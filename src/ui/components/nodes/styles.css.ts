@@ -1,260 +1,184 @@
 /**
  * C4 Node Styles
  *
- * Terminal/command-line aesthetic with:
- * - WCAG AAA contrast ratios (7:1 minimum)
- * - Slanted corners (retro terminal look)
- * - Green, blue, and amber color palette
- * - Monospace typography
+ * Contract-based theming with CSS layers for proper cascade control.
+ * Uses semantic design tokens for maintainability.
  */
 
 import { style } from "@vanilla-extract/css";
-import { vars } from "../../../styles/theme.css";
+import { theme } from "../../../styles/theme.css";
 
+/**
+ * Base Node
+ * Shared styles for all C4 diagram nodes
+ */
 const baseNode = style({
-	transition: vars.transition.normal,
-	clipPath: vars.clipPath.xlarge,
-	border: `${vars.borderWidth.medium} solid`,
-	boxShadow: vars.shadow.glow.large,
-	backgroundColor: vars.color.background.primary,
-	padding: `${vars.spacing["2xl"]} ${vars.spacing.xl}`,
+	// Layout
+	display: "flex",
+	flexDirection: "column",
+	transition: theme.transition.base,
+	clipPath: theme.clipPath.lg,
+	border: `${theme.border.width.base} solid`,
+
+	// Visual
+	boxShadow: theme.effect.glow.base,
+	backgroundColor: theme.color.background.surface,
+	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
 	minWidth: "220px",
+
+	// Typography
 	maxWidth: "320px",
-	letterSpacing: vars.font.letterSpacing.tight,
-	fontFamily: vars.font.family.mono,
-	fontSize: vars.font.size.base,
+	letterSpacing: theme.typography.letterSpacing.tight,
+	fontFamily: theme.typography.family.mono,
+
+	// Animation
+	fontSize: theme.typography.size.base,
 
 	selectors: {
 		"&[data-selected='true']": {
 			transform: "scale(1.03)",
-			boxShadow: vars.shadow.glow.selected,
+			boxShadow: theme.effect.glow.xl,
 		},
 		"&:hover": {
-			boxShadow: vars.shadow.glow.hoverLarge,
-		},
-	},
-
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			clipPath: "none",
-			borderRadius: vars.borderRadius.xl,
-			boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
-			backgroundColor: "white",
+			boxShadow: theme.effect.glow.md,
 		},
 	},
 });
 
-// Person Node - Cyan/Blue theme
+/**
+ * Person Node
+ * Represents human actors/users in the system
+ */
 export const personNode = style([
 	baseNode,
 	{
-		borderColor: vars.color.border.cyan,
-		backgroundColor: vars.color.node.person,
-		"@media": {
-			"(prefers-color-scheme: light)": {
-				backgroundColor: "#E8F4F8",
-			},
-		},
+		borderColor: theme.color.border.person,
+		backgroundColor: theme.color.surface.person,
 	},
 ]);
 
 export const personNodeIcon = style({
 	display: "flex",
 	justifyContent: "center",
-	marginBottom: vars.spacing.md,
-	textShadow: vars.shadow.textGlow.icon,
-	color: vars.color.accent.cyan,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			textShadow: "none",
-			color: "#08427B",
-		},
-	},
+	marginBottom: theme.spacing["2"],
+	textShadow: theme.effect.textGlow.md,
+	color: theme.color.semantic.person,
 });
 
 export const personNodeLabel = style({
-	marginBottom: vars.spacing.md,
+	marginBottom: theme.spacing["2"],
 	textTransform: "uppercase",
-	textShadow: vars.shadow.textGlow.cyan,
-	letterSpacing: vars.font.letterSpacing.wide,
-	color: vars.color.text.primary,
-	fontSize: vars.font.size.lg,
-	fontWeight: vars.font.weight.bold,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			textTransform: "none",
-			textShadow: "none",
-			color: "#08427B",
-		},
-	},
+	textShadow: theme.effect.textGlow.base,
+	letterSpacing: theme.typography.letterSpacing.wider,
+	color: theme.color.foreground.primary,
+	fontSize: theme.typography.size.lg,
+	fontWeight: theme.typography.weight.bold,
 });
 
 export const personNodeTechnology = style({
-	marginBottom: vars.spacing.sm,
-	color: vars.color.accent.teal,
-	fontSize: vars.font.size.sm,
-	fontStyle: "normal",
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			color: "#666",
-			fontStyle: "italic",
-		},
-	},
+	marginBottom: theme.spacing["1"],
+	color: theme.color.foreground.tertiary,
+	fontSize: theme.typography.size.sm,
 });
 
 export const personNodeDescription = style({
-	marginTop: vars.spacing.md,
-	lineHeight: vars.font.lineHeight.relaxed,
-	color: vars.color.text.secondary,
-	fontSize: vars.font.size.sm,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			color: "#444",
-		},
-	},
+	marginTop: theme.spacing["2"],
+	lineHeight: theme.typography.lineHeight.relaxed,
+	color: theme.color.foreground.secondary,
+	fontSize: theme.typography.size.sm,
 });
 
-// System Node - Green theme
+/**
+ * System Node
+ * Represents software systems
+ */
 export const systemNode = style([
 	baseNode,
 	{
-		borderColor: vars.color.border.green,
-		backgroundColor: vars.color.node.system,
-		"@media": {
-			"(prefers-color-scheme: light)": {
-				backgroundColor: "#EBF3FA",
-			},
-		},
+		borderColor: theme.color.border.system,
+		backgroundColor: theme.color.surface.system,
 	},
 ]);
 
 export const systemNodeIcon = style({
 	display: "flex",
 	justifyContent: "center",
-	marginBottom: vars.spacing.md,
-	textShadow: vars.shadow.textGlow.icon,
-	color: vars.color.accent.green,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			textShadow: "none",
-			color: "#1168BD",
-		},
-	},
+	marginBottom: theme.spacing["2"],
+	textShadow: theme.effect.textGlow.md,
+	color: theme.color.semantic.system,
 });
 
 export const systemNodeLabel = style({
-	marginBottom: vars.spacing.md,
+	marginBottom: theme.spacing["2"],
 	textTransform: "uppercase",
-	textShadow: vars.shadow.textGlow.green,
-	letterSpacing: vars.font.letterSpacing.wide,
-	color: vars.color.text.primary,
-	fontSize: vars.font.size.lg,
-	fontWeight: vars.font.weight.bold,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			textTransform: "none",
-			textShadow: "none",
-			color: "#1168BD",
-		},
-	},
+	textShadow: theme.effect.textGlow.base,
+	letterSpacing: theme.typography.letterSpacing.wider,
+	color: theme.color.foreground.primary,
+	fontSize: theme.typography.size.lg,
+	fontWeight: theme.typography.weight.bold,
 });
 
 export const systemNodeTechnology = style({
-	marginBottom: vars.spacing.sm,
-	color: vars.color.accent.darkGreen,
-	fontSize: vars.font.size.sm,
-	fontStyle: "normal",
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			color: "#666",
-			fontStyle: "italic",
-		},
-	},
+	marginBottom: theme.spacing["1"],
+	color: theme.color.foreground.tertiary,
+	fontSize: theme.typography.size.sm,
 });
 
 export const systemNodeDescription = style({
-	marginTop: vars.spacing.md,
-	lineHeight: vars.font.lineHeight.relaxed,
-	color: vars.color.text.secondary,
-	fontSize: vars.font.size.sm,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			color: "#444",
-		},
-	},
+	marginTop: theme.spacing["2"],
+	lineHeight: theme.typography.lineHeight.relaxed,
+	color: theme.color.foreground.secondary,
+	fontSize: theme.typography.size.sm,
 });
 
-// External System Node - Amber/Orange theme
+/**
+ * External System Node
+ * Represents third-party/external systems
+ */
 export const externalSystemNode = style([
 	baseNode,
 	{
 		borderStyle: "dashed",
-		borderColor: vars.color.border.amber,
-		backgroundColor: vars.color.node.external,
-		"@media": {
-			"(prefers-color-scheme: light)": {
-				backgroundColor: "#F5F5F5",
-			},
-		},
+		borderColor: theme.color.border.external,
+		backgroundColor: theme.color.surface.external,
 	},
 ]);
 
 export const externalSystemNodeIcon = style({
 	display: "flex",
 	justifyContent: "center",
-	marginBottom: vars.spacing.md,
-	textShadow: vars.shadow.textGlow.icon,
-	color: vars.color.accent.amber,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			textShadow: "none",
-			color: "#999999",
-		},
-	},
+	marginBottom: theme.spacing["2"],
+	textShadow: theme.effect.textGlow.md,
+	color: theme.color.semantic.external,
 });
 
 export const externalSystemNodeLabel = style({
-	marginBottom: vars.spacing.md,
+	marginBottom: theme.spacing["2"],
 	textTransform: "uppercase",
-	textShadow: vars.shadow.textGlow.amber,
-	letterSpacing: vars.font.letterSpacing.wide,
-	color: vars.color.text.primary,
-	fontSize: vars.font.size.lg,
-	fontWeight: vars.font.weight.bold,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			textTransform: "none",
-			textShadow: "none",
-			color: "#666",
-		},
-	},
+	textShadow: theme.effect.textGlow.base,
+	letterSpacing: theme.typography.letterSpacing.wider,
+	color: theme.color.foreground.primary,
+	fontSize: theme.typography.size.lg,
+	fontWeight: theme.typography.weight.bold,
 });
 
 export const externalSystemNodeTechnology = style({
-	marginBottom: vars.spacing.sm,
-	color: vars.color.accent.darkAmber,
-	fontSize: vars.font.size.sm,
-	fontStyle: "normal",
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			color: "#888",
-			fontStyle: "italic",
-		},
-	},
+	marginBottom: theme.spacing["1"],
+	color: theme.color.foreground.tertiary,
+	fontSize: theme.typography.size.sm,
 });
 
 export const externalSystemNodeDescription = style({
-	marginTop: vars.spacing.md,
-	lineHeight: vars.font.lineHeight.relaxed,
-	color: vars.color.text.secondary,
-	fontSize: vars.font.size.sm,
-	"@media": {
-		"(prefers-color-scheme: light)": {
-			color: "#555",
-		},
-	},
+	marginTop: theme.spacing["2"],
+	lineHeight: theme.typography.lineHeight.relaxed,
+	color: theme.color.foreground.secondary,
+	fontSize: theme.typography.size.sm,
 });
 
+/**
+ * Node Content Container
+ * Wrapper for node content
+ */
 export const nodeContent = style({
 	display: "flex",
 	flexDirection: "column",

@@ -21,7 +21,7 @@ import { useMemo } from "react";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
 import { PersonNode } from "./nodes/PersonNode";
 import { SystemNode } from "./nodes/SystemNode";
-import { canvasContainer, reactFlowControls, reactFlowBackground } from "./styles.css";
+import { canvasContainer, reactFlowControls } from "./styles.css";
 import { theme } from "../../styles/theme.css";
 
 interface C4CanvasProps {
@@ -70,7 +70,7 @@ export function C4Canvas({
 	);
 
 	return (
-		<div className={`${canvasContainer} ${reactFlowBackground}`}>
+		<div className={canvasContainer}>
 			<ReactFlow
 				nodes={nodes}
 				edges={edges}

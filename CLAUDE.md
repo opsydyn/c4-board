@@ -118,13 +118,29 @@ This template uses **React** exclusively for simplicity (KISS principle):
 
 ### Styling System
 
-**Vanilla Extract** is the primary styling approach:
+**Vanilla Extract with Contract-Based Theming**:
 
 - **Type-Safe CSS**: Write styles in `*.css.ts` files with full TypeScript support
-- **Vite Plugin**: Configured in [astro.config.mts](astro.config.mts) via `vanillaExtractPlugin()`
-- **Pattern**: Define styles as named exports, import and apply to `class` attributes
+- **Theme Contract**: All themes implement a type-safe contract ([src/styles/theme.contract.css.ts](src/styles/theme.contract.css.ts))
+- **CSS Layers**: Predictable cascade control with `@layer` ([src/styles/layers.css.ts](src/styles/layers.css.ts))
+- **Semantic Tokens**: Design tokens named by purpose, not value
+- **Pattern**: Import `theme` and use semantic tokens:
+  ```typescript
+  import { theme } from '@/styles/theme.css';
+
+  const myStyle = style({
+    "@layer": {
+      [componentsLayer]: {
+        color: theme.color.foreground.primary,
+        backgroundColor: theme.color.background.surface,
+        padding: theme.spacing["4"],
+      },
+    },
+  });
+  ```
 - **Global Styles**: Imported in [src/layouts/Layout.astro](src/layouts/Layout.astro) via `global.css.ts`
 - **ESLint Integration**: Special linting rules apply to `*.css.ts` files (see [eslint.config.ts](eslint.config.ts))
+- **Full Documentation**: See [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) for complete design system documentation
 
 ### Project Structure
 
