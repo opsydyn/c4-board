@@ -1,72 +1,87 @@
 /**
  * Component Styles
+ * Using theme tokens for maintainability
  */
 
 import { style } from "@vanilla-extract/css";
+import { vars } from "../../styles/theme.css";
 
 export const canvasContainer = style({
+	backgroundColor: vars.color.background.primary,
 	width: "100vw",
 	height: "100vh",
-	backgroundColor: "#1a1a1a",
+	fontFamily: vars.font.family.mono,
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			backgroundColor: "#f8f9fa",
+			fontFamily: vars.font.family.sans,
 		},
 	},
 });
 
 export const toolbar = style({
 	position: "fixed",
-	top: "20px",
-	left: "20px",
-	zIndex: 1000,
-	backgroundColor: "#2a2a2a",
-	padding: "12px",
-	borderRadius: "8px",
-	boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+	zIndex: Number(vars.zIndex.overlay),
+	top: vars.spacing["2xl"],
+	left: vars.spacing["2xl"],
 	display: "flex",
-	gap: "8px",
 	flexDirection: "column",
-	border: "1px solid #3a3a3a",
+	gap: vars.spacing.md,
+	clipPath: vars.clipPath.large,
+	border: `${vars.borderWidth.medium} solid ${vars.color.border.primary}`,
+	boxShadow: vars.shadow.glow.xlarge,
+	backgroundColor: vars.color.background.primary,
+	padding: vars.spacing.lg,
 	"@media": {
 		"(prefers-color-scheme: light)": {
-			backgroundColor: "white",
+			clipPath: "none",
+			borderRadius: vars.borderRadius.xl,
 			borderColor: "#e0e0e0",
 			boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+			backgroundColor: "white",
 		},
 	},
 });
 
 export const toolbarButton = style({
-	padding: "10px 14px",
-	border: "1px solid #444",
-	borderRadius: "6px",
-	backgroundColor: "#333",
-	color: "#fff",
-	cursor: "pointer",
-	fontSize: "14px",
-	fontWeight: 500,
 	display: "flex",
 	alignItems: "center",
-	gap: "8px",
-	transition: "all 0.2s ease",
+	gap: vars.spacing.md,
+	transition: vars.transition.normal,
+	clipPath: vars.clipPath.medium,
+	border: `${vars.borderWidth.thin} solid ${vars.color.border.primary}`,
+	backgroundColor: vars.color.background.primary,
+	cursor: "pointer",
+	padding: `${vars.spacing.md} ${vars.spacing.md}`,
+	textTransform: "uppercase",
+	letterSpacing: vars.font.letterSpacing.normal,
+	color: vars.color.text.accent,
+	fontFamily: vars.font.family.mono,
+	fontSize: vars.font.size.sm,
+	fontWeight: vars.font.weight.bold,
 	":hover": {
-		backgroundColor: "#444",
-		borderColor: "#666",
-		transform: "translateY(-1px)",
-		boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
+		borderColor: vars.color.border.primary,
+		boxShadow: vars.shadow.glow.hover,
+		backgroundColor: vars.color.background.tertiary,
+		textShadow: vars.shadow.textGlow.hover,
 	},
 	":active": {
-		transform: "translateY(0)",
+		transform: "scale(0.98)",
 	},
 	"@media": {
 		"(prefers-color-scheme: light)": {
-			backgroundColor: "white",
-			color: "#333",
+			clipPath: "none",
+			borderRadius: vars.borderRadius.lg,
 			borderColor: "#ddd",
+			backgroundColor: "white",
+			textTransform: "none",
+			color: "#333",
+			fontFamily: vars.font.family.sans,
 			":hover": {
-				backgroundColor: "#f0f0f0",
 				borderColor: "#999",
+				boxShadow: "none",
+				backgroundColor: "#f0f0f0",
+				textShadow: "none",
 			},
 		},
 	},
@@ -74,35 +89,44 @@ export const toolbarButton = style({
 
 export const propertiesPanel = style({
 	position: "fixed",
-	top: "20px",
-	right: "20px",
-	width: "320px",
-	zIndex: 1000,
-	backgroundColor: "#2a2a2a",
-	padding: "20px",
-	borderRadius: "8px",
-	boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-	border: "1px solid #3a3a3a",
+	zIndex: Number(vars.zIndex.overlay),
+	top: vars.spacing["2xl"],
+	right: vars.spacing["2xl"],
 	display: "flex",
 	flexDirection: "column",
-	gap: "16px",
+	gap: vars.spacing.xl,
+	clipPath: vars.clipPath.xlarge,
+	border: `${vars.borderWidth.medium} solid ${vars.color.border.primary}`,
+	boxShadow: vars.shadow.glow.xlarge,
+	backgroundColor: vars.color.background.primary,
+	padding: vars.spacing["2xl"],
+	width: "320px",
 	"@media": {
 		"(prefers-color-scheme: light)": {
-			backgroundColor: "white",
+			clipPath: "none",
+			borderRadius: vars.borderRadius.xl,
 			borderColor: "#e0e0e0",
 			boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+			backgroundColor: "white",
 		},
 	},
 });
 
 export const panelTitle = style({
 	margin: 0,
-	fontSize: "16px",
-	fontWeight: 600,
-	color: "#fff",
+	textTransform: "uppercase",
+	textShadow: vars.shadow.textGlow.medium,
+	letterSpacing: vars.font.letterSpacing.wide,
+	color: vars.color.text.accent,
+	fontFamily: vars.font.family.mono,
+	fontSize: vars.font.size.md,
+	fontWeight: vars.font.weight.bold,
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			textTransform: "none",
+			textShadow: "none",
 			color: "#333",
+			fontFamily: vars.font.family.sans,
 		},
 	},
 });
@@ -110,42 +134,49 @@ export const panelTitle = style({
 export const formGroup = style({
 	display: "flex",
 	flexDirection: "column",
-	gap: "6px",
+	gap: vars.spacing.sm,
 });
 
 export const label = style({
-	fontSize: "12px",
-	fontWeight: 600,
-	color: "#aaa",
 	textTransform: "uppercase",
-	letterSpacing: "0.5px",
+	letterSpacing: vars.font.letterSpacing.normal,
+	color: vars.color.accent.darkGreen,
+	fontFamily: vars.font.family.mono,
+	fontSize: vars.font.size.xs,
+	fontWeight: vars.font.weight.bold,
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			color: "#666",
+			fontFamily: vars.font.family.sans,
 		},
 	},
 });
 
 export const input = style({
-	padding: "10px 12px",
-	border: "1px solid #444",
-	borderRadius: "6px",
-	fontSize: "14px",
-	backgroundColor: "#1a1a1a",
-	color: "#fff",
-	transition: "all 0.2s ease",
+	transition: vars.transition.normal,
+	clipPath: vars.clipPath.small,
+	border: `${vars.borderWidth.thin} solid ${vars.color.border.primary}`,
+	backgroundColor: vars.color.background.input,
+	padding: `${vars.spacing.md} ${vars.spacing.lg}`,
+	color: vars.color.text.accent,
+	fontFamily: vars.font.family.mono,
+	fontSize: vars.font.size.base,
 	":focus": {
 		outline: "none",
-		borderColor: "#1168BD",
-		backgroundColor: "#222",
-		boxShadow: "0 0 0 3px rgba(17, 104, 189, 0.1)",
+		borderColor: vars.color.border.primary,
+		boxShadow: vars.shadow.glow.medium,
+		backgroundColor: vars.color.background.inputFocus,
 	},
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			clipPath: "none",
+			borderRadius: vars.borderRadius.lg,
+			borderColor: "#ddd",
 			backgroundColor: "white",
 			color: "#333",
-			borderColor: "#ddd",
+			fontFamily: vars.font.family.sans,
 			":focus": {
+				boxShadow: "0 0 0 3px rgba(17, 104, 189, 0.1)",
 				backgroundColor: "#fff",
 			},
 		},
@@ -153,30 +184,113 @@ export const input = style({
 });
 
 export const textarea = style({
-	padding: "10px 12px",
-	border: "1px solid #444",
-	borderRadius: "6px",
-	fontSize: "14px",
+	transition: vars.transition.normal,
+	clipPath: vars.clipPath.medium,
+	border: `${vars.borderWidth.thin} solid ${vars.color.border.primary}`,
+	backgroundColor: vars.color.background.input,
+	padding: `${vars.spacing.md} ${vars.spacing.lg}`,
 	minHeight: "100px",
 	resize: "vertical",
-	backgroundColor: "#1a1a1a",
-	color: "#fff",
-	fontFamily: "inherit",
-	lineHeight: "1.5",
-	transition: "all 0.2s ease",
+	lineHeight: vars.font.lineHeight.relaxed,
+	color: vars.color.text.accent,
+	fontFamily: vars.font.family.mono,
+	fontSize: vars.font.size.base,
 	":focus": {
 		outline: "none",
-		borderColor: "#1168BD",
-		backgroundColor: "#222",
-		boxShadow: "0 0 0 3px rgba(17, 104, 189, 0.1)",
+		borderColor: vars.color.border.primary,
+		boxShadow: vars.shadow.glow.medium,
+		backgroundColor: vars.color.background.inputFocus,
 	},
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			clipPath: "none",
+			borderRadius: vars.borderRadius.lg,
+			borderColor: "#ddd",
 			backgroundColor: "white",
 			color: "#333",
-			borderColor: "#ddd",
+			fontFamily: vars.font.family.sans,
 			":focus": {
+				boxShadow: "0 0 0 3px rgba(17, 104, 189, 0.1)",
 				backgroundColor: "#fff",
+			},
+		},
+	},
+});
+
+/**
+ * ReactFlow Controls Styling
+ * Applied directly to Controls component via className
+ */
+export const reactFlowControls = style({
+	clipPath: vars.clipPath.large,
+	border: `${vars.borderWidth.medium} solid ${vars.color.border.primary}`,
+	boxShadow: vars.shadow.glow.xlarge,
+	backgroundColor: vars.color.background.primary,
+
+	selectors: {
+		"& button": {
+			clipPath: vars.clipPath.small,
+			border: `${vars.borderWidth.thin} solid ${vars.color.border.primary}`,
+			borderBottom: `${vars.borderWidth.thin} solid ${vars.color.border.primary}`,
+			backgroundColor: vars.color.background.primary,
+		},
+		"& button:hover": {
+			boxShadow: vars.shadow.glow.hover,
+			backgroundColor: vars.color.background.tertiary,
+		},
+		"& button svg": {
+			filter: vars.shadow.dropShadow,
+			fill: vars.color.text.accent,
+		},
+	},
+
+	"@media": {
+		"(prefers-color-scheme: light)": {
+			clipPath: "none",
+			border: "1px solid #e0e0e0",
+			borderRadius: vars.borderRadius.xl,
+			boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+			backgroundColor: "white",
+			selectors: {
+				"& button": {
+					clipPath: "none",
+					border: "none",
+					borderBottom: "1px solid #e0e0e0",
+					backgroundColor: "white",
+				},
+				"& button svg": {
+					filter: "none",
+					fill: "#333",
+				},
+			},
+		},
+	},
+});
+
+/**
+ * ReactFlow Background Styling
+ * Override default grid with terminal-style dots
+ */
+export const reactFlowBackground = style({
+	selectors: {
+		":global(.react-flow__background)": {
+			backgroundColor: vars.color.background.primary,
+		},
+		":global(.react-flow__background-pattern)": {
+			opacity: Number(vars.opacity.gridDark),
+			stroke: vars.color.border.primary,
+		},
+	},
+	"@media": {
+		"(prefers-color-scheme: light)": {
+			selectors: {
+				":global(.react-flow__background)": {
+					backgroundColor: "#f8f9fa",
+				},
+				":global(.react-flow__background-pattern)": {
+					opacity: Number(vars.opacity.gridLight),
+					stroke: "#666",
+				},
 			},
 		},
 	},

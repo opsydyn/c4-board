@@ -10,6 +10,10 @@ import {
 	Controls,
 	type Edge,
 	type Node,
+	type NodeMouseHandler,
+	type OnNodesChange,
+	type OnEdgesChange,
+	type OnConnect,
 	ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -17,15 +21,16 @@ import { useMemo } from "react";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
 import { PersonNode } from "./nodes/PersonNode";
 import { SystemNode } from "./nodes/SystemNode";
-import { canvasContainer } from "./styles.css";
+import { canvasContainer, reactFlowControls, reactFlowBackground } from "./styles.css";
+import { theme } from "../../styles/theme.css";
 
 interface C4CanvasProps {
 	nodes: Node[];
 	edges: Edge[];
-	onNodesChange?: (changes: any) => void;
-	onEdgesChange?: (changes: any) => void;
-	onConnect?: (connection: any) => void;
-	onNodeClick?: ((event: React.MouseEvent, node: Node) => void) | undefined;
+	onNodesChange?: OnNodesChange<Node>;
+	onEdgesChange?: OnEdgesChange<Edge>;
+	onConnect?: OnConnect;
+	onNodeClick?: NodeMouseHandler<Node>;
 }
 
 export function C4Canvas({
@@ -50,30 +55,37 @@ export function C4Canvas({
 	const defaultEdgeOptions = useMemo(
 		() => ({
 			animated: true,
-			style: { stroke: "#666", strokeWidth: 2 },
-			labelStyle: { fill: "#666", fontSize: 12 },
-			labelBgStyle: { fill: "white" },
+			style: { stroke: theme.color.semantic.relationship, strokeWidth: 2 },
+			labelStyle: {
+				fill: theme.color.semantic.relationship,
+				fontSize: 12,
+				fontFamily: theme.typography.family.mono
+			},
+			labelBgStyle: {
+				fill: theme.color.background.base,
+				fillOpacity: Number(theme.opacity.overlay)
+			},
 		}),
 		[],
 	);
 
 	return (
-		<div className={canvasContainer}>
+		<div className={`${canvasContainer} ${reactFlowBackground}`}>
 			<ReactFlow
 				nodes={nodes}
 				edges={edges}
-				onNodesChange={onNodesChange}
-				onEdgesChange={onEdgesChange}
-				onConnect={onConnect}
-				onNodeClick={onNodeClick}
+				{...(onNodesChange && { onNodesChange })}
+				{...(onEdgesChange && { onEdgesChange })}
+				{...(onConnect && { onConnect })}
+				{...(onNodeClick && { onNodeClick })}
 				nodeTypes={nodeTypes}
 				defaultEdgeOptions={defaultEdgeOptions}
 				fitView
 				snapToGrid
 				snapGrid={[15, 15]}
 			>
-				<Background />
-				<Controls />
+				<Background color={theme.color.border.primary} />
+				<Controls className={reactFlowControls} />
 			</ReactFlow>
 		</div>
 	);

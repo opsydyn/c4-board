@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css.ts";
+import { themeClass } from "../styles/theme.css";
 ---
 
 <!DOCTYPE html>
@@ -8,7 +9,7 @@ import "../styles/global.css.ts";
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width" />
 	</head>
-	<body>
+	<body class={themeClass}>
 		<slot />
 	</body>
 </html>

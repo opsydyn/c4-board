@@ -1,47 +1,55 @@
 /**
  * C4 Node Styles
  *
- * Vanilla Extract styles for C4 diagram nodes.
- * Following C4 color conventions.
+ * Terminal/command-line aesthetic with:
+ * - WCAG AAA contrast ratios (7:1 minimum)
+ * - Slanted corners (retro terminal look)
+ * - Green, blue, and amber color palette
+ * - Monospace typography
  */
 
 import { style } from "@vanilla-extract/css";
+import { vars } from "../../../styles/theme.css";
 
 const baseNode = style({
-	transition: "all 0.2s ease",
-	border: "2px solid",
-	borderRadius: "8px",
-	boxShadow: "0 2px 8px rgba(0, 0, 0, 0.3)",
-	backgroundColor: "#2a2a2a",
-	padding: "16px",
-	minWidth: "200px",
-	maxWidth: "300px",
-	fontFamily: "system-ui, sans-serif",
-	fontSize: "14px",
+	transition: vars.transition.normal,
+	clipPath: vars.clipPath.xlarge,
+	border: `${vars.borderWidth.medium} solid`,
+	boxShadow: vars.shadow.glow.large,
+	backgroundColor: vars.color.background.primary,
+	padding: `${vars.spacing["2xl"]} ${vars.spacing.xl}`,
+	minWidth: "220px",
+	maxWidth: "320px",
+	letterSpacing: vars.font.letterSpacing.tight,
+	fontFamily: vars.font.family.mono,
+	fontSize: vars.font.size.base,
 
 	selectors: {
 		"&[data-selected='true']": {
-			transform: "scale(1.02)",
-			boxShadow: "0 4px 16px rgba(0, 0, 0, 0.5)",
+			transform: "scale(1.03)",
+			boxShadow: vars.shadow.glow.selected,
 		},
 		"&:hover": {
-			boxShadow: "0 4px 12px rgba(0, 0, 0, 0.4)",
+			boxShadow: vars.shadow.glow.hoverLarge,
 		},
 	},
 
 	"@media": {
 		"(prefers-color-scheme: light)": {
-			backgroundColor: "white",
+			clipPath: "none",
+			borderRadius: vars.borderRadius.xl,
 			boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+			backgroundColor: "white",
 		},
 	},
 });
 
+// Person Node - Cyan/Blue theme
 export const personNode = style([
 	baseNode,
 	{
-		borderColor: "#08427B",
-		backgroundColor: "#1a2a3a",
+		borderColor: vars.color.border.cyan,
+		backgroundColor: vars.color.node.person,
 		"@media": {
 			"(prefers-color-scheme: light)": {
 				backgroundColor: "#E8F4F8",
@@ -53,44 +61,52 @@ export const personNode = style([
 export const personNodeIcon = style({
 	display: "flex",
 	justifyContent: "center",
-	marginBottom: "8px",
-	color: "#5CA9E8",
+	marginBottom: vars.spacing.md,
+	textShadow: vars.shadow.textGlow.icon,
+	color: vars.color.accent.cyan,
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			textShadow: "none",
 			color: "#08427B",
 		},
 	},
 });
 
 export const personNodeLabel = style({
-	marginBottom: "4px",
-	color: "#5CA9E8",
-	fontSize: "16px",
-	fontWeight: 600,
+	marginBottom: vars.spacing.md,
+	textTransform: "uppercase",
+	textShadow: vars.shadow.textGlow.cyan,
+	letterSpacing: vars.font.letterSpacing.wide,
+	color: vars.color.text.primary,
+	fontSize: vars.font.size.lg,
+	fontWeight: vars.font.weight.bold,
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			textTransform: "none",
+			textShadow: "none",
 			color: "#08427B",
 		},
 	},
 });
 
 export const personNodeTechnology = style({
-	marginBottom: "4px",
-	color: "#aaa",
-	fontSize: "12px",
-	fontStyle: "italic",
+	marginBottom: vars.spacing.sm,
+	color: vars.color.accent.teal,
+	fontSize: vars.font.size.sm,
+	fontStyle: "normal",
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			color: "#666",
+			fontStyle: "italic",
 		},
 	},
 });
 
 export const personNodeDescription = style({
-	marginTop: "8px",
-	lineHeight: "1.4",
-	color: "#ccc",
-	fontSize: "13px",
+	marginTop: vars.spacing.md,
+	lineHeight: vars.font.lineHeight.relaxed,
+	color: vars.color.text.secondary,
+	fontSize: vars.font.size.sm,
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			color: "#444",
@@ -98,11 +114,12 @@ export const personNodeDescription = style({
 	},
 });
 
+// System Node - Green theme
 export const systemNode = style([
 	baseNode,
 	{
-		borderColor: "#1168BD",
-		backgroundColor: "#1a2535",
+		borderColor: vars.color.border.green,
+		backgroundColor: vars.color.node.system,
 		"@media": {
 			"(prefers-color-scheme: light)": {
 				backgroundColor: "#EBF3FA",
@@ -114,44 +131,52 @@ export const systemNode = style([
 export const systemNodeIcon = style({
 	display: "flex",
 	justifyContent: "center",
-	marginBottom: "8px",
-	color: "#6BA9E8",
+	marginBottom: vars.spacing.md,
+	textShadow: vars.shadow.textGlow.icon,
+	color: vars.color.accent.green,
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			textShadow: "none",
 			color: "#1168BD",
 		},
 	},
 });
 
 export const systemNodeLabel = style({
-	marginBottom: "4px",
-	color: "#6BA9E8",
-	fontSize: "16px",
-	fontWeight: 600,
+	marginBottom: vars.spacing.md,
+	textTransform: "uppercase",
+	textShadow: vars.shadow.textGlow.green,
+	letterSpacing: vars.font.letterSpacing.wide,
+	color: vars.color.text.primary,
+	fontSize: vars.font.size.lg,
+	fontWeight: vars.font.weight.bold,
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			textTransform: "none",
+			textShadow: "none",
 			color: "#1168BD",
 		},
 	},
 });
 
 export const systemNodeTechnology = style({
-	marginBottom: "4px",
-	color: "#aaa",
-	fontSize: "12px",
-	fontStyle: "italic",
+	marginBottom: vars.spacing.sm,
+	color: vars.color.accent.darkGreen,
+	fontSize: vars.font.size.sm,
+	fontStyle: "normal",
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			color: "#666",
+			fontStyle: "italic",
 		},
 	},
 });
 
 export const systemNodeDescription = style({
-	marginTop: "8px",
-	lineHeight: "1.4",
-	color: "#ccc",
-	fontSize: "13px",
+	marginTop: vars.spacing.md,
+	lineHeight: vars.font.lineHeight.relaxed,
+	color: vars.color.text.secondary,
+	fontSize: vars.font.size.sm,
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			color: "#444",
@@ -159,12 +184,13 @@ export const systemNodeDescription = style({
 	},
 });
 
+// External System Node - Amber/Orange theme
 export const externalSystemNode = style([
 	baseNode,
 	{
 		borderStyle: "dashed",
-		borderColor: "#999999",
-		backgroundColor: "#2a2a2a",
+		borderColor: vars.color.border.amber,
+		backgroundColor: vars.color.node.external,
 		"@media": {
 			"(prefers-color-scheme: light)": {
 				backgroundColor: "#F5F5F5",
@@ -176,44 +202,52 @@ export const externalSystemNode = style([
 export const externalSystemNodeIcon = style({
 	display: "flex",
 	justifyContent: "center",
-	marginBottom: "8px",
-	color: "#bbb",
+	marginBottom: vars.spacing.md,
+	textShadow: vars.shadow.textGlow.icon,
+	color: vars.color.accent.amber,
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			textShadow: "none",
 			color: "#999999",
 		},
 	},
 });
 
 export const externalSystemNodeLabel = style({
-	marginBottom: "4px",
-	color: "#ddd",
-	fontSize: "16px",
-	fontWeight: 600,
+	marginBottom: vars.spacing.md,
+	textTransform: "uppercase",
+	textShadow: vars.shadow.textGlow.amber,
+	letterSpacing: vars.font.letterSpacing.wide,
+	color: vars.color.text.primary,
+	fontSize: vars.font.size.lg,
+	fontWeight: vars.font.weight.bold,
 	"@media": {
 		"(prefers-color-scheme: light)": {
+			textTransform: "none",
+			textShadow: "none",
 			color: "#666",
 		},
 	},
 });
 
 export const externalSystemNodeTechnology = style({
-	marginBottom: "4px",
-	color: "#999",
-	fontSize: "12px",
-	fontStyle: "italic",
+	marginBottom: vars.spacing.sm,
+	color: vars.color.accent.darkAmber,
+	fontSize: vars.font.size.sm,
+	fontStyle: "normal",
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			color: "#888",
+			fontStyle: "italic",
 		},
 	},
 });
 
 export const externalSystemNodeDescription = style({
-	marginTop: "8px",
-	lineHeight: "1.4",
-	color: "#bbb",
-	fontSize: "13px",
+	marginTop: vars.spacing.md,
+	lineHeight: vars.font.lineHeight.relaxed,
+	color: vars.color.text.secondary,
+	fontSize: vars.font.size.sm,
 	"@media": {
 		"(prefers-color-scheme: light)": {
 			color: "#555",
