@@ -15,15 +15,6 @@ export default defineConfig([
 		rules: {
 			// Apply all recommended rules
 			...vanillaExtract.configs.recommended.rules,
-
-			// Optionally override specific rules
-			// 'vanilla-extract/concentric-order': 'warn', // Change severity from error to warn
-			// 'vanilla-extract/no-empty-style-blocks': 'off', // Disable a recommended rule
-			// 'vanilla-extract/no-zero-unit': 'warn', // Change severity from error to warn
-
-			// Switch to a different ordering rule (see "Important" section below)
-			// 'vanilla-extract/concentric-order': 'off',
-			// 'vanilla-extract/alphabetical-order': 'error',
 		},
 	},
 	{
@@ -33,5 +24,17 @@ export default defineConfig([
 		languageOptions: { globals: globals.browser },
 	},
 	tseslint.configs.recommended,
-	pluginReact.configs.flat.recommended,
+	{
+		...pluginReact.configs.flat.recommended,
+		settings: {
+			react: {
+				version: "19.2",
+			},
+		},
+		rules: {
+			...pluginReact.configs.flat.recommended.rules,
+			"react/react-in-jsx-scope": "off", // Not needed with React 19 JSX transform
+			"@typescript-eslint/no-explicit-any": "warn", // Allow any for now in MVP
+		},
+	},
 ]);

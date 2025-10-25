@@ -1,5 +1,4 @@
 import react from "@astrojs/react";
-import solidJs from "@astrojs/solid-js";
 
 import playformCompress from "@playform/compress";
 import playformInline from "@playform/inline";
@@ -9,9 +8,19 @@ import { defineConfig } from "astro/config";
 // https://astro.build/config
 export default defineConfig({
 	vite: {
-		plugins: [
-			vanillaExtractPlugin(),
-		],
+		plugins: [vanillaExtractPlugin()],
+		resolve: {
+			alias: {
+				"@ui": "/src/ui",
+				"@core": "/src/core",
+				"@schema": "/src/core/schema",
+			},
+		},
 	},
-	integrations: [solidJs(), playformInline(), playformCompress(), react()],
+	integrations: [
+		// React for all components
+		react(),
+		playformInline(),
+		playformCompress(),
+	],
 });

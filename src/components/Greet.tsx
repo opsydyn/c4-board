@@ -1,20 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
-import { createSignal } from "solid-js";
+import { useState } from "react";
 import { greetInput } from "../styles/index.css.ts";
 
 export function Greet() {
-	const [greetMsg, setGreetMsg] = createSignal("");
-	const [name, setName] = createSignal("");
+	const [greetMsg, setGreetMsg] = useState("");
+	const [name, setName] = useState("");
 
 	async function greet() {
 		// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-		return setGreetMsg(await invoke("greet", { name: name() }));
+		const result = await invoke<string>("greet", { name });
+		setGreetMsg(result);
 	}
 
 	return (
 		<>
 			<form
-				class="row"
+				className="row"
 				onSubmit={(e) => {
 					e.preventDefault();
 					greet();
@@ -22,14 +23,14 @@ export function Greet() {
 			>
 				<input
 					id="greet-input"
-					class={greetInput}
+					className={greetInput}
 					onChange={(e) => setName(e.currentTarget.value)}
 					placeholder="Enter a name..."
 				/>
 				<button type="submit">Greet</button>
 			</form>
 
-			<p class="row">{greetMsg()}</p>
+			<p className="row">{greetMsg}</p>
 		</>
 	);
 }

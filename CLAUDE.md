@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is a **Tauri v2 + Astro** desktop application template that combines:
-- **Frontend**: Astro with SSG (Static Site Generation), supporting both React and SolidJS components
+- **Frontend**: Astro with SSG (Static Site Generation) using React
 - **Backend**: Tauri v2 (Rust-based) for native desktop capabilities
 - **Styling**: Vanilla Extract for type-safe CSS-in-JS
 
@@ -109,12 +109,12 @@ The application uses **Tauri Commands** for IPC (Inter-Process Communication):
 
 ### Component Framework Strategy
 
-This template supports **both React and SolidJS simultaneously**:
+This template uses **React** exclusively for simplicity (KISS principle):
 
-- **Astro Integration**: Configured in [astro.config.mts](astro.config.mts) with both `@astrojs/react` and `@astrojs/solid-js`
-- **Default Framework**: TSConfig is set to React (`jsxImportSource: "react"`)
-- **Component Hydration**: Use Astro's client directives (e.g., `client:visible`) to control when components become interactive
-- **Current Usage**: The example `Greet` component uses SolidJS with signals
+- **Astro Integration**: Configured in [astro.config.mts](astro.config.mts) with `@astrojs/react`
+- **JSX Transform**: React 19's automatic JSX transform (no need to import React)
+- **Component Hydration**: Use Astro's client directives (e.g., `client:visible`, `client:only="react"`) to control when components become interactive
+- **State Management**: XState for UI flows, React hooks (`useState`, `useCallback`) for local component state
 
 ### Styling System
 
@@ -130,9 +130,16 @@ This template supports **both React and SolidJS simultaneously**:
 
 ```
 ├── src/                      # Astro frontend source
-│   ├── components/          # UI components (React/SolidJS)
+│   ├── components/          # React components
+│   ├── ui/                  # C4 canvas application
+│   │   ├── components/      # Canvas UI components
+│   │   ├── machines/        # XState machines
+│   │   └── nodes/           # Custom ReactFlow nodes
+│   ├── core/                # Functional core
+│   │   ├── effects/         # Effect-TS services (coming)
+│   │   └── schema/          # Zod schemas
 │   ├── layouts/             # Astro layouts
-│   ├── pages/               # Astro pages (become routes)
+│   ├── pages/               # Astro pages (routes)
 │   └── styles/              # Vanilla Extract styles (*.css.ts)
 ├── src-tauri/               # Rust/Tauri backend
 │   ├── src/
@@ -146,7 +153,7 @@ This template supports **both React and SolidJS simultaneously**:
 ## Key Configuration Files
 
 - **[tauri.conf.json](src-tauri/tauri.conf.json)**: Defines dev server URL, build commands, window settings, and bundle configuration
-- **[astro.config.mts](astro.config.mts)**: Astro configuration with React, SolidJS, Vanilla Extract, and optimization plugins
+- **[astro.config.mts](astro.config.mts)**: Astro configuration with React, Vanilla Extract, and optimization plugins
 - **[Cargo.toml](src-tauri/Cargo.toml)**: Rust dependencies and release optimizations (LTO, size optimization)
 
 ## Dependencies of Note

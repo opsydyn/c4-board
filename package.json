@@ -8,12 +8,12 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "knip": "knip"
   },
   "dependencies": {
     "@astrojs/check": "0.9.5",
     "@astrojs/react": "^4.4.0",
-    "@astrojs/solid-js": "5.1.1",
     "@effect-atom/atom-react": "^0.3.4",
     "@phosphor-icons/react": "^2.1.10",
     "@playform/compress": "^0.2.0",
@@ -36,17 +36,18 @@
     "fuse.js": "^7.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "solid-js": "^1.8.16",
-    "typescript": "^5.4.5",
     "xstate": "^5.23.0"
   },
   "devDependencies": {
     "@antebudimir/eslint-plugin-vanilla-extract": "^1.12.0",
     "@eslint/js": "^9.38.0",
+    "@types/node": "^24.9.1",
     "eslint": "^9.38.0",
     "eslint-plugin-react": "^7.37.5",
     "globals": "^16.4.0",
     "jiti": "^2.6.1",
+    "knip": "^5.66.3",
+    "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
     "vitest": "^4.0.3"
   }
