@@ -30,6 +30,8 @@ import {
 	createNewDiagram,
 	listAllDiagrams,
 } from "../../core/effects/canvas-persistence";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export function C4CanvasContainer() {
 	const [state, send] = useMachine(canvasMachine);
@@ -269,6 +271,81 @@ export function C4CanvasContainer() {
 			console.error("❌ New board creation failed:", error);
 		}
 	}, [runEffect, send]);
+
+	// Listen directly to native menu events while on the canvas
+	useEffect(() => {
+		const windowHandle = getCurrentWindow();
+		let isMounted = true;
+		const unlistenFns: UnlistenFn[] = [];
+
+		const register = async (
+			channel: string,
+			handler: () => void | Promise<void>,
+		): Promise<void> => {
+			const unlisten = await windowHandle.listen(channel, () => {
+				if (!isMounted) {
+					return;
+				}
+				void handler();
+			});
+			unlistenFns.push(unlisten);
+		};
+
+		(async () => {
+			await register("menu:save", handleSave);
+			await register("menu:new-board", handleNewBoard);
+			await register("menu:add-person", () => send({ type: "ADD_PERSON" }));
+			await register("menu:add-system", () => send({ type: "ADD_SYSTEM" }));
+			await register("menu:add-external", () =>
+				send({ type: "ADD_EXTERNAL_SYSTEM" }),
+			);
+		})()
+			.then(() => {
+				console.log("🎨 Canvas menu event listeners attached");
+			})
+			.catch((error) => {
+				console.error("⚠️ Failed to register canvas listeners", error);
+			});
+
+		return () => {
+			isMounted = false;
+			unlistenFns.forEach((unlisten) => unlisten());
+			console.log("🎨 Canvas menu event listeners removed");
+		};
+	}, [handleSave, handleNewBoard, send]);
+
+	// Handle query string actions (used when navigation triggers a canvas command)
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const action = params.get("action");
+
+		if (!action) {
+			return;
+		}
+
+		switch (action) {
+			case "new-board":
+				void handleNewBoard();
+				break;
+			case "save":
+				void handleSave();
+				break;
+			case "add-person":
+				send({ type: "ADD_PERSON" });
+				break;
+			case "add-system":
+				send({ type: "ADD_SYSTEM" });
+				break;
+			case "add-external":
+				send({ type: "ADD_EXTERNAL_SYSTEM" });
+				break;
+			default:
+				console.warn("⚠️ Unknown canvas action requested:", action);
+				break;
+		}
+
+		window.history.replaceState({}, "", "/canvas");
+	}, [handleNewBoard, handleSave, send]);
 
 	// Get selected node object
 	const selectedNode =

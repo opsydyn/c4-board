@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css.ts";
 import { defaultTheme } from "../styles/theme.css";
+import { GlobalMenuListener } from "../components/GlobalMenuListener.tsx";
 ---
 
 <!DOCTYPE html>
@@ -10,6 +11,7 @@ import { defaultTheme } from "../styles/theme.css";
 		<meta name="viewport" content="width=device-width" />
 	</head>
 	<body class={defaultTheme}>
+		<GlobalMenuListener client:only="react" />
 		<slot />
 	</body>
 </html>
