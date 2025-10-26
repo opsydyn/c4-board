@@ -71,7 +71,7 @@ export const lightTheme = createTheme(themeContract, {
 
 	typography: {
 		family: {
-			mono: "'SF Mono', 'Monaco', 'Courier New', monospace",
+			mono: "'Berkeley Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 			sans: "system-ui, -apple-system, sans-serif",
 		},
 		size: {

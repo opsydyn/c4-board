@@ -71,7 +71,7 @@ export const darkTheme = createTheme(themeContract, {
 
 	typography: {
 		family: {
-			mono: "'Courier New', 'Courier', monospace",
+			mono: "'Berkeley Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 			sans: "system-ui, -apple-system, sans-serif",
 		},
 		size: {

@@ -18,7 +18,7 @@ const baseNode = style({
 	flexDirection: "column",
 	transition: theme.transition.base,
 	clipPath: theme.clipPath.lg,
-	border: `${theme.border.width.base} solid`,
+	border: `${theme.border.width.thin} solid`,
 
 	// Visual
 	boxShadow: theme.effect.glow.base,
