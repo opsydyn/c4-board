@@ -1,22 +1,36 @@
 {
-  "productName": "tauri-app",
+  "productName": "c4-board",
   "version": "0.0.0",
   "identifier": "com.tauri.devs",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "bun dev",
     "devUrl": "http://localhost:4321/",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "bun build",
     "frontendDist": "../dist"
   },
-  "app": {"windows": [
+  "app": {
+    "windows": [
       {
-        "title": "tauri-app",
+        "title": "c4-board",
         "width": 800,
         "height": 600
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "default",
+          "windows": ["*"],
+          "permissions": [
+            "sql:default",
+            "sql:allow-load",
+            "sql:allow-execute",
+            "sql:allow-select",
+            "sql:allow-close"
+          ]
+        }
+      ]
     }
   },
   "bundle": {
@@ -29,5 +43,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "sql": {
+      "preload": ["sqlite:c4board.db"]
+    }
   }
 }

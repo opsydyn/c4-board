@@ -1,0 +1,8 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { DatabaseTest } from "../components/DatabaseTest";
+---
+
+<Layout title="Database Test">
+	<DatabaseTest client:only="react" />
+</Layout>

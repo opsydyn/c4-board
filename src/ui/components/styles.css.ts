@@ -38,6 +38,38 @@ export const toolbar = style({
 });
 
 /**
+ * Save Status
+ * Shows diagram name and save status
+ */
+export const saveStatus = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+	paddingBottom: theme.spacing["2"],
+	marginBottom: theme.spacing["2"],
+	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	color: theme.color.foreground.secondary,
+});
+
+globalStyle(`${saveStatus} strong`, {
+	fontSize: theme.typography.size.sm,
+	color: theme.color.foreground.primary,
+	fontWeight: theme.typography.weight.bold,
+});
+
+globalStyle(`${saveStatus} div`, {
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+});
+
+globalStyle(`${saveStatus} svg`, {
+	color: theme.color.interactive.primary,
+});
+
+/**
  * Toolbar Button
  * Action buttons in the toolbar
  */

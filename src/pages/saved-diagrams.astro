@@ -1,0 +1,18 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { SavedDiagramsTable } from "../ui/components/SavedDiagramsTable.tsx";
+---
+
+<Layout>
+	<main style="padding: 2rem; max-width: 1200px; margin: 0 auto;">
+		<h1 style="margin-bottom: 2rem; font-size: 2rem; font-weight: bold;">
+			Saved Diagrams
+		</h1>
+		<div style="margin-bottom: 1rem;">
+			<a href="/canvas" style="color: #0066cc; text-decoration: underline;">
+				← Back to Canvas
+			</a>
+		</div>
+		<SavedDiagramsTable client:only="react" />
+	</main>
+</Layout>
