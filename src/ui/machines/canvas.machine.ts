@@ -31,7 +31,9 @@ export type CanvasEvent =
 	| { type: "EDGES_CHANGED"; changes: EdgeChange[] }
 	// Persistence events
 	| { type: "CREATE_NEW_DIAGRAM"; name: string; description?: string }
+	| { type: "CREATE_NEW_BOARD" }
 	| { type: "LOAD_DIAGRAM"; diagramId: string }
+	| { type: "SWITCH_BOARD"; diagramId: string }
 	| {
 			type: "LOAD_DIAGRAM_SUCCESS";
 			diagram: {

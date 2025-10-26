@@ -11,14 +11,17 @@ import {
 	FloppyDiskIcon,
 	CheckCircleIcon,
 	ListBulletsIcon,
+	PlusIcon,
 } from "@phosphor-icons/react";
-import { toolbar, toolbarButton, saveStatus } from "./styles.css";
+import { toolbar, toolbarButton, saveStatus, boardNameInput } from "./styles.css";
 
 interface ToolbarProps {
 	onAddPerson: () => void;
 	onAddSystem: () => void;
 	onAddExternalSystem: () => void;
 	onSave: () => void;
+	onNewBoard: () => void;
+	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
 	sessionName: string;
 	isSaving?: boolean;
@@ -49,6 +52,8 @@ export function Toolbar({
 	onAddSystem,
 	onAddExternalSystem,
 	onSave,
+	onNewBoard,
+	onDiagramNameChange,
 	onSessionNameChange,
 	sessionName,
 	isSaving = false,
@@ -57,9 +62,15 @@ export function Toolbar({
 }: ToolbarProps) {
 	return (
 		<div className={toolbar}>
-			{/* Diagram name and save status */}
+			{/* Board name editor and save status */}
 			<div className={saveStatus}>
-				<strong>{diagramName}</strong>
+				<input
+					type="text"
+					value={diagramName}
+					onChange={(e) => onDiagramNameChange(e.target.value)}
+					className={boardNameInput}
+					placeholder="Board name"
+				/>
 				<div>
 					{isSaving && (
 						<>
@@ -75,6 +86,12 @@ export function Toolbar({
 					)}
 				</div>
 			</div>
+
+			{/* New Board button */}
+			<button type="button" className={toolbarButton} onClick={onNewBoard}>
+				<PlusIcon size={20} weight="duotone" />
+				New Board
+			</button>
 
 			{/* Session name input */}
 			<input

@@ -45,17 +45,17 @@ export const saveStatus = style({
 	display: "flex",
 	flexDirection: "column",
 	gap: theme.spacing["1"],
-	paddingBottom: theme.spacing["2"],
 	marginBottom: theme.spacing["2"],
 	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	paddingBottom: theme.spacing["2"],
+	color: theme.color.foreground.secondary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
-	color: theme.color.foreground.secondary,
 });
 
 globalStyle(`${saveStatus} strong`, {
-	fontSize: theme.typography.size.sm,
 	color: theme.color.foreground.primary,
+	fontSize: theme.typography.size.sm,
 	fontWeight: theme.typography.weight.bold,
 });
 
@@ -67,6 +67,31 @@ globalStyle(`${saveStatus} div`, {
 
 globalStyle(`${saveStatus} svg`, {
 	color: theme.color.interactive.primary,
+});
+
+/**
+ * Board Name Input
+ * Editable input for board/diagram name
+ */
+export const boardNameInput = style({
+	outline: "none",
+	border: "none",
+	backgroundColor: "transparent",
+	cursor: "text",
+	padding: `${theme.spacing["1"]} 0`,
+	width: "100%",
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.sans,
+	fontSize: theme.typography.size.sm,
+	fontWeight: theme.typography.weight.bold,
+
+	":focus": {
+		color: theme.color.interactive.primary,
+	},
+
+	"::placeholder": {
+		color: theme.color.foreground.tertiary,
+	},
 });
 
 /**
@@ -218,8 +243,8 @@ export const textarea = style({
 export const reactFlowControls = style({
 	clipPath: theme.clipPath.md,
 	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-	backgroundColor: theme.color.background.base,
 	boxShadow: theme.effect.glow.lg,
+	backgroundColor: theme.color.background.base,
 });
 
 // ReactFlow Controls button styles (must use globalStyle for child selectors)
@@ -231,13 +256,13 @@ globalStyle(`${reactFlowControls} button`, {
 });
 
 globalStyle(`${reactFlowControls} button:hover`, {
-	backgroundColor: theme.color.background.raised,
 	boxShadow: theme.effect.glow.base,
+	backgroundColor: theme.color.background.raised,
 });
 
 globalStyle(`${reactFlowControls} button svg`, {
-	fill: theme.color.interactive.primary,
 	filter: theme.effect.dropShadow,
+	fill: theme.color.interactive.primary,
 });
 
 /**
@@ -249,6 +274,6 @@ globalStyle(".react-flow__background", {
 });
 
 globalStyle(".react-flow__background-pattern", {
-	stroke: theme.color.border.primary,
 	opacity: theme.opacity.grid,
+	stroke: theme.color.border.primary,
 });
