@@ -39,6 +39,30 @@ export function C4CanvasContainer() {
 	useEffect(() => {
 		const initializeDiagram = async () => {
 			try {
+				// Check for load query parameter
+				const urlParams = new URLSearchParams(window.location.search);
+				const loadDiagramId = urlParams.get("load");
+
+				if (loadDiagramId) {
+					// Load specific diagram from URL
+					const diagram = await runEffect(loadDiagram(loadDiagramId));
+					const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+						type: "LOAD_DIAGRAM_SUCCESS",
+						diagram: {
+							id: diagram.id,
+							name: diagram.name,
+							nodes: diagram.nodes,
+							edges: diagram.edges,
+							updatedAt: diagram.updatedAt,
+							...(diagram.description ? { description: diagram.description } : {}),
+						},
+					};
+					send(loadEvent);
+					// Clear the query parameter
+					window.history.replaceState({}, "", "/canvas");
+					return;
+				}
+
 				// Load diagrams from database (single source of truth)
 				const diagrams = await runEffect(listAllDiagrams());
 
@@ -223,6 +247,9 @@ export function C4CanvasContainer() {
 
 	const handleNewBoard = useCallback(async () => {
 		try {
+			// Send CREATE_NEW_BOARD event to transition to creatingDiagram state
+			send({ type: "CREATE_NEW_BOARD" });
+
 			const diagram = await runEffect(createNewDiagram("Untitled Diagram"));
 
 			send({
@@ -237,7 +264,7 @@ export function C4CanvasContainer() {
 				},
 			});
 
-			send({ type: "UPDATE_SESSION_NAME", name: "" });
+			console.log("📝 Created new board:", diagram.id);
 		} catch (error) {
 			console.error("❌ New board creation failed:", error);
 		}

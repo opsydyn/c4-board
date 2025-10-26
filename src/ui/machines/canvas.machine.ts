@@ -344,6 +344,12 @@ export const canvasMachine = setup({
 				CREATE_NEW_DIAGRAM: {
 					target: "creatingDiagram",
 				},
+				CREATE_NEW_BOARD: {
+					target: "creatingDiagram",
+				},
+				SWITCH_BOARD: {
+					target: "loadingDiagram",
+				},
 				LOAD_DIAGRAM: {
 					target: "loadingDiagram",
 				},

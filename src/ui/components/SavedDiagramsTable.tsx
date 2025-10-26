@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { listAllDiagrams } from "../../core/effects/canvas-persistence";
-import { table, tableHeader, tableRow, tableCell } from "./SavedDiagramsTable.css";
+import { table, tableHeader, tableRow, tableCell, actionButton } from "./SavedDiagramsTable.css";
 
 interface DiagramEntry {
 	id: string;
@@ -17,7 +17,11 @@ interface DiagramEntry {
 	updatedAt: number;
 }
 
-export function SavedDiagramsTable() {
+interface SavedDiagramsTableProps {
+	onLoadDiagram: (diagramId: string) => void;
+}
+
+export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 	const [diagrams, setDiagrams] = useState<DiagramEntry[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -80,6 +84,7 @@ export function SavedDiagramsTable() {
 					<th className={tableCell}>Description</th>
 					<th className={tableCell}>Created</th>
 					<th className={tableCell}>Last Updated</th>
+					<th className={tableCell}>Actions</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -89,6 +94,15 @@ export function SavedDiagramsTable() {
 						<td className={tableCell}>{diagram.description || "-"}</td>
 						<td className={tableCell}>{formatDate(diagram.createdAt)}</td>
 						<td className={tableCell}>{formatDate(diagram.updatedAt)}</td>
+						<td className={tableCell}>
+							<button
+								type="button"
+								className={actionButton}
+								onClick={() => onLoadDiagram(diagram.id)}
+							>
+								Load
+							</button>
+						</td>
 					</tr>
 				))}
 			</tbody>

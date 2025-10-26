@@ -1,6 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { SavedDiagramsTable } from "../ui/components/SavedDiagramsTable.tsx";
+import { SavedDiagramsPage } from "../ui/components/SavedDiagramsPage.tsx";
 ---
 
 <Layout>
@@ -13,6 +13,6 @@ import { SavedDiagramsTable } from "../ui/components/SavedDiagramsTable.tsx";
 				← Back to Canvas
 			</a>
 		</div>
-		<SavedDiagramsTable client:only="react" />
+		<SavedDiagramsPage client:only="react" />
 	</main>
 </Layout>

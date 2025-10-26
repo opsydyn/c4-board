@@ -66,3 +66,30 @@ export const tableCell = style({
 		},
 	},
 });
+
+export const actionButton = style({
+	"@layer": {
+		[componentsLayer]: {
+			padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+			fontSize: theme.typography.size.xs,
+			fontWeight: theme.typography.weight.medium,
+			fontFamily: theme.typography.family.sans,
+			color: theme.color.foreground.primary,
+			backgroundColor: theme.color.background.raised,
+			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+			borderRadius: theme.border.radius.sm,
+			cursor: "pointer",
+			transition: "all 0.15s ease",
+
+			":hover": {
+				backgroundColor: theme.color.interactive.primary,
+				color: theme.color.background.surface,
+				borderColor: theme.color.interactive.primary,
+			},
+
+			":active": {
+				transform: "scale(0.98)",
+			},
+		},
+	},
+});
