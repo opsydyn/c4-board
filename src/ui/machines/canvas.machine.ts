@@ -32,6 +32,17 @@ export type CanvasEvent =
 	// Persistence events
 	| { type: "CREATE_NEW_DIAGRAM"; name: string; description?: string }
 	| { type: "LOAD_DIAGRAM"; diagramId: string }
+	| {
+			type: "LOAD_DIAGRAM_SUCCESS";
+			diagram: {
+				id: string;
+				name: string;
+				description?: string;
+				nodes: Node[];
+				edges: Edge[];
+				updatedAt: number;
+			};
+	  }
 	| { type: "SAVE_DIAGRAM" }
 	| { type: "SAVE_SUCCESS" }
 	| { type: "SAVE_ERROR"; error: string }
@@ -236,6 +247,33 @@ export const canvasMachine = setup({
 				return event.error;
 			},
 		}),
+
+		loadDiagramSuccess: assign({
+			currentDiagramId: ({ event }) => {
+				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return null;
+				return event.diagram.id;
+			},
+			diagramName: ({ event }) => {
+				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return "Untitled";
+				return event.diagram.name;
+			},
+			diagramDescription: ({ event }) => {
+				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return null;
+				return event.diagram.description ?? null;
+			},
+			nodes: ({ event }) => {
+				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return [];
+				return event.diagram.nodes;
+			},
+			edges: ({ event }) => {
+				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return [];
+				return event.diagram.edges;
+			},
+			lastSaved: ({ event }) => {
+				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return null;
+				return event.diagram.updatedAt;
+			},
+		}),
 	},
 }).createMachine({
 	id: "canvas",
@@ -306,6 +344,9 @@ export const canvasMachine = setup({
 				},
 				LOAD_DIAGRAM: {
 					target: "loadingDiagram",
+				},
+				LOAD_DIAGRAM_SUCCESS: {
+					actions: "loadDiagramSuccess",
 				},
 				SAVE_DIAGRAM: {
 					target: "saving",

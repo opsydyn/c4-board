@@ -21,7 +21,7 @@ import {
 	type NodeChange,
 } from "@xyflow/react";
 import { useCallback, useEffect } from "react";
-import { canvasMachine } from "../machines/canvas.machine";
+import { canvasMachine, type CanvasEvent } from "../machines/canvas.machine";
 import { C4Canvas } from "./C4Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { Toolbar } from "./Toolbar";
@@ -41,68 +41,103 @@ export function C4CanvasContainer() {
 	useEffect(() => {
 		const initializeDiagram = async () => {
 			try {
-				// Try to load the most recent diagram
+				// Load diagrams from database (single source of truth)
 				const diagrams = await runEffect(listAllDiagrams());
 
 				if (diagrams.length > 0) {
-					// Load most recently updated diagram
-					const mostRecent = diagrams.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-					if (!mostRecent) {
+					// Load all diagrams with their content to determine which to use
+					const diagramsWithContent = await Promise.all(
+						diagrams.map(async (meta) => {
+							const full = await runEffect(loadDiagram(meta.id));
+							return {
+								...meta,
+								nodeCount: full.nodes.length,
+								edgeCount: full.edges.length,
+								fullDiagram: full,
+							};
+						})
+					);
+
+					// IDIOMATIC TAURI: Query database to find best diagram
+					// Prioritize: diagrams with content > most recent
+					const diagramToLoad = diagramsWithContent
+						.sort((a, b) => {
+							// First: diagrams with nodes/edges
+							const aHasContent = a.nodeCount > 0 || a.edgeCount > 0 ? 1 : 0;
+							const bHasContent = b.nodeCount > 0 || b.edgeCount > 0 ? 1 : 0;
+							if (aHasContent !== bHasContent) {
+								return bHasContent - aHasContent;
+							}
+							// Then: most recently updated
+							return b.updatedAt - a.updatedAt;
+						})[0];
+
+					if (!diagramToLoad) {
 						throw new Error("No diagram found");
 					}
-					const diagram = await runEffect(loadDiagram(mostRecent.id));
 
-					// Update machine state with loaded diagram
-					send({
-						type: "LOAD_DIAGRAM",
-						diagramId: diagram.id,
-					});
+					const diagram = diagramToLoad.fullDiagram;
 
-					// Manually update context (since we're not using invoke in machine)
-					// This is a temporary approach - ideally machine would handle this
-					Object.assign(state.context, {
-						currentDiagramId: diagram.id,
-						diagramName: diagram.name,
-						diagramDescription: diagram.description ?? null,
-						nodes: diagram.nodes,
-						edges: diagram.edges,
-						lastSaved: diagram.updatedAt,
-					});
+					console.log(
+						"📂 Loaded diagram:",
+						diagram.id,
+						"with",
+						diagram.nodes.length,
+						"nodes,",
+						diagram.edges.length,
+						"edges"
+					);
+
+					// Send success event to update state and trigger re-render
+					const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+						type: "LOAD_DIAGRAM_SUCCESS",
+						diagram: {
+							id: diagram.id,
+							name: diagram.name,
+							nodes: diagram.nodes,
+							edges: diagram.edges,
+							updatedAt: diagram.updatedAt,
+							...(diagram.description ? { description: diagram.description } : {}),
+						},
+					};
+					send(loadEvent);
 				} else {
 					// No diagrams exist, create a new one
 					const diagram = await runEffect(
 						createNewDiagram("My First Diagram", "Getting started with C4"),
 					);
 
-					send({
-						type: "CREATE_NEW_DIAGRAM",
-						name: diagram.name,
-						description: diagram.description ?? "",
-					});
+					console.log("📝 Created new diagram:", diagram.id);
 
-					Object.assign(state.context, {
-						currentDiagramId: diagram.id,
-						diagramName: diagram.name,
-						diagramDescription: diagram.description ?? null,
-						nodes: [],
-						edges: [],
-						lastSaved: diagram.createdAt,
-					});
+					const createEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+						type: "LOAD_DIAGRAM_SUCCESS",
+						diagram: {
+							id: diagram.id,
+							name: diagram.name,
+							nodes: [],
+							edges: [],
+							updatedAt: diagram.createdAt,
+							...(diagram.description ? { description: diagram.description } : {}),
+						},
+					};
+					send(createEvent);
 				}
 			} catch (error) {
-				console.error("Failed to initialize diagram:", error);
+				console.error("⚠️ Failed to initialize diagram:", error);
 				// Create new diagram on error
 				const diagram = await runEffect(
 					createNewDiagram("Untitled Diagram"),
 				);
 
-				Object.assign(state.context, {
-					currentDiagramId: diagram.id,
-					diagramName: diagram.name,
-					diagramDescription: null,
-					nodes: [],
-					edges: [],
-					lastSaved: diagram.createdAt,
+				send({
+					type: "LOAD_DIAGRAM_SUCCESS",
+					diagram: {
+						id: diagram.id,
+						name: diagram.name,
+						nodes: [],
+						edges: [],
+						updatedAt: diagram.createdAt,
+					},
 				});
 			}
 		};
