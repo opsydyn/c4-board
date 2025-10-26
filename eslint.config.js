@@ -14,6 +14,7 @@ export default defineConfig([
 		},
 		rules: {
 			// Apply all recommended rules
+			// ts-ignore because of missing types
 			...vanillaExtract.configs.recommended.rules,
 		},
 	},
@@ -32,7 +33,7 @@ export default defineConfig([
 			},
 		},
 		rules: {
-			...pluginReact.configs.flat.recommended.rules,
+			...(pluginReact.configs.flat.recommended?.rules || {}),
 			"react/react-in-jsx-scope": "off", // Not needed with React 19 JSX transform
 			"@typescript-eslint/no-explicit-any": "warn", // Allow any for now in MVP
 		},

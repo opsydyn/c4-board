@@ -13,7 +13,7 @@ import * as S from "effect/Schema";
 export const C4ElementType = S.Union(
 	S.Literal("person" as const),
 	S.Literal("system" as const),
-	S.Literal("external_system" as const),
+	S.Literal("externalSystem" as const),
 	S.Literal("relationship" as const),
 );
 
@@ -67,7 +67,7 @@ export type SoftwareSystem = S.Schema.Type<typeof SoftwareSystem>;
  * Convenience type for external software systems
  */
 export const ExternalSystem = S.extend(SoftwareSystem, S.Struct({
-	type: S.Literal("external_system" as const),
+	type: S.Literal("externalSystem" as const),
 	external: S.Literal(true as const),
 }));
 

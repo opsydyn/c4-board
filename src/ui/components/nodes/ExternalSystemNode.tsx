@@ -17,7 +17,33 @@ import {
 	nodeContent,
 } from "./styles.css";
 
-export function ExternalSystemNode({ data, selected }: NodeProps) {
+interface ExternalSystemNodeData {
+	label?: string;
+	technology?: string;
+	description?: string;
+}
+
+function isExternalSystemNodeData(value: unknown): value is ExternalSystemNodeData {
+	if (typeof value !== "object" || value === null) {
+		return false;
+	}
+
+	const record = value as Record<string, unknown>;
+	const { label, technology, description } = record;
+
+	return (
+		(label === undefined || typeof label === "string") &&
+		(technology === undefined || typeof technology === "string") &&
+		(description === undefined || typeof description === "string")
+	);
+}
+
+export function ExternalSystemNode({
+	data,
+	selected,
+}: NodeProps) {
+	const nodeData: ExternalSystemNodeData = isExternalSystemNodeData(data) ? data : {};
+
 	return (
 		<div className={externalSystemNode} data-selected={selected}>
 			<Handle type="target" position={Position.Top} />
@@ -27,13 +53,13 @@ export function ExternalSystemNode({ data, selected }: NodeProps) {
 			</div>
 
 			<div className={nodeContent}>
-				<div className={externalSystemNodeLabel}>{data?.label ?? "Unnamed"}</div>
-				{data?.technology && (
-					<div className={externalSystemNodeTechnology}>[{data.technology}]</div>
+				<div className={externalSystemNodeLabel}>{nodeData.label ?? "Unnamed"}</div>
+				{nodeData.technology && (
+					<div className={externalSystemNodeTechnology}>[{nodeData.technology}]</div>
 				)}
-				{data?.description && (
+				{nodeData.description && (
 					<div className={externalSystemNodeDescription}>
-						{data.description}
+						{nodeData.description}
 					</div>
 				)}
 			</div>

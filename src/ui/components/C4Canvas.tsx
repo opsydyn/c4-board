@@ -46,7 +46,7 @@ export function C4Canvas({
 		() => ({
 			person: PersonNode,
 			system: SystemNode,
-			external_system: ExternalSystemNode,
+			externalSystem: ExternalSystemNode,
 		}),
 		[],
 	);

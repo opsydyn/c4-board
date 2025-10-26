@@ -13,13 +13,13 @@
 import { Effect } from "effect";
 import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from "@xyflow/react";
 import {
-	DatabaseService,
-	type Diagram,
 	type Node as DbNode,
 	type Edge as DbEdge,
 	type CreateDiagramInput,
 	type CreateNodeInput,
 	type CreateEdgeInput,
+	type UpdateDiagramInput,
+	type UpdateNodeInput,
 	createDiagram,
 	getDiagram,
 	listDiagrams,
@@ -33,7 +33,6 @@ import {
 	getEdgesByDiagram,
 	deleteEdge,
 	NotFoundError,
-	DatabaseError,
 } from "./database";
 
 // ============================================================================
@@ -89,13 +88,29 @@ function reactFlowNodeToDb(
 	node: ReactFlowNode,
 	diagramId: string,
 ): CreateNodeInput {
+	const rawData =
+		typeof node.data === "object" && node.data !== null ? node.data : {};
+	const dataRecord = rawData as Record<string, unknown>;
+	const labelValue = dataRecord.label;
+	const technologyValue = dataRecord.technology;
+	const descriptionValue = dataRecord.description;
+
+	const technology =
+		typeof technologyValue === "string" ? technologyValue : undefined;
+	const description =
+		typeof descriptionValue === "string" ? descriptionValue : undefined;
+	const label =
+		typeof labelValue === "string" && labelValue.length > 0
+			? labelValue
+			: "Unnamed";
+
 	return {
 		id: node.id,
 		diagram_id: diagramId,
 		type: (node.type || "system") as "person" | "system" | "externalSystem",
-		label: (node.data?.label as string) || "Unnamed",
-		technology: (node.data?.technology as string) || undefined,
-		description: (node.data?.description as string) || undefined,
+		label,
+		...(technology !== undefined ? { technology } : {}),
+		...(description !== undefined ? { description } : {}),
 		position_x: node.position.x,
 		position_y: node.position.y,
 	};
@@ -121,12 +136,15 @@ function reactFlowEdgeToDb(
 	edge: ReactFlowEdge,
 	diagramId: string,
 ): CreateEdgeInput {
+	const labelValue =
+		typeof edge.label === "string" ? edge.label : undefined;
+
 	return {
 		id: edge.id,
 		diagram_id: diagramId,
 		source: edge.source,
 		target: edge.target,
-		label: edge.label as string | undefined,
+		...(labelValue !== undefined ? { label: labelValue } : {}),
 	};
 }
 
@@ -140,24 +158,34 @@ function reactFlowEdgeToDb(
  */
 export const saveDiagram = (input: SaveDiagramInput) =>
 	Effect.gen(function* () {
-		const service = yield* DatabaseService;
-
 		// 1. Check if diagram exists, create or update
 		const existingDiagram = yield* Effect.either(getDiagram(input.id));
 
 		if (existingDiagram._tag === "Left") {
-			// Create new diagram
-			yield* createDiagram({
-				id: input.id,
-				name: input.name,
-				description: input.description,
-			});
+			const error = existingDiagram.left;
+
+			if (error instanceof NotFoundError) {
+				const createPayload: CreateDiagramInput = {
+					id: input.id,
+					name: input.name,
+					...(input.description !== undefined
+						? { description: input.description }
+						: {}),
+				};
+
+				yield* createDiagram(createPayload);
+			} else {
+				return yield* Effect.fail(error);
+			}
 		} else {
-			// Update existing diagram
-			yield* updateDiagram(input.id, {
+			const updatePayload: UpdateDiagramInput = {
 				name: input.name,
-				description: input.description,
-			});
+				...(input.description !== undefined
+					? { description: input.description }
+					: {}),
+			};
+
+			yield* updateDiagram(input.id, updatePayload);
 		}
 
 		// 2. Get existing nodes and edges to determine what to delete
@@ -190,13 +218,19 @@ export const saveDiagram = (input: SaveDiagramInput) =>
 
 			if (nodeExists) {
 				// Update existing node
-				yield* updateNode(node.id, {
+				const updateNodePayload: UpdateNodeInput = {
 					label: dbNodeInput.label,
-					technology: dbNodeInput.technology,
-					description: dbNodeInput.description,
 					position_x: dbNodeInput.position_x,
 					position_y: dbNodeInput.position_y,
-				});
+					...(dbNodeInput.technology !== undefined
+						? { technology: dbNodeInput.technology }
+						: {}),
+					...(dbNodeInput.description !== undefined
+						? { description: dbNodeInput.description }
+						: {}),
+				};
+
+				yield* updateNode(node.id, updateNodePayload);
 			} else {
 				// Create new node
 				yield* createNode(dbNodeInput);
@@ -228,7 +262,7 @@ export const saveDiagram = (input: SaveDiagramInput) =>
 export const loadDiagram = (diagramId: string) =>
 	Effect.gen(function* () {
 		// 1. Load diagram metadata
-		const diagram = yield* getDiagram(diagramId);
+		const diagram = (yield* getDiagram(diagramId))!;
 
 		// 2. Load all nodes for this diagram
 		const dbNodes = yield* getNodesByDiagram(diagramId);
@@ -243,7 +277,9 @@ export const loadDiagram = (diagramId: string) =>
 		return {
 			id: diagram.id,
 			name: diagram.name,
-			description: diagram.description ?? undefined,
+			...(diagram.description !== null
+				? { description: diagram.description }
+				: {}),
 			nodes,
 			edges,
 			createdAt: diagram.created_at,
@@ -258,16 +294,18 @@ export const createNewDiagram = (name: string, description?: string) =>
 	Effect.gen(function* () {
 		const id = `diagram-${Date.now()}`;
 
-		yield* createDiagram({
+		const createPayload: CreateDiagramInput = {
 			id,
 			name,
-			description,
-		});
+			...(description !== undefined ? { description } : {}),
+		};
+
+		yield* createDiagram(createPayload);
 
 		return {
 			id,
 			name,
-			description,
+			...(description !== undefined ? { description } : {}),
 			nodes: [],
 			edges: [],
 			createdAt: Date.now(),
@@ -285,7 +323,7 @@ export const listAllDiagrams = () =>
 		return diagrams.map((d) => ({
 			id: d.id,
 			name: d.name,
-			description: d.description ?? undefined,
+			...(d.description !== null ? { description: d.description } : {}),
 			createdAt: d.created_at,
 			updatedAt: d.updated_at,
 		}));
@@ -335,18 +373,24 @@ export const duplicateDiagram = (sourceDiagramId: string, newName: string) =>
 		}));
 
 		// 5. Save the duplicate
-		yield* saveDiagram({
+		const duplicatePayload: SaveDiagramInput = {
 			id: newId,
 			name: newName,
-			description: source.description,
 			nodes: newNodes,
 			edges: newEdges,
-		});
+			...(source.description !== undefined
+				? { description: source.description }
+				: {}),
+		};
+
+		yield* saveDiagram(duplicatePayload);
 
 		return {
 			id: newId,
 			name: newName,
-			description: source.description,
+			...(source.description !== undefined
+				? { description: source.description }
+				: {}),
 			nodes: newNodes,
 			edges: newEdges,
 			createdAt: Date.now(),

@@ -13,8 +13,6 @@
 
 import { useMachine } from "@xstate/react";
 import {
-	addEdge,
-	applyNodeChanges,
 	type Connection,
 	type EdgeChange,
 	type Node,
@@ -143,7 +141,7 @@ export function C4CanvasContainer() {
 		};
 
 		initializeDiagram();
-	}, []); // Only run on mount
+	}, [runEffect, send]);
 
 	// Handle explicit save action
 	const handleSave = useCallback(async () => {
@@ -185,20 +183,9 @@ export function C4CanvasContainer() {
 	// Handle node position/selection changes from ReactFlow
 	const onNodesChange = useCallback(
 		(changes: NodeChange[]) => {
-			// PERFORMANCE: Check if these are only position changes during drag
-			const hasOnlyPositionChanges = changes.every((c) => c.type === "position");
-			const isDragging = changes.some((c) => c.type === "position" && (c as any).dragging !== false);
-
-			if (hasOnlyPositionChanges && isDragging) {
-				// OPTIMIZATION: During drag, directly mutate context to avoid XState overhead
-				// This bypasses the event system for smoother dragging performance
-				state.context.nodes = applyNodeChanges(changes, state.context.nodes);
-			} else {
-				// For other changes (selection, add, remove, drag end), use proper XState events
-				send({ type: "NODES_CHANGED", changes });
-			}
+			send({ type: "NODES_CHANGED", changes });
 		},
-		[send, state.context],
+		[send],
 	);
 
 	// Handle edge changes from ReactFlow
@@ -213,23 +200,17 @@ export function C4CanvasContainer() {
 	// Handle new connections between nodes
 	const onConnect = useCallback(
 		(connection: Connection) => {
-			if (!connection.source || !connection.target) return;
+			if (!connection.source || !connection.target) {
+				return;
+			}
 
-			const updatedEdges = addEdge(
-				{
-					...connection,
-					id: `edge-${Date.now()}`,
-					type: "default",
-					label: "uses",
-				},
-				state.context.edges,
-			);
-
-			// Manually update edges
-			// TODO: Convert this to use XState event
-			state.context.edges = updatedEdges;
+			send({
+				type: "CONNECT_NODES",
+				source: connection.source,
+				target: connection.target,
+			});
 		},
-		[state.context],
+		[send],
 	);
 
 	// Handle node clicks for selection
@@ -239,6 +220,28 @@ export function C4CanvasContainer() {
 		},
 		[send],
 	);
+
+	const handleNewBoard = useCallback(async () => {
+		try {
+			const diagram = await runEffect(createNewDiagram("Untitled Diagram"));
+
+			send({
+				type: "LOAD_DIAGRAM_SUCCESS",
+				diagram: {
+					id: diagram.id,
+					name: diagram.name,
+					nodes: diagram.nodes,
+					edges: diagram.edges,
+					updatedAt: diagram.updatedAt,
+					...(diagram.description ? { description: diagram.description } : {}),
+				},
+			});
+
+			send({ type: "UPDATE_SESSION_NAME", name: "" });
+		} catch (error) {
+			console.error("❌ New board creation failed:", error);
+		}
+	}, [runEffect, send]);
 
 	// Get selected node object
 	const selectedNode =
@@ -252,7 +255,9 @@ export function C4CanvasContainer() {
 				onAddSystem={() => send({ type: "ADD_SYSTEM" })}
 				onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
 				onSave={handleSave}
+				onNewBoard={handleNewBoard}
 				onSessionNameChange={(name) => send({ type: "UPDATE_SESSION_NAME", name })}
+				onDiagramNameChange={(name) => send({ type: "UPDATE_DIAGRAM_NAME", name })}
 				sessionName={state.context.sessionName}
 				isSaving={state.context.isSaving}
 				lastSaved={state.context.lastSaved}
