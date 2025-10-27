@@ -72,6 +72,8 @@ export interface Node {
 	description: string | null;
 	position_x: number;
 	position_y: number;
+	width: number | null;
+	height: number | null;
 	created_at: number;
 	updated_at: number;
 }
@@ -110,6 +112,8 @@ export interface CreateNodeInput {
 	description?: string;
 	position_x: number;
 	position_y: number;
+	width?: number;
+	height?: number;
 }
 
 export interface UpdateNodeInput {
@@ -118,6 +122,8 @@ export interface UpdateNodeInput {
 	description?: string;
 	position_x?: number;
 	position_y?: number;
+	width?: number;
+	height?: number;
 }
 
 export interface CreateEdgeInput {
@@ -243,8 +249,8 @@ export const createNode = (input: CreateNodeInput) =>
 		const now = Date.now();
 
 		yield* service.execute(
-			`INSERT INTO nodes (id, diagram_id, type, label, technology, description, position_x, position_y, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO nodes (id, diagram_id, type, label, technology, description, position_x, position_y, width, height, created_at, updated_at)
+	       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				input.id,
 				input.diagram_id,
@@ -254,6 +260,8 @@ export const createNode = (input: CreateNodeInput) =>
 				input.description ?? null,
 				input.position_x,
 				input.position_y,
+				input.width ?? null,
+				input.height ?? null,
 				now,
 				now,
 			],
@@ -268,6 +276,8 @@ export const createNode = (input: CreateNodeInput) =>
 			description: input.description ?? null,
 			position_x: input.position_x,
 			position_y: input.position_y,
+			width: input.width ?? null,
+			height: input.height ?? null,
 			created_at: now,
 			updated_at: now,
 		} satisfies Node;
@@ -310,6 +320,14 @@ export const updateNode = (id: string, input: UpdateNodeInput) =>
 		if (input.position_y !== undefined) {
 			updates.push("position_y = ?");
 			values.push(input.position_y);
+		}
+		if (input.width !== undefined) {
+			updates.push("width = ?");
+			values.push(input.width ?? null);
+		}
+		if (input.height !== undefined) {
+			updates.push("height = ?");
+			values.push(input.height ?? null);
 		}
 
 		if (updates.length === 0) {

@@ -65,7 +65,7 @@ export interface SaveDiagramInput {
  * Convert database node to ReactFlow node format
  */
 function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
-	return {
+	const node: ReactFlowNode = {
 		id: dbNode.id,
 		type: dbNode.type,
 		position: {
@@ -79,6 +79,21 @@ function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 			c4Type: dbNode.type,
 		},
 	};
+
+	if (dbNode.width !== null) {
+		node.width = dbNode.width;
+	}
+	if (dbNode.height !== null) {
+		node.height = dbNode.height;
+	}
+	if (dbNode.width !== null || dbNode.height !== null) {
+		node.style = {
+			...(dbNode.width !== null ? { width: dbNode.width } : {}),
+			...(dbNode.height !== null ? { height: dbNode.height } : {}),
+		};
+	}
+
+	return node;
 }
 
 /**
@@ -97,6 +112,10 @@ function reactFlowNodeToDb(
 	const explicitType = typeof node.type === "string" && node.type.length > 0 ? node.type : undefined;
 	const dataType = typeof dataRecord.c4Type === "string" && dataRecord.c4Type.length > 0 ? (dataRecord.c4Type as string) : undefined;
 	const resolvedType = (explicitType ?? dataType ?? "system") as CreateNodeInput["type"];
+	const styleWidth = extractNumericDimension(node.style?.width);
+	const styleHeight = extractNumericDimension(node.style?.height);
+	const widthValue = typeof node.width === "number" ? node.width : styleWidth;
+	const heightValue = typeof node.height === "number" ? node.height : styleHeight;
 
 	const technology =
 		typeof technologyValue === "string" ? technologyValue : undefined;
@@ -116,6 +135,8 @@ function reactFlowNodeToDb(
 		...(description !== undefined ? { description } : {}),
 		position_x: node.position.x,
 		position_y: node.position.y,
+		...(widthValue !== undefined ? { width: widthValue } : {}),
+		...(heightValue !== undefined ? { height: heightValue } : {}),
 	};
 }
 
@@ -219,22 +240,24 @@ export const saveDiagram = (input: SaveDiagramInput) =>
 			// Check if node exists
 			const nodeExists = existingNodes.some((n) => n.id === node.id);
 
-			if (nodeExists) {
-				// Update existing node
-				const updateNodePayload: UpdateNodeInput = {
-					label: dbNodeInput.label,
-					position_x: dbNodeInput.position_x,
-					position_y: dbNodeInput.position_y,
-					...(dbNodeInput.technology !== undefined
-						? { technology: dbNodeInput.technology }
-						: {}),
-					...(dbNodeInput.description !== undefined
-						? { description: dbNodeInput.description }
-						: {}),
-				};
+		if (nodeExists) {
+			// Update existing node
+			const updateNodePayload: UpdateNodeInput = {
+				label: dbNodeInput.label,
+				position_x: dbNodeInput.position_x,
+				position_y: dbNodeInput.position_y,
+				...(dbNodeInput.technology !== undefined
+					? { technology: dbNodeInput.technology }
+					: {}),
+				...(dbNodeInput.description !== undefined
+					? { description: dbNodeInput.description }
+					: {}),
+				...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
+				...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
+			};
 
-				yield* updateNode(node.id, updateNodePayload);
-			} else {
+			yield* updateNode(node.id, updateNodePayload);
+		} else {
 				// Create new node
 				yield* createNode(dbNodeInput);
 			}
@@ -400,3 +423,13 @@ export const duplicateDiagram = (sourceDiagramId: string, newName: string) =>
 			updatedAt: Date.now(),
 		} satisfies CanvasDiagram;
 	});
+const extractNumericDimension = (value: unknown): number | undefined => {
+	if (typeof value === "number") {
+		return value;
+	}
+	if (typeof value === "string") {
+		const parsed = Number.parseFloat(value);
+		return Number.isFinite(parsed) ? parsed : undefined;
+	}
+	return undefined;
+};

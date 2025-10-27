@@ -28,6 +28,8 @@ pub struct Node {
     pub description: Option<String>,
     pub position_x: f64,
     pub position_y: f64,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -71,6 +73,8 @@ pub struct CreateNodeInput {
     pub description: Option<String>,
     pub position_x: f64,
     pub position_y: f64,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,6 +84,8 @@ pub struct UpdateNodeInput {
     pub description: Option<String>,
     pub position_x: Option<f64>,
     pub position_y: Option<f64>,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,6 +238,12 @@ pub fn run() {
             version: 3,
             description: "update_node_types",
             sql: include_str!("../migrations/003_update_node_types.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "add_node_dimensions",
+            sql: include_str!("../migrations/004_add_node_dimensions.sql"),
             kind: MigrationKind::Up,
         },
     ];

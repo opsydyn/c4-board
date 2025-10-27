@@ -152,6 +152,9 @@ export function DatabaseTest() {
 						<div>Position: ({node.position_x}, {node.position_y})</div>
 						<div>Technology: {node.technology ?? "None"}</div>
 						<div>Description: {node.description ?? "None"}</div>
+						<div>
+							Size: {node.width ?? "auto"} × {node.height ?? "auto"}
+						</div>
 					</div>
 				))}
 			</div>
