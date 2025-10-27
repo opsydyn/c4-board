@@ -66,7 +66,7 @@ export interface Diagram {
 export interface Node {
 	id: string;
 	diagram_id: string;
-	type: "person" | "system" | "externalSystem";
+	type: "person" | "system" | "externalSystem" | "container" | "component";
 	label: string;
 	technology: string | null;
 	description: string | null;
@@ -104,7 +104,7 @@ export interface UpdateDiagramInput {
 export interface CreateNodeInput {
 	id: string;
 	diagram_id: string;
-	type: "person" | "system" | "externalSystem";
+	type: "person" | "system" | "externalSystem" | "container" | "component";
 	label: string;
 	technology?: string;
 	description?: string;

@@ -94,6 +94,9 @@ function reactFlowNodeToDb(
 	const labelValue = dataRecord.label;
 	const technologyValue = dataRecord.technology;
 	const descriptionValue = dataRecord.description;
+	const explicitType = typeof node.type === "string" && node.type.length > 0 ? node.type : undefined;
+	const dataType = typeof dataRecord.c4Type === "string" && dataRecord.c4Type.length > 0 ? (dataRecord.c4Type as string) : undefined;
+	const resolvedType = (explicitType ?? dataType ?? "system") as CreateNodeInput["type"];
 
 	const technology =
 		typeof technologyValue === "string" ? technologyValue : undefined;
@@ -107,7 +110,7 @@ function reactFlowNodeToDb(
 	return {
 		id: node.id,
 		diagram_id: diagramId,
-		type: (node.type || "system") as "person" | "system" | "externalSystem",
+		type: resolvedType,
 		label,
 		...(technology !== undefined ? { technology } : {}),
 		...(description !== undefined ? { description } : {}),

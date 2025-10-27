@@ -33,10 +33,10 @@ export const searchIcon = style({
 		[componentsLayer]: {
 			position: "absolute",
 			left: theme.spacing["3"],
-			pointerEvents: "none",
-			color: theme.color.foreground.tertiary,
 			display: "flex",
 			alignItems: "center",
+			pointerEvents: "none",
+			color: theme.color.foreground.tertiary,
 		},
 	},
 });
@@ -44,25 +44,25 @@ export const searchIcon = style({
 export const searchInput = style({
 	"@layer": {
 		[componentsLayer]: {
-			width: "100%",
-			padding: `${theme.spacing["2"]} ${theme.spacing["3"]} ${theme.spacing["2"]} ${theme.spacing["10"]}`,
-			backgroundColor: theme.color.background.input,
-			border: `${theme.border.width.medium} solid ${theme.color.semantic.person}`,
-			borderRadius: theme.border.radius.md,
-			color: theme.color.foreground.primary,
-			fontSize: theme.typography.size.sm,
-			fontFamily: theme.typography.family.sans,
 			transition: theme.transition.base,
 			outline: "none",
+			border: `${theme.border.width.base} solid ${theme.color.semantic.person}`,
+			borderRadius: theme.border.radius.md,
+			backgroundColor: theme.color.background.input,
+			padding: `${theme.spacing["2"]} ${theme.spacing["3"]} ${theme.spacing["2"]} ${theme.spacing["10"]}`,
+			width: "100%",
+			color: theme.color.foreground.primary,
+			fontFamily: theme.typography.family.sans,
+			fontSize: theme.typography.size.sm,
 
 			"::placeholder": {
 				color: theme.color.foreground.tertiary,
 			},
 
 			":focus": {
-				backgroundColor: theme.color.background.inputFocus,
 				borderColor: theme.color.semantic.person,
 				boxShadow: `0 0 0 3px ${theme.color.semantic.person}33`,
+				backgroundColor: theme.color.background.inputFocus,
 			},
 		},
 	},
@@ -72,16 +72,16 @@ export const resultsDropdown = style({
 	"@layer": {
 		[componentsLayer]: {
 			position: "absolute",
+			zIndex: theme.zIndex.dropdown,
 			top: "calc(100% + 4px)",
-			left: 0,
 			right: 0,
-			maxHeight: "400px",
-			overflowY: "auto",
-			backgroundColor: theme.color.background.surface,
-			border: `${theme.border.width.medium} solid ${theme.color.semantic.person}`,
+			left: 0,
+			border: `${theme.border.width.base} solid ${theme.color.semantic.person}`,
 			borderRadius: theme.border.radius.md,
 			boxShadow: theme.effect.glow.lg,
-			zIndex: theme.zIndex.dropdown,
+			backgroundColor: theme.color.background.surface,
+			maxHeight: "400px",
+			overflowY: "auto",
 		},
 	},
 });
@@ -92,10 +92,10 @@ export const resultItem = style({
 			display: "flex",
 			alignItems: "flex-start",
 			gap: theme.spacing["3"],
-			padding: theme.spacing["3"],
-			cursor: "pointer",
 			transition: theme.transition.fast,
 			borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+			cursor: "pointer",
+			padding: theme.spacing["3"],
 
 			":last-child": {
 				borderBottom: "none",
@@ -112,12 +112,12 @@ export const resultBadge = style({
 	"@layer": {
 		[componentsLayer]: {
 			flexShrink: 0,
-			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 			borderRadius: theme.border.radius.sm,
-			fontSize: theme.typography.size.xs,
-			fontWeight: theme.typography.weight.medium,
+			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 			textTransform: "uppercase",
 			letterSpacing: theme.typography.letterSpacing.wide,
+			fontSize: theme.typography.size.xs,
+			fontWeight: theme.typography.weight.medium,
 		},
 	},
 });
@@ -134,13 +134,13 @@ export const resultContent = style({
 export const resultLabel = style({
 	"@layer": {
 		[componentsLayer]: {
-			fontSize: theme.typography.size.sm,
-			fontWeight: theme.typography.weight.semibold,
-			color: theme.color.foreground.primary,
 			marginBottom: theme.spacing["1"],
 			overflow: "hidden",
 			textOverflow: "ellipsis",
 			whiteSpace: "nowrap",
+			color: theme.color.foreground.primary,
+			fontSize: theme.typography.size.sm,
+			fontWeight: theme.typography.weight.semibold,
 		},
 	},
 });
@@ -148,11 +148,11 @@ export const resultLabel = style({
 export const resultDescription = style({
 	"@layer": {
 		[componentsLayer]: {
-			fontSize: theme.typography.size.xs,
-			color: theme.color.foreground.secondary,
 			overflow: "hidden",
 			textOverflow: "ellipsis",
 			whiteSpace: "nowrap",
+			color: theme.color.foreground.secondary,
+			fontSize: theme.typography.size.xs,
 		},
 	},
 });
@@ -172,13 +172,13 @@ export const kbd = style({
 	"@layer": {
 		[componentsLayer]: {
 			display: "inline-block",
-			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
-			fontSize: theme.typography.size.xs,
-			fontFamily: theme.typography.family.mono,
-			backgroundColor: theme.color.background.raised,
+			marginLeft: theme.spacing["2"],
 			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 			borderRadius: theme.border.radius.sm,
-			marginLeft: theme.spacing["2"],
+			backgroundColor: theme.color.background.raised,
+			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+			fontFamily: theme.typography.family.mono,
+			fontSize: theme.typography.size.xs,
 		},
 	},
 });

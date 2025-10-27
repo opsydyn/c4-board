@@ -22,7 +22,7 @@ pub struct Node {
     pub id: String,
     pub diagram_id: String,
     #[serde(rename = "type")]
-    pub node_type: String, // "person" | "system" | "externalSystem"
+    pub node_type: String, // "person" | "system" | "externalSystem" | "container" | "component"
     pub label: String,
     pub technology: Option<String>,
     pub description: Option<String>,
@@ -226,6 +226,12 @@ pub fn run() {
             version: 2,
             description: "create_history_table",
             sql: include_str!("../migrations/002_history.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "update_node_types",
+            sql: include_str!("../migrations/003_update_node_types.sql"),
             kind: MigrationKind::Up,
         },
     ];

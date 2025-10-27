@@ -14,6 +14,8 @@ export const C4ElementType = S.Union(
 	S.Literal("person" as const),
 	S.Literal("system" as const),
 	S.Literal("externalSystem" as const),
+	S.Literal("container" as const),
+	S.Literal("component" as const),
 	S.Literal("relationship" as const),
 );
 
@@ -74,6 +76,34 @@ export const ExternalSystem = S.extend(SoftwareSystem, S.Struct({
 export type ExternalSystem = S.Schema.Type<typeof ExternalSystem>;
 
 /**
+ * Container (Application, Database, etc.)
+ */
+export const Container = S.Struct({
+	id: S.String,
+	type: S.Literal("container" as const),
+	name: S.String.pipe(S.minLength(1)),
+	description: S.optional(S.String),
+	technology: S.optional(S.String),
+	position: Position,
+});
+
+export type Container = S.Schema.Type<typeof Container>;
+
+/**
+ * Component (Module inside a container)
+ */
+export const Component = S.Struct({
+	id: S.String,
+	type: S.Literal("component" as const),
+	name: S.String.pipe(S.minLength(1)),
+	description: S.optional(S.String),
+	technology: S.optional(S.String),
+	position: Position,
+});
+
+export type Component = S.Schema.Type<typeof Component>;
+
+/**
  * Relationship (Connection between elements)
  * Represents how elements interact
  */
@@ -95,6 +125,8 @@ export const C4Element = S.Union(
 	Person,
 	SoftwareSystem,
 	ExternalSystem,
+	Container,
+	Component,
 	Relationship,
 );
 
