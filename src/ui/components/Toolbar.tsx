@@ -14,6 +14,7 @@ import {
 	PlusIcon,
 	Stack,
 	Cube,
+	GridFour,
 } from "@phosphor-icons/react";
 import type { Node } from "@xyflow/react";
 import { toolbar, toolbarButton, saveStatus, boardNameInput } from "./styles.css";
@@ -27,6 +28,8 @@ interface ToolbarProps {
 	onAddComponent: () => void;
 	onSave: () => void;
 	onNewBoard: () => void;
+	onAutoLayout: () => void;
+	onAutoLayoutSelected: () => void;
 	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
 	onSelectNode: (nodeId: string) => void;
@@ -63,6 +66,8 @@ export function Toolbar({
 	onAddComponent,
 	onSave,
 	onNewBoard,
+	onAutoLayout,
+	onAutoLayoutSelected,
 	onDiagramNameChange,
 	onSessionNameChange,
 	onSelectNode,
@@ -128,6 +133,27 @@ export function Toolbar({
 
 			{/* Search box */}
 			<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
+
+			{/* Auto-layout buttons */}
+			<button
+				type="button"
+				className={toolbarButton}
+				onClick={onAutoLayout}
+				title="Auto-arrange all nodes (⌘L)"
+			>
+				<GridFour size={20} weight="duotone" />
+				Layout All
+			</button>
+
+			<button
+				type="button"
+				className={toolbarButton}
+				onClick={onAutoLayoutSelected}
+				title="Auto-arrange selected nodes (⌘⇧L)"
+			>
+				<GridFour size={20} weight="fill" />
+				Layout Selected
+			</button>
 
 			{/* Add node buttons */}
 			<button type="button" className={toolbarButton} onClick={onAddPerson}>

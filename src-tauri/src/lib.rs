@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem};
+use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -188,9 +188,10 @@ fn build_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu<tauri::Wry>, t
         .build()?;
 
     // View Menu
-    let toggle_properties = MenuItemBuilder::with_id("toggle-properties", "Toggle Properties Panel")
-        .accelerator("CmdOrCtrl+P")
-        .build(app)?;
+    let toggle_properties =
+        MenuItemBuilder::with_id("toggle-properties", "Toggle Properties Panel")
+            .accelerator("CmdOrCtrl+P")
+            .build(app)?;
     let zoom_in = MenuItemBuilder::with_id("zoom-in", "Zoom In")
         .accelerator("CmdOrCtrl+Plus")
         .build(app)?;
@@ -246,13 +247,19 @@ pub fn run() {
             sql: include_str!("../migrations/004_add_node_dimensions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "add_node_parent_fields",
+            sql: include_str!("../migrations/005_add_node_parent_fields.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:c4board.db", migrations)
-                .build()
+                .build(),
         )
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![greet])

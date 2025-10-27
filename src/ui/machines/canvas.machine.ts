@@ -8,6 +8,7 @@
 import type { Edge, Node, NodeChange, EdgeChange } from "@xyflow/react";
 import { applyNodeChanges, applyEdgeChanges } from "@xyflow/react";
 import { assign, setup } from "xstate";
+import { autoLayout, autoLayoutSelected, type LayoutOptions } from "../../core/effects/layout";
 
 export type CanvasEvent =
 	| { type: "ADD_PERSON" }
@@ -17,6 +18,8 @@ export type CanvasEvent =
 	| { type: "ADD_COMPONENT" }
 	| { type: "SELECT_NODE"; nodeId: string }
 	| { type: "DESELECT_NODE" }
+	| { type: "AUTO_LAYOUT"; options?: Partial<LayoutOptions> }
+	| { type: "AUTO_LAYOUT_SELECTED"; options?: Partial<LayoutOptions> }
 	| {
 			type: "UPDATE_NODE";
 			nodeId: string;
@@ -72,6 +75,9 @@ export interface CanvasContext {
 	isSaving: boolean;
 	lastSaved: number | null;
 	saveError: string | null;
+
+	// Layout state
+	previousLayout: Node[] | null; // For undo functionality
 }
 
 export const canvasMachine = setup({
@@ -83,16 +89,33 @@ export const canvasMachine = setup({
 		addPerson: assign({
 			nodes: ({ context }) => {
 				const id = `person-${context.nodeCounter}`;
+
+				// Check if a container is selected
+				const selectedNode = context.selectedNodeId
+					? context.nodes.find((n) => n.id === context.selectedNodeId)
+					: null;
+
+				const isParentContainer = selectedNode?.type === "container";
+
 				const newNode: Node = {
 					id,
 					type: "person",
-					position: { x: 100 + context.nodeCounter * 50, y: 100 },
+					// Position relative to parent if inside container, absolute otherwise
+					position: isParentContainer
+						? { x: 20, y: 60 }
+						: { x: 100 + context.nodeCounter * 50, y: 100 },
 					data: {
 						label: "New Person",
 						description: "",
 						technology: "",
 						c4Type: "person",
 					},
+					// Set parent relationship if container is selected
+					...(isParentContainer && {
+						parentId: selectedNode.id,
+						extent: "parent" as const,
+						expandParent: true,
+					}),
 				};
 				return [...context.nodes, newNode];
 			},
@@ -102,16 +125,33 @@ export const canvasMachine = setup({
 		addSystem: assign({
 			nodes: ({ context }) => {
 				const id = `system-${context.nodeCounter}`;
+
+				// Check if a container is selected
+				const selectedNode = context.selectedNodeId
+					? context.nodes.find((n) => n.id === context.selectedNodeId)
+					: null;
+
+				const isParentContainer = selectedNode?.type === "container";
+
 				const newNode: Node = {
 					id,
 					type: "system",
-					position: { x: 100 + context.nodeCounter * 50, y: 100 },
+					// Position relative to parent if inside container, absolute otherwise
+					position: isParentContainer
+						? { x: 20, y: 60 }
+						: { x: 100 + context.nodeCounter * 50, y: 100 },
 					data: {
 						label: "New System",
 						description: "",
 						technology: "",
 						c4Type: "system",
 					},
+					// Set parent relationship if container is selected
+					...(isParentContainer && {
+						parentId: selectedNode.id,
+						extent: "parent" as const,
+						expandParent: true,
+					}),
 				};
 				return [...context.nodes, newNode];
 			},
@@ -121,16 +161,33 @@ export const canvasMachine = setup({
 		addExternalSystem: assign({
 			nodes: ({ context }) => {
 				const id = `external-${context.nodeCounter}`;
+
+				// Check if a container is selected
+				const selectedNode = context.selectedNodeId
+					? context.nodes.find((n) => n.id === context.selectedNodeId)
+					: null;
+
+				const isParentContainer = selectedNode?.type === "container";
+
 				const newNode: Node = {
 					id,
 					type: "externalSystem",
-					position: { x: 100 + context.nodeCounter * 50, y: 100 },
+					// Position relative to parent if inside container, absolute otherwise
+					position: isParentContainer
+						? { x: 20, y: 60 }
+						: { x: 100 + context.nodeCounter * 50, y: 100 },
 					data: {
 						label: "External System",
 						description: "",
 						technology: "",
 						c4Type: "externalSystem",
 					},
+					// Set parent relationship if container is selected
+					...(isParentContainer && {
+						parentId: selectedNode.id,
+						extent: "parent" as const,
+						expandParent: true,
+					}),
 				};
 				return [...context.nodes, newNode];
 			},
@@ -140,10 +197,21 @@ export const canvasMachine = setup({
 		addContainer: assign({
 			nodes: ({ context }) => {
 				const id = `container-${context.nodeCounter}`;
+
+				// Check if a container is selected - support nested containers
+				const selectedNode = context.selectedNodeId
+					? context.nodes.find((n) => n.id === context.selectedNodeId)
+					: null;
+
+				const isParentContainer = selectedNode?.type === "container";
+
 				const newNode: Node = {
 					id,
 					type: "container",
-					position: { x: 100 + context.nodeCounter * 50, y: 100 },
+					// Position relative to parent if nested, absolute otherwise
+					position: isParentContainer
+						? { x: 20, y: 60 } // Position inside parent container
+						: { x: 100 + context.nodeCounter * 50, y: 100 },
 					data: {
 						label: "Container",
 						description: "",
@@ -151,9 +219,15 @@ export const canvasMachine = setup({
 						c4Type: "container",
 					},
 					style: {
-						width: 300,
-						height: 200,
+						width: 400,
+						height: 300,
 					},
+					// Set parent relationship if container is selected
+					...(isParentContainer && {
+						parentId: selectedNode.id,
+						extent: "parent" as const,
+						expandParent: true,
+					}),
 				};
 				return [...context.nodes, newNode];
 			},
@@ -163,16 +237,33 @@ export const canvasMachine = setup({
 		addComponent: assign({
 			nodes: ({ context }) => {
 				const id = `component-${context.nodeCounter}`;
+
+				// Check if a container is selected - if so, add component as child
+				const selectedNode = context.selectedNodeId
+					? context.nodes.find((n) => n.id === context.selectedNodeId)
+					: null;
+
+				const isParentContainer = selectedNode?.type === "container";
+
 				const newNode: Node = {
 					id,
 					type: "component",
-					position: { x: 100 + context.nodeCounter * 50, y: 100 },
+					// Position relative to parent if inside container, absolute otherwise
+					position: isParentContainer
+						? { x: 20, y: 60 } // Position inside container (below header)
+						: { x: 100 + context.nodeCounter * 50, y: 100 },
 					data: {
 						label: "Component",
 						description: "",
 						technology: "",
 						c4Type: "component",
 					},
+					// Set parent relationship if container is selected
+					...(isParentContainer && {
+						parentId: selectedNode.id,
+						extent: "parent" as const, // Keep child within parent bounds
+						expandParent: true, // Auto-expand parent if needed
+					}),
 				};
 				return [...context.nodes, newNode];
 			},
@@ -275,6 +366,38 @@ export const canvasMachine = setup({
 			},
 		}),
 
+		applyLayout: assign({
+			previousLayout: ({ context }) => context.nodes, // Save current layout for undo
+			nodes: ({ context, event }) => {
+				if (event.type !== "AUTO_LAYOUT") return context.nodes;
+				return autoLayout(context.nodes, context.edges, event.options);
+			},
+		}),
+
+		applyLayoutSelected: assign({
+			previousLayout: ({ context }) => context.nodes, // Save current layout for undo
+			nodes: ({ context, event }) => {
+				if (event.type !== "AUTO_LAYOUT_SELECTED") return context.nodes;
+
+				// Get all selected nodes (ReactFlow stores selection in node.selected)
+				const selectedNodeIds = context.nodes
+					.filter((node) => node.selected)
+					.map((node) => node.id);
+
+				if (selectedNodeIds.length === 0) {
+					// No selection, fallback to layout all
+					return autoLayout(context.nodes, context.edges, event.options);
+				}
+
+				return autoLayoutSelected(
+					context.nodes,
+					context.edges,
+					selectedNodeIds,
+					event.options,
+				);
+			},
+		}),
+
 		setSaving: assign({
 			isSaving: true,
 			saveError: null,
@@ -341,6 +464,9 @@ export const canvasMachine = setup({
 		isSaving: false,
 		lastSaved: null,
 		saveError: null,
+
+		// Layout state
+		previousLayout: null,
 	},
 	states: {
 		idle: {
@@ -389,6 +515,12 @@ export const canvasMachine = setup({
 				},
 				UPDATE_SESSION_NAME: {
 					actions: "updateSessionName",
+				},
+				AUTO_LAYOUT: {
+					actions: "applyLayout",
+				},
+				AUTO_LAYOUT_SELECTED: {
+					actions: "applyLayoutSelected",
 				},
 				// Persistence events
 				CREATE_NEW_DIAGRAM: {

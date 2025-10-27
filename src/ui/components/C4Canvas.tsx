@@ -8,6 +8,7 @@
 import {
 	Background,
 	Controls,
+	MiniMap,
 	type Edge,
 	type Node,
 	type NodeMouseHandler,
@@ -112,10 +113,45 @@ function C4CanvasInner(
 				defaultEdgeOptions={defaultEdgeOptions}
 				fitView
 				snapToGrid
-				snapGrid={[15, 15]}
+				snapGrid={[20, 20]}
+				nodesDraggable
+				nodesConnectable
+				elementsSelectable
 			>
 				<Background color={theme.color.border.primary} />
 				<Controls className={reactFlowControls} />
+				<MiniMap
+					nodeColor={(node) => {
+						// Color nodes based on their type using tactical colors
+						switch (node.type) {
+							case "person":
+								return theme.color.semantic.person;
+							case "system":
+								return theme.color.semantic.system;
+							case "externalSystem":
+								return theme.color.semantic.external;
+							case "container":
+								return theme.color.semantic.container;
+							case "component":
+								return theme.color.semantic.component;
+							default:
+								return theme.color.foreground.secondary;
+						}
+					}}
+					nodeStrokeColor={(node) => {
+						// Highlight selected nodes with tactical cyan
+						return node.selected
+							? theme.color.status.selected
+							: theme.color.border.primary;
+					}}
+					nodeStrokeWidth={3}
+					maskColor={`${theme.color.background.base}cc`}
+					style={{
+						backgroundColor: theme.color.background.surface,
+						border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+						clipPath: theme.clipPath.md,
+					}}
+				/>
 			</ReactFlow>
 		</div>
 	);

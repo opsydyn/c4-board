@@ -74,6 +74,9 @@ export interface Node {
 	position_y: number;
 	width: number | null;
 	height: number | null;
+	parent_id: string | null;
+	extent: "parent" | null;
+	expand_parent: number;
 	created_at: number;
 	updated_at: number;
 }
@@ -114,6 +117,9 @@ export interface CreateNodeInput {
 	position_y: number;
 	width?: number;
 	height?: number;
+	parent_id?: string;
+	extent?: "parent";
+	expand_parent?: boolean;
 }
 
 export interface UpdateNodeInput {
@@ -124,6 +130,9 @@ export interface UpdateNodeInput {
 	position_y?: number;
 	width?: number;
 	height?: number;
+	parent_id?: string;
+	extent?: "parent";
+	expand_parent?: boolean;
 }
 
 export interface CreateEdgeInput {
@@ -249,8 +258,8 @@ export const createNode = (input: CreateNodeInput) =>
 		const now = Date.now();
 
 		yield* service.execute(
-			`INSERT INTO nodes (id, diagram_id, type, label, technology, description, position_x, position_y, width, height, created_at, updated_at)
-	       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO nodes (id, diagram_id, type, label, technology, description, position_x, position_y, width, height, parent_id, extent, expand_parent, created_at, updated_at)
+	       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				input.id,
 				input.diagram_id,
@@ -262,6 +271,9 @@ export const createNode = (input: CreateNodeInput) =>
 				input.position_y,
 				input.width ?? null,
 				input.height ?? null,
+				input.parent_id ?? null,
+				input.extent ?? null,
+				input.expand_parent ? 1 : 0,
 				now,
 				now,
 			],
@@ -278,6 +290,9 @@ export const createNode = (input: CreateNodeInput) =>
 			position_y: input.position_y,
 			width: input.width ?? null,
 			height: input.height ?? null,
+			parent_id: input.parent_id ?? null,
+			extent: input.extent ?? null,
+			expand_parent: input.expand_parent ? 1 : 0,
 			created_at: now,
 			updated_at: now,
 		} satisfies Node;
@@ -328,6 +343,18 @@ export const updateNode = (id: string, input: UpdateNodeInput) =>
 		if (input.height !== undefined) {
 			updates.push("height = ?");
 			values.push(input.height ?? null);
+		}
+		if (input.parent_id !== undefined) {
+			updates.push("parent_id = ?");
+			values.push(input.parent_id ?? null);
+		}
+		if (input.extent !== undefined) {
+			updates.push("extent = ?");
+			values.push(input.extent ?? null);
+		}
+		if (input.expand_parent !== undefined) {
+			updates.push("expand_parent = ?");
+			values.push(input.expand_parent ? 1 : 0);
 		}
 
 		if (updates.length === 0) {

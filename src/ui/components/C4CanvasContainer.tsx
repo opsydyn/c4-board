@@ -273,6 +273,39 @@ export function C4CanvasContainer() {
 		}
 	}, [runEffect, send]);
 
+	// Handle auto-layout action
+	const handleAutoLayout = useCallback(() => {
+		send({ type: "AUTO_LAYOUT" });
+		console.log("🎯 Auto-layout applied");
+	}, [send]);
+
+	// Handle auto-layout selected nodes
+	const handleAutoLayoutSelected = useCallback(() => {
+		send({ type: "AUTO_LAYOUT_SELECTED" });
+		console.log("🎯 Auto-layout (selected) applied");
+	}, [send]);
+
+	// Keyboard shortcuts (⌘L for auto-layout, ⌘⇧L for auto-layout selected)
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			// ⌘⇧L / Ctrl+Shift+L - Auto-layout selected nodes
+			if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === "l") {
+				event.preventDefault();
+				handleAutoLayoutSelected();
+				return;
+			}
+
+			// ⌘L / Ctrl+L - Auto-layout all nodes
+			if ((event.metaKey || event.ctrlKey) && event.key === "l") {
+				event.preventDefault();
+				handleAutoLayout();
+			}
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [handleAutoLayout, handleAutoLayoutSelected]);
+
 	// Listen directly to native menu events while on the canvas
 	useEffect(() => {
 		const windowHandle = getCurrentWindow();
@@ -379,6 +412,8 @@ export function C4CanvasContainer() {
 				onAddComponent={() => send({ type: "ADD_COMPONENT" })}
 				onSave={handleSave}
 				onNewBoard={handleNewBoard}
+				onAutoLayout={handleAutoLayout}
+				onAutoLayoutSelected={handleAutoLayoutSelected}
 				onSessionNameChange={(name) => send({ type: "UPDATE_SESSION_NAME", name })}
 				onDiagramNameChange={(name) => send({ type: "UPDATE_DIAGRAM_NAME", name })}
 				onSelectNode={handleSelectNode}

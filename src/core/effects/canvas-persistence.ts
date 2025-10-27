@@ -93,6 +93,17 @@ function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 		};
 	}
 
+	// Parent-child relationship fields for sub-flows
+	if (dbNode.parent_id !== null) {
+		node.parentId = dbNode.parent_id;
+	}
+	if (dbNode.extent !== null) {
+		node.extent = dbNode.extent;
+	}
+	if (dbNode.expand_parent === 1) {
+		node.expandParent = true;
+	}
+
 	return node;
 }
 
@@ -137,6 +148,10 @@ function reactFlowNodeToDb(
 		position_y: node.position.y,
 		...(widthValue !== undefined ? { width: widthValue } : {}),
 		...(heightValue !== undefined ? { height: heightValue } : {}),
+		// Parent-child relationship fields for sub-flows
+		...(node.parentId !== undefined ? { parent_id: node.parentId } : {}),
+		...(node.extent !== undefined ? { extent: node.extent as "parent" } : {}),
+		...(node.expandParent !== undefined ? { expand_parent: node.expandParent } : {}),
 	};
 }
 
@@ -254,6 +269,9 @@ export const saveDiagram = (input: SaveDiagramInput) =>
 					: {}),
 				...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
 				...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
+				...(dbNodeInput.parent_id !== undefined ? { parent_id: dbNodeInput.parent_id } : {}),
+				...(dbNodeInput.extent !== undefined ? { extent: dbNodeInput.extent } : {}),
+				...(dbNodeInput.expand_parent !== undefined ? { expand_parent: dbNodeInput.expand_parent } : {}),
 			};
 
 			yield* updateNode(node.id, updateNodePayload);

@@ -37,7 +37,10 @@ const baseNode = style({
 	selectors: {
 		"&[data-selected='true']": {
 			transform: "scale(1.03)",
-			boxShadow: theme.effect.glow.xl,
+			boxShadow: `0 0 20px ${theme.color.status.selected}99, 0 0 40px ${theme.color.status.selected}66`,
+			borderColor: theme.color.status.selected,
+			borderWidth: theme.border.width.base,
+			backgroundColor: theme.color.background.raised,
 		},
 		"&:hover": {
 			boxShadow: theme.effect.glow.md,
@@ -248,8 +251,9 @@ export const containerNode = style({
 
 	selectors: {
 		"&[data-selected='true']": {
-			borderColor: theme.color.interactive.primary,
-			boxShadow: theme.effect.glow.lg,
+			borderColor: theme.color.status.selected,
+			borderWidth: theme.border.width.base,
+			boxShadow: `0 0 20px ${theme.color.status.selected}99, 0 0 40px ${theme.color.status.selected}66`,
 			backgroundColor: theme.color.surface.containerSelected,
 		},
 		"&:hover": {
