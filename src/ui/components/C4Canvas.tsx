@@ -15,9 +15,11 @@ import {
 	type OnEdgesChange,
 	type OnConnect,
 	ReactFlow,
+	ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useMemo } from "react";
+import { useMemo, forwardRef, useImperativeHandle } from "react";
+import { useReactFlow } from "@xyflow/react";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
 import { PersonNode } from "./nodes/PersonNode";
 import { SystemNode } from "./nodes/SystemNode";
@@ -35,14 +37,38 @@ interface C4CanvasProps {
 	onNodeClick?: NodeMouseHandler<Node>;
 }
 
-export function C4Canvas({
-	nodes,
-	edges,
-	onNodesChange,
-	onEdgesChange,
-	onConnect,
-	onNodeClick,
-}: C4CanvasProps) {
+export interface C4CanvasRef {
+	fitViewToNode: (nodeId: string) => void;
+}
+
+function C4CanvasInner(
+	{
+		nodes,
+		edges,
+		onNodesChange,
+		onEdgesChange,
+		onConnect,
+		onNodeClick,
+	}: C4CanvasProps,
+	ref: React.Ref<C4CanvasRef>,
+) {
+	const { setCenter, getNode } = useReactFlow();
+
+	// Expose methods to parent via ref
+	useImperativeHandle(ref, () => ({
+		fitViewToNode: (nodeId: string) => {
+			const node = getNode(nodeId);
+			if (node?.position) {
+				// Center on the node with zoom
+				setCenter(
+					node.position.x + (node.measured?.width || 0) / 2,
+					node.position.y + (node.measured?.height || 0) / 2,
+					{ zoom: 1.2, duration: 800 },
+				);
+			}
+		},
+	}));
+
 	// Define custom node types for C4 elements
 	const nodeTypes = useMemo(
 		() => ({
@@ -94,3 +120,11 @@ export function C4Canvas({
 		</div>
 	);
 }
+
+const C4CanvasWithRef = forwardRef(C4CanvasInner);
+
+export const C4Canvas = forwardRef<C4CanvasRef, C4CanvasProps>((props, ref) => (
+	<ReactFlowProvider>
+		<C4CanvasWithRef {...props} ref={ref} />
+	</ReactFlowProvider>
+));

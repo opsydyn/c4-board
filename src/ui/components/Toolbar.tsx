@@ -15,7 +15,9 @@ import {
 	Stack,
 	Cube,
 } from "@phosphor-icons/react";
+import type { Node } from "@xyflow/react";
 import { toolbar, toolbarButton, saveStatus, boardNameInput } from "./styles.css";
+import { SearchBox } from "./SearchBox";
 
 interface ToolbarProps {
 	onAddPerson: () => void;
@@ -27,6 +29,8 @@ interface ToolbarProps {
 	onNewBoard: () => void;
 	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
+	onSelectNode: (nodeId: string) => void;
+	nodes: Node[];
 	sessionName: string;
 	isSaving?: boolean;
 	lastSaved?: number | null;
@@ -61,6 +65,8 @@ export function Toolbar({
 	onNewBoard,
 	onDiagramNameChange,
 	onSessionNameChange,
+	onSelectNode,
+	nodes,
 	sessionName,
 	isSaving = false,
 	lastSaved = null,
@@ -119,6 +125,9 @@ export function Toolbar({
 				<FloppyDiskIcon size={20} weight="duotone" />
 				Save
 			</button>
+
+			{/* Search box */}
+			<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
 
 			{/* Add node buttons */}
 			<button type="button" className={toolbarButton} onClick={onAddPerson}>

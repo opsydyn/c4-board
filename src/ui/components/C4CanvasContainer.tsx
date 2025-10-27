@@ -18,9 +18,9 @@ import {
 	type Node,
 	type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { canvasMachine, type CanvasEvent } from "../machines/canvas.machine";
-import { C4Canvas } from "./C4Canvas";
+import { C4Canvas, type C4CanvasRef } from "./C4Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { Toolbar } from "./Toolbar";
 import { useDatabase } from "../../core/effects/useDatabase";
@@ -36,6 +36,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 export function C4CanvasContainer() {
 	const [state, send] = useMachine(canvasMachine);
 	const { runEffect } = useDatabase();
+	const canvasRef = useRef<C4CanvasRef>(null);
 
 	// Initialize: Load most recent diagram or create new one
 	useEffect(() => {
@@ -358,6 +359,16 @@ export function C4CanvasContainer() {
 		state.context.nodes.find((n) => n.id === state.context.selectedNodeId) ||
 		null;
 
+	// Handle node selection from search
+	const handleSelectNode = useCallback(
+		(nodeId: string) => {
+			send({ type: "SELECT_NODE", nodeId });
+			// Pan and zoom to the selected node
+			canvasRef.current?.fitViewToNode(nodeId);
+		},
+		[send],
+	);
+
 	return (
 		<>
 			<Toolbar
@@ -370,6 +381,8 @@ export function C4CanvasContainer() {
 				onNewBoard={handleNewBoard}
 				onSessionNameChange={(name) => send({ type: "UPDATE_SESSION_NAME", name })}
 				onDiagramNameChange={(name) => send({ type: "UPDATE_DIAGRAM_NAME", name })}
+				onSelectNode={handleSelectNode}
+				nodes={state.context.nodes}
 				sessionName={state.context.sessionName}
 				isSaving={state.context.isSaving}
 				lastSaved={state.context.lastSaved}
@@ -384,6 +397,7 @@ export function C4CanvasContainer() {
 			/>
 
 			<C4Canvas
+				ref={canvasRef}
 				nodes={state.context.nodes}
 				edges={state.context.edges}
 				onNodesChange={onNodesChange}
