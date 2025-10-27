@@ -176,6 +176,127 @@ export const externalSystemNodeDescription = style({
 });
 
 /**
+ * Component Node
+ * Represents components within containers
+ */
+export const componentNode = style([
+	baseNode,
+	{
+		borderColor: theme.color.border.component,
+		backgroundColor: theme.color.surface.component,
+		padding: `${theme.spacing["4"]} ${theme.spacing["3"]}`,
+		minWidth: "180px",
+		maxWidth: "260px",
+	},
+]);
+
+export const componentNodeIcon = style({
+	display: "flex",
+	justifyContent: "center",
+	marginBottom: theme.spacing["2"],
+	textShadow: theme.effect.textGlow.md,
+	color: theme.color.semantic.component,
+});
+
+export const componentNodeLabel = style({
+	marginBottom: theme.spacing["2"],
+	textTransform: "uppercase",
+	textShadow: theme.effect.textGlow.base,
+	letterSpacing: theme.typography.letterSpacing.wider,
+	color: theme.color.foreground.primary,
+	fontSize: theme.typography.size.base,
+	fontWeight: theme.typography.weight.bold,
+});
+
+export const componentNodeTechnology = style({
+	marginBottom: theme.spacing["1"],
+	color: theme.color.foreground.tertiary,
+	fontSize: theme.typography.size.xs,
+});
+
+export const componentNodeDescription = style({
+	marginTop: theme.spacing["2"],
+	lineHeight: theme.typography.lineHeight.relaxed,
+	color: theme.color.foreground.secondary,
+	fontSize: theme.typography.size.xs,
+});
+
+/**
+ * Container Node (Resizable Group)
+ * Represents containers (apps, databases) that can contain components
+ */
+export const containerNode = style({
+	// Layout - transparent background to show children
+	position: "relative",
+	display: "flex",
+	flexDirection: "column",
+	transition: theme.transition.base,
+	border: `${theme.border.width.base} dashed`,
+	borderRadius: theme.border.radius.lg,
+	borderColor: theme.color.border.container,
+
+	// Visual - dashed border to indicate grouping
+	backgroundColor: theme.color.surface.container,
+	padding: theme.spacing["4"],
+	width: "100%",
+	minWidth: "200px",
+	height: "100%",
+
+	// Animation
+	minHeight: "150px",
+
+	selectors: {
+		"&[data-selected='true']": {
+			borderColor: theme.color.interactive.primary,
+			boxShadow: theme.effect.glow.lg,
+			backgroundColor: theme.color.surface.containerSelected,
+		},
+		"&:hover": {
+			borderColor: theme.color.interactive.hover,
+		},
+	},
+});
+
+export const containerNodeHeader = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	marginBottom: theme.spacing["3"],
+	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	paddingBottom: theme.spacing["2"],
+});
+
+export const containerNodeIcon = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	textShadow: theme.effect.textGlow.md,
+	color: theme.color.semantic.container,
+});
+
+export const containerNodeLabel = style({
+	textTransform: "uppercase",
+	textShadow: theme.effect.textGlow.base,
+	letterSpacing: theme.typography.letterSpacing.wider,
+	color: theme.color.foreground.primary,
+	fontSize: theme.typography.size.lg,
+	fontWeight: theme.typography.weight.bold,
+});
+
+export const containerNodeTechnology = style({
+	marginTop: theme.spacing["1"],
+	color: theme.color.foreground.tertiary,
+	fontSize: theme.typography.size.sm,
+});
+
+export const containerNodeDescription = style({
+	marginTop: theme.spacing["2"],
+	lineHeight: theme.typography.lineHeight.relaxed,
+	color: theme.color.foreground.secondary,
+	fontSize: theme.typography.size.sm,
+});
+
+/**
  * Node Content Container
  * Wrapper for node content
  */

@@ -43,6 +43,8 @@ export const themeContract = createThemeContract({
 			person: null,      // C4 Person element (cyan)
 			system: null,      // C4 System element (green)
 			external: null,    // C4 External system (amber)
+			container: null,   // C4 Container element (blue)
+			component: null,   // C4 Component element (purple)
 			relationship: null, // Connections/edges
 		},
 
@@ -54,6 +56,8 @@ export const themeContract = createThemeContract({
 			person: null,      // Person node border
 			system: null,      // System node border
 			external: null,    // External system border
+			container: null,   // Container node border
+			component: null,   // Component node border
 		},
 
 		// Surface tints - subtle background colors
@@ -61,6 +65,9 @@ export const themeContract = createThemeContract({
 			person: null,      // Person node background
 			system: null,      // System node background
 			external: null,    // External system background
+			container: null,   // Container node background
+			component: null,   // Component node background
+			containerSelected: null, // Container when selected
 		},
 	},
 

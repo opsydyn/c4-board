@@ -21,6 +21,8 @@ import { useMemo } from "react";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
 import { PersonNode } from "./nodes/PersonNode";
 import { SystemNode } from "./nodes/SystemNode";
+import { ContainerNode } from "./nodes/ContainerNode";
+import { ComponentNode } from "./nodes/ComponentNode";
 import { canvasContainer, reactFlowControls } from "./styles.css";
 import { theme } from "../../styles/theme.css";
 
@@ -47,6 +49,8 @@ export function C4Canvas({
 			person: PersonNode,
 			system: SystemNode,
 			externalSystem: ExternalSystemNode,
+			container: ContainerNode,
+			component: ComponentNode,
 		}),
 		[],
 	);

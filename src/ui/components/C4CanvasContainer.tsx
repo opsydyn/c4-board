@@ -299,6 +299,12 @@ export function C4CanvasContainer() {
 			await register("menu:add-external", () =>
 				send({ type: "ADD_EXTERNAL_SYSTEM" }),
 			);
+			await register("menu:add-container", () =>
+				send({ type: "ADD_CONTAINER" }),
+			);
+			await register("menu:add-component", () =>
+				send({ type: "ADD_COMPONENT" }),
+			);
 		})()
 			.then(() => {
 				console.log("🎨 Canvas menu event listeners attached");
@@ -358,6 +364,8 @@ export function C4CanvasContainer() {
 				onAddPerson={() => send({ type: "ADD_PERSON" })}
 				onAddSystem={() => send({ type: "ADD_SYSTEM" })}
 				onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
+				onAddContainer={() => send({ type: "ADD_CONTAINER" })}
+				onAddComponent={() => send({ type: "ADD_COMPONENT" })}
 				onSave={handleSave}
 				onNewBoard={handleNewBoard}
 				onSessionNameChange={(name) => send({ type: "UPDATE_SESSION_NAME", name })}

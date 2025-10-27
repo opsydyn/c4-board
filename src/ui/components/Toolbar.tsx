@@ -12,6 +12,8 @@ import {
 	CheckCircleIcon,
 	ListBulletsIcon,
 	PlusIcon,
+	Stack,
+	Cube,
 } from "@phosphor-icons/react";
 import { toolbar, toolbarButton, saveStatus, boardNameInput } from "./styles.css";
 
@@ -19,6 +21,8 @@ interface ToolbarProps {
 	onAddPerson: () => void;
 	onAddSystem: () => void;
 	onAddExternalSystem: () => void;
+	onAddContainer: () => void;
+	onAddComponent: () => void;
 	onSave: () => void;
 	onNewBoard: () => void;
 	onDiagramNameChange: (name: string) => void;
@@ -51,6 +55,8 @@ export function Toolbar({
 	onAddPerson,
 	onAddSystem,
 	onAddExternalSystem,
+	onAddContainer,
+	onAddComponent,
 	onSave,
 	onNewBoard,
 	onDiagramNameChange,
@@ -132,6 +138,24 @@ export function Toolbar({
 			>
 				<CloudIcon size={20} weight="duotone" />
 				Add External
+			</button>
+
+			<button
+				type="button"
+				className={toolbarButton}
+				onClick={onAddContainer}
+			>
+				<Stack size={20} weight="duotone" />
+				Add Container
+			</button>
+
+			<button
+				type="button"
+				className={toolbarButton}
+				onClick={onAddComponent}
+			>
+				<Cube size={20} weight="duotone" />
+				Add Component
 			</button>
 
 			{/* Saved diagrams link */}

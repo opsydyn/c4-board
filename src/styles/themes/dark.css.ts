@@ -36,6 +36,8 @@ export const darkTheme = createTheme(themeContract, {
 			person: "#00ffff",     // Cyan for people
 			system: "#00ff00",     // Green for systems
 			external: "#ffcc00",   // Amber for external
+			container: "#0088ff",  // Blue for containers
+			component: "#cc88ff",  // Purple for components
 			relationship: "#00ffaa", // Primary color for connections
 		},
 
@@ -46,12 +48,17 @@ export const darkTheme = createTheme(themeContract, {
 			person: "#00ffff",     // Person node borders
 			system: "#00ff00",     // System node borders
 			external: "#ffcc00",   // External node borders
+			container: "#0088ff",  // Container node borders
+			component: "#cc88ff",  // Component node borders
 		},
 
 		surface: {
 			person: "#001a1a",     // Dark cyan tint
 			system: "#001a00",     // Dark green tint
 			external: "#1a1400",   // Dark amber tint
+			container: "#001a33",  // Dark blue tint
+			component: "#1a0033",  // Dark purple tint
+			containerSelected: "#002a4d", // Lighter blue when selected
 		},
 	},
 

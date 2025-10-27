@@ -13,6 +13,8 @@ export type CanvasEvent =
 	| { type: "ADD_PERSON" }
 	| { type: "ADD_SYSTEM" }
 	| { type: "ADD_EXTERNAL_SYSTEM" }
+	| { type: "ADD_CONTAINER" }
+	| { type: "ADD_COMPONENT" }
 	| { type: "SELECT_NODE"; nodeId: string }
 	| { type: "DESELECT_NODE" }
 	| {
@@ -128,6 +130,48 @@ export const canvasMachine = setup({
 						description: "",
 						technology: "",
 						c4Type: "externalSystem",
+					},
+				};
+				return [...context.nodes, newNode];
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addContainer: assign({
+			nodes: ({ context }) => {
+				const id = `container-${context.nodeCounter}`;
+				const newNode: Node = {
+					id,
+					type: "container",
+					position: { x: 100 + context.nodeCounter * 50, y: 100 },
+					data: {
+						label: "Container",
+						description: "",
+						technology: "",
+						c4Type: "container",
+					},
+					style: {
+						width: 300,
+						height: 200,
+					},
+				};
+				return [...context.nodes, newNode];
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addComponent: assign({
+			nodes: ({ context }) => {
+				const id = `component-${context.nodeCounter}`;
+				const newNode: Node = {
+					id,
+					type: "component",
+					position: { x: 100 + context.nodeCounter * 50, y: 100 },
+					data: {
+						label: "Component",
+						description: "",
+						technology: "",
+						c4Type: "component",
 					},
 				};
 				return [...context.nodes, newNode];
@@ -310,6 +354,12 @@ export const canvasMachine = setup({
 				ADD_EXTERNAL_SYSTEM: {
 					actions: "addExternalSystem",
 				},
+				ADD_CONTAINER: {
+					actions: "addContainer",
+				},
+				ADD_COMPONENT: {
+					actions: "addComponent",
+				},
 				SELECT_NODE: {
 					actions: "selectNode",
 				},
@@ -394,6 +444,12 @@ export const canvasMachine = setup({
 				},
 				ADD_EXTERNAL_SYSTEM: {
 					actions: "addExternalSystem",
+				},
+				ADD_CONTAINER: {
+					actions: "addContainer",
+				},
+				ADD_COMPONENT: {
+					actions: "addComponent",
 				},
 				SELECT_NODE: {
 					actions: "selectNode",

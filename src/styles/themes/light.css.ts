@@ -36,6 +36,8 @@ export const lightTheme = createTheme(themeContract, {
 			person: "#08427B",
 			system: "#1168BD",
 			external: "#996600",
+			container: "#0066cc",   // Blue for containers
+			component: "#8855cc",   // Purple for components
 			relationship: "#666666",
 		},
 
@@ -46,12 +48,17 @@ export const lightTheme = createTheme(themeContract, {
 			person: "#08427B",
 			system: "#1168BD",
 			external: "#996600",
+			container: "#0066cc",   // Blue border for containers
+			component: "#8855cc",   // Purple border for components
 		},
 
 		surface: {
 			person: "#E8F4F8",
 			system: "#EBF3FA",
 			external: "#FFF9E6",
+			container: "#E6F0FF",   // Light blue tint for containers
+			component: "#F0E6FF",   // Light purple tint for components
+			containerSelected: "#CCE0FF", // Slightly darker blue when selected
 		},
 	},
 
