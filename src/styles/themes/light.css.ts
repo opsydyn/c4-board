@@ -41,6 +41,15 @@ export const lightTheme = createTheme(themeContract, {
 			relationship: "#666666",
 		},
 
+		status: {
+			ready: "#2E7D32",      // Green - operational
+			caution: "#F57C00",    // Orange - warning
+			critical: "#C62828",   // Red - error
+			selected: "#0277BD",   // Blue - focus
+		},
+
+		grid: "#d0d0d0",           // Grid line color
+
 		border: {
 			primary: "#e0e0e0",
 			secondary: "#f0f0f0",
@@ -106,6 +115,11 @@ export const lightTheme = createTheme(themeContract, {
 			normal: "0",
 			wide: "0.05em",
 			wider: "0.1em",
+			engineering: "0.15em",
+		},
+		textTransform: {
+			uppercase: "uppercase",
+			none: "none",
 		},
 	},
 
@@ -123,6 +137,11 @@ export const lightTheme = createTheme(themeContract, {
 			thin: "1px",
 			base: "2px",
 			thick: "3px",
+		},
+		style: {
+			solid: "solid",
+			dashed: "dashed",
+			dotted: "dotted",
 		},
 	},
 

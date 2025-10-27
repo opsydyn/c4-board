@@ -48,6 +48,17 @@ export const themeContract = createThemeContract({
 			relationship: null, // Connections/edges
 		},
 
+		// Operational status colors - military/engineering
+		status: {
+			ready: null,       // Green - normal/operational
+			caution: null,     // Amber - warning/unknown
+			critical: null,    // Red - error/critical
+			selected: null,    // Cyan - focus/selected
+		},
+
+		// Grid and structural colors
+		grid: null,            // Grid line color
+
 		// Border colors - structural hierarchy
 		border: {
 			primary: null,     // Main borders
@@ -118,10 +129,16 @@ export const themeContract = createThemeContract({
 		},
 		// Letter spacing
 		letterSpacing: {
-			tight: null,   // -0.05em
-			normal: null,  // 0
-			wide: null,    // 0.05em
-			wider: null,   // 0.1em
+			tight: null,       // -0.05em
+			normal: null,      // 0
+			wide: null,        // 0.05em
+			wider: null,       // 0.1em
+			engineering: null, // 0.15em - tactical labels
+		},
+		// Text transform
+		textTransform: {
+			uppercase: null,   // UPPERCASE
+			none: null,        // normal
 		},
 	},
 
@@ -140,6 +157,11 @@ export const themeContract = createThemeContract({
 			thin: null,  // 1px
 			base: null,  // 2px
 			thick: null, // 3px
+		},
+		style: {
+			solid: null,  // Solid line
+			dashed: null, // Dashed line
+			dotted: null, // Dotted line
 		},
 	},
 

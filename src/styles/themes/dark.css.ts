@@ -11,54 +11,63 @@ import { themeContract } from "../theme.contract.css";
 export const darkTheme = createTheme(themeContract, {
 	color: {
 		background: {
-			base: "#0a0a0a",       // Deep black canvas
-			surface: "#0f0f0f",    // Slightly elevated panels
-			raised: "#1a1a1a",     // Hover states
+			base: "#111111",       // Console black
+			surface: "#0f0f0f",    // Panel black
+			raised: "#1a1a1a",     // Elevated elements
 			input: "#0a0a0a",      // Input backgrounds
 			inputFocus: "#0f0f0f", // Focused input
 		},
 
 		foreground: {
-			primary: "#ffffff",    // White text (21:1 contrast)
-			secondary: "#aaaaaa",  // Gray text (11.7:1 contrast)
-			tertiary: "#888888",   // Muted text (7.8:1 contrast)
-			disabled: "#666666",   // Disabled (5.7:1 contrast)
+			primary: "#E5E9F0",    // Nord6 - Snow Storm (bright white)
+			secondary: "#D8DEE9",  // Nord5 - light gray
+			tertiary: "#88C0D0",   // Nord8 - muted cyan
+			disabled: "#4C566A",   // Nord3 - dark gray
 		},
 
 		interactive: {
-			primary: "#00ffaa",    // Bright cyan-green (14.5:1 contrast)
-			hover: "#00ffcc",      // Lighter on hover
-			active: "#00dd99",     // Darker when active
-			focus: "#00ffff",      // Cyan focus ring
+			primary: "#81A1C1",    // Nord9 - tactical blue
+			hover: "#88C0D0",      // Nord8 - lighter blue
+			active: "#5E81AC",     // Nord10 - darker blue
+			focus: "#88C0D0",      // Nord8 - cyan focus
 		},
 
 		semantic: {
-			person: "#00ffff",     // Cyan for people
-			system: "#00ff00",     // Green for systems
-			external: "#ffcc00",   // Amber for external
-			container: "#0088ff",  // Blue for containers
-			component: "#cc88ff",  // Purple for components
-			relationship: "#00ffaa", // Primary color for connections
+			person: "#88C0D0",     // Nord8 - cyan for people
+			system: "#A3BE8C",     // Nord14 - tactical green for systems
+			external: "#D08770",   // Nord12 - amber for external
+			container: "#81A1C1",  // Nord9 - blue for containers
+			component: "#B48EAD",  // Nord15 - purple for components
+			relationship: "#4C566A", // Nord3 - dim gray for connections
 		},
 
+		status: {
+			ready: "#A3BE8C",      // Nord14 - green (operational)
+			caution: "#D08770",    // Nord12 - amber (warning)
+			critical: "#BF616A",   // Nord11 - red (error)
+			selected: "#81A1C1",   // Nord9 - cyan (focus)
+		},
+
+		grid: "#2a2a2a",           // Grid line color
+
 		border: {
-			primary: "#00ffaa",    // Primary borders
-			secondary: "#003333",  // Subtle borders
-			focus: "#00ffff",      // Focus borders
-			person: "#00ffff",     // Person node borders
-			system: "#00ff00",     // System node borders
-			external: "#ffcc00",   // External node borders
-			container: "#0088ff",  // Container node borders
-			component: "#cc88ff",  // Component node borders
+			primary: "#81A1C1",    // Nord9 - tactical blue borders
+			secondary: "#4C566A",  // Nord3 - subtle gray
+			focus: "#88C0D0",      // Nord8 - cyan focus
+			person: "#88C0D0",     // Nord8 - cyan
+			system: "#A3BE8C",     // Nord14 - green
+			external: "#D08770",   // Nord12 - amber
+			container: "#81A1C1",  // Nord9 - blue
+			component: "#B48EAD",  // Nord15 - purple
 		},
 
 		surface: {
-			person: "#001a1a",     // Dark cyan tint
-			system: "#001a00",     // Dark green tint
-			external: "#1a1400",   // Dark amber tint
-			container: "#001a33",  // Dark blue tint
-			component: "#1a0033",  // Dark purple tint
-			containerSelected: "#002a4d", // Lighter blue when selected
+			person: "#2E3440",     // Nord0 - dark tint
+			system: "#2E3440",     // Nord0 - dark tint
+			external: "#2E3440",   // Nord0 - dark tint
+			container: "#2E3440",  // Nord0 - dark tint
+			component: "#2E3440",  // Nord0 - dark tint
+			containerSelected: "#3B4252", // Nord1 - slightly lighter
 		},
 	},
 
@@ -106,6 +115,11 @@ export const darkTheme = createTheme(themeContract, {
 			normal: "0",
 			wide: "0.05em",
 			wider: "0.1em",
+			engineering: "0.15em", // Tactical label spacing
+		},
+		textTransform: {
+			uppercase: "uppercase",
+			none: "none",
 		},
 	},
 
@@ -123,6 +137,11 @@ export const darkTheme = createTheme(themeContract, {
 			thin: "1px",
 			base: "2px",
 			thick: "3px",
+		},
+		style: {
+			solid: "solid",
+			dashed: "dashed",
+			dotted: "dotted",
 		},
 	},
 

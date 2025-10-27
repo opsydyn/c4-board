@@ -13,6 +13,11 @@ import { theme } from "../../styles/theme.css";
  */
 export const canvasContainer = style({
 	backgroundColor: theme.color.background.base,
+	backgroundImage: `
+		linear-gradient(${theme.color.grid} 1px, transparent 1px),
+		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+	`,
+	backgroundSize: "20px 20px", // Grid spacing - 20px tactical grid
 	width: "100vw",
 	height: "100vh",
 	fontFamily: theme.typography.family.mono,
@@ -81,16 +86,20 @@ export const boardNameInput = style({
 	padding: `${theme.spacing["1"]} 0`,
 	width: "100%",
 	color: theme.color.foreground.primary,
-	fontFamily: theme.typography.family.sans,
+	fontFamily: theme.typography.family.mono, // MONOSPACE
 	fontSize: theme.typography.size.sm,
 	fontWeight: theme.typography.weight.bold,
+	textTransform: theme.typography.textTransform.uppercase, // UPPERCASE
+	letterSpacing: theme.typography.letterSpacing.engineering, // TACTICAL
 
 	":focus": {
-		color: theme.color.interactive.primary,
+		color: theme.color.status.ready, // Tactical green on focus
+		textShadow: theme.effect.textGlow.sm, // Subtle glow
 	},
 
 	"::placeholder": {
 		color: theme.color.foreground.tertiary,
+		textTransform: theme.typography.textTransform.uppercase,
 	},
 });
 

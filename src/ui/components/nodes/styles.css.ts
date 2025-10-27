@@ -232,7 +232,8 @@ export const containerNode = style({
 	flexDirection: "column",
 	transition: theme.transition.base,
 	border: `${theme.border.width.base} dashed`,
-	borderRadius: theme.border.radius.lg,
+	borderRadius: theme.border.radius.none, // ANGULAR - no rounding
+	clipPath: theme.clipPath.lg, // Angled corners
 	borderColor: theme.color.border.container,
 
 	// Visual - dashed border to indicate grouping
