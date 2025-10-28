@@ -47,12 +47,16 @@ export function PersonNode({ data, selected }: NodeProps) {
 			<Handle type="target" position={Position.Top} id="top" />
 			<Handle type="target" position={Position.Left} id="left" />
 
-			<div className={personNodeIcon}>
-				<UserIcon size={24} weight="duotone" />
+			{/* Header: Icon + Label inline */}
+			<div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+				<div className={personNodeIcon}>
+					<UserIcon size={24} weight="duotone" />
+				</div>
+				<div className={personNodeLabel}>{nodeData.label ?? "Unnamed"}</div>
 			</div>
 
+			{/* Content: Technology and Description stacked below */}
 			<div className={nodeContent}>
-				<div className={personNodeLabel}>{nodeData.label ?? "Unnamed"}</div>
 				{nodeData.technology && (
 					<div className={personNodeTechnology}>[{nodeData.technology}]</div>
 				)}

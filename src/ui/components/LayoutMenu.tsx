@@ -11,11 +11,11 @@ import {
 	MenuTrigger,
 	Button,
 	Popover,
-	Section,
+	MenuSection,
 	Header,
 	Separator,
 } from "react-aria-components";
-import { GridFour, CaretDown } from "@phosphor-icons/react";
+import { GridFourIcon, CaretDownIcon } from "@phosphor-icons/react";
 import { getAllPresets, type LayoutPresetName } from "../../core/effects/layout";
 import {
 	menuButton,
@@ -61,14 +61,14 @@ export function LayoutMenu({
 	return (
 		<MenuTrigger>
 			<Button className={menuButton}>
-				<GridFour size={20} weight={variant === "selected" ? "fill" : "duotone"} className={menuIcon} />
+				<GridFourIcon size={20} weight={variant === "selected" ? "fill" : "duotone"} className={menuIcon} />
 				{buttonLabel}
-				<CaretDown size={16} weight="bold" />
+				<CaretDownIcon size={16} weight="bold" />
 			</Button>
 			<Popover className={menuPopover}>
 				<Menu className={menuContent} onAction={handleAction}>
 					{/* Essential Layouts Section */}
-					<Section className={menuSection}>
+					<MenuSection className={menuSection}>
 						<Header className={menuHeader}>ESSENTIAL LAYOUTS</Header>
 						{essentialPresets.map((preset) => (
 							<MenuItem
@@ -88,12 +88,12 @@ export function LayoutMenu({
 								)}
 							</MenuItem>
 						))}
-					</Section>
+					</MenuSection>
 
 					<Separator className={menuSeparator} />
 
 					{/* Advanced Layouts Section */}
-					<Section className={menuSection}>
+					<MenuSection className={menuSection}>
 						<Header className={menuHeader}>ADVANCED PATTERNS</Header>
 						{advancedPresets.map((preset) => (
 							<MenuItem
@@ -113,12 +113,12 @@ export function LayoutMenu({
 								)}
 							</MenuItem>
 						))}
-					</Section>
+					</MenuSection>
 
 					<Separator className={menuSeparator} />
 
 					{/* Utility Layouts Section */}
-					<Section className={menuSection}>
+					<MenuSection className={menuSection}>
 						<Header className={menuHeader}>UTILITY</Header>
 						{utilityPresets.map((preset) => (
 							<MenuItem
@@ -138,7 +138,7 @@ export function LayoutMenu({
 								)}
 							</MenuItem>
 						))}
-					</Section>
+					</MenuSection>
 				</Menu>
 			</Popover>
 		</MenuTrigger>

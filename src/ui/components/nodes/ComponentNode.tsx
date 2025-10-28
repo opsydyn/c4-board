@@ -47,12 +47,16 @@ export function ComponentNode({ data, selected }: NodeProps) {
 			<Handle type="target" position={Position.Top} id="top" />
 			<Handle type="target" position={Position.Left} id="left" />
 
-			<div className={componentNodeIcon}>
-				<Cube size={20} weight="duotone" />
+			{/* Header: Icon + Label inline */}
+			<div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+				<div className={componentNodeIcon}>
+					<Cube size={20} weight="duotone" />
+				</div>
+				<div className={componentNodeLabel}>{nodeData.label ?? "Component"}</div>
 			</div>
 
+			{/* Content: Technology and Description stacked below */}
 			<div className={nodeContent}>
-				<div className={componentNodeLabel}>{nodeData.label ?? "Component"}</div>
 				{nodeData.technology && (
 					<div className={componentNodeTechnology}>[{nodeData.technology}]</div>
 				)}

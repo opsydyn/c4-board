@@ -62,20 +62,19 @@ export const personNode = style([
 
 export const personNodeIcon = style({
 	display: "flex",
-	justifyContent: "center",
-	marginBottom: theme.spacing["2"],
+	flexShrink: 0, // Prevent icon from shrinking
 	textShadow: theme.effect.textGlow.md,
 	color: theme.color.semantic.person,
 });
 
 export const personNodeLabel = style({
-	marginBottom: theme.spacing["2"],
 	textTransform: "uppercase",
 	textShadow: theme.effect.textGlow.base,
 	letterSpacing: theme.typography.letterSpacing.wider,
 	color: theme.color.foreground.primary,
 	fontSize: theme.typography.size.lg,
 	fontWeight: theme.typography.weight.bold,
+	flex: 1, // Take remaining space
 });
 
 export const personNodeTechnology = style({
@@ -105,20 +104,19 @@ export const systemNode = style([
 
 export const systemNodeIcon = style({
 	display: "flex",
-	justifyContent: "center",
-	marginBottom: theme.spacing["2"],
+	flexShrink: 0, // Prevent icon from shrinking
 	textShadow: theme.effect.textGlow.md,
 	color: theme.color.semantic.system,
 });
 
 export const systemNodeLabel = style({
-	marginBottom: theme.spacing["2"],
 	textTransform: "uppercase",
 	textShadow: theme.effect.textGlow.base,
 	letterSpacing: theme.typography.letterSpacing.wider,
 	color: theme.color.foreground.primary,
 	fontSize: theme.typography.size.lg,
 	fontWeight: theme.typography.weight.bold,
+	flex: 1, // Take remaining space
 });
 
 export const systemNodeTechnology = style({
@@ -149,20 +147,19 @@ export const externalSystemNode = style([
 
 export const externalSystemNodeIcon = style({
 	display: "flex",
-	justifyContent: "center",
-	marginBottom: theme.spacing["2"],
+	flexShrink: 0, // Prevent icon from shrinking
 	textShadow: theme.effect.textGlow.md,
 	color: theme.color.semantic.external,
 });
 
 export const externalSystemNodeLabel = style({
-	marginBottom: theme.spacing["2"],
 	textTransform: "uppercase",
 	textShadow: theme.effect.textGlow.base,
 	letterSpacing: theme.typography.letterSpacing.wider,
 	color: theme.color.foreground.primary,
 	fontSize: theme.typography.size.lg,
 	fontWeight: theme.typography.weight.bold,
+	flex: 1, // Take remaining space
 });
 
 export const externalSystemNodeTechnology = style({
@@ -195,20 +192,19 @@ export const componentNode = style([
 
 export const componentNodeIcon = style({
 	display: "flex",
-	justifyContent: "center",
-	marginBottom: theme.spacing["2"],
+	flexShrink: 0, // Prevent icon from shrinking
 	textShadow: theme.effect.textGlow.md,
 	color: theme.color.semantic.component,
 });
 
 export const componentNodeLabel = style({
-	marginBottom: theme.spacing["2"],
 	textTransform: "uppercase",
 	textShadow: theme.effect.textGlow.base,
 	letterSpacing: theme.typography.letterSpacing.wider,
 	color: theme.color.foreground.primary,
 	fontSize: theme.typography.size.base,
 	fontWeight: theme.typography.weight.bold,
+	flex: 1, // Take remaining space
 });
 
 export const componentNodeTechnology = style({

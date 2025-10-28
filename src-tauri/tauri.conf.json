@@ -27,7 +27,10 @@
             "sql:allow-load",
             "sql:allow-execute",
             "sql:allow-select",
-            "sql:allow-close"
+            "sql:allow-close",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten",
+            "core:event:allow-emit"
           ]
         }
       ]

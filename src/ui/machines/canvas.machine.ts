@@ -81,6 +81,24 @@ export interface CanvasContext {
 	currentLayout: LayoutPresetName | null; // Track currently applied layout preset
 }
 
+/**
+ * Calculate initial position for a new node
+ * Uses simple offset positioning - users will use Dagre auto-layout for final arrangement
+ * This just ensures nodes don't stack on top of each other initially
+ */
+function getInitialNodePosition(nodeCount: number): { x: number; y: number } {
+	// Simple diagonal offset - spreads nodes apart initially
+	// User will apply auto-layout (Dagre) for intelligent positioning
+	const OFFSET = 80; // Spacing between each new node
+	const START_X = 400;
+	const START_Y = 300;
+
+	return {
+		x: START_X + (nodeCount * OFFSET),
+		y: START_Y + (nodeCount * OFFSET),
+	};
+}
+
 export const canvasMachine = setup({
 	types: {
 		context: {} as CanvasContext,
@@ -104,7 +122,7 @@ export const canvasMachine = setup({
 					// Position relative to parent if inside container, absolute otherwise
 					position: isParentContainer
 						? { x: 20, y: 60 }
-						: { x: 100 + context.nodeCounter * 50, y: 100 },
+						: getInitialNodePosition(context.nodeCounter),
 					data: {
 						label: "New Person",
 						description: "",
@@ -140,7 +158,7 @@ export const canvasMachine = setup({
 					// Position relative to parent if inside container, absolute otherwise
 					position: isParentContainer
 						? { x: 20, y: 60 }
-						: { x: 100 + context.nodeCounter * 50, y: 100 },
+						: getInitialNodePosition(context.nodeCounter),
 					data: {
 						label: "New System",
 						description: "",
@@ -176,7 +194,7 @@ export const canvasMachine = setup({
 					// Position relative to parent if inside container, absolute otherwise
 					position: isParentContainer
 						? { x: 20, y: 60 }
-						: { x: 100 + context.nodeCounter * 50, y: 100 },
+						: getInitialNodePosition(context.nodeCounter),
 					data: {
 						label: "External System",
 						description: "",
@@ -318,6 +336,26 @@ export const canvasMachine = setup({
 			edges: ({ context, event }) => {
 				if (event.type !== "CONNECT_NODES") return context.edges;
 
+				// Validation: Prevent self-connections (node connecting to itself)
+				if (event.source === event.target) {
+					console.warn("⚠️ Cannot connect node to itself");
+					return context.edges;
+				}
+
+				// Validation: Prevent duplicate edges (same source and target)
+				// Check both directions to prevent A→B when B→A exists (bidirectional check)
+				const isDuplicate = context.edges.some(
+					(edge) =>
+						(edge.source === event.source && edge.target === event.target) ||
+						(edge.source === event.target && edge.target === event.source),
+				);
+
+				if (isDuplicate) {
+					console.warn("⚠️ Edge already exists between these nodes");
+					return context.edges;
+				}
+
+				// Create new edge
 				const newEdge: Edge = {
 					id: `edge-${Date.now()}`,
 					source: event.source,

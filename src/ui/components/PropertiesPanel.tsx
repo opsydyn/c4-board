@@ -64,7 +64,7 @@ export function PropertiesPanel({
 					className={input}
 					value={selectedNode.data?.technology || ""}
 					onChange={(e) => handleChange("technology", e.target.value)}
-					placeholder="e.g., Java, Spring Boot"
+					placeholder="e.g., Astro, XState, Effect"
 				/>
 			</div>
 

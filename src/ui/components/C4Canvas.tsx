@@ -17,6 +17,7 @@ import {
 	type OnConnect,
 	ReactFlow,
 	ReactFlowProvider,
+	ConnectionMode,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMemo, forwardRef, useImperativeHandle } from "react";
@@ -86,13 +87,14 @@ function C4CanvasInner(
 	const defaultEdgeOptions = useMemo(
 		() => ({
 			type: "smoothstep", // Smooth step edges for cleaner routing
-			animated: true,
+			animated: false, // Disable animation for cleaner look
 			style: {
 				stroke: theme.color.semantic.relationship,
 				strokeWidth: 2,
+				strokeDasharray: "5,5", // Dotted line pattern
 			},
 			labelStyle: {
-				fill: theme.color.semantic.relationship,
+				fill: "#FFFFFF", // White text for clarity
 				fontSize: 12,
 				fontFamily: theme.typography.family.mono,
 				fontWeight: 600,
@@ -100,7 +102,7 @@ function C4CanvasInner(
 			},
 			labelBgStyle: {
 				fill: theme.color.background.base,
-				fillOpacity: Number(theme.opacity.overlay),
+				fillOpacity: 0.9, // Higher opacity for better contrast
 			},
 			// Add directional arrow marker
 			markerEnd: {
@@ -130,6 +132,7 @@ function C4CanvasInner(
 				nodesDraggable
 				nodesConnectable
 				elementsSelectable
+				connectionMode={ConnectionMode.Loose}
 			>
 				<Background color={theme.color.border.primary} />
 				<Controls className={reactFlowControls} />
@@ -177,3 +180,6 @@ export const C4Canvas = forwardRef<C4CanvasRef, C4CanvasProps>((props, ref) => (
 		<C4CanvasWithRef {...props} ref={ref} />
 	</ReactFlowProvider>
 ));
+
+
+C4Canvas.displayName = 'C4Canvas';
