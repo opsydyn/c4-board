@@ -3,12 +3,19 @@
  *
  * IMPERATIVE SHELL - Orchestrates canvas interactions and persistence.
  * Manages user flows: adding nodes, selecting, editing, connecting, saving/loading.
+ *
+ * This machine coordinates WHEN to run effects, but delegates all business logic
+ * to the functional core (Effect services).
  */
 
 import type { Edge, Node, NodeChange, EdgeChange } from "@xyflow/react";
 import { applyNodeChanges, applyEdgeChanges } from "@xyflow/react";
 import { assign, setup } from "xstate";
+import { Effect } from "effect";
 import { autoLayout, autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetName } from "../../core/effects/layout";
+import * as NodeOps from "../../core/effects/node-operations";
+import * as EdgeOps from "../../core/effects/edge-operations";
+import * as DiagramOps from "../../core/effects/diagram-operations";
 
 export type CanvasEvent =
 	| { type: "ADD_PERSON" }
@@ -23,12 +30,7 @@ export type CanvasEvent =
 	| {
 			type: "UPDATE_NODE";
 			nodeId: string;
-			updates: Partial<{
-				label: string;
-				description: string;
-				technology: string;
-				c4Type: string;
-			}>;
+			updates: Partial<NodeOps.NodeData>;
 	  }
 	| { type: "DELETE_NODE"; nodeId: string }
 	| { type: "CONNECT_NODES"; source: string; target: string }
@@ -82,21 +84,29 @@ export interface CanvasContext {
 }
 
 /**
- * Calculate initial position for a new node
- * Uses simple offset positioning - users will use Dagre auto-layout for final arrangement
- * This just ensures nodes don't stack on top of each other initially
+ * Run an Effect synchronously - XState actions must be sync
+ * Extracts the value from Effect or throws if it fails
  */
-function getInitialNodePosition(nodeCount: number): { x: number; y: number } {
-	// Simple diagonal offset - spreads nodes apart initially
-	// User will apply auto-layout (Dagre) for intelligent positioning
-	const OFFSET = 80; // Spacing between each new node
-	const START_X = 400;
-	const START_Y = 300;
+function runEffectSync<A>(effect: Effect.Effect<A>): A {
+	let result: A | undefined;
+	let error: unknown;
 
-	return {
-		x: START_X + (nodeCount * OFFSET),
-		y: START_Y + (nodeCount * OFFSET),
-	};
+	Effect.runSync(
+		Effect.gen(function* () {
+			try {
+				result = yield* effect;
+			} catch (e) {
+				error = e;
+				throw e;
+			}
+		}),
+	);
+
+	if (error) {
+		throw error;
+	}
+
+	return result as A;
 }
 
 export const canvasMachine = setup({
@@ -107,184 +117,86 @@ export const canvasMachine = setup({
 	actions: {
 		addPerson: assign({
 			nodes: ({ context }) => {
-				const id = `person-${context.nodeCounter}`;
-
-				// Check if a container is selected
-				const selectedNode = context.selectedNodeId
-					? context.nodes.find((n) => n.id === context.selectedNodeId)
-					: null;
-
-				const isParentContainer = selectedNode?.type === "container";
-
-				const newNode: Node = {
-					id,
-					type: "person",
-					// Position relative to parent if inside container, absolute otherwise
-					position: isParentContainer
-						? { x: 20, y: 60 }
-						: getInitialNodePosition(context.nodeCounter),
-					data: {
+				// Use Effect service for pure business logic
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "person",
 						label: "New Person",
-						description: "",
-						technology: "",
-						c4Type: "person",
-					},
-					// Set parent relationship if container is selected
-					...(isParentContainer && {
-						parentId: selectedNode.id,
-						extent: "parent" as const,
-						expandParent: true,
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
 					}),
-				};
-				return [...context.nodes, newNode];
+				);
+
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
 			},
 			nodeCounter: ({ context }) => context.nodeCounter + 1,
 		}),
 
 		addSystem: assign({
 			nodes: ({ context }) => {
-				const id = `system-${context.nodeCounter}`;
-
-				// Check if a container is selected
-				const selectedNode = context.selectedNodeId
-					? context.nodes.find((n) => n.id === context.selectedNodeId)
-					: null;
-
-				const isParentContainer = selectedNode?.type === "container";
-
-				const newNode: Node = {
-					id,
-					type: "system",
-					// Position relative to parent if inside container, absolute otherwise
-					position: isParentContainer
-						? { x: 20, y: 60 }
-						: getInitialNodePosition(context.nodeCounter),
-					data: {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "system",
 						label: "New System",
-						description: "",
-						technology: "",
-						c4Type: "system",
-					},
-					// Set parent relationship if container is selected
-					...(isParentContainer && {
-						parentId: selectedNode.id,
-						extent: "parent" as const,
-						expandParent: true,
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
 					}),
-				};
-				return [...context.nodes, newNode];
+				);
+
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
 			},
 			nodeCounter: ({ context }) => context.nodeCounter + 1,
 		}),
 
 		addExternalSystem: assign({
 			nodes: ({ context }) => {
-				const id = `external-${context.nodeCounter}`;
-
-				// Check if a container is selected
-				const selectedNode = context.selectedNodeId
-					? context.nodes.find((n) => n.id === context.selectedNodeId)
-					: null;
-
-				const isParentContainer = selectedNode?.type === "container";
-
-				const newNode: Node = {
-					id,
-					type: "externalSystem",
-					// Position relative to parent if inside container, absolute otherwise
-					position: isParentContainer
-						? { x: 20, y: 60 }
-						: getInitialNodePosition(context.nodeCounter),
-					data: {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "externalSystem",
 						label: "External System",
-						description: "",
-						technology: "",
-						c4Type: "externalSystem",
-					},
-					// Set parent relationship if container is selected
-					...(isParentContainer && {
-						parentId: selectedNode.id,
-						extent: "parent" as const,
-						expandParent: true,
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
 					}),
-				};
-				return [...context.nodes, newNode];
+				);
+
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
 			},
 			nodeCounter: ({ context }) => context.nodeCounter + 1,
 		}),
 
 		addContainer: assign({
 			nodes: ({ context }) => {
-				const id = `container-${context.nodeCounter}`;
-
-				// Check if a container is selected - support nested containers
-				const selectedNode = context.selectedNodeId
-					? context.nodes.find((n) => n.id === context.selectedNodeId)
-					: null;
-
-				const isParentContainer = selectedNode?.type === "container";
-
-				const newNode: Node = {
-					id,
-					type: "container",
-					// Position relative to parent if nested, absolute otherwise
-					position: isParentContainer
-						? { x: 20, y: 60 } // Position inside parent container
-						: { x: 100 + context.nodeCounter * 50, y: 100 },
-					data: {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "container",
 						label: "Container",
-						description: "",
-						technology: "",
-						c4Type: "container",
-					},
-					style: {
-						width: 400,
-						height: 300,
-					},
-					// Set parent relationship if container is selected
-					...(isParentContainer && {
-						parentId: selectedNode.id,
-						extent: "parent" as const,
-						expandParent: true,
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
 					}),
-				};
-				return [...context.nodes, newNode];
+				);
+
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
 			},
 			nodeCounter: ({ context }) => context.nodeCounter + 1,
 		}),
 
 		addComponent: assign({
 			nodes: ({ context }) => {
-				const id = `component-${context.nodeCounter}`;
-
-				// Check if a container is selected - if so, add component as child
-				const selectedNode = context.selectedNodeId
-					? context.nodes.find((n) => n.id === context.selectedNodeId)
-					: null;
-
-				const isParentContainer = selectedNode?.type === "container";
-
-				const newNode: Node = {
-					id,
-					type: "component",
-					// Position relative to parent if inside container, absolute otherwise
-					position: isParentContainer
-						? { x: 20, y: 60 } // Position inside container (below header)
-						: { x: 100 + context.nodeCounter * 50, y: 100 },
-					data: {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "component",
 						label: "Component",
-						description: "",
-						technology: "",
-						c4Type: "component",
-					},
-					// Set parent relationship if container is selected
-					...(isParentContainer && {
-						parentId: selectedNode.id,
-						extent: "parent" as const, // Keep child within parent bounds
-						expandParent: true, // Auto-expand parent if needed
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
 					}),
-				};
-				return [...context.nodes, newNode];
+				);
+
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
 			},
 			nodeCounter: ({ context }) => context.nodeCounter + 1,
 		}),
@@ -304,10 +216,8 @@ export const canvasMachine = setup({
 			nodes: ({ context, event }) => {
 				if (event.type !== "UPDATE_NODE") return context.nodes;
 
-				return context.nodes.map((node) =>
-					node.id === event.nodeId
-						? { ...node, data: { ...node.data, ...event.updates } }
-						: node,
+				return runEffectSync(
+					NodeOps.updateNodeData(context.nodes, event.nodeId, event.updates),
 				);
 			},
 		}),
@@ -315,13 +225,13 @@ export const canvasMachine = setup({
 		deleteNode: assign({
 			nodes: ({ context, event }) => {
 				if (event.type !== "DELETE_NODE") return context.nodes;
-				return context.nodes.filter((node) => node.id !== event.nodeId);
+				return runEffectSync(NodeOps.removeNode(context.nodes, event.nodeId));
 			},
 			edges: ({ context, event }) => {
 				if (event.type !== "DELETE_NODE") return context.edges;
-				// Remove edges connected to deleted node
-				return context.edges.filter(
-					(edge) => edge.source !== event.nodeId && edge.target !== event.nodeId,
+				// Remove edges connected to deleted node using Effect service
+				return runEffectSync(
+					EdgeOps.removeEdgesConnectedToNode(context.edges, event.nodeId),
 				);
 			},
 			selectedNodeId: ({ context, event }) => {
@@ -336,35 +246,27 @@ export const canvasMachine = setup({
 			edges: ({ context, event }) => {
 				if (event.type !== "CONNECT_NODES") return context.edges;
 
-				// Validation: Prevent self-connections (node connecting to itself)
-				if (event.source === event.target) {
-					console.warn("⚠️ Cannot connect node to itself");
-					return context.edges;
-				}
-
-				// Validation: Prevent duplicate edges (same source and target)
-				// Check both directions to prevent A→B when B→A exists (bidirectional check)
-				const isDuplicate = context.edges.some(
-					(edge) =>
-						(edge.source === event.source && edge.target === event.target) ||
-						(edge.source === event.target && edge.target === event.source),
+				// Use Effect service for validation and creation
+				// Validation errors will be caught and logged, returning unchanged edges
+				const result = Effect.runSync(
+					Effect.gen(function* () {
+						return yield* EdgeOps.addValidatedEdge(
+							context.edges,
+							event.source,
+							event.target,
+							"uses",
+						);
+					}).pipe(
+						Effect.catchAll((error) => {
+							if (error instanceof EdgeOps.EdgeValidationError) {
+								console.warn(`⚠️ ${error.message}`);
+							}
+							return Effect.succeed(context.edges); // Return unchanged edges on error
+						}),
+					),
 				);
 
-				if (isDuplicate) {
-					console.warn("⚠️ Edge already exists between these nodes");
-					return context.edges;
-				}
-
-				// Create new edge
-				const newEdge: Edge = {
-					id: `edge-${Date.now()}`,
-					source: event.source,
-					target: event.target,
-					label: "uses",
-					type: "default",
-				};
-
-				return [...context.edges, newEdge];
+				return result;
 			},
 		}),
 
@@ -385,23 +287,62 @@ export const canvasMachine = setup({
 		}),
 
 		updateDiagramName: assign({
-			diagramName: ({ event }) => {
-				if (event.type !== "UPDATE_DIAGRAM_NAME") return "";
-				return event.name;
+			diagramName: ({ context, event }) => {
+				if (event.type !== "UPDATE_DIAGRAM_NAME") return context.diagramName;
+
+				const metadata = runEffectSync(
+					DiagramOps.updateDiagramName(
+						{
+							id: context.currentDiagramId,
+							name: context.diagramName,
+							description: context.diagramDescription,
+							sessionName: context.sessionName,
+						},
+						event.name,
+					),
+				);
+
+				return metadata.name;
 			},
 		}),
 
 		updateDiagramDescription: assign({
-			diagramDescription: ({ event }) => {
-				if (event.type !== "UPDATE_DIAGRAM_DESCRIPTION") return null;
-				return event.description;
+			diagramDescription: ({ context, event }) => {
+				if (event.type !== "UPDATE_DIAGRAM_DESCRIPTION") return context.diagramDescription;
+
+				const metadata = runEffectSync(
+					DiagramOps.updateDiagramDescription(
+						{
+							id: context.currentDiagramId,
+							name: context.diagramName,
+							description: context.diagramDescription,
+							sessionName: context.sessionName,
+						},
+						event.description,
+					),
+				);
+
+				return metadata.description;
 			},
 		}),
 
 		updateSessionName: assign({
-			sessionName: ({ event }) => {
-				if (event.type !== "UPDATE_SESSION_NAME") return "";
-				return event.name;
+			sessionName: ({ context, event }) => {
+				if (event.type !== "UPDATE_SESSION_NAME") return context.sessionName;
+
+				const metadata = runEffectSync(
+					DiagramOps.updateSessionName(
+						{
+							id: context.currentDiagramId,
+							name: context.diagramName,
+							description: context.diagramDescription,
+							sessionName: context.sessionName,
+						},
+						event.name,
+					),
+				);
+
+				return metadata.sessionName;
 			},
 		}),
 

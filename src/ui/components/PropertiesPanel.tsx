@@ -5,6 +5,7 @@
  */
 
 import type { Node } from "@xyflow/react";
+import type { NodeData } from "../../core/effects/node-operations";
 import {
 	formGroup,
 	input,
@@ -13,13 +14,6 @@ import {
 	propertiesPanel,
 	textarea,
 } from "./styles.css";
-
-interface NodeData extends Record<string, unknown> {
-	label?: string;
-	description?: string;
-	technology?: string;
-	c4Type?: string;
-}
 
 interface PropertiesPanelProps {
 	selectedNode: Node<NodeData> | null;

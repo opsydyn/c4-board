@@ -33,6 +33,7 @@ import {
 import type { LayoutPresetName } from "../../core/effects/layout";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { NodeData } from "../../core/effects/node-operations";
 
 export function C4CanvasContainer() {
 	const [state, send] = useMachine(canvasMachine);
@@ -388,10 +389,10 @@ export function C4CanvasContainer() {
 		window.history.replaceState({}, "", "/canvas");
 	}, [handleNewBoard, handleSave, send]);
 
-	// Get selected node object
-	const selectedNode =
-		state.context.nodes.find((n) => n.id === state.context.selectedNodeId) ||
-		null;
+	// Get selected node object (cast to Node<NodeData> since our nodes always have NodeData)
+	const selectedNode = (state.context.nodes.find(
+		(n) => n.id === state.context.selectedNodeId,
+	) as Node<NodeData> | undefined) || null;
 
 	// Handle node selection from search
 	const handleSelectNode = useCallback(
