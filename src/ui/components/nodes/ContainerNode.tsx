@@ -52,8 +52,9 @@ export function ContainerNode({ data, selected }: NodeProps) {
 			/>
 
 			<div className={containerNode} data-selected={selected}>
-				{/* Handles for connections */}
-				<Handle type="target" position={Position.Top} />
+				{/* Input handles (target) - can receive connections from any direction */}
+				<Handle type="target" position={Position.Top} id="top" />
+				<Handle type="target" position={Position.Left} id="left" />
 
 				{/* Header with icon and label */}
 				<div className={containerNodeHeader}>
@@ -73,7 +74,9 @@ export function ContainerNode({ data, selected }: NodeProps) {
 					<div className={containerNodeDescription}>{nodeData.description}</div>
 				)}
 
-				<Handle type="source" position={Position.Bottom} />
+				{/* Output handles (source) - can send connections in any direction */}
+				<Handle type="source" position={Position.Right} id="right" />
+				<Handle type="source" position={Position.Bottom} id="bottom" />
 			</div>
 		</>
 	);

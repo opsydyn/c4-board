@@ -43,7 +43,9 @@ export function SystemNode({ data, selected }: NodeProps) {
 
 	return (
 		<div className={systemNode} data-selected={selected}>
-			<Handle type="target" position={Position.Top} />
+			{/* Input handles (target) - can receive connections from any direction */}
+			<Handle type="target" position={Position.Top} id="top" />
+			<Handle type="target" position={Position.Left} id="left" />
 
 			<div className={systemNodeIcon}>
 				<PackageIcon size={24} weight="duotone" />
@@ -59,7 +61,9 @@ export function SystemNode({ data, selected }: NodeProps) {
 				)}
 			</div>
 
-			<Handle type="source" position={Position.Bottom} />
+			{/* Output handles (source) - can send connections in any direction */}
+			<Handle type="source" position={Position.Right} id="right" />
+			<Handle type="source" position={Position.Bottom} id="bottom" />
 		</div>
 	);
 }

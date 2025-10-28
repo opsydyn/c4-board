@@ -46,7 +46,9 @@ export function ExternalSystemNode({
 
 	return (
 		<div className={externalSystemNode} data-selected={selected}>
-			<Handle type="target" position={Position.Top} />
+			{/* Input handles (target) - can receive connections from any direction */}
+			<Handle type="target" position={Position.Top} id="top" />
+			<Handle type="target" position={Position.Left} id="left" />
 
 			<div className={externalSystemNodeIcon}>
 				<CloudIcon size={24} weight="duotone" />
@@ -64,7 +66,9 @@ export function ExternalSystemNode({
 				)}
 			</div>
 
-			<Handle type="source" position={Position.Bottom} />
+			{/* Output handles (source) - can send connections in any direction */}
+			<Handle type="source" position={Position.Right} id="right" />
+			<Handle type="source" position={Position.Bottom} id="bottom" />
 		</div>
 	);
 }

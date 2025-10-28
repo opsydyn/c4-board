@@ -252,38 +252,158 @@ function getDefaultNodeHeight(nodeType: string | undefined): number {
 }
 
 /**
- * Tactical layout presets for different use cases
+ * C4-optimized layout presets for different architectural patterns
  */
-export const TACTICAL_PRESETS = {
-	// Command chain (top-down hierarchy) - DEFAULT
+export const C4_LAYOUT_PRESETS = {
+	// ============================================================================
+	// ESSENTIAL LAYOUTS (Phase 1)
+	// ============================================================================
+
+	/**
+	 * Command Hierarchy (Default)
+	 * Top-down organizational chart, command chain
+	 * Use for: Reporting structures, process flows
+	 */
 	command: {
 		direction: "TB" as const,
 		rankSpacing: 120,
 		nodeSpacing: 80,
 	},
 
-	// Data flow (left-to-right)
+	/**
+	 * Data Flow (Left-to-Right)
+	 * Sequential processing, data pipelines
+	 * Use for: ETL processes, request flows, pipeline stages
+	 */
 	dataFlow: {
 		direction: "LR" as const,
-		nodeSpacing: 100,
 		rankSpacing: 120,
+		nodeSpacing: 100,
 	},
 
-	// Dependency tree (bottom-up)
+	/**
+	 * Layered Architecture (3-Tier)
+	 * Presentation → Business → Data layers
+	 * Use for: Web applications, traditional n-tier systems
+	 */
+	layered: {
+		direction: "TB" as const,
+		rankSpacing: 150,
+		nodeSpacing: 100,
+	},
+
+	/**
+	 * Microservices Mesh
+	 * Service-oriented architecture with gateway
+	 * Use for: Distributed systems, microservices, API gateway patterns
+	 */
+	microservices: {
+		direction: "LR" as const,
+		rankSpacing: 180,
+		nodeSpacing: 100,
+	},
+
+	/**
+	 * System Context (Radial)
+	 * Main system with external systems and users
+	 * Use for: C4 Level 1 - System Context diagrams
+	 */
+	systemContext: {
+		direction: "TB" as const,
+		rankSpacing: 200,
+		nodeSpacing: 120,
+	},
+
+	// ============================================================================
+	// ADVANCED LAYOUTS (Phase 2)
+	// ============================================================================
+
+	/**
+	 * Hexagonal Architecture (Ports & Adapters)
+	 * Core domain with input/output adapters
+	 * Use for: Clean architecture, DDD, hexagonal patterns
+	 */
+	hexagonal: {
+		direction: "TB" as const,
+		rankSpacing: 140,
+		nodeSpacing: 90,
+	},
+
+	/**
+	 * Event-Driven Flow
+	 * Publishers → Event Bus → Subscribers
+	 * Use for: Event sourcing, message queues, pub/sub systems
+	 */
+	eventDriven: {
+		direction: "LR" as const,
+		rankSpacing: 200,
+		nodeSpacing: 120,
+	},
+
+	/**
+	 * Client-Server Tiers
+	 * Client → Server → Database layers
+	 * Use for: Traditional web apps, mobile backends
+	 */
+	clientServer: {
+		direction: "TB" as const,
+		rankSpacing: 180,
+		nodeSpacing: 120,
+	},
+
+	/**
+	 * Pipeline / Sequential
+	 * Strict left-to-right sequential stages
+	 * Use for: CI/CD pipelines, data processing stages
+	 */
+	pipeline: {
+		direction: "LR" as const,
+		rankSpacing: 160,
+		nodeSpacing: 80,
+	},
+
+	/**
+	 * Hub-Spoke (Star Pattern)
+	 * Central integration hub with satellite services
+	 * Use for: ESB, integration platforms, API aggregators
+	 */
+	hubSpoke: {
+		direction: "TB" as const,
+		rankSpacing: 160,
+		nodeSpacing: 100,
+	},
+
+	// ============================================================================
+	// UTILITY LAYOUTS
+	// ============================================================================
+
+	/**
+	 * Dependency Tree (Bottom-Up)
+	 * Dependencies at bottom, dependents flow upward
+	 * Use for: Module dependencies, package graphs
+	 */
 	dependencies: {
 		direction: "BT" as const,
 		rankSpacing: 120,
 		nodeSpacing: 80,
 	},
 
-	// Compact (minimal spacing)
+	/**
+	 * Compact (Minimal Spacing)
+	 * Dense layout for large diagrams
+	 * Use for: Overview diagrams, many nodes
+	 */
 	compact: {
 		direction: "TB" as const,
 		nodeSpacing: 50,
 		rankSpacing: 80,
 	},
 
-	// Presentation (spacious)
+	/**
+	 * Presentation (Spacious)
+	 * Wide spacing for readability
+	 * Use for: Presentations, documentation, posters
+	 */
 	presentation: {
 		direction: "TB" as const,
 		nodeSpacing: 100,
@@ -295,9 +415,108 @@ export const TACTICAL_PRESETS = {
  * Get layout preset by name
  */
 export function getPreset(
-	name: keyof typeof TACTICAL_PRESETS,
+	name: keyof typeof C4_LAYOUT_PRESETS,
 ): Partial<LayoutOptions> {
-	return TACTICAL_PRESETS[name];
+	return C4_LAYOUT_PRESETS[name];
+}
+
+/**
+ * Layout preset names for type safety
+ */
+export type LayoutPresetName = keyof typeof C4_LAYOUT_PRESETS;
+
+/**
+ * Get all available layout presets
+ */
+export function getAllPresets(): Array<{
+	name: LayoutPresetName;
+	label: string;
+	description: string;
+	category: "essential" | "advanced" | "utility";
+}> {
+	return [
+		// Essential
+		{
+			name: "command",
+			label: "Command Hierarchy",
+			description: "Top-down organizational chart",
+			category: "essential",
+		},
+		{
+			name: "dataFlow",
+			label: "Data Flow",
+			description: "Sequential left-to-right processing",
+			category: "essential",
+		},
+		{
+			name: "layered",
+			label: "Layered (3-Tier)",
+			description: "Presentation → Business → Data",
+			category: "essential",
+		},
+		{
+			name: "microservices",
+			label: "Microservices",
+			description: "Service mesh with gateway",
+			category: "essential",
+		},
+		{
+			name: "systemContext",
+			label: "System Context",
+			description: "Main system with externals",
+			category: "essential",
+		},
+		// Advanced
+		{
+			name: "hexagonal",
+			label: "Hexagonal",
+			description: "Ports & Adapters pattern",
+			category: "advanced",
+		},
+		{
+			name: "eventDriven",
+			label: "Event-Driven",
+			description: "Publishers → Bus → Subscribers",
+			category: "advanced",
+		},
+		{
+			name: "clientServer",
+			label: "Client-Server",
+			description: "Client → Server → Database",
+			category: "advanced",
+		},
+		{
+			name: "pipeline",
+			label: "Pipeline",
+			description: "Sequential stages",
+			category: "advanced",
+		},
+		{
+			name: "hubSpoke",
+			label: "Hub-Spoke",
+			description: "Central hub with satellites",
+			category: "advanced",
+		},
+		// Utility
+		{
+			name: "dependencies",
+			label: "Dependency Tree",
+			description: "Bottom-up dependencies",
+			category: "utility",
+		},
+		{
+			name: "compact",
+			label: "Compact",
+			description: "Minimal spacing",
+			category: "utility",
+		},
+		{
+			name: "presentation",
+			label: "Presentation",
+			description: "Spacious for slides",
+			category: "utility",
+		},
+	];
 }
 
 /**

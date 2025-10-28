@@ -82,19 +82,32 @@ function C4CanvasInner(
 		[],
 	);
 
-	// Default edge styling for C4 relationships
+	// Default edge styling for C4 relationships with directional arrows
 	const defaultEdgeOptions = useMemo(
 		() => ({
+			type: "smoothstep", // Smooth step edges for cleaner routing
 			animated: true,
-			style: { stroke: theme.color.semantic.relationship, strokeWidth: 2 },
+			style: {
+				stroke: theme.color.semantic.relationship,
+				strokeWidth: 2,
+			},
 			labelStyle: {
 				fill: theme.color.semantic.relationship,
 				fontSize: 12,
-				fontFamily: theme.typography.family.mono
+				fontFamily: theme.typography.family.mono,
+				fontWeight: 600,
+				letterSpacing: "0.05em",
 			},
 			labelBgStyle: {
 				fill: theme.color.background.base,
-				fillOpacity: Number(theme.opacity.overlay)
+				fillOpacity: Number(theme.opacity.overlay),
+			},
+			// Add directional arrow marker
+			markerEnd: {
+				type: "arrowclosed" as const,
+				width: 20,
+				height: 20,
+				color: theme.color.semantic.relationship,
 			},
 		}),
 		[],

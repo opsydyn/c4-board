@@ -30,6 +30,7 @@ import {
 	createNewDiagram,
 	listAllDiagrams,
 } from "../../core/effects/canvas-persistence";
+import type { LayoutPresetName } from "../../core/effects/layout";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -274,15 +275,15 @@ export function C4CanvasContainer() {
 	}, [runEffect, send]);
 
 	// Handle auto-layout action
-	const handleAutoLayout = useCallback(() => {
-		send({ type: "AUTO_LAYOUT" });
-		console.log("🎯 Auto-layout applied");
+	const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
+		send({ type: "AUTO_LAYOUT", preset });
+		console.log(`🎯 Auto-layout applied: ${preset}`);
 	}, [send]);
 
 	// Handle auto-layout selected nodes
-	const handleAutoLayoutSelected = useCallback(() => {
-		send({ type: "AUTO_LAYOUT_SELECTED" });
-		console.log("🎯 Auto-layout (selected) applied");
+	const handleAutoLayoutSelected = useCallback((preset: LayoutPresetName) => {
+		send({ type: "AUTO_LAYOUT_SELECTED", preset });
+		console.log(`🎯 Auto-layout (selected) applied: ${preset}`);
 	}, [send]);
 
 	// Keyboard shortcuts (⌘L for auto-layout, ⌘⇧L for auto-layout selected)
@@ -291,14 +292,14 @@ export function C4CanvasContainer() {
 			// ⌘⇧L / Ctrl+Shift+L - Auto-layout selected nodes
 			if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === "l") {
 				event.preventDefault();
-				handleAutoLayoutSelected();
+				handleAutoLayoutSelected("command"); // Default to command preset
 				return;
 			}
 
 			// ⌘L / Ctrl+L - Auto-layout all nodes
 			if ((event.metaKey || event.ctrlKey) && event.key === "l") {
 				event.preventDefault();
-				handleAutoLayout();
+				handleAutoLayout("command"); // Default to command preset
 			}
 		};
 
@@ -422,6 +423,7 @@ export function C4CanvasContainer() {
 				isSaving={state.context.isSaving}
 				lastSaved={state.context.lastSaved}
 				diagramName={state.context.diagramName}
+				{...(state.context.currentLayout && { currentLayout: state.context.currentLayout })}
 			/>
 
 			<PropertiesPanel

@@ -8,7 +8,7 @@
 import type { Edge, Node, NodeChange, EdgeChange } from "@xyflow/react";
 import { applyNodeChanges, applyEdgeChanges } from "@xyflow/react";
 import { assign, setup } from "xstate";
-import { autoLayout, autoLayoutSelected, type LayoutOptions } from "../../core/effects/layout";
+import { autoLayout, autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetName } from "../../core/effects/layout";
 
 export type CanvasEvent =
 	| { type: "ADD_PERSON" }
@@ -18,8 +18,8 @@ export type CanvasEvent =
 	| { type: "ADD_COMPONENT" }
 	| { type: "SELECT_NODE"; nodeId: string }
 	| { type: "DESELECT_NODE" }
-	| { type: "AUTO_LAYOUT"; options?: Partial<LayoutOptions> }
-	| { type: "AUTO_LAYOUT_SELECTED"; options?: Partial<LayoutOptions> }
+	| { type: "AUTO_LAYOUT"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
+	| { type: "AUTO_LAYOUT_SELECTED"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
 	| {
 			type: "UPDATE_NODE";
 			nodeId: string;
@@ -78,6 +78,7 @@ export interface CanvasContext {
 
 	// Layout state
 	previousLayout: Node[] | null; // For undo functionality
+	currentLayout: LayoutPresetName | null; // Track currently applied layout preset
 }
 
 export const canvasMachine = setup({
@@ -368,16 +369,33 @@ export const canvasMachine = setup({
 
 		applyLayout: assign({
 			previousLayout: ({ context }) => context.nodes, // Save current layout for undo
+			currentLayout: ({ event }) => {
+				if (event.type !== "AUTO_LAYOUT") return null;
+				return event.preset ?? "command"; // Default to command if no preset specified
+			},
 			nodes: ({ context, event }) => {
 				if (event.type !== "AUTO_LAYOUT") return context.nodes;
-				return autoLayout(context.nodes, context.edges, event.options);
+
+				// Merge preset options with explicit options (explicit options take precedence)
+				const presetOptions = event.preset ? getPreset(event.preset) : {};
+				const mergedOptions = { ...presetOptions, ...event.options };
+
+				return autoLayout(context.nodes, context.edges, mergedOptions);
 			},
 		}),
 
 		applyLayoutSelected: assign({
 			previousLayout: ({ context }) => context.nodes, // Save current layout for undo
+			currentLayout: ({ event }) => {
+				if (event.type !== "AUTO_LAYOUT_SELECTED") return null;
+				return event.preset ?? "command"; // Default to command if no preset specified
+			},
 			nodes: ({ context, event }) => {
 				if (event.type !== "AUTO_LAYOUT_SELECTED") return context.nodes;
+
+				// Merge preset options with explicit options (explicit options take precedence)
+				const presetOptions = event.preset ? getPreset(event.preset) : {};
+				const mergedOptions = { ...presetOptions, ...event.options };
 
 				// Get all selected nodes (ReactFlow stores selection in node.selected)
 				const selectedNodeIds = context.nodes
@@ -386,14 +404,14 @@ export const canvasMachine = setup({
 
 				if (selectedNodeIds.length === 0) {
 					// No selection, fallback to layout all
-					return autoLayout(context.nodes, context.edges, event.options);
+					return autoLayout(context.nodes, context.edges, mergedOptions);
 				}
 
 				return autoLayoutSelected(
 					context.nodes,
 					context.edges,
 					selectedNodeIds,
-					event.options,
+					mergedOptions,
 				);
 			},
 		}),
@@ -467,6 +485,7 @@ export const canvasMachine = setup({
 
 		// Layout state
 		previousLayout: null,
+		currentLayout: null,
 	},
 	states: {
 		idle: {

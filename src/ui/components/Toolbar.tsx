@@ -14,11 +14,12 @@ import {
 	PlusIcon,
 	Stack,
 	Cube,
-	GridFour,
 } from "@phosphor-icons/react";
 import type { Node } from "@xyflow/react";
 import { toolbar, toolbarButton, saveStatus, boardNameInput } from "./styles.css";
 import { SearchBox } from "./SearchBox";
+import { LayoutMenu } from "./LayoutMenu";
+import type { LayoutPresetName } from "../../core/effects/layout";
 
 interface ToolbarProps {
 	onAddPerson: () => void;
@@ -28,8 +29,8 @@ interface ToolbarProps {
 	onAddComponent: () => void;
 	onSave: () => void;
 	onNewBoard: () => void;
-	onAutoLayout: () => void;
-	onAutoLayoutSelected: () => void;
+	onAutoLayout: (presetName: LayoutPresetName) => void;
+	onAutoLayoutSelected: (presetName: LayoutPresetName) => void;
 	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
 	onSelectNode: (nodeId: string) => void;
@@ -38,6 +39,7 @@ interface ToolbarProps {
 	isSaving?: boolean;
 	lastSaved?: number | null;
 	diagramName?: string;
+	currentLayout?: LayoutPresetName;
 }
 
 function formatSaveTime(timestamp: number): string {
@@ -76,6 +78,7 @@ export function Toolbar({
 	isSaving = false,
 	lastSaved = null,
 	diagramName = "Untitled",
+	currentLayout,
 }: ToolbarProps) {
 	return (
 		<div className={toolbar}>
@@ -134,26 +137,18 @@ export function Toolbar({
 			{/* Search box */}
 			<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
 
-			{/* Auto-layout buttons */}
-			<button
-				type="button"
-				className={toolbarButton}
-				onClick={onAutoLayout}
-				title="Auto-arrange all nodes (⌘L)"
-			>
-				<GridFour size={20} weight="duotone" />
-				Layout All
-			</button>
+			{/* Auto-layout menus */}
+			<LayoutMenu
+				onSelectLayout={onAutoLayout}
+				variant="all"
+				{...(currentLayout && { currentLayout })}
+			/>
 
-			<button
-				type="button"
-				className={toolbarButton}
-				onClick={onAutoLayoutSelected}
-				title="Auto-arrange selected nodes (⌘⇧L)"
-			>
-				<GridFour size={20} weight="fill" />
-				Layout Selected
-			</button>
+			<LayoutMenu
+				onSelectLayout={onAutoLayoutSelected}
+				variant="selected"
+				{...(currentLayout && { currentLayout })}
+			/>
 
 			{/* Add node buttons */}
 			<button type="button" className={toolbarButton} onClick={onAddPerson}>
