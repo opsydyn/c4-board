@@ -29,6 +29,7 @@ import { ContainerNode } from "./nodes/ContainerNode";
 import { ComponentNode } from "./nodes/ComponentNode";
 import { canvasContainer, reactFlowControls } from "./styles.css";
 import { theme } from "../../styles/theme.css";
+import { DownloadButton } from "./DownloadButton";
 
 interface C4CanvasProps {
 	nodes: Node[];
@@ -118,6 +119,7 @@ function C4CanvasInner(
 	return (
 		<div className={canvasContainer}>
 			<ReactFlow
+			  proOptions={{ hideAttribution: true }}
 				nodes={nodes}
 				edges={edges}
 				{...(onNodesChange && { onNodesChange })}
@@ -136,7 +138,10 @@ function C4CanvasInner(
 			>
 				<Background color={theme.color.border.primary} />
 				<Controls className={reactFlowControls} />
+				<DownloadButton />
 				<MiniMap
+					pannable
+					zoomable
 					nodeColor={(node) => {
 						// Color nodes based on their type using tactical colors
 						switch (node.type) {

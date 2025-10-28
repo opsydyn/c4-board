@@ -90,9 +90,9 @@ export const createEmptyDiagram = (
  */
 export const validateDiagramName = (
 	name: string,
-): Effect.Effect<boolean, { message: string }> => {
+): Effect.Effect<boolean, DiagramNameError> => {
 	if (!name || name.trim().length === 0) {
-		return Effect.fail({ message: "Diagram name cannot be empty" });
+		return Effect.fail(new DiagramNameError({ message: "Diagram name cannot be empty" }));
 	}
 	return Effect.succeed(true);
 };

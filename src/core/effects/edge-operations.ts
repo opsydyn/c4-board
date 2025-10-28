@@ -7,15 +7,14 @@
  */
 
 import type { Edge } from "@xyflow/react";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 
 /**
  * Validation errors for edge operations
  */
-export class EdgeValidationError {
-	readonly _tag = "EdgeValidationError";
-	constructor(readonly message: string) {}
-}
+export class EdgeValidationError extends Data.TaggedError("EdgeValidationError")<{
+	message: string;
+}> {}
 
 /**
  * Check if a connection would create a self-loop (node connecting to itself)
@@ -59,7 +58,7 @@ export const validateEdgeConnection = (
 		const isSelf = yield* isSelfConnection(source, target);
 		if (isSelf) {
 			return yield* Effect.fail(
-				new EdgeValidationError("Cannot connect node to itself"),
+				new EdgeValidationError({ message: "Cannot connect node to itself" }),
 			);
 		}
 
@@ -67,7 +66,9 @@ export const validateEdgeConnection = (
 		const isDuplicate = yield* isDuplicateEdge(edges, source, target);
 		if (isDuplicate) {
 			return yield* Effect.fail(
-				new EdgeValidationError("Edge already exists between these nodes"),
+				new EdgeValidationError({
+					message: "Edge already exists between these nodes",
+				}),
 			);
 		}
 

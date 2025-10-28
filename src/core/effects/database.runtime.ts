@@ -22,7 +22,8 @@ const getDatabase = (): Effect.Effect<Database, DatabaseError> =>
 
 		dbInstance = yield* Effect.tryPromise({
 			try: () => Database.load("sqlite:c4board.db"),
-			catch: (error) => new DatabaseError("Failed to load database", error),
+			catch: (error) =>
+				new DatabaseError({ message: "Failed to load database", cause: error }),
 		});
 
 		return dbInstance;
@@ -38,10 +39,11 @@ const query = <T>(
 	Effect.gen(function* () {
 		const db = yield* getDatabase();
 
-		return yield* Effect.tryPromise({
-			try: () => db.select<T[]>(sql, bindValues),
-			catch: (error) => new DatabaseError("Query failed", error),
-		});
+	return yield* Effect.tryPromise({
+		try: () => db.select<T[]>(sql, bindValues),
+		catch: (error) =>
+			new DatabaseError({ message: "Query failed", cause: error }),
+	});
 	});
 
 /**
@@ -54,10 +56,11 @@ const execute = (
 	Effect.gen(function* () {
 		const db = yield* getDatabase();
 
-		yield* Effect.tryPromise({
-			try: () => db.execute(sql, bindValues),
-			catch: (error) => new DatabaseError("Execute failed", error),
-		});
+	yield* Effect.tryPromise({
+		try: () => db.execute(sql, bindValues),
+		catch: (error) =>
+			new DatabaseError({ message: "Execute failed", cause: error }),
+	});
 	});
 
 /**

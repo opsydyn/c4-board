@@ -10,7 +10,7 @@
  * - XState machines orchestrate WHEN to do it (flow control)
  */
 
-import { Effect, Context } from "effect";
+import { Effect, Context, Data } from "effect";
 import Database from "@tauri-apps/plugin-sql";
 
 // ============================================================================
@@ -36,20 +36,20 @@ export class DatabaseService extends Context.Tag("DatabaseService")<
 // Error Types
 // ============================================================================
 
-export class DatabaseError {
-	readonly _tag = "DatabaseError";
-	constructor(readonly message: string, readonly cause?: unknown) {}
-}
+export class DatabaseError extends Data.TaggedError("DatabaseError")<{
+	message: string;
+	cause?: unknown;
+}> {}
 
-export class NotFoundError {
-	readonly _tag = "NotFoundError";
-	constructor(readonly entity: string, readonly id: string) {}
-}
+export class NotFoundError extends Data.TaggedError("NotFoundError")<{
+	entity: string;
+	id: string;
+}> {}
 
-export class ValidationError {
-	readonly _tag = "ValidationError";
-	constructor(readonly field: string, readonly message: string) {}
-}
+export class ValidationError extends Data.TaggedError("ValidationError")<{
+	field: string;
+	message: string;
+}> {}
 
 // ============================================================================
 // Domain Models (matching Rust structs)
@@ -192,7 +192,9 @@ export const getDiagram = (id: string) =>
 		);
 
 		if (results.length === 0) {
-			return yield* Effect.fail(new NotFoundError("Diagram", id));
+			return yield* Effect.fail(
+				new NotFoundError({ entity: "Diagram", id }),
+			);
 		}
 
 		return results[0];
