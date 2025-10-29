@@ -8,38 +8,122 @@ import { style, globalStyle } from "@vanilla-extract/css";
 import { theme } from "../../styles/theme.css";
 
 /**
+ * Workspace Layout
+ * Responsive shell that hosts sidebar, canvas, and details panel.
+ */
+export const workspace = style({
+	display: "grid",
+	gridTemplateRows: "100%",
+	gridTemplateColumns: "minmax(260px, 320px) 1fr minmax(300px, 360px)",
+	backgroundColor: theme.color.background.base,
+	width: "100vw",
+	height: "100vh",
+	overflow: "hidden",
+	color: theme.color.foreground.primary,
+
+	"@media": {
+		"(max-width: 1440px)": {
+			gridTemplateColumns: "minmax(240px, 300px) 1fr minmax(280px, 340px)",
+		},
+		"(max-width: 1200px)": {
+			gridTemplateColumns: "minmax(240px, 320px) 1fr",
+		},
+	},
+});
+
+export const sidebarColumn = style({
+	display: "flex",
+	flexDirection: "column",
+	borderRight: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
+	overflowX: "hidden",
+	overflowY: "auto",
+	gridColumn: "1 / 2",
+	gap: theme.spacing["4"],
+});
+
+export const canvasRegion = style({
+	position: "relative",
+	display: "flex",
+	flex: 1,
+	flexDirection: "column",
+	minWidth: 0,
+	minHeight: 0,
+	overflow: "hidden",
+	gridColumn: "2 / 3",
+});
+
+export const detailsColumn = style({
+	display: "flex",
+	flexDirection: "column",
+	borderLeft: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(10, 18, 14, 0.96)",
+	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
+	overflowX: "hidden",
+	overflowY: "auto",
+	gridColumn: "3 / 4",
+	gap: theme.spacing["4"],
+
+	"@media": {
+		"(max-width: 1200px)": {
+			display: "none",
+		},
+	},
+});
+
+/**
  * Canvas Container
  * Main viewport for the C4 diagram
  */
 export const canvasContainer = style({
+	position: "relative",
+	isolation: "isolate",
 	backgroundColor: theme.color.background.base,
 	backgroundImage: `
+		radial-gradient(115% 115% at 50% 55%, rgba(3, 25, 66, 0.35) 0%, rgba(6, 11, 8, 0.75) 70%),
 		linear-gradient(${theme.color.grid} 1px, transparent 1px),
 		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
 	`,
-	backgroundSize: "20px 20px", // Grid spacing - 20px tactical grid
-	width: "100vw",
-	height: "100vh",
+	backgroundPosition: "center",
+	backgroundSize: "100% 100%, 24px 24px, 24px 24px",
+	width: "100%",
+	height: "100%",
+	color: theme.color.foreground.primary,
 	fontFamily: theme.typography.family.mono,
+
+	selectors: {
+		"&::before": {
+			position: "absolute",
+			zIndex: theme.zIndex.base,
+			inset: 0,
+			opacity: theme.opacity.grid,
+			mixBlendMode: "screen",
+			backgroundImage:
+				"linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px)",
+			backgroundSize: "100% 4px",
+			pointerEvents: "none",
+			content: '""',
+		},
+	},
 });
 
 /**
  * Toolbar
- * Floating action panel for adding elements
+ * Vertical command stack for actions and metadata
  */
 export const toolbar = style({
-	position: "fixed",
-	zIndex: theme.zIndex.overlay,
+	position: "sticky",
 	top: theme.spacing["5"],
-	left: theme.spacing["5"],
 	display: "flex",
 	flexDirection: "column",
 	gap: theme.spacing["2"],
 	clipPath: theme.clipPath.md,
 	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-	boxShadow: theme.effect.glow.lg,
-	backgroundColor: theme.color.background.base,
-	padding: theme.spacing["3"],
+	boxShadow: theme.effect.glow.sm,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	padding: theme.spacing["4"],
+	width: "100%",
 });
 
 /**
@@ -51,9 +135,9 @@ export const saveStatus = style({
 	flexDirection: "column",
 	gap: theme.spacing["1"],
 	marginBottom: theme.spacing["2"],
-	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 	paddingBottom: theme.spacing["2"],
-	color: theme.color.foreground.secondary,
+	color: theme.color.foreground.tertiary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
 });
@@ -85,21 +169,21 @@ export const boardNameInput = style({
 	cursor: "text",
 	padding: `${theme.spacing["1"]} 0`,
 	width: "100%",
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.engineering,
 	color: theme.color.foreground.primary,
-	fontFamily: theme.typography.family.mono, // MONOSPACE
+	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.sm,
 	fontWeight: theme.typography.weight.bold,
-	textTransform: theme.typography.textTransform.uppercase, // UPPERCASE
-	letterSpacing: theme.typography.letterSpacing.engineering, // TACTICAL
 
 	":focus": {
-		color: theme.color.status.ready, // Tactical green on focus
-		textShadow: theme.effect.textGlow.sm, // Subtle glow
+		textShadow: theme.effect.textGlow.sm,
+		color: theme.color.interactive.hover,
 	},
 
 	"::placeholder": {
-		color: theme.color.foreground.tertiary,
 		textTransform: theme.typography.textTransform.uppercase,
+		color: theme.color.foreground.tertiary,
 	},
 });
 
@@ -114,7 +198,7 @@ export const toolbarButton = style({
 	transition: theme.transition.base,
 	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-	backgroundColor: theme.color.background.base,
+	backgroundColor: "rgba(13, 23, 18, 0.95)",
 	cursor: "pointer",
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
 	textTransform: "uppercase",
@@ -127,8 +211,8 @@ export const toolbarButton = style({
 	selectors: {
 		"&:hover": {
 			boxShadow: theme.effect.glow.base,
-			backgroundColor: theme.color.background.raised,
-			textShadow: theme.effect.textGlow.sm,
+			backgroundColor: "rgba(16, 28, 22, 0.98)",
+			textShadow: theme.effect.textGlow.base,
 		},
 		"&:active": {
 			transform: "scale(0.98)",
@@ -136,24 +220,129 @@ export const toolbarButton = style({
 	},
 });
 
+export const toolbarLink = style([
+	toolbarButton,
+	{
+		borderColor: theme.color.interactive.primary,
+		textDecoration: "none",
+		color: theme.color.foreground.primary,
+
+		selectors: {
+			"&:hover": {
+				textDecoration: "underline",
+				color: theme.color.foreground.primary,
+			},
+		},
+	},
+]);
+
 /**
  * Properties Panel
  * Sidebar for editing selected node properties
  */
 export const propertiesPanel = style({
-	position: "fixed",
-	zIndex: theme.zIndex.overlay,
+	position: "sticky",
 	top: theme.spacing["5"],
-	right: theme.spacing["5"],
 	display: "flex",
 	flexDirection: "column",
 	gap: theme.spacing["4"],
 	clipPath: theme.clipPath.lg,
 	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-	boxShadow: theme.effect.glow.lg,
-	backgroundColor: theme.color.background.base,
+	boxShadow: theme.effect.glow.sm,
+	backgroundColor: "rgba(10, 18, 14, 0.96)",
 	padding: theme.spacing["5"],
-	width: "320px",
+	width: "100%",
+	maxHeight: "calc(100vh - 80px)",
+	overflowY: "auto",
+});
+
+export const panelHeader = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: theme.spacing["2"],
+});
+
+export const collapseToggle = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	color: theme.color.interactive.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	clipPath: theme.clipPath.base,
+	cursor: "pointer",
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover": {
+			boxShadow: theme.effect.glow.sm,
+			backgroundColor: "rgba(16, 28, 22, 0.98)",
+		},
+	},
+});
+
+export const collapseHandleLeft = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	color: theme.color.interactive.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	position: "absolute",
+	top: "50%",
+	left: theme.spacing["4"],
+	transform: "translate(-50%, -50%)",
+	zIndex: theme.zIndex.overlay,
+	clipPath: theme.clipPath.base,
+	cursor: "pointer",
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover": {
+			boxShadow: theme.effect.glow.sm,
+			backgroundColor: "rgba(16, 28, 22, 0.98)",
+		},
+	},
+});
+
+export const collapseHandleRight = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	color: theme.color.interactive.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	position: "absolute",
+	top: "50%",
+	right: theme.spacing["4"],
+	transform: "translate(50%, -50%)",
+	zIndex: theme.zIndex.overlay,
+	clipPath: theme.clipPath.base,
+	cursor: "pointer",
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover": {
+			boxShadow: theme.effect.glow.sm,
+			backgroundColor: "rgba(16, 28, 22, 0.98)",
+		},
+	},
 });
 
 /**
@@ -163,7 +352,7 @@ export const propertiesPanel = style({
 export const panelTitle = style({
 	margin: 0,
 	textTransform: "uppercase",
-	textShadow: theme.effect.textGlow.base,
+	textShadow: theme.effect.textGlow.sm,
 	letterSpacing: theme.typography.letterSpacing.wider,
 	color: theme.color.interactive.primary,
 	fontFamily: theme.typography.family.mono,
@@ -188,7 +377,7 @@ export const formGroup = style({
 export const label = style({
 	textTransform: "uppercase",
 	letterSpacing: theme.typography.letterSpacing.wide,
-	color: theme.color.foreground.tertiary,
+	color: theme.color.foreground.secondary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
 	fontWeight: theme.typography.weight.bold,
@@ -201,10 +390,10 @@ export const label = style({
 export const input = style({
 	transition: theme.transition.base,
 	clipPath: theme.clipPath.sm,
-	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-	backgroundColor: theme.color.background.input,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 18, 13, 0.92)",
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-	color: theme.color.interactive.primary,
+	color: theme.color.foreground.primary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.base,
 
@@ -225,13 +414,13 @@ export const input = style({
 export const textarea = style({
 	transition: theme.transition.base,
 	clipPath: theme.clipPath.base,
-	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-	backgroundColor: theme.color.background.input,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 18, 13, 0.92)",
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-	minHeight: "100px",
+	minHeight: "120px",
 	resize: "vertical",
 	lineHeight: theme.typography.lineHeight.relaxed,
-	color: theme.color.interactive.primary,
+	color: theme.color.foreground.primary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.base,
 
@@ -252,21 +441,20 @@ export const textarea = style({
 export const reactFlowControls = style({
 	clipPath: theme.clipPath.md,
 	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-	boxShadow: theme.effect.glow.lg,
-	backgroundColor: theme.color.background.base,
+	boxShadow: theme.effect.glow.base,
+	backgroundColor: "rgba(11, 20, 16, 0.95)",
 });
 
-// ReactFlow Controls button styles (must use globalStyle for child selectors)
 globalStyle(`${reactFlowControls} button`, {
 	clipPath: theme.clipPath.sm,
-	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-	backgroundColor: theme.color.background.base,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(12, 21, 16, 0.95)",
+	color: theme.color.interactive.primary,
 });
 
 globalStyle(`${reactFlowControls} button:hover`, {
-	boxShadow: theme.effect.glow.base,
-	backgroundColor: theme.color.background.raised,
+	boxShadow: theme.effect.glow.sm,
+	backgroundColor: "rgba(15, 26, 20, 0.98)",
 });
 
 globalStyle(`${reactFlowControls} button svg`, {

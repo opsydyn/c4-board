@@ -42,6 +42,7 @@ interface C4CanvasProps {
 
 export interface C4CanvasRef {
 	fitViewToNode: (nodeId: string) => void;
+	fitViewToGraph: () => void;
 }
 
 function C4CanvasInner(
@@ -55,7 +56,7 @@ function C4CanvasInner(
 	}: C4CanvasProps,
 	ref: React.Ref<C4CanvasRef>,
 ) {
-	const { setCenter, getNode } = useReactFlow();
+	const { setCenter, getNode, fitView } = useReactFlow();
 
 	// Expose methods to parent via ref
 	useImperativeHandle(ref, () => ({
@@ -69,6 +70,9 @@ function C4CanvasInner(
 					{ zoom: 1.2, duration: 800 },
 				);
 			}
+		},
+		fitViewToGraph: () => {
+			fitView({ padding: 0.2, duration: 600 });
 		},
 	}));
 

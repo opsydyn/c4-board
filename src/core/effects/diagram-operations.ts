@@ -7,7 +7,14 @@
  */
 
 import type { Edge, Node } from "@xyflow/react";
-import { Effect } from "effect";
+import { Effect, Data } from "effect";
+
+/**
+ * Error for diagram validation failures
+ */
+export class DiagramNameError extends Data.TaggedError("DiagramNameError")<{
+	message: string;
+}> {}
 
 /**
  * Diagram metadata

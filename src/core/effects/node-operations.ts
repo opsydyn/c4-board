@@ -45,25 +45,106 @@ export interface CreateNodeOptions {
 	existingNodes: Node[];
 }
 
+const GRID_SIZE = 20;
+const DEFAULT_PLACEMENT_CENTER = { x: 360, y: 280 };
+
+const DEFAULT_DIMENSIONS: Record<C4Type | "default", { width: number; height: number }> = {
+	person: { width: 220, height: 160 },
+	system: { width: 240, height: 170 },
+	externalSystem: { width: 240, height: 170 },
+	container: { width: 400, height: 300 },
+	component: { width: 200, height: 140 },
+	default: { width: 240, height: 170 },
+};
+
+const snapToGrid = (value: number): number =>
+	Math.round(value / GRID_SIZE) * GRID_SIZE;
+
+const resolveType = (node: Node): C4Type => {
+	const data = node.data as NodeData | undefined;
+	const inferred = (data?.c4Type as C4Type | undefined) ?? (node.type as C4Type | undefined);
+	return inferred ?? "system";
+};
+
+const getTypeDimensions = (type: C4Type): { width: number; height: number } =>
+	DEFAULT_DIMENSIONS[type] ?? DEFAULT_DIMENSIONS.default;
+
+const getNodeDimensions = (node: Node): { width: number; height: number } => {
+	const type = resolveType(node);
+	const fallback = getTypeDimensions(type);
+
+	const width =
+		typeof node.measured?.width === "number"
+			? node.measured.width
+			: typeof node.width === "number"
+				? node.width
+				: typeof (node.style as { width?: number } | undefined)?.width === "number"
+					? (node.style as { width?: number }).width!
+					: fallback.width;
+
+	const height =
+		typeof node.measured?.height === "number"
+			? node.measured.height
+			: typeof node.height === "number"
+				? node.height
+				: typeof (node.style as { height?: number } | undefined)?.height === "number"
+					? (node.style as { height?: number }).height!
+					: fallback.height;
+
+	return { width, height };
+};
+
+interface Bounds {
+	minX: number;
+	maxX: number;
+	minY: number;
+	maxY: number;
+	width: number;
+	height: number;
+	centerX: number;
+	centerY: number;
+}
+
+const calculateBounds = (nodes: Node[]): Bounds | null => {
+	if (nodes.length === 0) {
+		return null;
+	}
+
+	let minX = Number.POSITIVE_INFINITY;
+	let minY = Number.POSITIVE_INFINITY;
+	let maxX = Number.NEGATIVE_INFINITY;
+	let maxY = Number.NEGATIVE_INFINITY;
+
+	nodes.forEach((node) => {
+		const { width, height } = getNodeDimensions(node);
+		const x = node.position.x;
+		const y = node.position.y;
+
+		minX = Math.min(minX, x);
+		minY = Math.min(minY, y);
+		maxX = Math.max(maxX, x + width);
+		maxY = Math.max(maxY, y + height);
+	});
+
+	const boundsWidth = maxX - minX;
+	const boundsHeight = maxY - minY;
+
+	return {
+		minX,
+		maxX,
+		minY,
+		maxY,
+		width: boundsWidth,
+		height: boundsHeight,
+		centerX: minX + boundsWidth / 2,
+		centerY: minY + boundsHeight / 2,
+	};
+};
+
 /**
  * Generate a stable unique node id
  */
 const generateNodeId = (prefix: string): string => `${prefix}-${nanoid(12)}`;
-
-/**
- * Calculate initial position for a new node
- * Uses simple offset positioning - users will use Dagre auto-layout for final arrangement
- */
-export const calculateInitialPosition = (nodeCount: number): Effect.Effect<NodePosition> => {
-	const OFFSET = 80; // Spacing between each new node
-	const START_X = 400;
-	const START_Y = 300;
-
-	return Effect.succeed({
-		x: START_X + (nodeCount * OFFSET),
-		y: START_Y + (nodeCount * OFFSET),
-	});
-};
 
 /**
  * Check if a node is a container type
@@ -80,18 +161,13 @@ export const getChildPosition = (): Effect.Effect<NodePosition> => {
 };
 
 /**
- * Get position for a node at the root level
- */
-export const getRootPosition = (nodeCount: number): Effect.Effect<NodePosition> => {
-	return calculateInitialPosition(nodeCount);
-};
-
-/**
  * Determine the position for a new node based on parent context
  */
 export const determineNodePosition = (
 	nodeCount: number,
 	selectedNode: Node | null,
+	existingNodes: Node[],
+	newNodeType: C4Type,
 ): Effect.Effect<NodePosition> => {
 	return Effect.gen(function* () {
 		const isContainer = yield* isContainerNode(selectedNode);
@@ -100,7 +176,30 @@ export const determineNodePosition = (
 			return yield* getChildPosition();
 		}
 
-		return yield* getRootPosition(nodeCount);
+		const rootNodes = existingNodes.filter((node) => !node.parentId);
+		const bounds = calculateBounds(rootNodes);
+		const { width, height } = getTypeDimensions(newNodeType);
+
+		if (!bounds) {
+			return {
+				x: snapToGrid(DEFAULT_PLACEMENT_CENTER.x - width / 2),
+				y: snapToGrid(DEFAULT_PLACEMENT_CENTER.y - height / 2),
+			};
+		}
+
+		const maxSpan = Math.max(bounds.width, bounds.height);
+		const baseRadius = Math.max(maxSpan / 2, 160) + 120;
+		const ringIndex = Math.floor(nodeCount / 6);
+		const radius = baseRadius + ringIndex * 80;
+		const angle = (Math.PI / 3) * (nodeCount % 6);
+
+		const rawX = bounds.centerX + Math.cos(angle) * radius - width / 2;
+		const rawY = bounds.centerY + Math.sin(angle) * radius - height / 2;
+
+		return {
+			x: snapToGrid(rawX),
+			y: snapToGrid(rawY),
+		};
 	});
 };
 
@@ -167,7 +266,12 @@ export const createNode = (options: CreateNodeOptions): Effect.Effect<Node> => {
 		const id = generateNodeId(typePrefix);
 
 		// Determine position
-		const position = yield* determineNodePosition(nodeCounter, selectedNode);
+		const position = yield* determineNodePosition(
+			nodeCounter,
+			selectedNode,
+			existingNodes,
+			type,
+		);
 
 		// Create parent relationship if applicable
 		const parentRelationship = yield* createParentRelationship(selectedNode);

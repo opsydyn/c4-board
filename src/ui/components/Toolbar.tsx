@@ -16,7 +16,13 @@ import {
 	Cube,
 } from "@phosphor-icons/react";
 import type { Node } from "@xyflow/react";
-import { toolbar, toolbarButton, saveStatus, boardNameInput } from "./styles.css";
+import {
+	toolbar,
+	toolbarButton,
+	saveStatus,
+	boardNameInput,
+	toolbarLink,
+} from "./styles.css";
 import { SearchBox } from "./SearchBox";
 import { LayoutMenu } from "./LayoutMenu";
 import type { LayoutPresetName } from "../../core/effects/layout";
@@ -189,7 +195,7 @@ export function Toolbar({
 			</button>
 
 			{/* Saved diagrams link */}
-			<a href="/saved-diagrams" className={toolbarButton}>
+			<a href="/saved-diagrams" className={toolbarLink}>
 				<ListBulletsIcon size={20} weight="duotone" />
 				View Saved
 			</a>

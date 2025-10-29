@@ -9,7 +9,12 @@
     "preview": "astro preview",
     "astro": "astro",
     "tauri": "tauri",
-    "knip": "knip"
+    "knip": "knip",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:watch": "vitest watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@astrojs/check": "0.9.5",
@@ -54,6 +59,7 @@
     "@antebudimir/eslint-plugin-vanilla-extract": "^1.12.0",
     "@eslint/js": "^9.38.0",
     "@types/node": "^24.9.1",
+    "@vitest/ui": "4.0.3",
     "eslint": "^9.38.0",
     "eslint-plugin-react": "^7.37.5",
     "globals": "^16.4.0",

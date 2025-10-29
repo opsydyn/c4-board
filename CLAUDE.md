@@ -56,6 +56,32 @@ npm run preview
 npm run astro [command]
 ```
 
+### Testing
+```bash
+# Run tests once (CI mode)
+npm run test:run
+
+# Run tests in watch mode (development)
+npm run test:watch
+# or
+npm test
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run specific test file
+npx vitest run src/ui/machines/canvas.machine.test.ts
+```
+
+**Test Philosophy:**
+- Tests focus on the **Functional Core** (Effect services)
+- XState machines are tested via integration tests
+- 100% type-safe tests using TypeScript
+- Use Vitest for fast, modern testing
+
 ## Architecture
 
 ### **Core Principle: Functional Core, Imperative Shell** ⭐

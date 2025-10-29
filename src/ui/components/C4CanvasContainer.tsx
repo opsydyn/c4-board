@@ -18,11 +18,21 @@ import {
 	type Node,
 	type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { canvasMachine, type CanvasEvent } from "../machines/canvas.machine";
 import { C4Canvas, type C4CanvasRef } from "./C4Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { Toolbar } from "./Toolbar";
+import {
+	workspace,
+	sidebarColumn,
+	canvasRegion,
+	detailsColumn,
+	panelHeader,
+	collapseToggle,
+	collapseHandleLeft,
+	collapseHandleRight,
+} from "./styles.css";
 import { useDatabase } from "../../core/effects/useDatabase";
 import {
 	saveDiagram,
@@ -34,11 +44,17 @@ import type { LayoutPresetName } from "../../core/effects/layout";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { NodeData } from "../../core/effects/node-operations";
+import { ToggleButton } from "react-aria-components";
+import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
 
 export function C4CanvasContainer() {
 	const [state, send] = useMachine(canvasMachine);
 	const { runEffect } = useDatabase();
 	const canvasRef = useRef<C4CanvasRef>(null);
+	const lastDiagramIdRef = useRef<string | null>(null);
+	const [isSidebarOpen, setSidebarOpen] = useState(true);
+	const [isDetailsOpen, setDetailsOpen] = useState(true);
+	const [isCompactLayout, setCompactLayout] = useState(false);
 
 	// Initialize: Load most recent diagram or create new one
 	useEffect(() => {
@@ -278,12 +294,18 @@ export function C4CanvasContainer() {
 	// Handle auto-layout action
 	const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
 		send({ type: "AUTO_LAYOUT", preset });
+		requestAnimationFrame(() => {
+			canvasRef.current?.fitViewToGraph();
+		});
 		console.log(`🎯 Auto-layout applied: ${preset}`);
 	}, [send]);
 
 	// Handle auto-layout selected nodes
 	const handleAutoLayoutSelected = useCallback((preset: LayoutPresetName) => {
 		send({ type: "AUTO_LAYOUT_SELECTED", preset });
+		requestAnimationFrame(() => {
+			canvasRef.current?.fitViewToGraph();
+		});
 		console.log(`🎯 Auto-layout (selected) applied: ${preset}`);
 	}, [send]);
 
@@ -404,45 +426,173 @@ export function C4CanvasContainer() {
 		[send],
 	);
 
+	// Fit view whenever a new diagram is loaded
+	useEffect(() => {
+		const currentId = state.context.currentDiagramId;
+		if (!currentId) {
+			return;
+		}
+
+		const hasChanged = lastDiagramIdRef.current !== currentId;
+		const hasNodes = state.context.nodes.length > 0;
+
+		if (hasChanged) {
+			lastDiagramIdRef.current = currentId;
+			if (hasNodes) {
+				requestAnimationFrame(() => {
+					canvasRef.current?.fitViewToGraph();
+				});
+			}
+		}
+	}, [state.context.currentDiagramId, state.context.nodes.length]);
+
+	// Re-fit diagram when viewport size changes
+	useEffect(() => {
+		if (state.context.nodes.length === 0) {
+			return;
+		}
+
+		const handleResize = () => {
+			canvasRef.current?.fitViewToGraph();
+		};
+
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, [state.context.nodes.length]);
+
+	useEffect(() => {
+		if (state.context.nodes.length === 0) {
+			return;
+		}
+		canvasRef.current?.fitViewToGraph();
+	}, [isSidebarOpen, isDetailsOpen, state.context.nodes.length]);
+
+	useEffect(() => {
+		if (typeof window === "undefined" || !window.matchMedia) {
+			return;
+		}
+
+		const media = window.matchMedia("(max-width: 1200px)");
+		const update = (matches: boolean) => {
+			setCompactLayout(matches);
+			if (matches) {
+				setDetailsOpen(false);
+			}
+		};
+
+		update(media.matches);
+
+		const listener = (event: MediaQueryListEvent) => update(event.matches);
+		media.addEventListener("change", listener);
+		return () => media.removeEventListener("change", listener);
+	}, []);
+
+	const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
+	const rightTrack =
+		!isCompactLayout && isDetailsOpen ? "minmax(300px, 360px)" : "0px";
+
 	return (
-		<>
-			<Toolbar
-				onAddPerson={() => send({ type: "ADD_PERSON" })}
-				onAddSystem={() => send({ type: "ADD_SYSTEM" })}
-				onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
-				onAddContainer={() => send({ type: "ADD_CONTAINER" })}
-				onAddComponent={() => send({ type: "ADD_COMPONENT" })}
-				onSave={handleSave}
-				onNewBoard={handleNewBoard}
-				onAutoLayout={handleAutoLayout}
-				onAutoLayoutSelected={handleAutoLayoutSelected}
-				onSessionNameChange={(name) => send({ type: "UPDATE_SESSION_NAME", name })}
-				onDiagramNameChange={(name) => send({ type: "UPDATE_DIAGRAM_NAME", name })}
-				onSelectNode={handleSelectNode}
-				nodes={state.context.nodes}
-				sessionName={state.context.sessionName}
-				isSaving={state.context.isSaving}
-				lastSaved={state.context.lastSaved}
-				diagramName={state.context.diagramName}
-				{...(state.context.currentLayout && { currentLayout: state.context.currentLayout })}
-			/>
+		<div
+			className={workspace}
+			style={{
+				gridTemplateColumns: `${leftTrack} 1fr ${rightTrack}`,
+			}}
+		>
+			{isSidebarOpen && (
+				<aside className={sidebarColumn} aria-label="Toolbar panel">
+					<div className={panelHeader}>
+						<ToggleButton
+							isSelected={isSidebarOpen}
+							onChange={setSidebarOpen}
+							className={collapseToggle}
+							aria-label="Collapse left panel"
+						>
+							<CaretLeftIcon size={16} weight="bold" />
+							Collapse
+						</ToggleButton>
+					</div>
+					<Toolbar
+						onAddPerson={() => send({ type: "ADD_PERSON" })}
+						onAddSystem={() => send({ type: "ADD_SYSTEM" })}
+						onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
+						onAddContainer={() => send({ type: "ADD_CONTAINER" })}
+						onAddComponent={() => send({ type: "ADD_COMPONENT" })}
+						onSave={handleSave}
+						onNewBoard={handleNewBoard}
+						onAutoLayout={handleAutoLayout}
+						onAutoLayoutSelected={handleAutoLayoutSelected}
+						onSessionNameChange={(name) =>
+							send({ type: "UPDATE_SESSION_NAME", name })
+						}
+						onDiagramNameChange={(name) =>
+							send({ type: "UPDATE_DIAGRAM_NAME", name })
+						}
+						onSelectNode={handleSelectNode}
+						nodes={state.context.nodes}
+						sessionName={state.context.sessionName}
+						isSaving={state.context.isSaving}
+						lastSaved={state.context.lastSaved}
+						diagramName={state.context.diagramName}
+						{...(state.context.currentLayout && {
+							currentLayout: state.context.currentLayout,
+						})}
+					/>
+				</aside>
+			)}
 
-			<PropertiesPanel
-				selectedNode={selectedNode}
-				onUpdateNode={(nodeId, updates) =>
-					send({ type: "UPDATE_NODE", nodeId, updates })
-				}
-			/>
+			<section className={canvasRegion}>
+				<C4Canvas
+					ref={canvasRef}
+					nodes={state.context.nodes}
+					edges={state.context.edges}
+					onNodesChange={onNodesChange}
+					onEdgesChange={onEdgesChange}
+					onConnect={onConnect}
+					onNodeClick={onNodeClick}
+				/>
+				{!isSidebarOpen && (
+					<ToggleButton
+						isSelected={isSidebarOpen}
+						onChange={setSidebarOpen}
+						className={collapseHandleLeft}
+						aria-label="Expand left panel"
+					>
+						<CaretRightIcon size={16} weight="bold" />
+					</ToggleButton>
+				)}
+				{!isCompactLayout && !isDetailsOpen && (
+					<ToggleButton
+						isSelected={isDetailsOpen}
+						onChange={setDetailsOpen}
+						className={collapseHandleRight}
+						aria-label="Expand right panel"
+					>
+						<CaretRightIcon size={16} weight="bold" />
+					</ToggleButton>
+				)}
+			</section>
 
-			<C4Canvas
-				ref={canvasRef}
-				nodes={state.context.nodes}
-				edges={state.context.edges}
-				onNodesChange={onNodesChange}
-				onEdgesChange={onEdgesChange}
-				onConnect={onConnect}
-				onNodeClick={onNodeClick}
-			/>
-		</>
+			{!isCompactLayout && isDetailsOpen && (
+				<aside className={detailsColumn} aria-label="Properties panel">
+					<div className={panelHeader}>
+						<ToggleButton
+							isSelected={isDetailsOpen}
+							onChange={setDetailsOpen}
+							className={collapseToggle}
+							aria-label="Collapse right panel"
+						>
+							<CaretRightIcon size={16} weight="bold" />
+							Collapse
+						</ToggleButton>
+					</div>
+					<PropertiesPanel
+						selectedNode={selectedNode}
+						onUpdateNode={(nodeId, updates) =>
+							send({ type: "UPDATE_NODE", nodeId, updates })
+						}
+					/>
+				</aside>
+			)}
+		</div>
 	);
 }
