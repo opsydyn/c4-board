@@ -1,6 +1,6 @@
 import { Panel, useReactFlow, getNodesBounds, getViewportForBounds } from "@xyflow/react";
 import { toPng } from "html-to-image";
-import { DownloadSimple } from "@phosphor-icons/react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react";
 import { toolbarButton } from "./styles.css";
 import { theme } from "../../styles/theme.css";
 
@@ -31,7 +31,7 @@ export function DownloadButton() {
 		}
 
 		const bounds = getNodesBounds(nodes);
-		const viewport = getViewportForBounds(bounds, IMAGE_WIDTH, IMAGE_HEIGHT, 0.5, 2);
+		const viewport = getViewportForBounds(bounds, IMAGE_WIDTH, IMAGE_HEIGHT, 0.5, 2, 0.1);
 
 		try {
 			const dataUrl = await toPng(viewportElement, {
@@ -54,7 +54,7 @@ export function DownloadButton() {
 	return (
 		<Panel position="top-right">
 			<button type="button" className={toolbarButton} onClick={handleDownload}>
-				<DownloadSimple size={18} weight="duotone" />
+				<DownloadSimpleIcon size={18} weight="duotone" />
 				Download PNG
 			</button>
 		</Panel>

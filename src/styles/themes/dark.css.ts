@@ -1,8 +1,10 @@
 /**
- * Dark Theme (Terminal Aesthetic)
+ * Dark Theme (Tactical Terminal Aesthetic)
  *
- * Implements the theme contract with retro terminal colors.
+ * Refined tactical theme with Bootstrap-inspired grayscale and signature cyan accents.
  * WCAG AAA compliant with 7:1+ contrast ratios.
+ *
+ * Design: Bootstrap Dark palette + Terminal aesthetic + Cyan brand identity
  */
 
 import { createTheme } from "@vanilla-extract/css";
@@ -11,63 +13,63 @@ import { themeContract } from "../theme.contract.css";
 export const darkTheme = createTheme(themeContract, {
 	color: {
 		background: {
-			base: "#111111",       // Console black
-			surface: "#0f0f0f",    // Panel black
-			raised: "#1a1a1a",     // Elevated elements
-			input: "#0a0a0a",      // Input backgrounds
-			inputFocus: "#0f0f0f", // Focused input
+			base: "#0a0a0a",       // Darker terminal black
+			surface: "#1a1d20",    // Bootstrap subtle bg (darker)
+			raised: "#2b3035",     // Bootstrap tertiary bg
+			input: "#0f0f0f",      // Dark input contrast
+			inputFocus: "#161719", // Bootstrap secondary subtle
 		},
 
 		foreground: {
-			primary: "#E5E9F0",    // Nord6 - Snow Storm (bright white)
-			secondary: "#D8DEE9",  // Nord5 - light gray
-			tertiary: "#88C0D0",   // Nord8 - muted cyan
-			disabled: "#4C566A",   // Nord3 - dark gray
+			primary: "#f8f9fa",    // Bootstrap light (warmer white)
+			secondary: "#dee2e6",  // Bootstrap body color (refined gray)
+			tertiary: "#adb5bd",   // Bootstrap gray-500 (better hierarchy)
+			disabled: "#6c757d",   // Bootstrap gray-600 (clearer disabled)
 		},
 
 		interactive: {
-			primary: "#81A1C1",    // Nord9 - tactical blue
-			hover: "#88C0D0",      // Nord8 - lighter blue
-			active: "#5E81AC",     // Nord10 - darker blue
-			focus: "#88C0D0",      // Nord8 - cyan focus
+			primary: "#6ea8fe",    // Bootstrap primary-text-emphasis (softer blue)
+			hover: "#8bb9fe",      // Bootstrap link-hover (lighter)
+			active: "#084298",     // Bootstrap primary-border-subtle (darker)
+			focus: "#88C0D0",      // KEEP Nord cyan for brand consistency
 		},
 
 		semantic: {
-			person: "#88C0D0",     // Nord8 - cyan for people
-			system: "#A3BE8C",     // Nord14 - tactical green for systems
-			external: "#D08770",   // Nord12 - amber for external
-			container: "#81A1C1",  // Nord9 - blue for containers
-			component: "#B48EAD",  // Nord15 - purple for components
-			relationship: "#4C566A", // Nord3 - dim gray for connections
+			person: "#88C0D0",     // KEEP Nord cyan - brand signature
+			system: "#75b798",     // Bootstrap success-text-emphasis (softer green)
+			external: "#ffda6a",   // Bootstrap warning-text-emphasis (brighter amber)
+			container: "#6ea8fe",  // Bootstrap primary-text-emphasis (blue)
+			component: "#e685b5",  // Bootstrap code-color (pink/purple)
+			relationship: "#6c757d", // Bootstrap gray-600 (subtle)
 		},
 
 		status: {
-			ready: "#A3BE8C",      // Nord14 - green (operational)
-			caution: "#D08770",    // Nord12 - amber (warning)
-			critical: "#BF616A",   // Nord11 - red (error)
-			selected: "#81A1C1",   // Nord9 - cyan (focus)
+			ready: "#75b798",      // Bootstrap success (softer operational green)
+			caution: "#ffda6a",    // Bootstrap warning (brighter caution)
+			critical: "#ea868f",   // Bootstrap danger (softer critical red)
+			selected: "#6ea8fe",   // Bootstrap primary (blue selected state)
 		},
 
-		grid: "#2a2a2a",           // Grid line color
+		grid: "#343a40",           // Bootstrap gray-800 (warmer grid)
 
 		border: {
-			primary: "#81A1C1",    // Nord9 - tactical blue borders
-			secondary: "#4C566A",  // Nord3 - subtle gray
-			focus: "#88C0D0",      // Nord8 - cyan focus
-			person: "#88C0D0",     // Nord8 - cyan
-			system: "#A3BE8C",     // Nord14 - green
-			external: "#D08770",   // Nord12 - amber
-			container: "#81A1C1",  // Nord9 - blue
-			component: "#B48EAD",  // Nord15 - purple
+			primary: "#495057",    // Bootstrap gray-700 (structural)
+			secondary: "#343a40",  // Bootstrap gray-800 (subtle)
+			focus: "#6ea8fe",      // Bootstrap primary (blue focus)
+			person: "#88C0D0",     // KEEP Nord cyan - brand signature
+			system: "#75b798",     // Bootstrap success (green)
+			external: "#ffda6a",   // Bootstrap warning (amber)
+			container: "#6ea8fe",  // Bootstrap primary (blue)
+			component: "#e685b5",  // Bootstrap code-color (pink/purple)
 		},
 
 		surface: {
-			person: "#2E3440",     // Nord0 - dark tint
-			system: "#2E3440",     // Nord0 - dark tint
-			external: "#2E3440",   // Nord0 - dark tint
-			container: "#2E3440",  // Nord0 - dark tint
-			component: "#2E3440",  // Nord0 - dark tint
-			containerSelected: "#3B4252", // Nord1 - slightly lighter
+			person: "#1a1d20",     // Bootstrap subtle bg (consistent)
+			system: "#1a1d20",     // Bootstrap subtle bg
+			external: "#1a1d20",   // Bootstrap subtle bg
+			container: "#1a1d20",  // Bootstrap subtle bg
+			component: "#1a1d20",  // Bootstrap subtle bg
+			containerSelected: "#2b3035", // Bootstrap tertiary bg (lighter)
 		},
 	},
 
@@ -148,20 +150,20 @@ export const darkTheme = createTheme(themeContract, {
 	effect: {
 		glow: {
 			none: "none",
-			sm: "0 0 8px rgba(0, 255, 170, 0.2)",
-			base: "0 0 12px rgba(0, 255, 170, 0.3)",
-			md: "0 0 16px rgba(0, 255, 170, 0.3)",
-			lg: "0 0 20px rgba(0, 255, 170, 0.3)",
-			xl: "0 0 24px rgba(0, 255, 170, 0.4)",
+			sm: "0 0 8px rgba(110, 168, 254, 0.15)",   // Subtle Bootstrap blue
+			base: "0 0 12px rgba(110, 168, 254, 0.2)", // Blue glow
+			md: "0 0 16px rgba(110, 168, 254, 0.25)",  // Medium blue
+			lg: "0 0 20px rgba(110, 168, 254, 0.3)",   // Strong blue
+			xl: "0 0 24px rgba(136, 192, 208, 0.4)",   // Mix blue + cyan for xl
 		},
 		textGlow: {
 			none: "none",
-			sm: "0 0 4px rgba(0, 255, 170, 0.4)",
-			base: "0 0 6px rgba(0, 255, 170, 0.5)",
-			md: "0 0 8px rgba(0, 255, 170, 0.6)",
+			sm: "0 0 4px rgba(110, 168, 254, 0.3)",    // Blue text glow
+			base: "0 0 6px rgba(136, 192, 208, 0.4)",  // Cyan text glow (signature)
+			md: "0 0 8px rgba(136, 192, 208, 0.5)",    // Strong cyan glow
 		},
-		iconGlow: "0 0 10px rgba(0, 255, 170, 0.7)",
-		dropShadow: "drop-shadow(0 0 4px rgba(0, 255, 170, 0.5))",
+		iconGlow: "0 0 10px rgba(136, 192, 208, 0.6)",  // Cyan icon glow (brand)
+		dropShadow: "drop-shadow(0 0 4px rgba(110, 168, 254, 0.4))", // Blue drop shadow
 	},
 
 	clipPath: {

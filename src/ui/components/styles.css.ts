@@ -4,7 +4,7 @@
  * Contract-based theming with semantic design tokens.
  */
 
-import { style, globalStyle } from "@vanilla-extract/css";
+import { style, globalStyle, keyframes } from "@vanilla-extract/css";
 import { theme } from "../../styles/theme.css";
 
 /**
@@ -34,13 +34,34 @@ export const workspace = style({
 export const sidebarColumn = style({
 	display: "flex",
 	flexDirection: "column",
+	gridColumn: "1 / 2",
+	gap: theme.spacing["4"],
 	borderRight: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 	backgroundColor: "rgba(9, 16, 13, 0.92)",
 	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
 	overflowX: "hidden",
 	overflowY: "auto",
-	gridColumn: "1 / 2",
-	gap: theme.spacing["4"],
+});
+
+export const sidebarBrand = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	marginBottom: theme.spacing["3"],
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const sidebarBrandIcon = style({
+	width: "36px",
+	height: "36px",
+	flexShrink: 0,
+	display: "block",
+	clipPath: theme.clipPath.sm,
+	boxShadow: theme.effect.glow.sm,
 });
 
 export const canvasRegion = style({
@@ -48,22 +69,22 @@ export const canvasRegion = style({
 	display: "flex",
 	flex: 1,
 	flexDirection: "column",
+	gridColumn: "2 / 3",
 	minWidth: 0,
 	minHeight: 0,
 	overflow: "hidden",
-	gridColumn: "2 / 3",
 });
 
 export const detailsColumn = style({
 	display: "flex",
 	flexDirection: "column",
+	gridColumn: "3 / 4",
+	gap: theme.spacing["4"],
 	borderLeft: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 	backgroundColor: "rgba(10, 18, 14, 0.96)",
 	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
 	overflowX: "hidden",
 	overflowY: "auto",
-	gridColumn: "3 / 4",
-	gap: theme.spacing["4"],
 
 	"@media": {
 		"(max-width: 1200px)": {
@@ -267,17 +288,17 @@ export const collapseToggle = style({
 	display: "inline-flex",
 	alignItems: "center",
 	gap: theme.spacing["1"],
-	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	transition: theme.transition.base,
+	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
 	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	cursor: "pointer",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
 	color: theme.color.interactive.primary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
-	textTransform: theme.typography.textTransform.uppercase,
-	letterSpacing: theme.typography.letterSpacing.wide,
-	clipPath: theme.clipPath.base,
-	cursor: "pointer",
-	transition: theme.transition.base,
 
 	selectors: {
 		"&:hover": {
@@ -288,25 +309,25 @@ export const collapseToggle = style({
 });
 
 export const collapseHandleLeft = style({
+	position: "absolute",
+	zIndex: theme.zIndex.overlay,
+	top: "50%",
+	left: theme.spacing["4"],
 	display: "inline-flex",
 	alignItems: "center",
 	gap: theme.spacing["1"],
-	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	transform: "translate(-50%, -50%)",
+	transition: theme.transition.base,
+	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
 	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	cursor: "pointer",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
 	color: theme.color.interactive.primary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
-	textTransform: theme.typography.textTransform.uppercase,
-	letterSpacing: theme.typography.letterSpacing.wide,
-	position: "absolute",
-	top: "50%",
-	left: theme.spacing["4"],
-	transform: "translate(-50%, -50%)",
-	zIndex: theme.zIndex.overlay,
-	clipPath: theme.clipPath.base,
-	cursor: "pointer",
-	transition: theme.transition.base,
 
 	selectors: {
 		"&:hover": {
@@ -317,25 +338,25 @@ export const collapseHandleLeft = style({
 });
 
 export const collapseHandleRight = style({
+	position: "absolute",
+	zIndex: theme.zIndex.overlay,
+	top: "50%",
+	right: theme.spacing["4"],
 	display: "inline-flex",
 	alignItems: "center",
 	gap: theme.spacing["1"],
-	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	transform: "translate(50%, -50%)",
+	transition: theme.transition.base,
+	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
 	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	cursor: "pointer",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
 	color: theme.color.interactive.primary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
-	textTransform: theme.typography.textTransform.uppercase,
-	letterSpacing: theme.typography.letterSpacing.wide,
-	position: "absolute",
-	top: "50%",
-	right: theme.spacing["4"],
-	transform: "translate(50%, -50%)",
-	zIndex: theme.zIndex.overlay,
-	clipPath: theme.clipPath.base,
-	cursor: "pointer",
-	transition: theme.transition.base,
 
 	selectors: {
 		"&:hover": {
@@ -473,4 +494,345 @@ globalStyle(".react-flow__background", {
 globalStyle(".react-flow__background-pattern", {
 	opacity: theme.opacity.grid,
 	stroke: theme.color.border.primary,
+});
+
+/**
+ * Balanced Mud Chart
+ * Visualizes coupling risk and volatility using visx primitives.
+ */
+const mudPulse = keyframes({
+	"0%": { transform: "scale(0.98)", strokeOpacity: 0.2 },
+	"50%": { transform: "scale(1.05)", strokeOpacity: 0.5 },
+	"100%": { transform: "scale(0.98)", strokeOpacity: 0.2 },
+});
+
+export const mudChartCard = style({
+	boxSizing: "border-box",
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["4"],
+	clipPath: theme.clipPath.lg,
+	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+	boxShadow: theme.effect.glow.sm,
+	backgroundColor: "rgba(8, 14, 11, 0.92)",
+	padding: theme.spacing["4"],
+	width: "100%",
+});
+
+export const mudChartHeader = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+});
+
+export const mudChartTitle = style({
+	margin: 0,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.engineering,
+	color: theme.color.interactive.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	fontWeight: theme.typography.weight.bold,
+});
+
+export const mudChartMeta = style({
+	margin: 0,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const mudChartCanvas = style({
+	boxSizing: "border-box",
+	contain: "layout style paint",
+	position: "relative",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	willChange: "auto",
+	clipPath: theme.clipPath.lg,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(6, 11, 8, 0.9)",
+	padding: theme.spacing["2"],
+	width: "100%",
+	// FIX: Prevent layout shifts on hover
+	height: "clamp(260px, 32vh, 360px)", // CSS containment for stability
+	overflow: "hidden", // Reset any inherited will-change
+});
+
+globalStyle(`${mudChartCanvas} svg`, {
+	display: "block",
+	pointerEvents: "auto",
+	width: "100%",
+	// FIX: Prevent SVG from causing reflow
+	height: "100%", // Remove inline spacing
+	maxHeight: "100%", // Ensure SVG receives events (not the tooltip)
+});
+
+// FIX: Ensure ParentSize div doesn't cause layout shifts
+globalStyle(`${mudChartCanvas} > div`, {
+	position: "absolute",
+	top: 0,
+	right: 0, // FIX: Remove from flexbox flow to prevent resize
+	bottom: 0,
+	left: 0,
+	pointerEvents: "none",
+	width: "100%",
+	height: "100%", // FIX: Let events pass through wrapper
+});
+
+// FIX: Let SVG receive pointer events (override parent)
+globalStyle(`${mudChartCanvas} > div > svg`, {
+	pointerEvents: "auto", // Override parent's pointer-events: none
+});
+
+export const mudChartPulse = style({
+	transformOrigin: "center",
+	animation: `${mudPulse} 6s ease-in-out infinite`,
+});
+
+export const mudChartEmptyState = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: theme.spacing["4"],
+	minHeight: "200px",
+	textAlign: "center",
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+});
+
+export const mudChartSummaryGrid = style({
+	boxSizing: "border-box",
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+	gap: theme.spacing["3"],
+	width: "100%",
+});
+
+export const mudChartSummaryItem = style({
+	boxSizing: "border-box",
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+	clipPath: theme.clipPath.base,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(10, 18, 14, 0.9)",
+	padding: theme.spacing["3"],
+});
+
+export const mudChartSummaryLabel = style({
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.tertiary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const mudChartSummaryValue = style({
+	color: theme.color.interactive.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	fontWeight: theme.typography.weight.bold,
+});
+
+export const mudChartLegendRow = style({
+	boxSizing: "border-box",
+	display: "flex",
+	flexWrap: "wrap",
+	gap: theme.spacing["4"],
+	borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	paddingTop: theme.spacing["2"],
+	width: "100%",
+});
+
+export const mudChartLegendGroup = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["2"],
+	minWidth: "220px",
+});
+
+globalStyle(`${mudChartLegendGroup} span`, {
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const mudChartLegendLabel = style({
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const mudChartTooltip = style({
+	position: "absolute",
+	zIndex: 10,
+	right: 0,
+	bottom: 0,
+	left: 0,
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+	backdropFilter: "blur(4px)",
+	borderTop: `1px solid ${theme.color.border.primary}`,
+	background: "rgba(10, 18, 14, 0.92)",
+	pointerEvents: "none",
+	padding: "6px 12px",
+	maxHeight: "60px",
+	overflow: "hidden",
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.engineering,
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: "10px",
+});
+
+/**
+ * Diagram Evolution Chart
+ * Shows growth of nodes and edges over time.
+ */
+export const evolutionCard = style({
+	boxSizing: "border-box",
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["3"],
+	clipPath: theme.clipPath.lg,
+	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+	boxShadow: theme.effect.glow.sm,
+	backgroundColor: "rgba(6, 12, 10, 0.9)",
+	padding: theme.spacing["4"],
+	width: "100%",
+});
+
+export const evolutionHeader = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+});
+
+export const evolutionTitle = style({
+	margin: 0,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.engineering,
+	color: theme.color.interactive.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	fontWeight: theme.typography.weight.bold,
+});
+
+export const evolutionMeta = style({
+	margin: 0,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const evolutionChart = style({
+	boxSizing: "border-box",
+	position: "relative",
+	clipPath: theme.clipPath.base,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(5, 9, 7, 0.85)",
+	padding: theme.spacing["2"],
+	width: "100%",
+	height: "clamp(200px, 28vh, 280px)",
+	overflow: "hidden",
+});
+
+globalStyle(`${evolutionChart} svg`, {
+	width: "100%",
+	height: "100%",
+});
+
+export const evolutionLegend = style({
+	display: "flex",
+	flexWrap: "wrap",
+	alignItems: "center",
+	gap: theme.spacing["3"],
+	borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	padding: `${theme.spacing["1"]} 0`,
+});
+
+export const evolutionLegendItem = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+});
+
+export const evolutionLegendSwatch = style({
+	display: "inline-block",
+	borderRadius: "999px",
+	width: "10px",
+	height: "10px",
+});
+
+export const evolutionLegendLabel = style({
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const evolutionSummaryGrid = style({
+	boxSizing: "border-box",
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
+	gap: theme.spacing["3"],
+	width: "100%",
+});
+
+export const evolutionSummaryItem = style({
+	boxSizing: "border-box",
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+	clipPath: theme.clipPath.base,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(8, 14, 11, 0.9)",
+	padding: theme.spacing["3"],
+});
+
+export const evolutionSummaryLabel = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.tertiary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const evolutionSummaryValue = style({
+	color: theme.color.interactive.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	fontWeight: theme.typography.weight.bold,
+});
+
+export const evolutionEmptyState = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: theme.spacing["4"],
+	minHeight: "160px",
+	textAlign: "center",
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
 });

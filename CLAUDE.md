@@ -119,6 +119,126 @@ User Action (React)
 - Native I/O? → Create a Tauri command in `src-tauri/`
 - UI? → Create a React component (reads state, sends events)
 
+### Advanced Pattern Example: Auto-Layout
+
+**Real implementation from this codebase** showing the pattern in action:
+
+**Functional Core** ([src/core/effects/layout.ts](src/core/effects/layout.ts)):
+```typescript
+/**
+ * Pure function - takes nodes/edges, returns new positions
+ * NO side effects, NO ReactFlow APIs, NO DOM manipulation
+ * 100% testable without mocking
+ */
+export function autoLayout(
+  nodes: Node[],
+  edges: Edge[],
+  options: Partial<LayoutOptions> = {}
+): Node[] {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+
+  // Pure Dagre algorithm
+  const graph = new dagre.graphlib.Graph();
+  graph.setGraph({
+    rankdir: opts.direction,
+    nodesep: opts.nodeSpacing,
+    ranksep: opts.rankSpacing,
+  });
+
+  // Add nodes to graph (pure data transformation)
+  topLevelNodes.forEach(node => {
+    graph.setNode(node.id, {
+      width: node.width,
+      height: node.height
+    });
+  });
+
+  // Add edges (pure data transformation)
+  validEdges.forEach(edge => {
+    graph.setEdge(edge.source, edge.target);
+  });
+
+  // Run layout algorithm (pure computation)
+  dagre.layout(graph);
+
+  // Return new node array with updated positions (immutable)
+  return nodes.map(node => {
+    const position = graph.node(node.id);
+    return {
+      ...node,
+      position: opts.snapToGrid
+        ? snapToGrid(position, opts.gridSize)
+        : position
+    };
+  });
+}
+```
+
+**Imperative Shell** ([src/ui/machines/canvas.machine.ts](src/ui/machines/canvas.machine.ts)):
+```typescript
+/**
+ * XState machine action - orchestrates WHEN to run the effect
+ * Calls the pure function and updates state
+ */
+actions: {
+  applyLayout: assign({
+    previousLayout: ({ context }) => context.nodes, // Save for undo
+    currentLayout: ({ event }) => event.preset ?? "command",
+    nodes: ({ context, event }) => {
+      if (event.type !== "AUTO_LAYOUT") return context.nodes;
+
+      // Get preset options
+      const presetOptions = event.preset
+        ? getPreset(event.preset)
+        : {};
+      const mergedOptions = { ...presetOptions, ...event.options };
+
+      // Call pure function (functional core)
+      return autoLayout(context.nodes, context.edges, mergedOptions);
+    },
+  }),
+}
+```
+
+**React Component** ([src/ui/components/Toolbar.tsx](src/ui/components/Toolbar.tsx)):
+```typescript
+/**
+ * Pure view - reads state, sends events
+ * No business logic, just presentation
+ */
+function Toolbar({ send, currentLayout }) {
+  return (
+    <button
+      onClick={() => send({
+        type: "AUTO_LAYOUT",
+        preset: "command"
+      })}
+    >
+      Auto Layout
+    </button>
+  );
+}
+```
+
+**Why this pattern works:**
+- ✅ `autoLayout()` is **100% testable** without XState, React, or ReactFlow
+- ✅ Machine **orchestrates when**, not how
+- ✅ React **presents**, doesn't compute
+- ✅ Can swap layout algorithms without touching UI
+- ✅ Can test layout logic with simple unit tests:
+
+```typescript
+test('should layout nodes vertically', () => {
+  const nodes = [/* test nodes */];
+  const edges = [/* test edges */];
+
+  const result = autoLayout(nodes, edges, { direction: "TB" });
+
+  // Assert pure function results
+  expect(result[0].position.y).toBeLessThan(result[1].position.y);
+});
+```
+
 ### Frontend-Backend Communication
 
 The application uses **Tauri Commands** for IPC (Inter-Process Communication):

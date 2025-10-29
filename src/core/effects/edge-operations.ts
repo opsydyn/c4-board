@@ -84,12 +84,16 @@ export const createEdge = (
 	target: string,
 	label: string = "uses",
 ): Effect.Effect<Edge> => {
+	const createdAt = Date.now();
 	return Effect.succeed({
 		id: `edge-${Date.now()}`,
 		source,
 		target,
 		label,
 		type: "default",
+		data: {
+			createdAt,
+		},
 	});
 };
 

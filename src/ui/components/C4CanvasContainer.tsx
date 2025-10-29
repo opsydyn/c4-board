@@ -32,7 +32,11 @@ import {
 	collapseToggle,
 	collapseHandleLeft,
 	collapseHandleRight,
+	sidebarBrand,
+	sidebarBrandIcon,
 } from "./styles.css";
+import { BalancedMudChart } from "./BalancedMudChart";
+import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { useDatabase } from "../../core/effects/useDatabase";
 import {
 	saveDiagram,
@@ -500,6 +504,16 @@ export function C4CanvasContainer() {
 		>
 			{isSidebarOpen && (
 				<aside className={sidebarColumn} aria-label="Toolbar panel">
+					<div className={sidebarBrand}>
+						<img
+							src="/app-icon.png"
+							alt="C4 Canvas"
+							className={sidebarBrandIcon}
+							width={36}
+							height={36}
+						/>
+						<span>C4 Canvas</span>
+					</div>
 					<div className={panelHeader}>
 						<ToggleButton
 							isSelected={isSidebarOpen}
@@ -536,6 +550,10 @@ export function C4CanvasContainer() {
 						{...(state.context.currentLayout && {
 							currentLayout: state.context.currentLayout,
 						})}
+					/>
+					<DiagramEvolutionChart
+						nodes={state.context.nodes}
+						edges={state.context.edges}
 					/>
 				</aside>
 			)}
@@ -585,6 +603,12 @@ export function C4CanvasContainer() {
 							Collapse
 						</ToggleButton>
 					</div>
+					<BalancedMudChart
+						nodes={state.context.nodes}
+						edges={state.context.edges}
+						selectedModuleId={selectedNode?.id ?? null}
+						onSelectModule={handleSelectNode}
+					/>
 					<PropertiesPanel
 						selectedNode={selectedNode}
 						onUpdateNode={(nodeId, updates) =>

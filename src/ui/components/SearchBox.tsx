@@ -196,7 +196,7 @@ export function SearchBox({ nodes, onSelectNode }: SearchBoxProps) {
 							);
 						})
 					) : (
-						<div className={emptyState}>No nodes found</div>
+						<div className={emptyState}>[▒▒▒▒] NO TARGETS ACQUIRED</div>
 					)}
 				</div>
 			)}

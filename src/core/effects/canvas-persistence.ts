@@ -72,13 +72,14 @@ function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 			x: dbNode.position_x,
 			y: dbNode.position_y,
 		},
-		data: {
-			label: dbNode.label,
-			technology: dbNode.technology ?? undefined,
-			description: dbNode.description ?? undefined,
-			c4Type: dbNode.type,
-		},
-	};
+	data: {
+		label: dbNode.label,
+		technology: dbNode.technology ?? undefined,
+		description: dbNode.description ?? undefined,
+		c4Type: dbNode.type,
+		createdAt: dbNode.created_at,
+	},
+};
 
 	if (dbNode.width !== null) {
 		node.width = dbNode.width;
@@ -165,6 +166,9 @@ function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
 		target: dbEdge.target,
 		label: dbEdge.label ?? undefined,
 		type: "default",
+		data: {
+			createdAt: dbEdge.created_at,
+		},
 	};
 }
 

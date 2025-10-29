@@ -15,6 +15,16 @@ import { nanoid } from "nanoid";
  */
 export type C4Type = "person" | "system" | "externalSystem" | "container" | "component";
 
+export type SubdomainType = "core" | "generic" | "supporting";
+
+export type IntegrationType = "intrusive" | "contract" | "functional";
+
+export interface CouplingProfile {
+	strength: number;
+	distance: number;
+	volatility: number;
+}
+
 /**
  * Node data shape
  * Extends Record<string, unknown> to be compatible with ReactFlow's Node data type
@@ -24,6 +34,10 @@ export interface NodeData extends Record<string, unknown> {
 	description: string;
 	technology: string;
 	c4Type: C4Type;
+	createdAt?: number;
+	subdomainType?: SubdomainType;
+	integrationType?: IntegrationType;
+	couplingProfile?: CouplingProfile;
 }
 
 /**
@@ -57,6 +71,30 @@ const DEFAULT_DIMENSIONS: Record<C4Type | "default", { width: number; height: nu
 	default: { width: 240, height: 170 },
 };
 
+const DEFAULT_SUBDOMAIN: Record<C4Type, SubdomainType> = {
+	person: "supporting",
+	system: "core",
+	externalSystem: "generic",
+	container: "core",
+	component: "supporting",
+};
+
+const DEFAULT_INTEGRATION: Record<C4Type, IntegrationType> = {
+	person: "functional",
+	system: "contract",
+	externalSystem: "contract",
+	container: "intrusive",
+	component: "intrusive",
+};
+
+const DEFAULT_COUPLING_PROFILE: Record<C4Type, CouplingProfile> = {
+	person: { strength: 2, distance: 8, volatility: 2 },
+	system: { strength: 6, distance: 5, volatility: 6 },
+	externalSystem: { strength: 4, distance: 9, volatility: 3 },
+	container: { strength: 8, distance: 3, volatility: 7 },
+	component: { strength: 7, distance: 4, volatility: 5 },
+};
+
 const snapToGrid = (value: number): number =>
 	Math.round(value / GRID_SIZE) * GRID_SIZE;
 
@@ -68,6 +106,21 @@ const resolveType = (node: Node): C4Type => {
 
 const getTypeDimensions = (type: C4Type): { width: number; height: number } =>
 	DEFAULT_DIMENSIONS[type] ?? DEFAULT_DIMENSIONS.default;
+
+export const getDefaultSubdomainType = (type: C4Type): SubdomainType =>
+	DEFAULT_SUBDOMAIN[type] ?? "supporting";
+
+export const getDefaultIntegrationType = (type: C4Type): IntegrationType =>
+	DEFAULT_INTEGRATION[type] ?? "contract";
+
+export const getDefaultCouplingProfile = (type: C4Type): CouplingProfile => {
+	const profile = DEFAULT_COUPLING_PROFILE[type];
+	return {
+		strength: profile?.strength ?? 5,
+		distance: profile?.distance ?? 5,
+		volatility: profile?.volatility ?? 5,
+	};
+};
 
 const getNodeDimensions = (node: Node): { width: number; height: number } => {
 	const type = resolveType(node);
@@ -283,6 +336,11 @@ export const createNode = (options: CreateNodeOptions): Effect.Effect<Node> => {
 		// Get default size
 		const size = yield* getDefaultSize(type);
 
+		const subdomainType = getDefaultSubdomainType(type);
+		const integrationType = getDefaultIntegrationType(type);
+		const couplingProfile = getDefaultCouplingProfile(type);
+		const createdAt = Date.now();
+
 		// Build node
 		const node: Node = {
 			id,
@@ -293,6 +351,10 @@ export const createNode = (options: CreateNodeOptions): Effect.Effect<Node> => {
 				description: "",
 				technology: "",
 				c4Type: type,
+				createdAt,
+				subdomainType,
+				integrationType,
+				couplingProfile,
 			} as NodeData,
 			...(size && { style: size }),
 			...(parentRelationship && parentRelationship),
