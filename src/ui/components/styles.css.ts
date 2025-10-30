@@ -48,20 +48,61 @@ export const sidebarBrand = style({
 	alignItems: "center",
 	gap: theme.spacing["2"],
 	marginBottom: theme.spacing["3"],
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
 	color: theme.color.foreground.secondary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
-	textTransform: theme.typography.textTransform.uppercase,
-	letterSpacing: theme.typography.letterSpacing.wide,
 });
 
 export const sidebarBrandIcon = style({
-	width: "36px",
-	height: "36px",
-	flexShrink: 0,
 	display: "block",
+	flexShrink: 0,
 	clipPath: theme.clipPath.sm,
 	boxShadow: theme.effect.glow.sm,
+	// width: "50px",
+	// height: "50px",
+});
+
+export const canvasStack = style({
+	position: "relative",
+	display: "flex",
+	flex: 1,
+	flexDirection: "column",
+	minHeight: 0,
+});
+
+export const commandBar = style({
+	position: "relative",
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	clipPath: theme.clipPath.md,
+	margin: `${theme.spacing["5"]} ${theme.spacing["5"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+	boxShadow: theme.effect.glow.sm,
+	backgroundColor: "rgba(8, 14, 11, 0.95)",
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	minHeight: "52px",
+});
+
+export const commandBarLeft = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+});
+
+export const commandBarRight = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	marginLeft: "auto",
+});
+
+export const commandBarSearch = style({
+	display: "flex",
+	alignItems: "center",
+	minWidth: "280px",
 });
 
 export const canvasRegion = style({
@@ -100,6 +141,7 @@ export const detailsColumn = style({
 export const canvasContainer = style({
 	position: "relative",
 	isolation: "isolate",
+	flex: 1,
 	backgroundColor: theme.color.background.base,
 	backgroundImage: `
 		radial-gradient(115% 115% at 50% 55%, rgba(3, 25, 66, 0.35) 0%, rgba(6, 11, 8, 0.75) 70%),
@@ -110,6 +152,7 @@ export const canvasContainer = style({
 	backgroundSize: "100% 100%, 24px 24px, 24px 24px",
 	width: "100%",
 	height: "100%",
+	minHeight: 0,
 	color: theme.color.foreground.primary,
 	fontFamily: theme.typography.family.mono,
 
@@ -241,6 +284,16 @@ export const toolbarButton = style({
 	},
 });
 
+export const commandBarButton = style([
+	toolbarButton,
+	{
+		borderColor: theme.color.border.primary,
+		boxShadow: "none",
+		backgroundColor: "rgba(14, 22, 18, 0.95)",
+	},
+]);
+
+
 export const toolbarLink = style([
 	toolbarButton,
 	{
@@ -365,6 +418,27 @@ export const collapseHandleRight = style({
 		},
 	},
 });
+
+export const commandBarToggle = style([
+	collapseToggle,
+	{
+		position: "static",
+	},
+]);
+
+export const commandBarHandle = style([
+	collapseToggle,
+	{
+		position: "absolute",
+		zIndex: theme.zIndex.overlay,
+		top: theme.spacing["5"],
+		left: "50%",
+		display: "inline-flex",
+		alignItems: "center",
+		gap: theme.spacing["1"],
+		transform: "translate(-50%, 0)",
+	},
+]);
 
 /**
  * Panel Title

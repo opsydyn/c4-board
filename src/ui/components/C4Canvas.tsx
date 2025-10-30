@@ -27,9 +27,23 @@ import { PersonNode } from "./nodes/PersonNode";
 import { SystemNode } from "./nodes/SystemNode";
 import { ContainerNode } from "./nodes/ContainerNode";
 import { ComponentNode } from "./nodes/ComponentNode";
-import { canvasContainer, reactFlowControls } from "./styles.css";
+import {
+	canvasContainer,
+	canvasStack,
+	commandBar,
+	commandBarButton,
+	commandBarHandle,
+	commandBarToggle,
+	commandBarLeft,
+	commandBarRight,
+	commandBarSearch,
+	reactFlowControls,
+} from "./styles.css";
 import { theme } from "../../styles/theme.css";
 import { DownloadButton } from "./DownloadButton";
+import { ToggleButton } from "react-aria-components";
+import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
+import { SearchBox } from "./SearchBox";
 
 interface C4CanvasProps {
 	nodes: Node[];
@@ -38,6 +52,9 @@ interface C4CanvasProps {
 	onEdgesChange?: OnEdgesChange<Edge>;
 	onConnect?: OnConnect;
 	onNodeClick?: NodeMouseHandler<Node>;
+	isCommandBarOpen: boolean;
+	onToggleCommandBar: (open: boolean) => void;
+	onSelectNode: (nodeId: string) => void;
 }
 
 export interface C4CanvasRef {
@@ -53,6 +70,9 @@ function C4CanvasInner(
 		onEdgesChange,
 		onConnect,
 		onNodeClick,
+		isCommandBarOpen,
+		onToggleCommandBar,
+		onSelectNode,
 	}: C4CanvasProps,
 	ref: React.Ref<C4CanvasRef>,
 ) {
@@ -121,63 +141,95 @@ function C4CanvasInner(
 	);
 
 	return (
-		<div className={canvasContainer}>
-			<ReactFlow
-			  proOptions={{ hideAttribution: true }}
-				nodes={nodes}
-				edges={edges}
-				{...(onNodesChange && { onNodesChange })}
-				{...(onEdgesChange && { onEdgesChange })}
-				{...(onConnect && { onConnect })}
-				{...(onNodeClick && { onNodeClick })}
-				nodeTypes={nodeTypes}
-				defaultEdgeOptions={defaultEdgeOptions}
-				fitView
-				snapToGrid
-				snapGrid={[20, 20]}
-				nodesDraggable
-				nodesConnectable
-				elementsSelectable
-				connectionMode={ConnectionMode.Loose}
-			>
-				<Background color={theme.color.border.primary} />
-				<Controls className={reactFlowControls} />
-				<DownloadButton />
-				<MiniMap
-					pannable
-					zoomable
-					nodeColor={(node) => {
-						// Color nodes based on their type using tactical colors
-						switch (node.type) {
-							case "person":
-								return theme.color.semantic.person;
-							case "system":
-								return theme.color.semantic.system;
-							case "externalSystem":
-								return theme.color.semantic.external;
-							case "container":
-								return theme.color.semantic.container;
-							case "component":
-								return theme.color.semantic.component;
-							default:
-								return theme.color.foreground.secondary;
-						}
-					}}
-					nodeStrokeColor={(node) => {
-						// Highlight selected nodes with tactical cyan
-						return node.selected
-							? theme.color.status.selected
-							: theme.color.border.primary;
-					}}
-					nodeStrokeWidth={3}
-					maskColor={`${theme.color.background.base}cc`}
-					style={{
-						backgroundColor: theme.color.background.surface,
-						border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-						clipPath: theme.clipPath.md,
-					}}
-				/>
-			</ReactFlow>
+		<div className={canvasStack}>
+			{isCommandBarOpen ? (
+				<div className={commandBar}>
+					<div className={commandBarLeft}>
+						<DownloadButton variant="inline" className={commandBarButton} />
+					</div>
+					<div className={commandBarRight}>
+						<div className={commandBarSearch}>
+							<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
+						</div>
+						<ToggleButton
+							isSelected={isCommandBarOpen}
+							onChange={onToggleCommandBar}
+							className={commandBarToggle}
+							aria-label="Collapse command bar"
+						>
+							<CaretUpIcon size={14} weight="bold" />
+							ESC
+						</ToggleButton>
+					</div>
+				</div>
+			) : (
+				<ToggleButton
+					isSelected={isCommandBarOpen}
+					onChange={onToggleCommandBar}
+					className={commandBarHandle}
+					aria-label="Expand command bar"
+				>
+					<CaretDownIcon size={16} weight="bold" />
+					Command Bar
+				</ToggleButton>
+			)}
+			<div className={canvasContainer}>
+				<ReactFlow
+					proOptions={{ hideAttribution: true }}
+					nodes={nodes}
+					edges={edges}
+					{...(onNodesChange && { onNodesChange })}
+					{...(onEdgesChange && { onEdgesChange })}
+					{...(onConnect && { onConnect })}
+					{...(onNodeClick && { onNodeClick })}
+					nodeTypes={nodeTypes}
+					defaultEdgeOptions={defaultEdgeOptions}
+					fitView
+					snapToGrid
+					snapGrid={[20, 20]}
+					nodesDraggable
+					nodesConnectable
+					elementsSelectable
+					connectionMode={ConnectionMode.Loose}
+				>
+					<Background color={theme.color.border.primary} />
+					<Controls className={reactFlowControls} />
+					<MiniMap
+						pannable
+						zoomable
+						nodeColor={(node) => {
+							// Color nodes based on their type using tactical colors
+							switch (node.type) {
+								case "person":
+									return theme.color.semantic.person;
+								case "system":
+									return theme.color.semantic.system;
+								case "externalSystem":
+									return theme.color.semantic.external;
+								case "container":
+									return theme.color.semantic.container;
+								case "component":
+									return theme.color.semantic.component;
+								default:
+									return theme.color.foreground.secondary;
+							}
+						}}
+						nodeStrokeColor={(node) => {
+							// Highlight selected nodes with tactical cyan
+							return node.selected
+								? theme.color.status.selected
+								: theme.color.border.primary;
+						}}
+						nodeStrokeWidth={3}
+						maskColor={`${theme.color.background.base}cc`}
+						style={{
+							backgroundColor: theme.color.background.surface,
+							border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+							clipPath: theme.clipPath.md,
+						}}
+					/>
+				</ReactFlow>
+			</div>
 		</div>
 	);
 }

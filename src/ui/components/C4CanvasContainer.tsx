@@ -59,6 +59,7 @@ export function C4CanvasContainer() {
 	const [isSidebarOpen, setSidebarOpen] = useState(true);
 	const [isDetailsOpen, setDetailsOpen] = useState(true);
 	const [isCompactLayout, setCompactLayout] = useState(false);
+	const [isCommandBarOpen, setCommandBarOpen] = useState(true);
 
 	// Initialize: Load most recent diagram or create new one
 	useEffect(() => {
@@ -173,7 +174,7 @@ export function C4CanvasContainer() {
 				console.error("⚠️ Failed to initialize diagram:", error);
 				// Create new diagram on error
 				const diagram = await runEffect(
-					createNewDiagram("Untitled Diagram"),
+					createNewDiagram("DIAGRAM::UNTITLED"),
 				);
 
 				send({
@@ -275,7 +276,7 @@ export function C4CanvasContainer() {
 			// Send CREATE_NEW_BOARD event to transition to creatingDiagram state
 			send({ type: "CREATE_NEW_BOARD" });
 
-			const diagram = await runEffect(createNewDiagram("Untitled Diagram"));
+			const diagram = await runEffect(createNewDiagram("DIAGRAM::UNTITLED"));
 
 			send({
 				type: "LOAD_DIAGRAM_SUCCESS",
@@ -509,10 +510,10 @@ export function C4CanvasContainer() {
 							src="/app-icon.png"
 							alt="C4 Canvas"
 							className={sidebarBrandIcon}
-							width={36}
-							height={36}
+							width={50}
+							height={50}
 						/>
-						<span>C4 Canvas</span>
+						<span>OPSYDYN C4</span>
 					</div>
 					<div className={panelHeader}>
 						<ToggleButton
@@ -522,7 +523,7 @@ export function C4CanvasContainer() {
 							aria-label="Collapse left panel"
 						>
 							<CaretLeftIcon size={16} weight="bold" />
-							Collapse
+							ESC
 						</ToggleButton>
 					</div>
 					<Toolbar
@@ -541,8 +542,6 @@ export function C4CanvasContainer() {
 						onDiagramNameChange={(name) =>
 							send({ type: "UPDATE_DIAGRAM_NAME", name })
 						}
-						onSelectNode={handleSelectNode}
-						nodes={state.context.nodes}
 						sessionName={state.context.sessionName}
 						isSaving={state.context.isSaving}
 						lastSaved={state.context.lastSaved}
@@ -567,6 +566,9 @@ export function C4CanvasContainer() {
 					onEdgesChange={onEdgesChange}
 					onConnect={onConnect}
 					onNodeClick={onNodeClick}
+					isCommandBarOpen={isCommandBarOpen}
+					onToggleCommandBar={setCommandBarOpen}
+					onSelectNode={handleSelectNode}
 				/>
 				{!isSidebarOpen && (
 					<ToggleButton
@@ -585,7 +587,7 @@ export function C4CanvasContainer() {
 						className={collapseHandleRight}
 						aria-label="Expand right panel"
 					>
-						<CaretRightIcon size={16} weight="bold" />
+						<CaretLeftIcon size={16} weight="bold" />
 					</ToggleButton>
 				)}
 			</section>
@@ -600,7 +602,7 @@ export function C4CanvasContainer() {
 							aria-label="Collapse right panel"
 						>
 							<CaretRightIcon size={16} weight="bold" />
-							Collapse
+							ESC
 						</ToggleButton>
 					</div>
 					<BalancedMudChart

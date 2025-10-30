@@ -28,7 +28,7 @@ export const darkTheme = createTheme(themeContract, {
 		},
 
 		interactive: {
-			primary: "#6ea8fe",    // Bootstrap primary-text-emphasis (softer blue)
+			primary: "#f8f9fa",    // Bootstrap primary-text-emphasis (softer blue)
 			hover: "#8bb9fe",      // Bootstrap link-hover (lighter)
 			active: "#084298",     // Bootstrap primary-border-subtle (darker)
 			focus: "#88C0D0",      // KEEP Nord cyan for brand consistency

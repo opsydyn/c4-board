@@ -56,7 +56,7 @@ export function LayoutMenu({
 		}
 	};
 
-	const buttonLabel = variant === "selected" ? "Layout Selected" : "Layout All";
+	const buttonLabel = variant === "selected" ? "LAYOUT::SELECTION" : "LAYOUT::GRAPH";
 
 	return (
 		<MenuTrigger>

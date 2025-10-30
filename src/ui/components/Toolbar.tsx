@@ -15,7 +15,6 @@ import {
 	Stack,
 	Cube,
 } from "@phosphor-icons/react";
-import type { Node } from "@xyflow/react";
 import {
 	toolbar,
 	toolbarButton,
@@ -23,7 +22,6 @@ import {
 	boardNameInput,
 	toolbarLink,
 } from "./styles.css";
-import { SearchBox } from "./SearchBox";
 import { LayoutMenu } from "./LayoutMenu";
 import type { LayoutPresetName } from "../../core/effects/layout";
 
@@ -39,8 +37,6 @@ interface ToolbarProps {
 	onAutoLayoutSelected: (presetName: LayoutPresetName) => void;
 	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
-	onSelectNode: (nodeId: string) => void;
-	nodes: Node[];
 	sessionName: string;
 	isSaving?: boolean;
 	lastSaved?: number | null;
@@ -78,8 +74,6 @@ export function Toolbar({
 	onAutoLayoutSelected,
 	onDiagramNameChange,
 	onSessionNameChange,
-	onSelectNode,
-	nodes,
 	sessionName,
 	isSaving = false,
 	lastSaved = null,
@@ -116,13 +110,13 @@ export function Toolbar({
 			{/* New Board button */}
 			<button type="button" className={toolbarButton} onClick={onNewBoard}>
 				<PlusIcon size={20} weight="duotone" />
-				New Board
+				INIT::BOARD
 			</button>
 
 			{/* Session name input */}
 			<input
 				type="text"
-				placeholder="Session name (optional)"
+				placeholder="SESSION::ALPHA"
 				value={sessionName}
 				onChange={(e) => onSessionNameChange(e.target.value)}
 				className={toolbarButton}
@@ -137,11 +131,8 @@ export function Toolbar({
 				disabled={isSaving}
 			>
 				<FloppyDiskIcon size={20} weight="duotone" />
-				Save
-			</button>
-
-			{/* Search box */}
-			<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
+				SAVE::STATE
+		</button>
 
 			{/* Auto-layout menus */}
 			<LayoutMenu
@@ -159,12 +150,12 @@ export function Toolbar({
 			{/* Add node buttons */}
 			<button type="button" className={toolbarButton} onClick={onAddPerson}>
 				<UserIcon size={20} weight="duotone" />
-				Add Person
+				ADD::PERSON
 			</button>
 
 			<button type="button" className={toolbarButton} onClick={onAddSystem}>
 				<PackageIcon size={20} weight="duotone" />
-				Add System
+				ADD::SYSTEM
 			</button>
 
 			<button
@@ -173,7 +164,7 @@ export function Toolbar({
 				onClick={onAddExternalSystem}
 			>
 				<CloudIcon size={20} weight="duotone" />
-				Add External
+				ADD::EXTERNAL
 			</button>
 
 			<button
@@ -182,7 +173,7 @@ export function Toolbar({
 				onClick={onAddContainer}
 			>
 				<Stack size={20} weight="duotone" />
-				Add Container
+				ADD::CONTAINER
 			</button>
 
 			<button
@@ -191,13 +182,13 @@ export function Toolbar({
 				onClick={onAddComponent}
 			>
 				<Cube size={20} weight="duotone" />
-				Add Component
+				ADD::COMPONENT
 			</button>
 
 			{/* Saved diagrams link */}
 			<a href="/saved-diagrams" className={toolbarLink}>
 				<ListBulletsIcon size={20} weight="duotone" />
-				View Saved
+				LIST::SAVED
 			</a>
 		</div>
 	);

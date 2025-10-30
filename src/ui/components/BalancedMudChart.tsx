@@ -427,7 +427,7 @@ export function BalancedMudChart({
 					</>
 				) : (
 					<div style={{ opacity: 0.5, fontSize: "9px", letterSpacing: "0.5px" }}>
-						[████] TARGETING SYSTEM STANDBY
+						[████] ENGINEERING SYSTEM STANDBY
 					</div>
 				)}
 			</div>

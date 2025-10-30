@@ -14,7 +14,12 @@ function downloadImage(dataUrl: string) {
 	link.click();
 }
 
-export function DownloadButton() {
+interface DownloadButtonProps {
+	variant?: "panel" | "inline";
+	className?: string;
+}
+
+export function DownloadButton({ variant = "panel", className }: DownloadButtonProps) {
 	const { getNodes } = useReactFlow();
 
 	const handleDownload = async () => {
@@ -51,12 +56,20 @@ export function DownloadButton() {
 		}
 	};
 
-	return (
-		<Panel position="top-right">
-			<button type="button" className={toolbarButton} onClick={handleDownload}>
-				<DownloadSimpleIcon size={18} weight="duotone" />
-				Download PNG
-			</button>
-		</Panel>
+	const button = (
+		<button
+			type="button"
+			className={className ?? toolbarButton}
+			onClick={handleDownload}
+		>
+			<DownloadSimpleIcon size={18} weight="duotone" />
+			EXPORT::PNG
+		</button>
 	);
+
+	if (variant === "panel") {
+		return <Panel position="top-right">{button}</Panel>;
+	}
+
+	return button;
 }

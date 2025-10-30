@@ -444,7 +444,7 @@ describe("Canvas Machine", () => {
 			expect(snapshot.context.selectedNodeId).toBeNull();
 			expect(snapshot.context.nodeCounter).toBe(0);
 			expect(snapshot.context.currentDiagramId).toBeNull();
-			expect(snapshot.context.diagramName).toBe("Untitled Diagram");
+			expect(snapshot.context.diagramName).toBe("DIAGRAM::UNTITLED");
 			expect(snapshot.context.diagramDescription).toBeNull();
 			expect(snapshot.context.sessionName).toBe("");
 			expect(snapshot.context.isSaving).toBe(false);

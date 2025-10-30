@@ -453,7 +453,7 @@ export const canvasMachine = setup({
 
 		// Diagram metadata
 		currentDiagramId: null,
-		diagramName: "Untitled Diagram",
+		diagramName: "DIAGRAM::UNTITLED",
 		diagramDescription: null,
 		sessionName: "",
 
