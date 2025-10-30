@@ -2,8 +2,8 @@
  * Shared testing utilities live here.
  *
  * Once the Testing Library stack is installed, move helpers such as
- * `renderWithProviders`, MSW server setup, and Vitest lifecycle hooks into
- * this module so suites can import from a single place.
+ * `renderWithProviders` and machine-test helpers into this module so suites can
+ * import from a single place.
  */
 
 export function warnUnconfiguredTestingLibrary(): void {

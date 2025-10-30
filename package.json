@@ -65,7 +65,6 @@
     "@antebudimir/eslint-plugin-vanilla-extract": "^1.12.0",
     "@eslint/js": "^9.38.0",
     "@faker-js/faker": "^10.1.0",
-    "@mswjs/interceptors": "^0.40.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
@@ -76,7 +75,6 @@
     "globals": "^16.4.0",
     "jiti": "^2.6.1",
     "knip": "^5.66.3",
-    "msw": "^2.11.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
     "vitest": "^4.0.3"
