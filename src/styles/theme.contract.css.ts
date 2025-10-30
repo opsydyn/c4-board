@@ -79,6 +79,10 @@ export const themeContract = createThemeContract({
 			container: null,   // Container node background
 			component: null,   // Component node background
 			containerSelected: null, // Container when selected
+			// UI overlays - for dialogs, popovers, elevated panels
+			overlay: null,     // Overlay backgrounds (dropdowns, modals)
+			elevated: null,    // Elevated surfaces (hover states)
+			base: null,        // Base panel surface
 		},
 	},
 

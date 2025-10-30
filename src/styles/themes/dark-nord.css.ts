@@ -68,6 +68,10 @@ export const darkTheme = createTheme(themeContract, {
 			container: "#2E3440",  // Nord0 - dark tint
 			component: "#2E3440",  // Nord0 - dark tint
 			containerSelected: "#3B4252", // Nord1 - slightly lighter
+			// UI overlays - semantic rgba values for compositing
+			overlay: "rgba(46, 52, 64, 0.95)",   // Nord0 with opacity
+			elevated: "rgba(59, 66, 82, 0.98)",  // Nord1 with opacity
+			base: "rgba(36, 41, 51, 0.92)",      // Darker base surface
 		},
 	},
 

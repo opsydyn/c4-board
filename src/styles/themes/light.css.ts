@@ -68,6 +68,10 @@ export const lightTheme = createTheme(themeContract, {
 			container: "#E6F0FF",   // Light blue tint for containers
 			component: "#F0E6FF",   // Light purple tint for components
 			containerSelected: "#CCE0FF", // Slightly darker blue when selected
+			// UI overlays - semantic rgba values for compositing
+			overlay: "rgba(255, 255, 255, 0.95)",  // Light overlay with opacity
+			elevated: "rgba(248, 249, 250, 0.98)",  // Slightly elevated surface
+			base: "rgba(255, 255, 255, 0.92)",      // Base panel surface
 		},
 	},
 

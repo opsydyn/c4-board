@@ -15,10 +15,12 @@ import { AgGridReact } from "ag-grid-react";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 import { useDatabase } from "../../core/effects/useDatabase";
-import { listAllDiagrams } from "../../core/effects/canvas-persistence";
+import { getDiagramStats, listAllDiagrams } from "../../core/effects/canvas-persistence";
+import { DiagramStatsPopover } from "./DiagramStatsPopover";
 import {
 	actionButton,
 	agGridTheme,
+	errorAlert,
 	gridToolbar,
 	quickFilter,
 	quickFilterInput,
@@ -33,6 +35,7 @@ interface DiagramRow {
 	createdAt: number;
 	updatedAt: number;
 	lastUpdatedRelative: string;
+	complexity?: number; // nodes + edges count
 }
 
 interface SavedDiagramsTableProps {
@@ -42,6 +45,14 @@ interface SavedDiagramsTableProps {
 interface GridContext {
 	onLoadDiagram: (diagramId: string) => void;
 }
+
+const InfoActionRenderer = (props: ICellRendererParams<DiagramRow, unknown, GridContext>) => {
+	const diagramId = props.data?.id;
+	if (!diagramId) {
+		return null;
+	}
+	return <DiagramStatsPopover diagramId={diagramId} />;
+};
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -109,14 +120,30 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 		try {
 			setLoading(true);
 			const result = await runEffect(listAllDiagrams());
-			const mapped: DiagramRow[] = result.map((diagram) => ({
-				id: diagram.id,
-				name: diagram.name,
-				createdAt: diagram.createdAt,
-				updatedAt: diagram.updatedAt,
-				lastUpdatedRelative: formatRelativeTime(diagram.updatedAt),
-				...(diagram.description ? { description: diagram.description } : {}),
-			}));
+			// Load stats for each diagram to calculate complexity
+			const mapped: DiagramRow[] = await Promise.all(
+				result.map(async (diagram) => {
+					let complexity = 0;
+					try {
+						const stats = await runEffect(
+							getDiagramStats(diagram.id)
+						);
+						complexity = stats.nodeCount + stats.edgeCount;
+					} catch {
+						// If stats fail, complexity stays 0
+					}
+
+					return {
+						id: diagram.id,
+						name: diagram.name,
+						createdAt: diagram.createdAt,
+						updatedAt: diagram.updatedAt,
+						lastUpdatedRelative: formatRelativeTime(diagram.updatedAt),
+						complexity,
+						...(diagram.description ? { description: diagram.description } : {}),
+					};
+				})
+			);
 			setRows(mapped);
 			setError(null);
 		} catch (err) {
@@ -198,6 +225,16 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 				floatingFilter: true,
 			},
 			{
+				headerName: "Info",
+				colId: "info",
+				pinned: "right",
+				lockPinned: true,
+				maxWidth: 80,
+				cellRenderer: InfoActionRenderer,
+				floatingFilter: false,
+				sortable: false,
+			},
+			{
 				headerName: "Actions",
 				colId: "actions",
 				pinned: "right",
@@ -219,13 +256,6 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 		autoHeaderHeight: true,
 		flex: 1,
 	}), []);
-
-	const pinnedTopRowData = useMemo<DiagramRow[]>(() => {
-		if (rows.length === 0) return [];
-		const [latest] = [...rows].sort((a, b) => b.updatedAt - a.updatedAt);
-		if (!latest) return [];
-		return [{ ...latest }];
-	}, [rows]);
 
 	const onGridReady = useCallback((event: GridReadyEvent<DiagramRow>) => {
 		gridApiRef.current = event.api;
@@ -276,8 +306,32 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 		[],
 	);
 
+	const statusBar = useMemo(
+		() => ({
+			statusPanels: [
+				{
+					statusPanel: "agTotalAndFilteredRowCountComponent",
+					align: "left",
+				},
+				{
+					statusPanel: "agSelectedRowCountComponent",
+					align: "center",
+				},
+			],
+		}),
+		[],
+	);
+
 	if (error) {
-		return <div role="alert">Error loading diagrams: {error}</div>;
+		return (
+			<div className={errorAlert} role="alert">
+				<span>⚠</span>
+				<div>
+					<strong>Error loading diagrams</strong>
+					<div>{error}</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (
@@ -301,9 +355,22 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 					rowData={rows}
 					columnDefs={columnDefs}
 					defaultColDef={defaultColDef}
-					pinnedTopRowData={pinnedTopRowData}
 					rowSelection={rowSelection}
 					selectionColumnDef={selectionColumnDef}
+					statusBar={statusBar}
+					rowClassRules={{
+						"complexity-low": (params) =>
+							params.data?.complexity !== undefined &&
+							params.data.complexity >= 0 &&
+							params.data.complexity <= 5,
+						"complexity-medium": (params) =>
+							params.data?.complexity !== undefined &&
+							params.data.complexity >= 6 &&
+							params.data.complexity <= 10,
+						"complexity-high": (params) =>
+							params.data?.complexity !== undefined &&
+							params.data.complexity >= 11,
+					}}
 					domLayout="normal"
 					animateRows
 					onGridReady={onGridReady}

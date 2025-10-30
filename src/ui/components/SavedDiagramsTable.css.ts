@@ -32,7 +32,7 @@ export const quickFilter = style({
 	gap: theme.spacing["2"],
 	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	backgroundColor: theme.color.surface.overlay,
 	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 	color: theme.color.foreground.primary,
 });
@@ -56,7 +56,7 @@ export const actionButton = style({
 	transition: theme.transition.base,
 	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-	backgroundColor: "rgba(13, 23, 18, 0.95)",
+	backgroundColor: theme.color.surface.overlay,
 	cursor: "pointer",
 	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 	textTransform: theme.typography.textTransform.uppercase,
@@ -68,39 +68,44 @@ export const actionButton = style({
 	selectors: {
 		"&:hover": {
 			boxShadow: theme.effect.glow.sm,
-			backgroundColor: "rgba(16, 28, 22, 0.98)",
+			backgroundColor: theme.color.surface.elevated,
 		},
 	},
 });
 
 export const agGridTheme = style({
+	display: "flex",
 	flex: 1,
+	flexDirection: "column",
 	clipPath: theme.clipPath.lg,
 	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	backgroundColor: theme.color.surface.base,
 	padding: theme.spacing["2"],
-	minHeight: "520px",
-	height: "100%",
 	width: "100%",
+	height: "100%",
+	minHeight: "520px",
 });
 
 globalStyle(`.${agGridTheme}.ag-theme-quartz`, {
 	vars: {
 		"--ag-font-family": theme.typography.family.mono,
 		"--ag-font-size": theme.typography.size.sm,
-		"--ag-background-color": "rgba(9, 16, 13, 0.92)",
+		"--ag-background-color": theme.color.surface.base,
 		"--ag-foreground-color": theme.color.foreground.secondary,
 		"--ag-border-color": theme.color.border.secondary,
-		"--ag-header-background-color": "rgba(14, 24, 18, 0.95)",
+		"--ag-header-background-color": theme.color.surface.overlay,
 		"--ag-header-foreground-color": theme.color.foreground.secondary,
-		"--ag-odd-row-background-color": "rgba(12, 22, 17, 0.8)",
-		"--ag-row-hover-color": "rgba(97, 163, 142, 0.18)",
+		"--ag-odd-row-background-color": theme.color.background.surface,
+		"--ag-row-hover-color": theme.color.background.raised,
 		"--ag-selected-row-background-color": `${theme.color.status.selected}33`,
-		"--ag-control-panel-background-color": "rgba(12, 22, 17, 0.95)",
+		"--ag-control-panel-background-color": theme.color.surface.overlay,
 	},
 });
 
 globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-root-wrapper`, {
+	display: "flex",
+	flex: 1,
+	flexDirection: "column",
 	clipPath: theme.clipPath.lg,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
 	boxShadow: theme.effect.glow.sm,
@@ -122,17 +127,21 @@ globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.ag-row-focus`, {
 });
 
 globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-pinned-row`, {
-	background: "linear-gradient(90deg, rgba(111, 185, 169, 0.35) 0%, rgba(3, 25, 66, 0.25) 100%)",
+	borderBottom: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+	backgroundColor: theme.color.surface.elevated,
 	color: theme.color.foreground.primary,
+	fontWeight: theme.typography.weight.medium,
 });
 
 globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-floating-filter-input`, {
 	borderColor: theme.color.border.secondary,
-	backgroundColor: "rgba(13, 23, 18, 0.9)",
+	backgroundColor: theme.color.surface.overlay,
+	textTransform: theme.typography.textTransform.uppercase,
 	color: theme.color.foreground.primary,
 });
 
 globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-cell`, {
+	textTransform: theme.typography.textTransform.uppercase,
 	color: theme.color.foreground.primary,
 });
 
@@ -143,6 +152,67 @@ globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-header`, {
 globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-overlay-loading-center`, {
 	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	backgroundColor: theme.color.surface.base,
+	textTransform: theme.typography.textTransform.uppercase,
 	color: theme.color.foreground.primary,
+});
+
+export const errorAlert = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["3"],
+	clipPath: theme.clipPath.base,
+	border: `${theme.border.width.base} solid ${theme.color.status.critical}`,
+	boxShadow: `0 0 12px ${theme.color.status.critical}40`,
+	backgroundColor: theme.color.surface.overlay,
+	padding: theme.spacing["4"],
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.base,
+});
+
+// Status Bar Styling
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-status-bar`, {
+	borderTop: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	backgroundColor: theme.color.surface.overlay,
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-status-name-value-value`, {
+	color: theme.color.interactive.primary,
+	fontWeight: theme.typography.weight.medium,
+});
+
+// Complexity-based row styling
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-low`, {
+	borderLeft: `${theme.border.width.thick} solid ${theme.color.status.ready}`,
+	backgroundColor: `${theme.color.status.ready}08`,
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-medium`, {
+	borderLeft: `${theme.border.width.thick} solid ${theme.color.status.caution}`,
+	backgroundColor: `${theme.color.status.caution}08`,
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-high`, {
+	borderLeft: `${theme.border.width.thick} solid ${theme.color.status.critical}`,
+	backgroundColor: `${theme.color.status.critical}08`,
+});
+
+// Hover states for complexity rows
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-low:hover`, {
+	backgroundColor: `${theme.color.status.ready}12`,
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-medium:hover`, {
+	backgroundColor: `${theme.color.status.caution}12`,
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-high:hover`, {
+	backgroundColor: `${theme.color.status.critical}12`,
 });

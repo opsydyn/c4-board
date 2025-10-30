@@ -70,6 +70,10 @@ export const darkTheme = createTheme(themeContract, {
 			container: "#1a1d20",  // Bootstrap subtle bg
 			component: "#1a1d20",  // Bootstrap subtle bg
 			containerSelected: "#2b3035", // Bootstrap tertiary bg (lighter)
+			// UI overlays - semantic rgba values for compositing
+			overlay: "rgba(13, 23, 18, 0.95)",  // Dark overlay with opacity
+			elevated: "rgba(16, 28, 22, 0.98)",  // Slightly lighter elevated surface
+			base: "rgba(9, 16, 13, 0.92)",       // Base panel surface
 		},
 	},
 

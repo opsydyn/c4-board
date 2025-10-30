@@ -1,19 +1,20 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import { SavedDiagramsPage } from "../ui/components/SavedDiagramsPage.tsx";
+import { pageMain, pageHeading, backLinkContainer, backLink, tableWrapper } from "./saved-diagrams.css";
 ---
 
 <Layout>
-	<main style="padding: 2rem; max-width: 1400px; margin: 0 auto; height: calc(100vh - 4rem); display: flex; flex-direction: column;">
-		<h1 style="margin-bottom: 2rem; font-size: 2rem; font-weight: bold;">
+	<main class={pageMain}>
+		<h1 class={pageHeading}>
 			Saved Diagrams
 		</h1>
-		<div style="margin-bottom: 1rem;">
-			<a href="/canvas" style="color: #0066cc; text-decoration: underline;">
+		<div class={backLinkContainer}>
+			<a href="/canvas" class={backLink}>
 				← Back to Canvas
 			</a>
 		</div>
-		<div style="flex: 1; min-height: 0;">
+		<div class={tableWrapper}>
 			<SavedDiagramsPage client:only="react" />
 		</div>
 	</main>

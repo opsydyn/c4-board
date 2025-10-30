@@ -378,6 +378,32 @@ export const listAllDiagrams = () =>
 	});
 
 /**
+ * Get diagram statistics (node and edge counts)
+ */
+export const getDiagramStats = (diagramId: string) =>
+	Effect.gen(function* () {
+		const dbNodes = yield* getNodesByDiagram(diagramId);
+		const dbEdges = yield* getEdgesByDiagram(diagramId);
+
+		// Count nodes by type
+		const nodesByType = dbNodes.reduce(
+			(acc, node) => {
+				const type = node.type || "unknown";
+				acc[type] = (acc[type] || 0) + 1;
+				return acc;
+			},
+			{} as Record<string, number>,
+		);
+
+		return {
+			diagramId,
+			nodeCount: dbNodes.length,
+			edgeCount: dbEdges.length,
+			nodesByType,
+		};
+	});
+
+/**
  * Delete diagram and all associated nodes/edges (CASCADE)
  */
 export const removeDiagram = (diagramId: string) =>
