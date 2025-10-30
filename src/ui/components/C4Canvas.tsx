@@ -20,7 +20,7 @@ import {
 	ConnectionMode,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useMemo, forwardRef, useImperativeHandle } from "react";
+import { useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
 import { PersonNode } from "./nodes/PersonNode";
@@ -140,6 +140,22 @@ function C4CanvasInner(
 		[],
 	);
 
+	const handleNodeDoubleClick = useCallback(
+		(event: React.MouseEvent, node: Node) => {
+			if (onNodeClick) {
+				onNodeClick(event, node);
+			}
+			if (node?.position) {
+				setCenter(
+					node.position.x + (node.measured?.width || 0) / 2,
+					node.position.y + (node.measured?.height || 0) / 2,
+					{ zoom: 1.4, duration: 400 },
+				);
+			}
+		},
+		[onNodeClick, setCenter],
+	);
+
 	return (
 		<div className={canvasStack}>
 			{isCommandBarOpen ? (
@@ -170,7 +186,6 @@ function C4CanvasInner(
 					aria-label="Expand command bar"
 				>
 					<CaretDownIcon size={16} weight="bold" />
-					Command Bar
 				</ToggleButton>
 			)}
 			<div className={canvasContainer}>
@@ -182,6 +197,7 @@ function C4CanvasInner(
 					{...(onEdgesChange && { onEdgesChange })}
 					{...(onConnect && { onConnect })}
 					{...(onNodeClick && { onNodeClick })}
+					onNodeDoubleClick={handleNodeDoubleClick}
 					nodeTypes={nodeTypes}
 					defaultEdgeOptions={defaultEdgeOptions}
 					fitView

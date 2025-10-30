@@ -5,7 +5,7 @@
  * Uses Fuse.js for fuzzy matching.
  */
 
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react";
 import type { Node } from "@xyflow/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -133,13 +133,13 @@ export function SearchBox({ nodes, onSelectNode }: SearchBoxProps) {
 		<div className={searchContainer} ref={containerRef}>
 			<div className={searchInputWrapper}>
 				<div className={searchIcon}>
-					<MagnifyingGlass size={16} weight="bold" />
+					<MagnifyingGlassIcon size={16} weight="bold" />
 				</div>
 				<input
 					ref={inputRef}
 					type="text"
 					className={searchInput}
-					placeholder="Search nodes..."
+					placeholder="SEARCH::NODES (FUZZY)"
 					value={query}
 					onChange={handleInputChange}
 					onFocus={handleInputFocus}

@@ -514,7 +514,10 @@ export function C4CanvasContainer() {
 							height={50}
 						/>
 						<span>OPSYDYN C4</span>
+						<span>v1.0.0</span>
+		
 					</div>
+							<p>PRECISION TOOLS FOR PROFESSIONALS WHO MAP BEFORE THEY MOVE</p>
 					<div className={panelHeader}>
 						<ToggleButton
 							isSelected={isSidebarOpen}

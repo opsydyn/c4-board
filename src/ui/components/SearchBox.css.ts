@@ -76,7 +76,7 @@ export const resultsDropdown = style({
 	"@layer": {
 		[componentsLayer]: {
 			position: "absolute",
-			zIndex: theme.zIndex.dropdown,
+			zIndex: theme.zIndex.overlay,
 			top: "calc(100% + 4px)",
 			right: 0,
 			left: 0,

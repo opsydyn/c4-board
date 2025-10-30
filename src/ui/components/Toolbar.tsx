@@ -12,8 +12,8 @@ import {
 	CheckCircleIcon,
 	ListBulletsIcon,
 	PlusIcon,
-	Stack,
-	Cube,
+	StackIcon,
+	CubeIcon,
 } from "@phosphor-icons/react";
 import {
 	toolbar,
@@ -50,7 +50,7 @@ function formatSaveTime(timestamp: number): string {
 
 	if (diff < 60000) {
 		// Less than 1 minute
-		return "just now";
+		return "STATE::SYNCED @ NOW";
 	}
 	if (diff < 3600000) {
 		// Less than 1 hour
@@ -95,13 +95,13 @@ export function Toolbar({
 					{isSaving && (
 						<>
 							<FloppyDiskIcon size={14} weight="fill" />
-							<span>Saving...</span>
+							<span>WRITE::…</span>
 						</>
 					)}
 					{!isSaving && lastSaved && (
 						<>
 							<CheckCircleIcon size={14} weight="fill" />
-							<span>Saved {formatSaveTime(lastSaved)}</span>
+							<span>SAVED {formatSaveTime(lastSaved)}</span>
 						</>
 					)}
 				</div>
@@ -172,7 +172,7 @@ export function Toolbar({
 				className={toolbarButton}
 				onClick={onAddContainer}
 			>
-				<Stack size={20} weight="duotone" />
+				<StackIcon size={20} weight="duotone" />
 				ADD::CONTAINER
 			</button>
 
@@ -181,7 +181,7 @@ export function Toolbar({
 				className={toolbarButton}
 				onClick={onAddComponent}
 			>
-				<Cube size={20} weight="duotone" />
+				<CubeIcon size={20} weight="duotone" />
 				ADD::COMPONENT
 			</button>
 

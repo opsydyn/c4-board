@@ -74,6 +74,7 @@ export const canvasStack = style({
 
 export const commandBar = style({
 	position: "relative",
+	zIndex: theme.zIndex.sticky,
 	display: "flex",
 	alignItems: "center",
 	gap: theme.spacing["2"],
@@ -83,7 +84,7 @@ export const commandBar = style({
 	boxShadow: theme.effect.glow.sm,
 	backgroundColor: "rgba(8, 14, 11, 0.95)",
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-	minHeight: "52px",
+	minHeight: 200,
 });
 
 export const commandBarLeft = style({

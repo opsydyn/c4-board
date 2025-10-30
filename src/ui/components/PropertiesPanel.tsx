@@ -32,7 +32,7 @@ export function PropertiesPanel({
 
 	return (
 		<div className={propertiesPanel}>
-			<h3 className={panelTitle}>Edit {selectedNode.data?.c4Type}</h3>
+			<h3 className={panelTitle}>MODE::EDIT {selectedNode.data?.c4Type}</h3>
 
 			<div className={formGroup}>
 				<label className={label} htmlFor="node-label">
@@ -58,7 +58,7 @@ export function PropertiesPanel({
 					className={input}
 					value={selectedNode.data?.technology || ""}
 					onChange={(e) => handleChange("technology", e.target.value)}
-					placeholder="e.g., Astro, XState, Effect"
+					placeholder="E.G.::ASTRO / XSTATE / EFFECT"
 				/>
 			</div>
 
@@ -71,7 +71,7 @@ export function PropertiesPanel({
 					className={textarea}
 					value={selectedNode.data?.description || ""}
 					onChange={(e) => handleChange("description", e.target.value)}
-					placeholder="Brief description of this element"
+		            placeholder="META::DESC"
 				/>
 			</div>
 		</div>
