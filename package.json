@@ -52,6 +52,7 @@
     "ag-grid-react": "^34.3.0",
     "astro": "5.15.1",
     "dagre": "^0.8.5",
+    "date-fns": "^4.1.0",
     "effect": "^3.18.4",
     "fuse.js": "^7.1.0",
     "html-to-image": "1.11.11",

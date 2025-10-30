@@ -4,7 +4,7 @@ import { SavedDiagramsPage } from "../ui/components/SavedDiagramsPage.tsx";
 ---
 
 <Layout>
-	<main style="padding: 2rem; max-width: 1200px; margin: 0 auto;">
+	<main style="padding: 2rem; max-width: 1400px; margin: 0 auto; height: calc(100vh - 4rem); display: flex; flex-direction: column;">
 		<h1 style="margin-bottom: 2rem; font-size: 2rem; font-weight: bold;">
 			Saved Diagrams
 		</h1>
@@ -13,6 +13,8 @@ import { SavedDiagramsPage } from "../ui/components/SavedDiagramsPage.tsx";
 				← Back to Canvas
 			</a>
 		</div>
-		<SavedDiagramsPage client:only="react" />
+		<div style="flex: 1; min-height: 0;">
+			<SavedDiagramsPage client:only="react" />
+		</div>
 	</main>
 </Layout>

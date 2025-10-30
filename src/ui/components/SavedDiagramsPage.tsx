@@ -11,5 +11,9 @@ export function SavedDiagramsPage() {
 		window.location.href = `/canvas?load=${diagramId}`;
 	}, []);
 
-	return <SavedDiagramsTable onLoadDiagram={handleLoadDiagram} />;
+	return (
+		<div style={{ height: "100%", width: "100%" }}>
+			<SavedDiagramsTable onLoadDiagram={handleLoadDiagram} />
+		</div>
+	);
 }
