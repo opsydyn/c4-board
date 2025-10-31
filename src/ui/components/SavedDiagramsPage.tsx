@@ -9,7 +9,7 @@ import { SavedDiagramsTable } from "./SavedDiagramsTable";
 export function SavedDiagramsPage() {
 	const handleLoadDiagram = useCallback((diagramId: string) => {
 		// Navigate to canvas with the diagram ID as a query parameter
-		window.location.href = `/canvas?load=${diagramId}`;
+		window.location.href = `/?load=${diagramId}`;
 	}, []);
 
 	return (

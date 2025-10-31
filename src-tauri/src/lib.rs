@@ -105,6 +105,15 @@ pub struct SaveIconInput {
     pub mime_type: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct SaveIconResult {
+    pub icon_id: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub label: String,
+    pub bytes_written: usize,
+}
+
 // ============================================================================
 // Tauri Commands (Imperative Shell)
 // I/O boundary - handles database operations
@@ -117,7 +126,7 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-fn save_custom_icon(app: tauri::AppHandle, payload: SaveIconInput) -> Result<String, String> {
+fn save_custom_icon(app: tauri::AppHandle, payload: SaveIconInput) -> Result<SaveIconResult, String> {
     const MAX_FILE_SIZE: usize = 512 * 1024; // 512 KB
     const ALLOWED_MIME_TYPES: [(&str, &str); 4] = [
         ("image/png", "png"),
@@ -194,7 +203,13 @@ fn save_custom_icon(app: tauri::AppHandle, payload: SaveIconInput) -> Result<Str
         .and_then(|()| file.flush())
         .map_err(|err| format!("Failed to write icon file: {err}"))?;
 
-    Ok(format!("custom:{candidate}"))
+    Ok(SaveIconResult {
+        icon_id: format!("custom:{candidate}"),
+        filename: candidate,
+        mime_type: payload.mime_type,
+        label: stem,
+        bytes_written: payload.data.len(),
+    })
 }
 
 // ============================================================================
@@ -358,6 +373,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:c4board.db", migrations)

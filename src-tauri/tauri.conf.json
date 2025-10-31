@@ -17,7 +17,13 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self' asset: https://asset.localhost; img-src 'self' asset: https://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPLOCALDATA/**"
+        ]
+      },
       "capabilities": [
         {
           "identifier": "default",
@@ -30,7 +36,26 @@
             "sql:allow-close",
             "core:event:allow-listen",
             "core:event:allow-unlisten",
-            "core:event:allow-emit"
+            "core:event:allow-emit",
+            "core:default",
+            "core:path:default",
+            "dialog:default",
+            "dialog:allow-open",
+            "fs:default",
+            "fs:allow-read-file",
+            "fs:allow-read-dir",
+            "fs:allow-read-text-file",
+            "fs:allow-exists",
+            "fs:allow-stat",
+            "fs:allow-app-meta",
+            "fs:allow-app-meta-recursive",
+            {
+              "identifier": "fs:scope",
+              "allow": [
+                { "path": "$APPLOCALDATA" },
+                { "path": "$APPLOCALDATA/**" }
+              ]
+            }
           ]
         }
       ]
@@ -50,6 +75,7 @@
   "plugins": {
     "sql": {
       "preload": ["sqlite:c4board.db"]
-    }
+    },
+    "fs": {}
   }
 }

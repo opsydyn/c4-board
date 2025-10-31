@@ -29,12 +29,27 @@ export interface CouplingProfile {
  * Node data shape
  * Extends Record<string, unknown> to be compatible with ReactFlow's Node data type
  */
-export type NodeIconId =
+export type BuiltInIconId =
 	| "phosphor:user-duotone"
 	| "phosphor:package-duotone"
 	| "phosphor:cloud-duotone"
 	| "phosphor:stack-duotone"
 	| "phosphor:cube-duotone";
+
+export type CustomIconId = `custom:${string}`;
+
+export type NodeIconId = BuiltInIconId | CustomIconId;
+
+export const CUSTOM_ICON_PREFIX = "custom:" as const;
+
+export const isCustomIconId = (iconId: unknown): iconId is CustomIconId =>
+	typeof iconId === "string" && iconId.startsWith(CUSTOM_ICON_PREFIX);
+
+export const createCustomIconId = (filename: string): CustomIconId =>
+	`${CUSTOM_ICON_PREFIX}${filename}`;
+
+export const extractCustomIconFilename = (iconId: CustomIconId): string =>
+	iconId.slice(CUSTOM_ICON_PREFIX.length);
 
 export interface NodeData extends Record<string, unknown> {
 	label: string;
@@ -103,7 +118,7 @@ const DEFAULT_COUPLING_PROFILE: Record<C4Type, CouplingProfile> = {
 	component: { strength: 7, distance: 4, volatility: 5 },
 };
 
-export const DEFAULT_ICON_BY_TYPE: Record<C4Type, NodeIconId> = {
+export const DEFAULT_ICON_BY_TYPE: Record<C4Type, BuiltInIconId> = {
 	person: "phosphor:user-duotone",
 	system: "phosphor:package-duotone",
 	externalSystem: "phosphor:cloud-duotone",

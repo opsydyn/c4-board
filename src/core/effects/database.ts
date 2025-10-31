@@ -92,6 +92,14 @@ export interface Edge {
 	updated_at: number;
 }
 
+export interface CustomIcon {
+	id: string;
+	label: string | null;
+	filename: string;
+	mime_type: string;
+	created_at: number;
+}
+
 // ============================================================================
 // Input Types
 // ============================================================================
@@ -144,6 +152,13 @@ export interface CreateEdgeInput {
 	source: string;
 	target: string;
 	label?: string;
+}
+
+export interface UpsertCustomIconInput {
+	id: string;
+	filename: string;
+	mime_type: string;
+	label?: string | null;
 }
 
 // ============================================================================
@@ -438,4 +453,54 @@ export const deleteEdge = (id: string) =>
 		const service = yield* DatabaseService;
 
 		yield* service.execute(`DELETE FROM edges WHERE id = ?`, [id]);
+	});
+
+// ============================================================================
+// Custom Icon Operations
+// ============================================================================
+
+export const upsertCustomIcon = (input: UpsertCustomIconInput) =>
+	Effect.gen(function* () {
+		const service = yield* DatabaseService;
+		const now = Date.now();
+
+		yield* service.execute(
+			`INSERT INTO custom_icons (id, label, filename, mime_type, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         label = excluded.label,
+         filename = excluded.filename,
+         mime_type = excluded.mime_type`,
+			[
+				input.id,
+				input.label ?? null,
+				input.filename,
+				input.mime_type,
+				now,
+			],
+		);
+
+		return {
+			id: input.id,
+			label: input.label ?? null,
+			filename: input.filename,
+			mime_type: input.mime_type,
+			created_at: now,
+		} satisfies CustomIcon;
+	});
+
+export const listCustomIcons = () =>
+	Effect.gen(function* () {
+		const service = yield* DatabaseService;
+
+		return yield* service.query<CustomIcon>(
+			`SELECT * FROM custom_icons ORDER BY created_at DESC`,
+		);
+	});
+
+export const deleteCustomIcon = (id: string) =>
+	Effect.gen(function* () {
+		const service = yield* DatabaseService;
+
+		yield* service.execute(`DELETE FROM custom_icons WHERE id = ?`, [id]);
 	});

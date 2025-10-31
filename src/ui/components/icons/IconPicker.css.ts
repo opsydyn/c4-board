@@ -88,6 +88,14 @@ export const iconGrid = style({
 	overflowY: "auto",
 });
 
+export const sectionHeading = style({
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
 export const iconButton = style({
 	display: "flex",
 	flexDirection: "column",
@@ -135,4 +143,25 @@ export const footerButton = style({
 	color: theme.color.interactive.primary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
+});
+
+export const helperRow = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: theme.spacing["2"],
+});
+
+export const statusText = style({
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	letterSpacing: theme.typography.letterSpacing.normal,
+});
+
+export const errorText = style({
+	color: theme.color.status.critical,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	letterSpacing: theme.typography.letterSpacing.normal,
 });

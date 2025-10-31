@@ -12,15 +12,16 @@ name = "tauri_app_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-beta", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0-beta", features = [] }
-tauri-plugin-shell = "2.0.0-beta"
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2.4.2"
 
 [profile.release]
 panic = "abort" # Strip expensive panic clean-up logic
