@@ -34,9 +34,11 @@ import {
 	collapseHandleRight,
 	sidebarBrand,
 	sidebarBrandIcon,
+	bottomHandle,
 } from "./styles.css";
 import { BalancedMudChart } from "./BalancedMudChart";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
+import { DataBar } from "./DataBar";
 import { useDatabase } from "../../core/effects/useDatabase";
 import {
 	saveDiagram,
@@ -49,7 +51,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { NodeData } from "../../core/effects/node-operations";
 import { ToggleButton } from "react-aria-components";
-import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, CaretRightIcon, CaretUpIcon } from "@phosphor-icons/react";
 
 export function C4CanvasContainer() {
 	const [state, send] = useMachine(canvasMachine);
@@ -60,6 +62,7 @@ export function C4CanvasContainer() {
 	const [isDetailsOpen, setDetailsOpen] = useState(true);
 	const [isCompactLayout, setCompactLayout] = useState(false);
 	const [isCommandBarOpen, setCommandBarOpen] = useState(true);
+	const [isDataBarOpen, setDataBarOpen] = useState(false);
 
 	// Initialize: Load most recent diagram or create new one
 	useEffect(() => {
@@ -229,6 +232,26 @@ export function C4CanvasContainer() {
 			});
 		}
 	}, [state.context.currentDiagramId, state.context.diagramName, state.context.diagramDescription, state.context.nodes, state.context.edges, runEffect, send]);
+
+	const handleLoadDiagram = useCallback(async (diagramId: string) => {
+		try {
+			const diagram = await runEffect(loadDiagram(diagramId));
+			send({
+				type: "LOAD_DIAGRAM_SUCCESS",
+				diagram: {
+					id: diagram.id,
+					name: diagram.name,
+					nodes: diagram.nodes,
+					edges: diagram.edges,
+					updatedAt: diagram.updatedAt,
+					...(diagram.description ? { description: diagram.description } : {}),
+				},
+			});
+			setDataBarOpen(false);
+		} catch (error) {
+			console.error("❌ Failed to load diagram:", error);
+		}
+	}, [runEffect, send]);
 
 	// Handle node position/selection changes from ReactFlow
 	const onNodesChange = useCallback(
@@ -495,12 +518,14 @@ export function C4CanvasContainer() {
 	const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
 	const rightTrack =
 		!isCompactLayout && isDetailsOpen ? "minmax(300px, 360px)" : "0px";
+	const rowTrack = isDataBarOpen ? "1fr auto" : "1fr";
 
 	return (
 		<div
 			className={workspace}
 			style={{
 				gridTemplateColumns: `${leftTrack} 1fr ${rightTrack}`,
+				gridTemplateRows: rowTrack,
 			}}
 		>
 			{isSidebarOpen && (
@@ -593,6 +618,17 @@ export function C4CanvasContainer() {
 						<CaretLeftIcon size={16} weight="bold" />
 					</ToggleButton>
 				)}
+				{!isDataBarOpen && (
+					<ToggleButton
+						isSelected={isDataBarOpen}
+						onChange={(selected) => setDataBarOpen(selected)}
+						className={bottomHandle}
+						aria-label="Expand data bar"
+					>
+						<CaretUpIcon size={16} weight="bold" />
+						Data
+					</ToggleButton>
+				)}
 			</section>
 
 			{!isCompactLayout && isDetailsOpen && (
@@ -621,6 +657,14 @@ export function C4CanvasContainer() {
 						}
 					/>
 				</aside>
+			)}
+
+			{isDataBarOpen && (
+				<DataBar
+					isOpen={isDataBarOpen}
+					onToggle={setDataBarOpen}
+					onLoadDiagram={handleLoadDiagram}
+				/>
 			)}
 		</div>
 	);

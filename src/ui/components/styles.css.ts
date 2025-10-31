@@ -13,7 +13,7 @@ import { theme } from "../../styles/theme.css";
  */
 export const workspace = style({
 	display: "grid",
-	gridTemplateRows: "100%",
+	gridTemplateRows: "1fr",
 	gridTemplateColumns: "minmax(260px, 320px) 1fr minmax(300px, 360px)",
 	backgroundColor: theme.color.background.base,
 	width: "100vw",
@@ -440,6 +440,104 @@ export const commandBarHandle = style([
 		transform: "translate(-50%, 0)",
 	},
 ]);
+
+export const bottomPanel = style({
+	display: "flex",
+	flexDirection: "column",
+	gridRow: "2 / 3",
+	gridColumn: "1 / -1",
+	gap: theme.spacing["3"],
+	clipPath: theme.clipPath.lg,
+	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+	boxShadow: theme.effect.glow.md,
+	backgroundColor: "rgba(8, 14, 11, 0.96)",
+	padding: `${theme.spacing["4"]} ${theme.spacing["5"]} ${theme.spacing["5"]}`,
+	minHeight: 0,
+	overflow: "hidden",
+});
+
+export const bottomPanelHeader = style({
+	display: "flex",
+	flexWrap: "wrap",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: theme.spacing["3"],
+});
+
+export const bottomTabs = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+});
+
+export const bottomTabButton = style({
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: theme.spacing["1"],
+	transition: theme.transition.base,
+	clipPath: theme.clipPath.base,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(12, 20, 16, 0.92)",
+	cursor: "pointer",
+	padding: `${theme.spacing["1"]} ${theme.spacing["3"]}`,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.border.primary,
+			boxShadow: theme.effect.glow.sm,
+		},
+	},
+});
+
+export const bottomTabButtonActive = style({
+	borderColor: theme.color.border.primary,
+	boxShadow: theme.effect.glow.sm,
+	backgroundColor: "rgba(18, 30, 24, 0.98)",
+	color: theme.color.interactive.primary,
+});
+
+export const bottomPanelContent = style({
+	display: "flex",
+	flex: 1,
+	alignItems: "stretch",
+	width: "100%",
+	minHeight: "520px",
+	overflow: "hidden",
+});
+
+globalStyle(`${bottomPanelContent} > *`, {
+	flex: 1,
+	minWidth: 0,
+});
+
+export const bottomHandle = style([
+	collapseToggle,
+	{
+		position: "absolute",
+		zIndex: theme.zIndex.overlay,
+		bottom: theme.spacing["4"],
+		left: "50%",
+		transform: "translate(-50%, 0)",
+	},
+]);
+
+export const historyPlaceholder = style({
+	display: "flex",
+	flex: 1,
+	alignItems: "center",
+	justifyContent: "center",
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wider,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+});
 
 /**
  * Panel Title

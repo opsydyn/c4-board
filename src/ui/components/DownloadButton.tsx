@@ -4,8 +4,8 @@ import { DownloadSimpleIcon } from "@phosphor-icons/react";
 import { toolbarButton } from "./styles.css";
 import { theme } from "../../styles/theme.css";
 
-const IMAGE_WIDTH = 1280;
-const IMAGE_HEIGHT = 720;
+const EXPORT_PADDING = 96;
+const MIN_EXPORT_SIZE = 800;
 
 function downloadImage(dataUrl: string) {
 	const link = document.createElement("a");
@@ -36,17 +36,31 @@ export function DownloadButton({ variant = "panel", className }: DownloadButtonP
 		}
 
 		const bounds = getNodesBounds(nodes);
-		const viewport = getViewportForBounds(bounds, IMAGE_WIDTH, IMAGE_HEIGHT, 0.5, 2, 0.1);
+		const exportWidth = Math.max(bounds.width + EXPORT_PADDING * 2, MIN_EXPORT_SIZE);
+		const exportHeight = Math.max(bounds.height + EXPORT_PADDING * 2, MIN_EXPORT_SIZE);
+
+		const viewport = getViewportForBounds(
+			bounds,
+			exportWidth,
+			exportHeight,
+			0.5,
+			2,
+			EXPORT_PADDING,
+		);
 
 		try {
 			const dataUrl = await toPng(viewportElement, {
 				backgroundColor: theme.color.background.base,
-				width: IMAGE_WIDTH,
-				height: IMAGE_HEIGHT,
+				width: exportWidth,
+				height: exportHeight,
+				canvasWidth: exportWidth,
+				canvasHeight: exportHeight,
 				style: {
-					width: `${IMAGE_WIDTH}px`,
-					height: `${IMAGE_HEIGHT}px`,
+					width: `${exportWidth}px`,
+					height: `${exportHeight}px`,
 					transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+					transformOrigin: "0 0",
+					overflow: "visible",
 				},
 			});
 

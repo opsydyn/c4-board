@@ -5,6 +5,8 @@ export const tableContainer = style({
 	display: "flex",
 	flexDirection: "column",
 	gap: theme.spacing["4"],
+	width: "100%",
+	minWidth: 0,
 	height: "100%",
 	color: theme.color.foreground.primary,
 });
@@ -82,6 +84,7 @@ export const agGridTheme = style({
 	backgroundColor: theme.color.surface.base,
 	padding: theme.spacing["2"],
 	width: "100%",
+	minWidth: 0,
 	height: "100%",
 	minHeight: "520px",
 });

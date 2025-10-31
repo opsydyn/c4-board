@@ -11,6 +11,9 @@ export const docTableContainer = style({
 	display: "flex",
 	flexDirection: "column",
 	marginBottom: theme.spacing["6"],
+	flex: 1,
+	width: "100%",
+	minWidth: 0,
 	color: theme.color.foreground.primary,
 });
 
@@ -19,6 +22,7 @@ export const docGridTheme = style({
 	border: `${theme.border.width.base} solid ${theme.color.status.selected}`,
 	backgroundColor: theme.color.surface.base,
 	padding: theme.spacing["2"],
+	width: "100%",
 	minHeight: "auto",
 });
 

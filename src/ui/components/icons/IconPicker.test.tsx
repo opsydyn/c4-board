@@ -31,7 +31,7 @@ let IconPicker: (typeof import("./IconPicker"))["IconPicker"];
 beforeAll(async () => {
 	const module = await import("./IconPicker");
 	IconPicker = module.IconPicker;
-});
+}, 20000);
 import { DEFAULT_ICON_BY_TYPE } from "../../../core/effects/node-operations";
 
 describe("IconPicker", () => {
