@@ -1,8 +1,11 @@
-/// <reference types="vitest/config" />
-import { defineConfig } from 'vite'
+import { defineConfig } from "vitest/config";
+
 
 export default defineConfig({
-  test: {
-    // ...
-  },
-})
+
+	test: {
+		
+		environment: "jsdom",
+		setupFiles: "./tests/setup/test-setup.ts",
+	},
+});

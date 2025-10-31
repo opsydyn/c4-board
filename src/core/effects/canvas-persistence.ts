@@ -65,7 +65,7 @@ export interface SaveDiagramInput {
 /**
  * Convert database node to ReactFlow node format
  */
-function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
+export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 	const fallbackIcon = getDefaultIconId(dbNode.type as C4Type);
 	const node: ReactFlowNode = {
 		id: dbNode.id,
@@ -114,7 +114,7 @@ function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 /**
  * Convert ReactFlow node to database node format
  */
-function reactFlowNodeToDb(
+export function reactFlowNodeToDb(
 	node: ReactFlowNode,
 	diagramId: string,
 ): CreateNodeInput {
