@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { Node } from "@xyflow/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createGraphFixture } from "../../../tests/fixtures";
-import type { C4Type, NodeData } from "./node-operations";
+import { DEFAULT_ICON_BY_TYPE, type C4Type, type NodeData } from "./node-operations";
 
 
 vi.mock("nanoid", () => ({ nanoid: vi.fn(() => "fixed-node-id") }));
@@ -20,6 +20,7 @@ const buildNodeData = (type: C4Type, overrides: Partial<NodeData> = {}): NodeDat
 	technology: "",
 	c4Type: type,
 	...overrides,
+	iconId: overrides.iconId ?? DEFAULT_ICON_BY_TYPE[type],
 });
 
 describe("createNode", () => {
@@ -42,14 +43,15 @@ describe("createNode", () => {
 			existingNodes: [],
 		});
 
-		const node = Effect.runSync(effect);
+	const node = Effect.runSync(effect);
 
-		expect(node.id).toBe("system-fixed-node-id");
-		expect(node.type).toBe("system");
-		expect(node.position).toEqual({ x: 240, y: 200 });
-		expect(node.data.label).toBe("New System");
-		expect(node.data.createdAt).toBe(fixedNow);
-		expect(node).not.toHaveProperty("parentId");
+	expect(node.id).toBe("system-fixed-node-id");
+	expect(node.type).toBe("system");
+	expect(node.position).toEqual({ x: 240, y: 200 });
+	expect(node.data.label).toBe("New System");
+	expect(node.data.createdAt).toBe(fixedNow);
+	expect(node.data.iconId).toBe(DEFAULT_ICON_BY_TYPE.system);
+	expect(node).not.toHaveProperty("parentId");
 	});
 
 	it("creates a child component inside a selected container", () => {

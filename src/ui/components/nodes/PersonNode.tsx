@@ -5,7 +5,6 @@
  * Styled as a blue box with an icon.
  */
 
-import {  UserIcon } from "@phosphor-icons/react";
 import type { NodeProps } from "@xyflow/react";
 import { Handle, Position } from "@xyflow/react";
 import {
@@ -16,11 +15,14 @@ import {
 	personNodeLabel,
 	personNodeTechnology,
 } from "./styles.css";
+import { getNodeIconComponent } from "../../icons/nodeIcons";
+import type { NodeIconId } from "../../../core/effects/node-operations";
 
 interface PersonNodeData {
 	label?: string;
 	technology?: string;
 	description?: string;
+	iconId?: NodeIconId;
 }
 
 function isPersonNodeData(value: unknown): value is PersonNodeData {
@@ -29,17 +31,19 @@ function isPersonNodeData(value: unknown): value is PersonNodeData {
 	}
 
 	const record = value as Record<string, unknown>;
-	const { label, technology, description } = record;
+	const { label, technology, description, iconId } = record;
 
 	return (
 		(label === undefined || typeof label === "string") &&
 		(technology === undefined || typeof technology === "string") &&
-		(description === undefined || typeof description === "string")
+		(description === undefined || typeof description === "string") &&
+		(iconId === undefined || typeof iconId === "string")
 	);
 }
 
 export function PersonNode({ data, selected }: NodeProps) {
 	const nodeData: PersonNodeData = isPersonNodeData(data) ? data : {};
+	const Icon = getNodeIconComponent(nodeData.iconId, "person");
 
 	return (
 		<div className={personNode} data-selected={selected}>
@@ -50,7 +54,7 @@ export function PersonNode({ data, selected }: NodeProps) {
 			{/* Header: Icon + Label inline */}
 			<div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
 				<div className={personNodeIcon}>
-					<UserIcon size={24} weight="duotone" />
+					<Icon size={24} weight="duotone" />
 				</div>
 				<div className={personNodeLabel}>{nodeData.label ?? "Unnamed"}</div>
 			</div>

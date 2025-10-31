@@ -34,6 +34,7 @@ import {
 	deleteEdge,
 	NotFoundError,
 } from "./database";
+import { getDefaultIconId, type C4Type, type NodeIconId } from "./node-operations";
 
 // ============================================================================
 // Type Definitions
@@ -65,6 +66,7 @@ export interface SaveDiagramInput {
  * Convert database node to ReactFlow node format
  */
 function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
+	const fallbackIcon = getDefaultIconId(dbNode.type as C4Type);
 	const node: ReactFlowNode = {
 		id: dbNode.id,
 		type: dbNode.type,
@@ -72,14 +74,15 @@ function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 			x: dbNode.position_x,
 			y: dbNode.position_y,
 		},
-	data: {
-		label: dbNode.label,
-		technology: dbNode.technology ?? undefined,
-		description: dbNode.description ?? undefined,
-		c4Type: dbNode.type,
-		createdAt: dbNode.created_at,
-	},
-};
+		data: {
+			label: dbNode.label,
+			technology: dbNode.technology ?? undefined,
+			description: dbNode.description ?? undefined,
+			c4Type: dbNode.type,
+			createdAt: dbNode.created_at,
+			iconId: (dbNode.icon_id as NodeIconId | null) ?? fallbackIcon,
+		},
+	};
 
 	if (dbNode.width !== null) {
 		node.width = dbNode.width;
@@ -133,6 +136,11 @@ function reactFlowNodeToDb(
 		typeof technologyValue === "string" ? technologyValue : undefined;
 	const description =
 		typeof descriptionValue === "string" ? descriptionValue : undefined;
+	const iconValue =
+		typeof dataRecord.iconId === "string" && dataRecord.iconId.length > 0
+			? (dataRecord.iconId as string)
+			: undefined;
+	const resolvedIconId = iconValue ?? getDefaultIconId(resolvedType as C4Type);
 	const label =
 		typeof labelValue === "string" && labelValue.length > 0
 			? labelValue
@@ -153,6 +161,7 @@ function reactFlowNodeToDb(
 		...(node.parentId !== undefined ? { parent_id: node.parentId } : {}),
 		...(node.extent !== undefined ? { extent: node.extent as "parent" } : {}),
 		...(node.expandParent !== undefined ? { expand_parent: node.expandParent } : {}),
+		...(resolvedIconId !== undefined ? { icon_id: resolvedIconId } : {}),
 	};
 }
 
@@ -261,22 +270,23 @@ export const saveDiagram = (input: SaveDiagramInput) =>
 
 		if (nodeExists) {
 			// Update existing node
-			const updateNodePayload: UpdateNodeInput = {
-				label: dbNodeInput.label,
-				position_x: dbNodeInput.position_x,
-				position_y: dbNodeInput.position_y,
-				...(dbNodeInput.technology !== undefined
-					? { technology: dbNodeInput.technology }
-					: {}),
-				...(dbNodeInput.description !== undefined
-					? { description: dbNodeInput.description }
-					: {}),
-				...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
-				...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
-				...(dbNodeInput.parent_id !== undefined ? { parent_id: dbNodeInput.parent_id } : {}),
-				...(dbNodeInput.extent !== undefined ? { extent: dbNodeInput.extent } : {}),
-				...(dbNodeInput.expand_parent !== undefined ? { expand_parent: dbNodeInput.expand_parent } : {}),
-			};
+		const updateNodePayload: UpdateNodeInput = {
+			label: dbNodeInput.label,
+			position_x: dbNodeInput.position_x,
+			position_y: dbNodeInput.position_y,
+			...(dbNodeInput.technology !== undefined
+				? { technology: dbNodeInput.technology }
+				: {}),
+			...(dbNodeInput.description !== undefined
+				? { description: dbNodeInput.description }
+				: {}),
+			...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
+			...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
+			...(dbNodeInput.parent_id !== undefined ? { parent_id: dbNodeInput.parent_id } : {}),
+			...(dbNodeInput.extent !== undefined ? { extent: dbNodeInput.extent } : {}),
+			...(dbNodeInput.expand_parent !== undefined ? { expand_parent: dbNodeInput.expand_parent } : {}),
+			...(dbNodeInput.icon_id !== undefined ? { icon_id: dbNodeInput.icon_id } : {}),
+		};
 
 			yield* updateNode(node.id, updateNodePayload);
 		} else {

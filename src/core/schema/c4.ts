@@ -164,6 +164,7 @@ export const ReactFlowNodeData = S.Struct({
 	description: S.optional(S.String),
 	technology: S.optional(S.String),
 	c4Type: C4ElementType,
+	iconId: S.optional(S.String),
 });
 
 export type ReactFlowNodeData = S.Schema.Type<typeof ReactFlowNodeData>;

@@ -253,6 +253,12 @@ pub fn run() {
             sql: include_str!("../migrations/005_add_node_parent_fields.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "add_node_icons",
+            sql: include_str!("../migrations/006_add_node_icons.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

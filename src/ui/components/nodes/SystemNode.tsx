@@ -5,7 +5,6 @@
  * Styled as a gray/blue box.
  */
 
-import {  PackageIcon } from "@phosphor-icons/react";
 import type { NodeProps } from "@xyflow/react";
 import { Handle, Position } from "@xyflow/react";
 import {
@@ -16,11 +15,14 @@ import {
 	systemNodeLabel,
 	systemNodeTechnology,
 } from "./styles.css";
+import { getNodeIconComponent } from "../../icons/nodeIcons";
+import type { NodeIconId } from "../../../core/effects/node-operations";
 
 interface SystemNodeData {
 	label?: string;
 	technology?: string;
 	description?: string;
+	iconId?: NodeIconId;
 }
 
 function isSystemNodeData(value: unknown): value is SystemNodeData {
@@ -29,17 +31,19 @@ function isSystemNodeData(value: unknown): value is SystemNodeData {
 	}
 
 	const record = value as Record<string, unknown>;
-	const { label, technology, description } = record;
+	const { label, technology, description, iconId } = record;
 
 	return (
 		(label === undefined || typeof label === "string") &&
 		(technology === undefined || typeof technology === "string") &&
-		(description === undefined || typeof description === "string")
+		(description === undefined || typeof description === "string") &&
+		(iconId === undefined || typeof iconId === "string")
 	);
 }
 
 export function SystemNode({ data, selected }: NodeProps) {
 	const nodeData: SystemNodeData = isSystemNodeData(data) ? data : {};
+	const Icon = getNodeIconComponent(nodeData.iconId, "system");
 
 	return (
 		<div className={systemNode} data-selected={selected}>
@@ -48,10 +52,10 @@ export function SystemNode({ data, selected }: NodeProps) {
 			<Handle type="target" position={Position.Left} id="left" />
 
 			{/* Header: Icon + Label inline */}
-			<div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
-				<div className={systemNodeIcon}>
-					<PackageIcon size={24} weight="duotone" />
-				</div>
+		<div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+			<div className={systemNodeIcon}>
+				<Icon size={24} weight="duotone" />
+			</div>
 				<div className={systemNodeLabel}>{nodeData.label ?? "Unnamed"}</div>
 			</div>
 

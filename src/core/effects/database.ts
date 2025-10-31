@@ -77,6 +77,7 @@ export interface Node {
 	parent_id: string | null;
 	extent: "parent" | null;
 	expand_parent: number;
+	icon_id: string | null;
 	created_at: number;
 	updated_at: number;
 }
@@ -120,6 +121,7 @@ export interface CreateNodeInput {
 	parent_id?: string;
 	extent?: "parent";
 	expand_parent?: boolean;
+	icon_id?: string;
 }
 
 export interface UpdateNodeInput {
@@ -133,6 +135,7 @@ export interface UpdateNodeInput {
 	parent_id?: string;
 	extent?: "parent";
 	expand_parent?: boolean;
+	icon_id?: string | null;
 }
 
 export interface CreateEdgeInput {
@@ -259,9 +262,9 @@ export const createNode = (input: CreateNodeInput) =>
 		const service = yield* DatabaseService;
 		const now = Date.now();
 
-		yield* service.execute(
-			`INSERT INTO nodes (id, diagram_id, type, label, technology, description, position_x, position_y, width, height, parent_id, extent, expand_parent, created_at, updated_at)
-	       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	yield* service.execute(
+		`INSERT INTO nodes (id, diagram_id, type, label, technology, description, position_x, position_y, width, height, parent_id, extent, expand_parent, icon_id, created_at, updated_at)
+	       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				input.id,
 				input.diagram_id,
@@ -275,11 +278,12 @@ export const createNode = (input: CreateNodeInput) =>
 				input.height ?? null,
 				input.parent_id ?? null,
 				input.extent ?? null,
-				input.expand_parent ? 1 : 0,
-				now,
-				now,
-			],
-		);
+			input.expand_parent ? 1 : 0,
+			input.icon_id ?? null,
+			now,
+			now,
+		],
+	);
 
 		return {
 			id: input.id,
@@ -292,12 +296,13 @@ export const createNode = (input: CreateNodeInput) =>
 			position_y: input.position_y,
 			width: input.width ?? null,
 			height: input.height ?? null,
-			parent_id: input.parent_id ?? null,
-			extent: input.extent ?? null,
-			expand_parent: input.expand_parent ? 1 : 0,
-			created_at: now,
-			updated_at: now,
-		} satisfies Node;
+		parent_id: input.parent_id ?? null,
+		extent: input.extent ?? null,
+		expand_parent: input.expand_parent ? 1 : 0,
+		icon_id: input.icon_id ?? null,
+		created_at: now,
+		updated_at: now,
+	} satisfies Node;
 	});
 
 export const getNodesByDiagram = (diagramId: string) =>
@@ -354,10 +359,14 @@ export const updateNode = (id: string, input: UpdateNodeInput) =>
 			updates.push("extent = ?");
 			values.push(input.extent ?? null);
 		}
-		if (input.expand_parent !== undefined) {
-			updates.push("expand_parent = ?");
-			values.push(input.expand_parent ? 1 : 0);
-		}
+	if (input.expand_parent !== undefined) {
+		updates.push("expand_parent = ?");
+		values.push(input.expand_parent ? 1 : 0);
+	}
+	if (input.icon_id !== undefined) {
+		updates.push("icon_id = ?");
+		values.push(input.icon_id ?? null);
+	}
 
 		if (updates.length === 0) {
 			return;

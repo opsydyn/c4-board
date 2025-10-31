@@ -5,7 +5,6 @@
  * Styled as a resizable dashed border box that can group child nodes.
  */
 
-import { Stack } from "@phosphor-icons/react";
 import type { NodeProps } from "@xyflow/react";
 import { Handle, Position, NodeResizer } from "@xyflow/react";
 import {
@@ -16,11 +15,14 @@ import {
 	containerNodeTechnology,
 	containerNodeDescription,
 } from "./styles.css";
+import { getNodeIconComponent } from "../../icons/nodeIcons";
+import type { NodeIconId } from "../../../core/effects/node-operations";
 
 interface ContainerNodeData {
 	label?: string;
 	technology?: string;
 	description?: string;
+	iconId?: NodeIconId;
 }
 
 function isContainerNodeData(value: unknown): value is ContainerNodeData {
@@ -29,17 +31,19 @@ function isContainerNodeData(value: unknown): value is ContainerNodeData {
 	}
 
 	const record = value as Record<string, unknown>;
-	const { label, technology, description } = record;
+	const { label, technology, description, iconId } = record;
 
 	return (
 		(label === undefined || typeof label === "string") &&
 		(technology === undefined || typeof technology === "string") &&
-		(description === undefined || typeof description === "string")
+		(description === undefined || typeof description === "string") &&
+		(iconId === undefined || typeof iconId === "string")
 	);
 }
 
 export function ContainerNode({ data, selected }: NodeProps) {
 	const nodeData: ContainerNodeData = isContainerNodeData(data) ? data : {};
+	const Icon = getNodeIconComponent(nodeData.iconId, "container");
 
 	return (
 		<>
@@ -58,9 +62,9 @@ export function ContainerNode({ data, selected }: NodeProps) {
 
 				{/* Header with icon and label */}
 				<div className={containerNodeHeader}>
-					<div className={containerNodeIcon}>
-						<Stack size={24} weight="duotone" />
-					</div>
+			<div className={containerNodeIcon}>
+				<Icon size={24} weight="duotone" />
+			</div>
 					<div>
 						<div className={containerNodeLabel}>{nodeData.label ?? "Container"}</div>
 						{nodeData.technology && (

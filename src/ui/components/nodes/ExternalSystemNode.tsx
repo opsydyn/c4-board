@@ -5,7 +5,6 @@
  * Styled as a gray box with dashed border.
  */
 
-import { Cloud as CloudIcon } from "@phosphor-icons/react";
 import type { NodeProps } from "@xyflow/react";
 import { Handle, Position } from "@xyflow/react";
 import {
@@ -16,11 +15,14 @@ import {
 	externalSystemNodeTechnology,
 	nodeContent,
 } from "./styles.css";
+import { getNodeIconComponent } from "../../icons/nodeIcons";
+import type { NodeIconId } from "../../../core/effects/node-operations";
 
 interface ExternalSystemNodeData {
 	label?: string;
 	technology?: string;
 	description?: string;
+	iconId?: NodeIconId;
 }
 
 function isExternalSystemNodeData(value: unknown): value is ExternalSystemNodeData {
@@ -29,13 +31,14 @@ function isExternalSystemNodeData(value: unknown): value is ExternalSystemNodeDa
 	}
 
 	const record = value as Record<string, unknown>;
-	const { label, technology, description } = record;
+const { label, technology, description, iconId } = record;
 
-	return (
-		(label === undefined || typeof label === "string") &&
-		(technology === undefined || typeof technology === "string") &&
-		(description === undefined || typeof description === "string")
-	);
+return (
+	(label === undefined || typeof label === "string") &&
+	(technology === undefined || typeof technology === "string") &&
+	(description === undefined || typeof description === "string") &&
+	(iconId === undefined || typeof iconId === "string")
+);
 }
 
 export function ExternalSystemNode({
@@ -43,6 +46,7 @@ export function ExternalSystemNode({
 	selected,
 }: NodeProps) {
 	const nodeData: ExternalSystemNodeData = isExternalSystemNodeData(data) ? data : {};
+	const Icon = getNodeIconComponent(nodeData.iconId, "externalSystem");
 
 	return (
 		<div className={externalSystemNode} data-selected={selected}>
@@ -51,10 +55,10 @@ export function ExternalSystemNode({
 			<Handle type="target" position={Position.Left} id="left" />
 
 			{/* Header: Icon + Label inline */}
-			<div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
-				<div className={externalSystemNodeIcon}>
-					<CloudIcon size={24} weight="duotone" />
-				</div>
+		<div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+			<div className={externalSystemNodeIcon}>
+				<Icon size={24} weight="duotone" />
+			</div>
 				<div className={externalSystemNodeLabel}>{nodeData.label ?? "Unnamed"}</div>
 			</div>
 

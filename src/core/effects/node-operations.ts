@@ -29,6 +29,13 @@ export interface CouplingProfile {
  * Node data shape
  * Extends Record<string, unknown> to be compatible with ReactFlow's Node data type
  */
+export type NodeIconId =
+	| "phosphor:user-duotone"
+	| "phosphor:package-duotone"
+	| "phosphor:cloud-duotone"
+	| "phosphor:stack-duotone"
+	| "phosphor:cube-duotone";
+
 export interface NodeData extends Record<string, unknown> {
 	label: string;
 	description: string;
@@ -38,6 +45,7 @@ export interface NodeData extends Record<string, unknown> {
 	subdomainType?: SubdomainType;
 	integrationType?: IntegrationType;
 	couplingProfile?: CouplingProfile;
+	iconId?: NodeIconId;
 }
 
 /**
@@ -95,6 +103,14 @@ const DEFAULT_COUPLING_PROFILE: Record<C4Type, CouplingProfile> = {
 	component: { strength: 7, distance: 4, volatility: 5 },
 };
 
+export const DEFAULT_ICON_BY_TYPE: Record<C4Type, NodeIconId> = {
+	person: "phosphor:user-duotone",
+	system: "phosphor:package-duotone",
+	externalSystem: "phosphor:cloud-duotone",
+	container: "phosphor:stack-duotone",
+	component: "phosphor:cube-duotone",
+};
+
 const snapToGrid = (value: number): number =>
 	Math.round(value / GRID_SIZE) * GRID_SIZE;
 
@@ -106,6 +122,9 @@ const resolveType = (node: Node): C4Type => {
 
 const getTypeDimensions = (type: C4Type): { width: number; height: number } =>
 	DEFAULT_DIMENSIONS[type] ?? DEFAULT_DIMENSIONS.default;
+
+export const getDefaultIconId = (type: C4Type): NodeIconId =>
+	DEFAULT_ICON_BY_TYPE[type] ?? DEFAULT_ICON_BY_TYPE.system;
 
 export const getDefaultSubdomainType = (type: C4Type): SubdomainType =>
 	DEFAULT_SUBDOMAIN[type] ?? "supporting";
@@ -338,24 +357,25 @@ export const createNode = (options: CreateNodeOptions): Effect.Effect<Node> => {
 
 		const subdomainType = getDefaultSubdomainType(type);
 		const integrationType = getDefaultIntegrationType(type);
-		const couplingProfile = getDefaultCouplingProfile(type);
-		const createdAt = Date.now();
+	const couplingProfile = getDefaultCouplingProfile(type);
+	const createdAt = Date.now();
 
-		// Build node
-		const node: Node = {
+	// Build node
+	const node: Node = {
 			id,
 			type: type === "externalSystem" ? "externalSystem" : type,
 			position,
-			data: {
-				label: finalLabel,
-				description: "",
-				technology: "",
-				c4Type: type,
-				createdAt,
-				subdomainType,
-				integrationType,
-				couplingProfile,
-			} as NodeData,
+		data: {
+			label: finalLabel,
+			description: "",
+			technology: "",
+			c4Type: type,
+			createdAt,
+			subdomainType,
+			integrationType,
+			couplingProfile,
+			iconId: getDefaultIconId(type),
+		} as NodeData,
 			...(size && { style: size }),
 			...(parentRelationship && parentRelationship),
 		};

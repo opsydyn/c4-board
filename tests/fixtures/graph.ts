@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { NodeData } from "../../src/core/effects/node-operations";
+import { DEFAULT_ICON_BY_TYPE } from "../../src/core/effects/node-operations";
 
 /**
  * Minimal node fixture set used across suites. Mirrors the default types created
@@ -16,6 +17,7 @@ export const sampleNodes: Node<NodeData>[] = [
 			technology: "Human",
 			c4Type: "person",
 			createdAt: Date.now() - 60_000,
+			iconId: DEFAULT_ICON_BY_TYPE.person,
 		},
 	},
 	{
@@ -28,6 +30,7 @@ export const sampleNodes: Node<NodeData>[] = [
 			technology: "Rust",
 			c4Type: "system",
 			createdAt: Date.now() - 30_000,
+			iconId: DEFAULT_ICON_BY_TYPE.system,
 		},
 	},
 	{
@@ -40,6 +43,7 @@ export const sampleNodes: Node<NodeData>[] = [
 			technology: "TypeScript",
 			c4Type: "container",
 			createdAt: Date.now() - 10_000,
+			iconId: DEFAULT_ICON_BY_TYPE.container,
 		},
 	},
 ];
