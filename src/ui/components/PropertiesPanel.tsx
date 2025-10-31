@@ -14,6 +14,7 @@ import {
 	propertiesPanel,
 	textarea,
 } from "./styles.css";
+import { IconPicker } from "./icons/IconPicker";
 
 interface PropertiesPanelProps {
 	selectedNode: Node<NodeData> | null;
@@ -33,6 +34,12 @@ export function PropertiesPanel({
 	return (
 		<div className={propertiesPanel}>
 			<h3 className={panelTitle}>MODE::EDIT {selectedNode.data?.c4Type}</h3>
+
+			<IconPicker
+				type={selectedNode.data?.c4Type ?? "system"}
+				value={selectedNode.data?.iconId}
+				onChange={(iconId) => onUpdateNode(selectedNode.id, { iconId })}
+			/>
 
 			<div className={formGroup}>
 				<label className={label} htmlFor="node-label">
