@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::{fs, io::Write, path::Path};
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 use tauri_plugin_sql::{Migration, MigrationKind};
@@ -97,6 +98,13 @@ pub struct CreateEdgeInput {
     pub label: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SaveIconInput {
+    pub filename: String,
+    pub data: Vec<u8>,
+    pub mime_type: String,
+}
+
 // ============================================================================
 // Tauri Commands (Imperative Shell)
 // I/O boundary - handles database operations
@@ -106,6 +114,87 @@ pub struct CreateEdgeInput {
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[tauri::command]
+fn save_custom_icon(app: tauri::AppHandle, payload: SaveIconInput) -> Result<String, String> {
+    const MAX_FILE_SIZE: usize = 512 * 1024; // 512 KB
+    const ALLOWED_MIME_TYPES: [(&str, &str); 4] = [
+        ("image/png", "png"),
+        ("image/svg+xml", "svg"),
+        ("image/webp", "webp"),
+        ("image/jpeg", "jpg"),
+    ];
+
+    let mime = payload.mime_type.trim();
+    let ext_from_mime = ALLOWED_MIME_TYPES
+        .iter()
+        .find(|(allowed, _)| *allowed == mime)
+        .map(|(_, ext)| *ext);
+
+    if ext_from_mime.is_none() {
+        return Err(format!("Unsupported mime type: {}", payload.mime_type));
+    }
+
+    if payload.data.len() > MAX_FILE_SIZE {
+        return Err("Icon file too large (max 512KB)".into());
+    }
+
+    let mut icon_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|err| format!("Could not resolve app data directory: {err}"))?;
+    icon_dir.push("icons");
+
+    fs::create_dir_all(&icon_dir)
+        .map_err(|err| format!("Failed to create icon directory: {err}"))?;
+
+    let original = payload.filename.to_lowercase();
+    let path = Path::new(&original);
+
+    let sanitize = |component: &str| -> String {
+        component
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+            .collect::<String>()
+    };
+
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(sanitize)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "icon".to_string());
+
+    let mut extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(sanitize)
+        .filter(|s| !s.is_empty())
+        .or(ext_from_mime.map(|ext| ext.to_string()))
+        .unwrap_or_else(|| "bin".to_string());
+
+    if extension == "jpeg" {
+        // prefer .jpg for jpeg files
+        extension = "jpg".to_string();
+    }
+
+    let mut candidate = format!("{stem}.{extension}");
+    let mut target = icon_dir.join(&candidate);
+    let mut counter = 1;
+    while target.exists() {
+        candidate = format!("{stem}-{counter}.{extension}");
+        target = icon_dir.join(&candidate);
+        counter += 1;
+    }
+
+    let mut file =
+        fs::File::create(&target).map_err(|err| format!("Failed to create icon file: {err}"))?;
+    file.write_all(&payload.data)
+        .and_then(|()| file.flush())
+        .map_err(|err| format!("Failed to write icon file: {err}"))?;
+
+    Ok(format!("custom:{candidate}"))
 }
 
 // ============================================================================
@@ -259,16 +348,23 @@ pub fn run() {
             sql: include_str!("../migrations/006_add_node_icons.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "create_custom_icons_table",
+            sql: include_str!("../migrations/007_create_custom_icons_table.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:c4board.db", migrations)
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, save_custom_icon])
         .setup(|app| {
             // Build and set the native menu
             let menu = build_menu(app.handle())?;
