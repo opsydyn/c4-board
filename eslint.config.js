@@ -4,9 +4,11 @@ import { defineConfig } from "eslint/config";
 import pluginReact from "eslint-plugin-react";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import * as effectEslint from "@effect/eslint-plugin"
 
 export default defineConfig([
 	{
+		  ...effectEslint.configs.dprint,
 		files: ["**/*.css.ts"],
 		ignores: ["src/**/theme-contract.css.ts"],
 		plugins: {
