@@ -1,4 +1,4 @@
-import { Context, Data, Duration, Effect, Layer, Match } from "effect";
+import { Context, Data, Duration, Effect, Layer, Match, Array } from "effect";
 import type { EnvironmentVariable, RequestHeader } from "./schema";
 import {
 	type HttpMethod,
@@ -216,10 +216,12 @@ export const prepareRequest = (
 // =============================================================================
 
 const toFetchInit = (request: PreparedRequest): RequestInit => {
-	const headers = request.headers.reduce<Record<string, string>>((acc, row) => {
-		acc[row.key] = row.value;
-		return acc;
-	}, {});
+	// Use Array.reduce with Record combine (functional approach)
+	const headers = Array.reduce(
+		request.headers,
+		{} as Record<string, string>,
+		(acc, row) => ({ ...acc, [row.key]: row.value }),
+	);
 
 	const method = request.method;
 
