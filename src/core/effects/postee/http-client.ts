@@ -1,4 +1,5 @@
-import { Context, Data, Duration, Effect, Layer, Match, Array } from "effect";
+import { Context, Data, Duration, Effect, Layer, Match } from "effect";
+import { Semigroup } from "@effect/typeclass";
 import type { EnvironmentVariable, RequestHeader } from "./schema";
 import {
 	type HttpMethod,
@@ -215,12 +216,17 @@ export const prepareRequest = (
 // Live Layer
 // =============================================================================
 
+/**
+ * Semigroup for combining header records (last value wins)
+ */
+const HeaderRecordSemigroup: Semigroup.Semigroup<Record<string, string>> =
+	Semigroup.make((a, b) => ({ ...a, ...b }));
+
 const toFetchInit = (request: PreparedRequest): RequestInit => {
-	// Use Array.reduce with Record combine (functional approach)
-	const headers = Array.reduce(
-		request.headers,
+	// Use Semigroup to combine headers (functional approach)
+	const headers = request.headers.reduce(
+		(acc, row) => HeaderRecordSemigroup.combine(acc, { [row.key]: row.value }),
 		{} as Record<string, string>,
-		(acc, row) => ({ ...acc, [row.key]: row.value }),
 	);
 
 	const method = request.method;
