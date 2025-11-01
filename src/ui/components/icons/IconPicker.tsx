@@ -2,9 +2,7 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
-	useRef,
 	useState,
-	type ChangeEvent,
 } from "react";
 import {
 	MagnifyingGlassIcon,
@@ -87,28 +85,6 @@ const deriveLabelFromFilename = (filename: string): string => {
 	return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-const normalizeMimeType = (file: File): string => {
-	const reported = file.type?.toLowerCase() ?? "";
-	if (reported && ALLOWED_MIME_TYPES.has(reported)) {
-		return reported;
-	}
-
-	const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-	switch (extension) {
-		case "png":
-			return "image/png";
-		case "svg":
-			return "image/svg+xml";
-		case "webp":
-			return "image/webp";
-		case "jpg":
-		case "jpeg":
-			return "image/jpeg";
-		default:
-			return reported;
-	}
-};
-
 const mapCustomIcons = (records: CustomIconRecord[]): CustomIconOption[] =>
 	records
 		.filter((record): record is CustomIconRecord & { id: CustomIconId } =>
@@ -130,7 +106,6 @@ interface IconPickerProps {
 
 export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) {
 	const { runEffect } = useDatabase();
-	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const [filter, setFilter] = useState("");
 	const [customIcons, setCustomIcons] = useState<CustomIconOption[]>([]);
 	const [isOpen, setIsOpen] = useState(false);

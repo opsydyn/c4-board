@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Stack, Package as PackageIcon } from "@phosphor-icons/react";
+import { StackIcon, PackageIcon } from "@phosphor-icons/react";
 import {
 	getNodeIconComponent,
 	resolveNodeIconId,
@@ -24,7 +24,7 @@ describe("resolveNodeIconId", () => {
 describe("getNodeIconComponent", () => {
 	it("returns the registered icon component when available", () => {
 		const Component = getNodeIconComponent("phosphor:stack-duotone", "container");
-		expect(Component).toBe(Stack);
+		expect(Component).toBe(StackIcon);
 	});
 
 	it("returns the fallback icon component when id is unregistered", () => {

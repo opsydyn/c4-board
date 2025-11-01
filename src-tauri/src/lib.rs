@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::{fs, io::Write, path::Path};
+use std::{fs, io::Write, path::Path, time::Duration};
+use tauri::async_runtime::spawn;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Listener, Manager};
+use tokio::time::sleep;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 // ============================================================================
@@ -126,7 +128,10 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-fn save_custom_icon(app: tauri::AppHandle, payload: SaveIconInput) -> Result<SaveIconResult, String> {
+fn save_custom_icon(
+    app: tauri::AppHandle,
+    payload: SaveIconInput,
+) -> Result<SaveIconResult, String> {
     const MAX_FILE_SIZE: usize = 512 * 1024; // 512 KB
     const ALLOWED_MIME_TYPES: [(&str, &str); 4] = [
         ("image/png", "png"),
@@ -385,6 +390,37 @@ pub fn run() {
             // Build and set the native menu
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
+
+            let handle = app.handle().clone();
+            app.listen_any("frontend:ready", move |_| {
+                let handle = handle.clone();
+                spawn(async move {
+                    sleep(Duration::from_millis(420)).await;
+
+                    if let Some(splash) = handle.get_webview_window("splashscreen") {
+                        let _ = splash.close();
+                    }
+
+                    if let Some(main) = handle.get_webview_window("main") {
+                        let _ = main.show();
+                        let _ = main.set_focus();
+                    }
+                });
+            });
+
+            {
+                let handle = app.handle().clone();
+                spawn(async move {
+                    sleep(Duration::from_secs(10)).await;
+                    if let Some(main) = handle.get_webview_window("main") {
+                        let _ = main.show();
+                        let _ = main.set_focus();
+                    }
+                    if let Some(splash) = handle.get_webview_window("splashscreen") {
+                        let _ = splash.close();
+                    }
+                });
+            }
 
             // Handle menu events
             app.on_menu_event(|app, event| {

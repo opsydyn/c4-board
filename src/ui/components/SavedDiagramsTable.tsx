@@ -13,7 +13,7 @@ import {
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react";
-import "ag-grid-community/styles/ag-theme-quartz.css";
+import { themeQuartz } from 'ag-grid-community';
 import { useDatabase } from "../../core/effects/useDatabase";
 import { getDiagramStats, listAllDiagrams } from "../../core/effects/canvas-persistence";
 import { DiagramStatsPopover } from "./DiagramStatsPopover";
@@ -162,15 +162,14 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 		if (!gridApiRef.current) {
 			return;
 		}
-		if (loading) {
-			gridApiRef.current.showLoadingOverlay();
-			return;
-		}
+		gridApiRef.current.setGridOption("loading", loading);
+
 		if (error) {
 			gridApiRef.current.showNoRowsOverlay();
 			return;
 		}
-		if (rows.length === 0) {
+
+		if (rows.length === 0 && !loading) {
 			gridApiRef.current.showNoRowsOverlay();
 		} else {
 			gridApiRef.current.hideOverlay();
@@ -259,9 +258,7 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 
 	const onGridReady = useCallback((event: GridReadyEvent<DiagramRow>) => {
 		gridApiRef.current = event.api;
-		if (loading) {
-			event.api.showLoadingOverlay();
-		}
+		event.api.setGridOption("loading", loading);
 	}, [loading]);
 
 	const handleQuickFilterChange = useCallback(
@@ -306,22 +303,6 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 		[],
 	);
 
-	const statusBar = useMemo(
-		() => ({
-			statusPanels: [
-				{
-					statusPanel: "agTotalAndFilteredRowCountComponent",
-					align: "left",
-				},
-				{
-					statusPanel: "agSelectedRowCountComponent",
-					align: "center",
-				},
-			],
-		}),
-		[],
-	);
-
 	if (error) {
 		return (
 			<div className={errorAlert} role="alert">
@@ -351,14 +332,14 @@ export function SavedDiagramsTable({ onLoadDiagram }: SavedDiagramsTableProps) {
 				</label>
 			</div>
 			<div className={`${agGridTheme} ag-theme-quartz`}>
-				<AgGridReact<DiagramRow>
-					rowData={rows}
-					columnDefs={columnDefs}
-					defaultColDef={defaultColDef}
-					rowSelection={rowSelection}
-					selectionColumnDef={selectionColumnDef}
-					statusBar={statusBar}
-					rowClassRules={{
+			<AgGridReact<DiagramRow>
+				theme={themeQuartz}
+				rowData={rows}
+				columnDefs={columnDefs}
+				defaultColDef={defaultColDef}
+				rowSelection={rowSelection}
+				selectionColumnDef={selectionColumnDef}
+				rowClassRules={{
 						"complexity-low": (params) =>
 							params.data?.complexity !== undefined &&
 							params.data.complexity >= 0 &&

@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
-import { Info } from "@phosphor-icons/react";
+import { InfoIcon } from "@phosphor-icons/react";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { getDiagramStats } from "../../core/effects/canvas-persistence";
 import {
@@ -74,7 +74,7 @@ export function DiagramStatsPopover({ diagramId }: DiagramStatsPopoverProps) {
 				onPress={() => void loadStats()}
 				aria-label="Show diagram statistics"
 			>
-				<Info size={16} weight="bold" />
+				<InfoIcon size={16} weight="bold" />
 			</Button>
 			<Popover className={popoverContainer} placement="left">
 				<Dialog className={popoverContent}>

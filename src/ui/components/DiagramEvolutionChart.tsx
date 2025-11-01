@@ -7,13 +7,13 @@ import { curveMonotoneX } from "@visx/curve";
 import { scaleLinear, scaleTime } from "@visx/scale";
 import { Circle } from "@visx/shape";
 import {
-	Cube,
-	GitBranch,
-	Clock,
+	CubeIcon,
+		GitBranchIcon,
+		ClockIcon,
 	UserIcon,
 	PackageIcon,
 	CloudIcon,
-	Stack,
+	StackIcon,
 } from "@phosphor-icons/react";
 import {
 	evolutionCard,
@@ -64,8 +64,8 @@ const NODE_TYPE_ICON = {
 	person: UserIcon,
 	system: PackageIcon,
 	externalSystem: CloudIcon,
-	container: Stack,
-	component: Cube,
+	container: StackIcon,
+	component: CubeIcon,
 } as const;
 
 const isC4Type = (value: unknown): value is C4Type =>
@@ -447,19 +447,19 @@ export function DiagramEvolutionChart({ nodes, edges }: DiagramEvolutionChartPro
 			<div className={evolutionSummaryGrid}>
 				<div className={evolutionSummaryItem}>
 					<span className={evolutionSummaryLabel}>
-						<Cube size={14} weight="duotone" /> Modules
+						<CubeIcon size={14} weight="duotone" /> Modules
 					</span>
 					<span className={evolutionSummaryValue}>{model.totalNodes}</span>
 				</div>
 				<div className={evolutionSummaryItem}>
 					<span className={evolutionSummaryLabel}>
-						<GitBranch size={14} weight="duotone" /> Connections
+						<GitBranchIcon size={14} weight="duotone" /> Connections
 					</span>
 					<span className={evolutionSummaryValue}>{model.totalEdges}</span>
 				</div>
 				<div className={evolutionSummaryItem}>
 					<span className={evolutionSummaryLabel}>
-						<Clock size={14} weight="duotone" /> Latest
+						<ClockIcon size={14} weight="duotone" /> Latest
 					</span>
 					<span className={evolutionSummaryValue}>
 						{model.lastUpdatedAt

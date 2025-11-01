@@ -9,9 +9,9 @@ import { theme } from "../../styles/theme.css";
 
 export const docTableContainer = style({
 	display: "flex",
+	flex: 1,
 	flexDirection: "column",
 	marginBottom: theme.spacing["6"],
-	flex: 1,
 	width: "100%",
 	minWidth: 0,
 	color: theme.color.foreground.primary,
@@ -64,13 +64,13 @@ globalStyle(`${docGridTheme}.ag-theme-quartz .ag-row`, {
 });
 
 globalStyle(`${docGridTheme}.ag-theme-quartz .ag-cell`, {
-	color: theme.color.foreground.primary,
 	textTransform: theme.typography.textTransform.uppercase,
+	color: theme.color.foreground.primary,
 });
 
 // Shortcut column styling (like CMD/A in reference)
 globalStyle(`${docGridTheme}.ag-theme-quartz .ag-cell[col-id="shortcut"]`, {
+	textAlign: "center",
 	color: theme.color.status.selected,
 	fontWeight: theme.typography.weight.bold,
-	textAlign: "center",
 });

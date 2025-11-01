@@ -47,6 +47,7 @@ import {
 	listAllDiagrams,
 } from "../../core/effects/canvas-persistence";
 import type { LayoutPresetName } from "../../core/effects/layout";
+import { emit } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { NodeData } from "../../core/effects/node-operations";
@@ -63,6 +64,20 @@ export function C4CanvasContainer() {
 	const [isCompactLayout, setCompactLayout] = useState(false);
 	const [isCommandBarOpen, setCommandBarOpen] = useState(true);
 	const [isDataBarOpen, setDataBarOpen] = useState(false);
+
+	useEffect(() => {
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		if (!("__TAURI_INTERNALS__" in window)) {
+			return;
+		}
+
+		emit("frontend:ready").catch((error) => {
+			console.warn("⚠️ Failed to emit frontend:ready event", error);
+		});
+	}, []);
 
 	// Initialize: Load most recent diagram or create new one
 	useEffect(() => {
@@ -543,6 +558,12 @@ export function C4CanvasContainer() {
 		
 					</div>
 							<p>PRECISION TOOLS FOR PROFESSIONALS WHO MAP BEFORE THEY MOVE</p>
+							<a
+								href="/splashscreen"
+		
+							>
+								Visit OPSYDYN
+							</a>
 					<div className={panelHeader}>
 						<ToggleButton
 							isSelected={isSidebarOpen}

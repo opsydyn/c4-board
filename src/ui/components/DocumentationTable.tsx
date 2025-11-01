@@ -7,6 +7,7 @@
 import { useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef } from "ag-grid-community";
+import "ag-grid-community/styles/ag-theme-quartz.css";
 import { docTableContainer, docGridTheme } from "./DocumentationTable.css";
 
 interface DocRow {

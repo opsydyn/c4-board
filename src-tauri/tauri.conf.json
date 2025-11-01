@@ -5,15 +5,29 @@
   "build": {
     "beforeDevCommand": "bun dev",
     "devUrl": "http://localhost:4321/",
-    "beforeBuildCommand": "bun build",
+    "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "c4-board",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "visible": false
+      },
+      {
+        "label": "splashscreen",
+        "url": "splashscreen/index.html",
+        "width": 1000,
+        "height": 800,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "transparent": false,
+        "visible": true
       }
     ],
     "security": {

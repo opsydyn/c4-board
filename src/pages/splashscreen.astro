@@ -1,0 +1,214 @@
+---
+---
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>OPSYDYN // System Boot</title>
+		<style>
+			:root {
+				color-scheme: dark;
+			}
+
+			*,
+			*::before,
+			*::after {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				min-height: 100vh;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: radial-gradient(120% 120% at 50% 20%, #16211f 0%, #050806 65%, #010302 100%);
+				font-family: "Berkeley Mono", "Fira Code", monospace;
+				color: #c7f5c3;
+				overflow: hidden;
+			}
+
+			.crt {
+				position: relative;
+				width: min(480px, 90vw);
+				padding: 40px 32px 36px;
+				border: 2px solid rgba(58, 224, 173, 0.4);
+				box-shadow:
+					0 0 18px rgba(58, 224, 173, 0.3),
+					inset 0 0 24px rgba(58, 224, 173, 0.15);
+				background: rgba(8, 18, 16, 0.92);
+				text-transform: uppercase;
+				letter-spacing: 0.12em;
+				overflow: hidden;
+			}
+
+			.crt::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				background-image: linear-gradient(
+					transparent 0,
+					rgba(0, 0, 0, 0.08) 50%,
+					transparent 100%
+				);
+				background-size: 100% 3px;
+				opacity: 0.45;
+				pointer-events: none;
+			}
+
+			.scanline {
+				position: absolute;
+				top: -100%;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: linear-gradient(
+					0deg,
+					transparent 0%,
+					rgba(58, 224, 173, 0.25) 45%,
+					rgba(58, 224, 173, 0.35) 50%,
+					rgba(58, 224, 173, 0.25) 55%,
+					transparent 100%
+				);
+				animation: scan 3.4s linear infinite;
+				mix-blend-mode: screen;
+				opacity: 0.35;
+			}
+
+			@keyframes scan {
+				0% {
+					transform: translateY(-100%);
+				}
+				100% {
+					transform: translateY(100%);
+				}
+			}
+
+			h1 {
+				margin: 0 0 18px;
+				font-size: 1.05rem;
+				color: #5ce0c4;
+				text-shadow: 0 0 6px rgba(92, 224, 196, 0.5);
+			}
+
+			.status-line {
+				display: flex;
+				justify-content: space-between;
+				align-items: baseline;
+				margin-bottom: 8px;
+				font-size: 0.8rem;
+			}
+
+			.status-line span:last-child {
+				color: #b6ffc8;
+			}
+
+			.separator {
+				margin: 16px 0;
+				height: 1px;
+				background: linear-gradient(
+					90deg,
+					transparent,
+					rgba(92, 224, 196, 0.6),
+					transparent
+				);
+			}
+
+			.terminal {
+				font-size: 0.78rem;
+				line-height: 1.6;
+			}
+
+			.cursor {
+				display: inline-block;
+				width: 8px;
+				height: 1rem;
+				margin-left: 6px;
+				background: #5ce0c4;
+				box-shadow: 0 0 6px rgba(92, 224, 196, 0.7);
+				animation: blink 1s steps(1, end) infinite;
+			}
+
+			@keyframes blink {
+				0%,
+				50% {
+					opacity: 1;
+				}
+				50.01%,
+				100% {
+					opacity: 0;
+				}
+			}
+
+			.footer {
+				margin-top: 16px;
+				display: flex;
+				justify-content: space-between;
+				font-size: 0.7rem;
+				color: rgba(198, 255, 216, 0.75);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="crt">
+			<div class="scanline" aria-hidden="true"></div>
+			<h1>OPSYDYN // C4 CANVAS</h1>
+			<div class="status-line">
+				<span>Boot Sequence</span>
+				<span id="boot-step">INITIALIZING</span>
+			</div>
+			<div class="status-line">
+				<span>Memcheck</span>
+				<span>OK</span>
+			</div>
+			<div class="status-line">
+				<span>Vector Grid</span>
+				<span>READY</span>
+			</div>
+			<div class="separator"></div>
+			<div class="terminal" id="terminal">
+				<span>&gt; waking subsystems</span><br />
+				<span>&gt; calibrating layout</span><br />
+				<span>&gt; loading diagram context</span>
+				<span class="cursor" aria-hidden="true"></span>
+			</div>
+			<div class="footer">
+				<span>v1.0.0</span>
+				<span>press [esc] to abort</span>
+				<span><a href="/">>>></a></span>
+			</div>
+		</div>
+		<script>
+			const bootMessages = [
+				"authenticating operators",
+				"linking socio-technical mesh",
+				"stabilizing nodes",
+				"rendering balanced mud chart",
+				"deploying command stacks"
+			];
+
+			const bootStepEl = document.getElementById("boot-step");
+			const terminalEl = document.getElementById("terminal");
+
+			const emitLog = (remaining: string | string[]) => {
+				if (!bootStepEl || !terminalEl || remaining.length === 0) {
+					return;
+				}
+
+				const [message, ...rest] = remaining;
+				bootStepEl.textContent = message?.toUpperCase() ?? "ONLINE";
+
+				const line = document.createElement("div");
+				line.textContent = `> ${message}`;
+				terminalEl.insertBefore(line, terminalEl.lastElementChild);
+
+				if (rest.length > 0) {
+					setTimeout(() => emitLog(rest), 420);
+				}
+			};
+
+			emitLog([...bootMessages, "systems nominal"]);
+		</script>
+	</body>
+</html>

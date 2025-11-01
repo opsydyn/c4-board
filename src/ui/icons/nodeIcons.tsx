@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import type { ReactElement } from "react";
 import type { IconWeight, Icon } from "@phosphor-icons/react";
 import {
-	User,
-	Package,
-	Cloud,
-	Stack,
-	Cube,
+	UserIcon,
+	PackageIcon,
+	CloudIcon,
+	StackIcon,
+	CubeIcon,
 } from "@phosphor-icons/react";
 import {
 	DEFAULT_ICON_BY_TYPE,
@@ -22,15 +23,15 @@ type IconRenderProps = {
 	weight?: IconWeight;
 	className?: string;
 };
+type IconComponent = (props: IconRenderProps) => ReactElement;
 
-type IconComponent = (props: IconRenderProps) => JSX.Element;
 
 const builtInIconRegistry: Record<BuiltInIconId, Icon> = {
-	"phosphor:user-duotone": User,
-	"phosphor:package-duotone": Package,
-	"phosphor:cloud-duotone": Cloud,
-	"phosphor:stack-duotone": Stack,
-	"phosphor:cube-duotone": Cube,
+	"phosphor:user-duotone": UserIcon,
+	"phosphor:package-duotone": PackageIcon,
+	"phosphor:cloud-duotone": CloudIcon,
+	"phosphor:stack-duotone": StackIcon,
+	"phosphor:cube-duotone": CubeIcon,
 };
 
 const fallbackIconId: BuiltInIconId = "phosphor:package-duotone";
@@ -58,7 +59,7 @@ export function renderNodeIcon({
 }: ResolveOptions) {
 	const resolvedId = resolveNodeIconId(iconId, type);
 	const IconComponent = getNodeIconComponent(resolvedId, type);
-	return <IconComponent size={size} weight={weight} className={className} />;
+	return <IconComponent size={size} weight={weight} {...(className !== undefined && { className })} />;
 }
 
 export function getNodeIconComponent(iconId: NodeIconId | undefined, type: C4Type) {
@@ -75,7 +76,7 @@ function getOrCreateCustomIconComponent(iconId: CustomIconId): IconComponent {
 		return cached;
 	}
 
-	const CustomIcon: IconComponent = ({ size = 24, className }) => {
+	const CustomIcon: IconComponent = ({ size = 24, className }: IconRenderProps) => {
 		const [src, setSrc] = useState<string | null>(null);
 
 		useEffect(() => {
@@ -136,7 +137,7 @@ function getOrCreateCustomIconComponent(iconId: CustomIconId): IconComponent {
 				height={size}
 				className={className}
 				style={{ objectFit: "contain" }}
-				alt=""
+				alt={src}
 			/>
 		);
 	};
