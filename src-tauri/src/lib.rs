@@ -3,8 +3,8 @@ use std::{fs, io::Write, path::Path, time::Duration};
 use tauri::async_runtime::spawn;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Listener, Manager};
-use tokio::time::sleep;
 use tauri_plugin_sql::{Migration, MigrationKind};
+use tokio::time::sleep;
 
 // ============================================================================
 // Domain Models (Functional Core)
@@ -383,6 +383,7 @@ pub fn run() {
     ];
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(

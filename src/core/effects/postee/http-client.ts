@@ -16,7 +16,8 @@ import {
 	durationFromMillis,
 	durationToMillis,
 } from "./types";
-
+import { fetch as TauriFetch} from '@tauri-apps/plugin-http' 
+ 
 // =============================================================================
 // HTTP Service (Effect.Service based)
 // =============================================================================
@@ -43,6 +44,10 @@ export type HttpClientErrorType = {
 	readonly _tag: "HttpClientError";
 	readonly message: string;
 	readonly cause?: unknown;
+	readonly request?: {
+		readonly method: HttpMethod;
+		readonly url: string;
+	};
 };
 
 export type HttpClientTimeoutErrorType = {
@@ -141,6 +146,10 @@ export const prepareRequest = (
 			catch: () =>
 				HttpClientError({
 					message: `Invalid URL: ${resolvedUrl}`,
+					request: {
+						method: params.method,
+						url: resolvedUrl,
+					},
 				}),
 		});
 
@@ -179,6 +188,10 @@ export const prepareRequest = (
 							HttpClientError({
 								message: "Invalid JSON body",
 								cause,
+								request: {
+									method: params.method,
+									url: resolvedUrl,
+								},
 							}),
 					});
 
@@ -231,27 +244,46 @@ const toFetchInit = (request: PreparedRequest): RequestInit => {
 
 	const method = request.method;
 
+	// Methods that cannot have a body
+	const methodAllowsBody = method !== "GET" && method !== "HEAD";
+
 	// Use pattern matching for body handling
 	return Match.value(request.body).pipe(
 		Match.tag("None", () => ({
 			method,
 			headers,
 		})),
-		Match.tag("Raw", ({ content }) => ({
-			method,
-			headers,
-			body: content,
-		})),
-		Match.tag("Json", ({ content }) => ({
-			method,
-			headers: {
-				"content-type":
-					headers["content-type"] ?? "application/json; charset=utf-8",
-				...headers,
-			},
-			body: content,
-		})),
+		Match.tag("Raw", ({ content }) => {
+			// Only include body if method allows it and content exists
+			if (!methodAllowsBody || content.length === 0) {
+				return { method, headers };
+			}
+			return {
+				method,
+				headers,
+				body: content,
+			};
+		}),
+		Match.tag("Json", ({ content }) => {
+			// Only include body if method allows it and content exists
+			if (!methodAllowsBody || content.length === 0) {
+				return { method, headers };
+			}
+			return {
+				method,
+				headers: {
+					"content-type":
+						headers["content-type"] ?? "application/json; charset=utf-8",
+					...headers,
+				},
+				body: content,
+			};
+		}),
 		Match.tag("Form", ({ entries }) => {
+			// Only include body if method allows it and form has entries
+			if (!methodAllowsBody || entries.length === 0) {
+				return { method, headers };
+			}
 			const form = new URLSearchParams();
 			for (const [key, value] of entries) {
 				form.append(key, value);
@@ -279,6 +311,19 @@ const responseHeadersToRecord = (headers: Headers): Record<string, string> => {
 };
 
 const makeAbortController = () => new AbortController();
+
+const logRequestFailure = (
+	request: PreparedRequest,
+	error: HttpClientFailure,
+) => {
+	 
+	console.error("[postee][http-client] request failed", {
+		id: request.id,
+		method: request.method,
+		url: String(request.url),
+		error,
+	});
+};
 
 export const HttpClientLive = Layer.sync(HttpClient, () => {
 	const inflight = new Map<string, AbortController>();
@@ -308,7 +353,7 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
 
 				const started = performance.now();
 
-				fetch(request.url, init)
+				TauriFetch(request.url, init)
 					.then(async (response) => {
 						const durationMs = performance.now() - started;
 						const bodyText = await response.text();
@@ -329,6 +374,20 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
 					.catch((cause: unknown) => {
 						const reason = controller.signal.reason;
 						cleanup();
+
+						// Log the raw error for debugging Tauri fetch issues
+						console.error("[postee][http-client] Raw fetch error:", {
+							cause,
+							causeType: typeof cause,
+							causeConstructor: cause?.constructor?.name,
+							causeMessage: cause instanceof Error ? cause.message : String(cause),
+							causeStack: cause instanceof Error ? cause.stack : undefined,
+							reason,
+							request: {
+								method: request.method,
+								url: String(request.url),
+							},
+						});
 
 						// Use pattern matching for error handling
 						const error = Match.value(cause).pipe(
@@ -356,6 +415,10 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
 											HttpClientError({
 												message: "Request aborted",
 												cause,
+												request: {
+													method: request.method,
+													url: String(request.url),
+												},
 											}),
 										),
 									),
@@ -364,11 +427,29 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
 								HttpClientError({
 									message: "Failed to perform HTTP request",
 									cause,
+									request: {
+										method: request.method,
+										url: String(request.url),
+									},
 								}),
 							),
 						);
 
-						resume(Effect.fail(error));
+						const enrichedError: HttpClientFailure =
+							error._tag === "HttpClientError"
+								? HttpClientError({
+										message: error.message,
+										cause: error.cause,
+										request:
+											error.request ?? {
+												method: request.method,
+												url: String(request.url),
+											},
+									})
+								: error;
+
+						logRequestFailure(request, enrichedError);
+						resume(Effect.fail(enrichedError));
 					});
 
 				return Effect.sync(cleanup);

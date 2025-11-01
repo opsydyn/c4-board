@@ -45,6 +45,7 @@ import { DatabaseServiceLive } from "../../core/effects/database.runtime";
 type WorkspaceEnv = DatabaseService | HttpClient;
 type WorkspaceLayer = Layer.Layer<WorkspaceEnv, never, never>;
 
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -320,6 +321,46 @@ export const createPosteeWorkspaceMachine = (options?: {
 			hasActiveRequest: ({ context }) => context.activeRequestId !== null,
 		},
 		actions: {
+			createCollection: assign(({ context, event }) => {
+				if (!event || event.type !== "CREATE_COLLECTION") {
+					return context;
+				}
+
+				const collectionId = event.payload.id as unknown as string;
+				const now = Date.now();
+
+				runLayeredEffect(
+					context.layer,
+					PosteeCollections.create({
+						id: collectionId,
+						name: event.payload.name,
+						description: event.payload.description ?? null,
+						sort_order: context.collections.length + 1,
+					}),
+				).catch(() => {
+					// TODO: surface error to user once notifications are wired up
+				});
+
+				const newCollection: PosteeCollection = {
+					id: collectionId,
+					name: event.payload.name,
+					description: event.payload.description ?? null,
+					sort_order: context.collections.length + 1,
+					created_at: now,
+					updated_at: now,
+				};
+
+				return {
+					...context,
+					collections: [newCollection, ...context.collections],
+					requestsByCollection: {
+						...context.requestsByCollection,
+						[collectionId]: [],
+					},
+					activeCollectionId: event.payload.id,
+					activeRequestId: null,
+				};
+			}),
 			selectCollection: assign({
 				activeCollectionId: ({ event }) =>
 					event.type === "SELECT_COLLECTION" ? event.collectionId : null,
@@ -347,6 +388,114 @@ export const createPosteeWorkspaceMachine = (options?: {
 					}
 					return event.environmentId;
 				},
+			}),
+			createRequest: assign(({ context, event }) => {
+				if (!event || event.type !== "CREATE_REQUEST") {
+					return context;
+				}
+
+				const collectionKey = event.payload.collectionId as unknown as string;
+				const requestId = event.payload.id as unknown as string;
+				const now = Date.now();
+
+				runLayeredEffect(
+					context.layer,
+					PosteeRequests.create({
+						id: requestId,
+						collection_id: collectionKey,
+						name: event.payload.name,
+						method: event.payload.method,
+						url: event.payload.url,
+						description: null,
+						favorite: 0,
+						sort_order:
+							(context.requestsByCollection[collectionKey]?.length ?? 0) + 1,
+					}),
+				).catch(() => {
+					// TODO: surface error to user once notifications are wired up
+				});
+
+				const nextRequest: PosteeRequest = {
+					id: requestId,
+					collection_id: collectionKey,
+					name: event.payload.name,
+					method: event.payload.method,
+					url: event.payload.url,
+					description: null,
+					favorite: 0,
+					sort_order:
+						(context.requestsByCollection[collectionKey]?.length ?? 0) + 1,
+					created_at: now,
+					updated_at: now,
+				};
+
+				const nextRequests = [
+					nextRequest,
+					...(context.requestsByCollection[collectionKey] ?? []),
+				];
+
+				return {
+					...context,
+					requestsByCollection: {
+						...context.requestsByCollection,
+						[collectionKey]: nextRequests,
+					},
+					activeCollectionId: event.payload.collectionId,
+					activeRequestId: event.payload.id,
+				};
+			}),
+			updateRequestMetadata: assign(({ context, event }) => {
+				if (!event || event.type !== "UPDATE_REQUEST_METADATA") {
+					return context;
+				}
+
+				const requestId = event.payload.id as unknown as string;
+				let targetCollectionKey: string | null = null;
+				let existingRequest: PosteeRequest | undefined;
+
+				for (const [key, requests] of Object.entries(
+					context.requestsByCollection,
+				)) {
+					const match = requests.find((request) => request.id === requestId);
+					if (match) {
+						targetCollectionKey = key;
+						existingRequest = match;
+						break;
+					}
+				}
+
+				if (!targetCollectionKey || !existingRequest) {
+					return context;
+				}
+
+				const updatedAt = Date.now();
+				const updatedRequest: PosteeRequest = {
+					...existingRequest,
+					name: event.payload.name ?? existingRequest.name,
+					method: event.payload.method ?? existingRequest.method,
+					url: event.payload.url ?? existingRequest.url,
+					description:
+						event.payload.description ?? existingRequest.description,
+					updated_at: updatedAt,
+				};
+
+				runLayeredEffect(
+					context.layer,
+					PosteeRequests.update(updatedRequest),
+				).catch(() => {
+					// TODO: surface error to user once notifications are wired up
+				});
+
+				return {
+					...context,
+					requestsByCollection: {
+						...context.requestsByCollection,
+						[targetCollectionKey]: context.requestsByCollection[targetCollectionKey]?.map(
+							(request) => (request.id === requestId ? updatedRequest : request),
+						) ?? [],
+					},
+					activeRequestId: event.payload.id,
+				};
 			}),
 			assignWorkspace: assign(({ context, event }) => {
 				// XState done events are not in the union type
@@ -413,11 +562,23 @@ export const createPosteeWorkspaceMachine = (options?: {
 						return context.runner;
 					}
 
+					const errorText = (() => {
+						const message = event.message;
+						if (typeof message === "string" && message.length > 0) {
+							return message;
+						}
+						try {
+							return JSON.stringify(message, null, 2);
+						} catch {
+							return String(message ?? "Request failed");
+						}
+					})();
+
 					return {
 						status: "error" as const,
 						requestId: event.requestId,
 						response: null,
-						error: event.message,
+						error: errorText,
 						startedAt: context.runner.startedAt,
 					};
 				},
@@ -450,14 +611,35 @@ export const createPosteeWorkspaceMachine = (options?: {
 				runner: ({ context, event }) => {
 					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					const errorEvent = event as any;
+					const rawError =
+						errorEvent?.error ?? errorEvent?.data ?? errorEvent ?? null;
+					const errorText = (() => {
+						if (!rawError) {
+							return "Request failed";
+						}
+						if (typeof rawError === "string") {
+							return rawError;
+						}
+						if (rawError instanceof Error) {
+							const base = rawError.stack ?? rawError.message;
+							// @ts-expect-error optional cause property
+							const cause = rawError.cause;
+							const causeText = cause
+								? `\nCause: ${JSON.stringify(cause, null, 2)}`
+								: "";
+							return `${base}${causeText}`;
+						}
+						try {
+							return JSON.stringify(rawError, null, 2);
+						} catch {
+							return String(rawError);
+						}
+					})();
 					return {
 						status: "error" as const,
 						requestId: context.activeRequestId,
 						response: null,
-						error:
-							errorEvent?.error instanceof Error
-								? errorEvent.error.message
-								: "Request failed",
+						error: errorText,
 						startedAt: context.runner.startedAt,
 					};
 				},
@@ -515,6 +697,15 @@ export const createPosteeWorkspaceMachine = (options?: {
 				states: {
 					idle: {
 						on: {
+							CREATE_COLLECTION: {
+								actions: "createCollection",
+							},
+							CREATE_REQUEST: {
+								actions: "createRequest",
+							},
+							UPDATE_REQUEST_METADATA: {
+								actions: "updateRequestMetadata",
+							},
 							RUN_REQUEST: {
 								target: "running",
 								guard: "hasActiveRequest",

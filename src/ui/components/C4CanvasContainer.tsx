@@ -103,7 +103,7 @@ export function C4CanvasContainer() {
 					};
 					send(loadEvent);
 					// Clear the query parameter
-					window.history.replaceState({}, "", "/canvas");
+					window.history.replaceState({}, "", "/");
 					return;
 				}
 
@@ -451,7 +451,7 @@ export function C4CanvasContainer() {
 				break;
 		}
 
-		window.history.replaceState({}, "", "/canvas");
+		window.history.replaceState({}, "", "/");
 	}, [handleNewBoard, handleSave, send]);
 
 	// Get selected node object (cast to Node<NodeData> since our nodes always have NodeData)
@@ -563,6 +563,12 @@ export function C4CanvasContainer() {
 		
 							>
 								Visit OPSYDYN
+							</a>
+										<a
+								href="/postee"
+		
+							>
+								USE POSTEE API CLIENT
 							</a>
 					<div className={panelHeader}>
 						<ToggleButton
