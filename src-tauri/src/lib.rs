@@ -374,6 +374,12 @@ pub fn run() {
             sql: include_str!("../migrations/007_create_custom_icons_table.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "create_postee_tables",
+            sql: include_str!("../migrations/008_create_postee_tables.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
