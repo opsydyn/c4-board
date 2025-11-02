@@ -17,6 +17,7 @@ import {
 	type HttpMethod,
 	durationToMillis,
 } from "../../../core/effects/postee/types";
+import { Select } from "./Select";
 
 import {
 	workspace,
@@ -37,7 +38,6 @@ import {
 	emptyState,
 	collectionForm,
 	createForm,
-	methodSelect,
 	textInput,
 	submitButton,
 	actionRow,
@@ -326,21 +326,12 @@ export function PosteeWorkspace() {
 				<section className={panel}>
 					<h2 className={sectionTitle}>Create HTTP Request</h2>
 					<form className={createForm} onSubmit={handleCreateRequest}>
-						<select
-							className={methodSelect}
+						<Select
 							value={newRequestMethod}
-							onChange={(event) =>
-								setNewRequestMethod(event.target.value as HttpMethod)
-							}
+							options={methodOptions}
+							onChange={setNewRequestMethod}
 							disabled={!activeCollectionKey}
-							aria-label="HTTP method"
-						>
-							{methodOptions.map((method) => (
-								<option key={method} value={method}>
-									{method}
-								</option>
-							))}
-						</select>
+						/>
 						<input
 							className={textInput}
 							type="text"
@@ -402,20 +393,11 @@ export function PosteeWorkspace() {
 
 		{selectedRequest && (
 			<form className={createForm} onSubmit={handleUpdateRequest}>
-				<select
-					className={methodSelect}
+				<Select
 					value={editRequestMethod}
-					onChange={(event) =>
-						setEditRequestMethod(event.target.value as HttpMethod)
-					}
-					aria-label="Selected request HTTP method"
-				>
-					{methodOptions.map((method) => (
-						<option key={method} value={method}>
-							{method}
-						</option>
-					))}
-				</select>
+					options={methodOptions}
+					onChange={setEditRequestMethod}
+				/>
 				<input
 					className={textInput}
 					type="text"

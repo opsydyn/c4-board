@@ -305,3 +305,21 @@ export const nodeContent = style({
 	display: "flex",
 	flexDirection: "column",
 });
+
+/**
+ * Editable Field
+ * Visual indicator for inline-editable text fields
+ */
+export const editableField = style({
+	cursor: "text",
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover": {
+			opacity: 0.8,
+			textDecoration: "underline",
+			textDecorationStyle: "dotted",
+			textUnderlineOffset: "4px",
+		},
+	},
+});

@@ -18,7 +18,7 @@ import {
 	type Node,
 	type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { canvasMachine, type CanvasEvent } from "../machines/canvas.machine";
 import { C4Canvas, type C4CanvasRef } from "./C4Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -316,6 +316,19 @@ export function C4CanvasContainer() {
 		},
 		[send],
 	);
+
+	// Enrich nodes with onUpdate callback for inline editing
+	const enrichedNodes = useMemo(() => {
+		return state.context.nodes.map((node) => ({
+			...node,
+			data: {
+				...node.data,
+				onUpdate: (updates: Partial<NodeData>) => {
+					send({ type: "UPDATE_NODE", nodeId: node.id, updates });
+				},
+			},
+		}));
+	}, [state.context.nodes, send]);
 
 	const handleNewBoard = useCallback(async () => {
 		try {
@@ -623,7 +636,7 @@ export function C4CanvasContainer() {
 			<section className={canvasRegion}>
 				<C4Canvas
 					ref={canvasRef}
-					nodes={state.context.nodes}
+					nodes={enrichedNodes}
 					edges={state.context.edges}
 					onNodesChange={onNodesChange}
 					onEdgesChange={onEdgesChange}

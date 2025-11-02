@@ -33,7 +33,7 @@ const TABS: Array<{ id: DataBarTab; label: string }> = [
 	},
 	{
 		id: "docs",
-		label: "Documentation",
+		label: "RTFM:V1",
 	},
 ];
 

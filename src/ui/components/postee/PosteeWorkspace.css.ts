@@ -47,7 +47,7 @@ export const collectionList = style({
 
 export const collectionButton = style({
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.lg,
+	clipPath: theme.clipPath.base,
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
 	background: "transparent",
 	color: theme.color.foreground.primary,
@@ -90,7 +90,7 @@ export const requestButton = style({
 	alignItems: "center",
 	gap: theme.spacing["2"],
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-	borderRadius: theme.border.radius.md,
+	clipPath: theme.clipPath.sm,
 	border: `${theme.border.width.thin} solid transparent`,
 	color: theme.color.foreground.primary,
 	cursor: "pointer",
@@ -128,7 +128,7 @@ export const mainHeader = style({
 
 export const statusPill = style({
 	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
-	borderRadius: theme.border.radius.md,
+	clipPath: theme.clipPath.sm,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
 	backgroundColor: "rgba(25, 89, 63, 0.4)",
@@ -139,7 +139,7 @@ export const statusPill = style({
 
 export const panel = style({
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.lg,
+	clipPath: theme.clipPath.lg,
 	padding: `${theme.spacing["4"]} ${theme.spacing["5"]}`,
 	backgroundColor: "rgba(10, 18, 14, 0.94)",
 	boxShadow: theme.effect.glow.sm,
@@ -208,20 +208,9 @@ export const createForm = style({
 	},
 });
 
-export const methodSelect = style({
-	height: "36px",
-	borderRadius: theme.border.radius.base,
-	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	backgroundColor: theme.color.background.input,
-	color: theme.color.foreground.primary,
-	padding: `0 ${theme.spacing["2"]}`,
-	fontFamily: theme.typography.family.mono,
-	fontSize: theme.typography.size.sm,
-});
-
 export const textInput = style({
 	height: "36px",
-	borderRadius: theme.border.radius.base,
+	clipPath: theme.clipPath.sm,
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 	backgroundColor: theme.color.background.input,
 	color: theme.color.foreground.primary,
@@ -232,7 +221,7 @@ export const textInput = style({
 
 export const submitButton = style({
 	height: "36px",
-	borderRadius: theme.border.radius.base,
+	clipPath: theme.clipPath.sm,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
 	backgroundColor: theme.color.interactive.primary,
 	color: theme.color.background.base,
@@ -290,7 +279,7 @@ export const cancelButton = style([
 
 export const responseBody = style({
 	backgroundColor: theme.color.background.surface,
-	borderRadius: theme.border.radius.base,
+	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
 	fontFamily: theme.typography.family.mono,
