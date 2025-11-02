@@ -385,6 +385,31 @@ export const deleteEdge = (id: string) =>
 		yield* service.execute(`DELETE FROM edges WHERE id = ?`, [id]);
 	});
 
+export const updateEdgeLabel = (edgeId: string, label: string) =>
+	Effect.gen(function* () {
+		const service = yield* DatabaseService;
+		const now = Date.now();
+
+		yield* service.execute(
+			`UPDATE edges SET label = ?, updated_at = ? WHERE id = ?`,
+			[label, now, edgeId],
+		);
+
+		// Return updated edge
+		const rows = yield* service.query<Edge>(
+			`SELECT * FROM edges WHERE id = ?`,
+			[edgeId],
+		);
+
+		if (rows.length === 0) {
+			return yield* Effect.fail(
+				new Error(`Edge ${edgeId} not found after update`),
+			);
+		}
+
+		return rows[0];
+	});
+
 // ============================================================================
 // Custom Icons
 // ============================================================================

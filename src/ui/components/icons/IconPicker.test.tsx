@@ -1,6 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { DEFAULT_ICON_BY_TYPE } from "../../../core/effects/node-operations";
+import { describe, expect, it, vi } from "vitest";
+
 vi.mock("./IconPicker.css", () => ({
 	pickerContainer: "pickerContainer",
 	trigger: "trigger",
@@ -26,26 +28,20 @@ vi.mock("../../../core/effects/useDatabase", () => ({
 	useDatabase: () => mockDatabase,
 }));
 
-let IconPicker: (typeof import("./IconPicker"))["IconPicker"];
-
-beforeAll(async () => {
-	const module = await import("./IconPicker");
-	IconPicker = module.IconPicker;
-}, 20000);
-import { DEFAULT_ICON_BY_TYPE } from "../../../core/effects/node-operations";
 
 describe("IconPicker", () => {
 	it("allows selecting an icon option and closes the dialog", async () => {
 		const handleChange = vi.fn();
-		const user = userEvent.setup({ document: globalThis.document as Document });
+		const { IconPicker } = await import("./IconPicker");
 
-		render(
+		const view = render(
 			<IconPicker
 				type="system"
 				value={DEFAULT_ICON_BY_TYPE.system}
 				onChange={handleChange}
 			/>,
 		);
+		const user = userEvent.setup({ document: view.container.ownerDocument });
 
 		const trigger = screen.getByRole("button", { name: /select icon/i });
 		await user.click(trigger);
@@ -61,17 +57,15 @@ describe("IconPicker", () => {
 		expect(handleChange).toHaveBeenCalledWith("phosphor:cube-duotone");
 
 		await screen.findByRole("button", { name: /select icon/i });
-		expect(
-			screen.queryByRole("dialog", { name: /select node icon/i }),
-		).not.toBeInTheDocument();
+		expect(screen.queryByRole("dialog", { name: /select node icon/i })).toBeNull();
 	});
 
 	it("resets to the default icon when requested", async () => {
 		const handleChange = vi.fn();
 		const handleReset = vi.fn();
-		const user = userEvent.setup({ document: globalThis.document as Document });
+		const { IconPicker } = await import("./IconPicker");
 
-		render(
+		const view = render(
 			<IconPicker
 				type="system"
 				value="phosphor:cube-duotone"
@@ -79,6 +73,7 @@ describe("IconPicker", () => {
 				onReset={handleReset}
 			/>,
 		);
+		const user = userEvent.setup({ document: view.container.ownerDocument });
 
 		const trigger = screen.getByRole("button", { name: /select icon/i });
 		await user.click(trigger);

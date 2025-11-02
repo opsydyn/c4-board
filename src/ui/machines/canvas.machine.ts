@@ -33,7 +33,8 @@ export type CanvasEvent =
 			updates: Partial<NodeOps.NodeData>;
 	  }
 	| { type: "DELETE_NODE"; nodeId: string }
-	| { type: "CONNECT_NODES"; source: string; target: string }
+	| { type: "CONNECT_NODES"; source: string; target: string; label?: string }
+	| { type: "UPDATE_EDGE_LABEL"; edgeId: string; label: string }
 	| { type: "NODES_CHANGED"; changes: NodeChange[] }
 	| { type: "EDGES_CHANGED"; changes: EdgeChange[] }
 	// Persistence events
@@ -246,6 +247,9 @@ export const canvasMachine = setup({
 			edges: ({ context, event }) => {
 				if (event.type !== "CONNECT_NODES") return context.edges;
 
+				// Use custom label or default to "uses"
+				const label = event.label ?? "uses";
+
 				// Use Effect service for validation and creation
 				// Validation errors will be caught and logged, returning unchanged edges
 				const result = Effect.runSync(
@@ -254,7 +258,33 @@ export const canvasMachine = setup({
 							context.edges,
 							event.source,
 							event.target,
-							"uses",
+							label,
+						);
+					}).pipe(
+						Effect.catchAll((error) => {
+							if (error instanceof EdgeOps.EdgeValidationError) {
+								console.warn(`⚠️ ${error.message}`);
+							}
+							return Effect.succeed(context.edges); // Return unchanged edges on error
+						}),
+					),
+				);
+
+				return result;
+			},
+		}),
+
+		updateEdgeLabel: assign({
+			edges: ({ context, event }) => {
+				if (event.type !== "UPDATE_EDGE_LABEL") return context.edges;
+
+				// Use Effect service for validation and update
+				const result = Effect.runSync(
+					Effect.gen(function* () {
+						return yield* EdgeOps.updateEdgeLabel(
+							context.edges,
+							event.edgeId,
+							event.label,
 						);
 					}).pipe(
 						Effect.catchAll((error) => {
@@ -498,6 +528,9 @@ export const canvasMachine = setup({
 				},
 				CONNECT_NODES: {
 					actions: "connectNodes",
+				},
+				UPDATE_EDGE_LABEL: {
+					actions: "updateEdgeLabel",
 				},
 				NODES_CHANGED: {
 					actions: "updateNodesFromReactFlow",

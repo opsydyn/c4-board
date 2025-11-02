@@ -8,9 +8,15 @@
  * - Effect functions describe WHAT to do (pure logic)
  * - DatabaseService provides HOW to do it (I/O)
  * - XState machines orchestrate WHEN to do it (flow control)
+ *
+ * Idiomatic Effect patterns:
+ * - Effect.forEach for async iterations (replaces imperative for loops)
+ * - Either.match for pattern matching on Result types
+ * - pipe for composition and readability
+ * - Extracted reusable upsert patterns
  */
 
-import { Effect } from "effect";
+import { Effect, Either, pipe } from "effect";
 import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from "@xyflow/react";
 import {
 	type Node as DbNode,
@@ -31,6 +37,7 @@ import {
 	deleteNode,
 	createEdge,
 	getEdgesByDiagram,
+	updateEdgeLabel,
 	deleteEdge,
 	NotFoundError,
 } from "./database";
@@ -63,11 +70,49 @@ export interface SaveDiagramInput {
 // ============================================================================
 
 /**
- * Convert database node to ReactFlow node format
+ * Helper: Add optional field if value is not null/undefined (pure function)
+ * Returns a NEW object, never mutates the input
+ */
+const addOptional =
+	<K extends string, V>(key: K, value: V | null | undefined) =>
+	<T extends Record<string, unknown>>(obj: T): T => {
+		if (value !== null && value !== undefined) {
+			return { ...obj, [key]: value } as T;
+		}
+		return obj;
+	};
+
+/**
+ * Helper: Build style object from optional dimensions
+ */
+const buildStyle = (width: number | null, height: number | null) => {
+	if (width === null && height === null) return undefined;
+	return {
+		...(width !== null ? { width } : {}),
+		...(height !== null ? { height } : {}),
+	};
+};
+
+/**
+ * Helper: Build partial object from optional value
+ * Returns empty object if value is undefined, otherwise returns {key: value}
+ */
+const optional = <K extends string, V>(
+	key: K,
+	value: V | undefined,
+): Record<K, V> | Record<string, never> => {
+	return value !== undefined ? ({ [key]: value } as Record<K, V>) : {};
+};
+
+/**
+ * Convert database node to ReactFlow node format using PURE functional composition
+ * Uses pipe to chain transformations - no mutations!
  */
 export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 	const fallbackIcon = getDefaultIconId(dbNode.type as C4Type);
-	const node: ReactFlowNode = {
+
+	// Base node (always present fields)
+	const baseNode: ReactFlowNode = {
 		id: dbNode.id,
 		type: dbNode.type,
 		position: {
@@ -84,35 +129,20 @@ export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 		},
 	};
 
-	if (dbNode.width !== null) {
-		node.width = dbNode.width;
-	}
-	if (dbNode.height !== null) {
-		node.height = dbNode.height;
-	}
-	if (dbNode.width !== null || dbNode.height !== null) {
-		node.style = {
-			...(dbNode.width !== null ? { width: dbNode.width } : {}),
-			...(dbNode.height !== null ? { height: dbNode.height } : {}),
-		};
-	}
-
-	// Parent-child relationship fields for sub-flows
-	if (dbNode.parent_id !== null) {
-		node.parentId = dbNode.parent_id;
-	}
-	if (dbNode.extent !== null) {
-		node.extent = dbNode.extent;
-	}
-	if (dbNode.expand_parent === 1) {
-		node.expandParent = true;
-	}
-
-	return node;
+	// Pure functional composition - each function returns a NEW object
+	return pipe(
+		baseNode,
+		addOptional("width", dbNode.width),
+		addOptional("height", dbNode.height),
+		addOptional("style", buildStyle(dbNode.width, dbNode.height)),
+		addOptional("parentId", dbNode.parent_id),
+		addOptional("extent", dbNode.extent),
+		addOptional("expandParent", dbNode.expand_parent === 1 ? true : undefined),
+	);
 }
 
 /**
- * Convert ReactFlow node to database node format
+ * Convert ReactFlow node to database node format using helper functions
  */
 export function reactFlowNodeToDb(
 	node: ReactFlowNode,
@@ -124,8 +154,12 @@ export function reactFlowNodeToDb(
 	const labelValue = dataRecord.label;
 	const technologyValue = dataRecord.technology;
 	const descriptionValue = dataRecord.description;
-	const explicitType = typeof node.type === "string" && node.type.length > 0 ? node.type : undefined;
-	const dataType = typeof dataRecord.c4Type === "string" && dataRecord.c4Type.length > 0 ? (dataRecord.c4Type as string) : undefined;
+	const explicitType =
+		typeof node.type === "string" && node.type.length > 0 ? node.type : undefined;
+	const dataType =
+		typeof dataRecord.c4Type === "string" && dataRecord.c4Type.length > 0
+			? (dataRecord.c4Type as string)
+			: undefined;
 	const resolvedType = (explicitType ?? dataType ?? "system") as CreateNodeInput["type"];
 	const styleWidth = extractNumericDimension(node.style?.width);
 	const styleHeight = extractNumericDimension(node.style?.height);
@@ -142,26 +176,24 @@ export function reactFlowNodeToDb(
 			: undefined;
 	const resolvedIconId = iconValue ?? getDefaultIconId(resolvedType as C4Type);
 	const label =
-		typeof labelValue === "string" && labelValue.length > 0
-			? labelValue
-			: "Unnamed";
+		typeof labelValue === "string" && labelValue.length > 0 ? labelValue : "Unnamed";
 
 	return {
 		id: node.id,
 		diagram_id: diagramId,
 		type: resolvedType,
 		label,
-		...(technology !== undefined ? { technology } : {}),
-		...(description !== undefined ? { description } : {}),
+		...optional("technology", technology),
+		...optional("description", description),
 		position_x: node.position.x,
 		position_y: node.position.y,
-		...(widthValue !== undefined ? { width: widthValue } : {}),
-		...(heightValue !== undefined ? { height: heightValue } : {}),
+		...optional("width", widthValue),
+		...optional("height", heightValue),
 		// Parent-child relationship fields for sub-flows
-		...(node.parentId !== undefined ? { parent_id: node.parentId } : {}),
-		...(node.extent !== undefined ? { extent: node.extent as "parent" } : {}),
-		...(node.expandParent !== undefined ? { expand_parent: node.expandParent } : {}),
-		...(resolvedIconId !== undefined ? { icon_id: resolvedIconId } : {}),
+		...optional("parent_id", node.parentId),
+		...optional("extent", node.extent as "parent" | undefined),
+		...optional("expand_parent", node.expandParent),
+		...optional("icon_id", resolvedIconId),
 	};
 }
 
@@ -182,21 +214,20 @@ function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
 }
 
 /**
- * Convert ReactFlow edge to database edge format
+ * Convert ReactFlow edge to database edge format using helper
  */
 function reactFlowEdgeToDb(
 	edge: ReactFlowEdge,
 	diagramId: string,
 ): CreateEdgeInput {
-	const labelValue =
-		typeof edge.label === "string" ? edge.label : undefined;
+	const labelValue = typeof edge.label === "string" ? edge.label : undefined;
 
 	return {
 		id: edge.id,
 		diagram_id: diagramId,
 		source: edge.source,
 		target: edge.target,
-		...(labelValue !== undefined ? { label: labelValue } : {}),
+		...optional("label", labelValue),
 	};
 }
 
@@ -206,39 +237,41 @@ function reactFlowEdgeToDb(
 
 /**
  * Save complete diagram state (diagram + nodes + edges)
- * Uses transactional approach: save diagram, then nodes, then edges
+ * Uses transactional approach with Effect.forEach for iterations
  */
 export const saveDiagram = (input: SaveDiagramInput) =>
 	Effect.gen(function* () {
-		// 1. Check if diagram exists, create or update
+		// 1. Check if diagram exists, create or update using Either.match
 		const existingDiagram = yield* Effect.either(getDiagram(input.id));
 
-		if (existingDiagram._tag === "Left") {
-			const error = existingDiagram.left;
-
-			if (error instanceof NotFoundError) {
-				const createPayload: CreateDiagramInput = {
-					id: input.id,
+		yield* Either.match(existingDiagram, {
+			// Left: diagram not found or error
+			onLeft: (error) => {
+				if (error instanceof NotFoundError) {
+					// Create new diagram
+					const createPayload: CreateDiagramInput = {
+						id: input.id,
+						name: input.name,
+						...(input.description !== undefined
+							? { description: input.description }
+							: {}),
+					};
+					return createDiagram(createPayload);
+				}
+				// Re-throw other errors
+				return Effect.fail(error);
+			},
+			// Right: diagram exists, update it
+			onRight: () => {
+				const updatePayload: UpdateDiagramInput = {
 					name: input.name,
 					...(input.description !== undefined
 						? { description: input.description }
 						: {}),
 				};
-
-				yield* createDiagram(createPayload);
-			} else {
-				return yield* Effect.fail(error);
-			}
-		} else {
-			const updatePayload: UpdateDiagramInput = {
-				name: input.name,
-				...(input.description !== undefined
-					? { description: input.description }
-					: {}),
-			};
-
-			yield* updateDiagram(input.id, updatePayload);
-		}
+				return updateDiagram(input.id, updatePayload);
+			},
+		});
 
 		// 2. Get existing nodes and edges to determine what to delete
 		const existingNodes = yield* getNodesByDiagram(input.id);
@@ -247,66 +280,77 @@ export const saveDiagram = (input: SaveDiagramInput) =>
 		const currentNodeIds = new Set(input.nodes.map((n) => n.id));
 		const currentEdgeIds = new Set(input.edges.map((e) => e.id));
 
-		// 3. Delete nodes that no longer exist
-		for (const existingNode of existingNodes) {
-			if (!currentNodeIds.has(existingNode.id)) {
-				yield* deleteNode(existingNode.id);
-			}
-		}
+		// 3. Delete nodes that no longer exist using Effect.forEach
+		const nodesToDelete = existingNodes.filter((n) => !currentNodeIds.has(n.id));
+		yield* Effect.forEach(nodesToDelete, (node) => deleteNode(node.id), {
+			concurrency: "unbounded",
+		});
 
-		// 4. Delete edges that no longer exist
-		for (const existingEdge of existingEdges) {
-			if (!currentEdgeIds.has(existingEdge.id)) {
-				yield* deleteEdge(existingEdge.id);
-			}
-		}
+		// 4. Delete edges that no longer exist using Effect.forEach
+		const edgesToDelete = existingEdges.filter((e) => !currentEdgeIds.has(e.id));
+		yield* Effect.forEach(edgesToDelete, (edge) => deleteEdge(edge.id), {
+			concurrency: "unbounded",
+		});
 
-		// 5. Upsert all current nodes
-		for (const node of input.nodes) {
-			const dbNodeInput = reactFlowNodeToDb(node, input.id);
+		// 5. Upsert all current nodes using Effect.forEach
+		yield* Effect.forEach(
+			input.nodes,
+			(node) => {
+				const dbNodeInput = reactFlowNodeToDb(node, input.id);
+				const nodeExists = existingNodes.some((n) => n.id === node.id);
 
-			// Check if node exists
-			const nodeExists = existingNodes.some((n) => n.id === node.id);
-
-		if (nodeExists) {
-			// Update existing node
-		const updateNodePayload: UpdateNodeInput = {
-			label: dbNodeInput.label,
-			position_x: dbNodeInput.position_x,
-			position_y: dbNodeInput.position_y,
-			...(dbNodeInput.technology !== undefined
-				? { technology: dbNodeInput.technology }
-				: {}),
-			...(dbNodeInput.description !== undefined
-				? { description: dbNodeInput.description }
-				: {}),
-			...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
-			...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
-			...(dbNodeInput.parent_id !== undefined ? { parent_id: dbNodeInput.parent_id } : {}),
-			...(dbNodeInput.extent !== undefined ? { extent: dbNodeInput.extent } : {}),
-			...(dbNodeInput.expand_parent !== undefined ? { expand_parent: dbNodeInput.expand_parent } : {}),
-			...(dbNodeInput.icon_id !== undefined ? { icon_id: dbNodeInput.icon_id } : {}),
-		};
-
-			yield* updateNode(node.id, updateNodePayload);
-		} else {
+				if (nodeExists) {
+					// Update existing node
+					const updateNodePayload: UpdateNodeInput = {
+						label: dbNodeInput.label,
+						position_x: dbNodeInput.position_x,
+						position_y: dbNodeInput.position_y,
+						...(dbNodeInput.technology !== undefined
+							? { technology: dbNodeInput.technology }
+							: {}),
+						...(dbNodeInput.description !== undefined
+							? { description: dbNodeInput.description }
+							: {}),
+						...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
+						...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
+						...(dbNodeInput.parent_id !== undefined
+							? { parent_id: dbNodeInput.parent_id }
+							: {}),
+						...(dbNodeInput.extent !== undefined ? { extent: dbNodeInput.extent } : {}),
+						...(dbNodeInput.expand_parent !== undefined
+							? { expand_parent: dbNodeInput.expand_parent }
+							: {}),
+						...(dbNodeInput.icon_id !== undefined ? { icon_id: dbNodeInput.icon_id } : {}),
+					};
+					return updateNode(node.id, updateNodePayload);
+				}
 				// Create new node
-				yield* createNode(dbNodeInput);
-			}
-		}
+				return createNode(dbNodeInput);
+			},
+			{ concurrency: "unbounded" },
+		);
 
-		// 6. Upsert all current edges (delete and recreate is simpler for edges)
-		for (const edge of input.edges) {
-			const dbEdgeInput = reactFlowEdgeToDb(edge, input.id);
+		// 6. Upsert all current edges using Effect.forEach
+		yield* Effect.forEach(
+			input.edges,
+			(edge) => {
+				const dbEdgeInput = reactFlowEdgeToDb(edge, input.id);
+				const existingEdge = existingEdges.find((e) => e.id === edge.id);
 
-			// Check if edge exists
-			const edgeExists = existingEdges.some((e) => e.id === edge.id);
+				if (existingEdge) {
+					// Update existing edge if label has changed
+					const newLabel = dbEdgeInput.label ?? "uses";
+					const currentLabel = existingEdge.label ?? "uses";
 
-			if (!edgeExists) {
-				// Create new edge (edges don't have update, so we only create new ones)
-				yield* createEdge(dbEdgeInput);
-			}
-		}
+					return newLabel !== currentLabel
+						? updateEdgeLabel(edge.id, newLabel)
+						: Effect.succeed(undefined);
+				}
+				// Create new edge
+				return createEdge(dbEdgeInput);
+			},
+			{ concurrency: "unbounded" },
+		);
 
 		return {
 			diagramId: input.id,

@@ -242,6 +242,7 @@ export function PosteeWorkspace() {
 			<aside className={sidebar}>
 				<header className={branding}>
 					<span>Postee Collections</span>
+						<span><a href="/">C4:BOARD</a></span>
 					<span>{collections.length}</span>
 				</header>
 

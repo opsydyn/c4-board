@@ -20,7 +20,13 @@ import {
 	ConnectionMode,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
+import {
+	useMemo,
+	forwardRef,
+	useImperativeHandle,
+	useCallback,
+	useState,
+} from "react";
 import { useReactFlow } from "@xyflow/react";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
 import { PersonNode } from "./nodes/PersonNode";
@@ -44,6 +50,7 @@ import { DownloadButton } from "./DownloadButton";
 import { ToggleButton } from "react-aria-components";
 import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
 import { SearchBox } from "./SearchBox";
+import { EdgeLabelEditor } from "./EdgeLabelEditor";
 
 interface C4CanvasProps {
 	nodes: Node[];
@@ -52,6 +59,7 @@ interface C4CanvasProps {
 	onEdgesChange?: OnEdgesChange<Edge>;
 	onConnect?: OnConnect;
 	onNodeClick?: NodeMouseHandler<Node>;
+	onUpdateEdgeLabel?: (edgeId: string, label: string) => void;
 	isCommandBarOpen: boolean;
 	onToggleCommandBar: (open: boolean) => void;
 	onSelectNode: (nodeId: string) => void;
@@ -70,6 +78,7 @@ function C4CanvasInner(
 		onEdgesChange,
 		onConnect,
 		onNodeClick,
+		onUpdateEdgeLabel,
 		isCommandBarOpen,
 		onToggleCommandBar,
 		onSelectNode,
@@ -77,6 +86,10 @@ function C4CanvasInner(
 	ref: React.Ref<C4CanvasRef>,
 ) {
 	const { setCenter, getNode, fitView } = useReactFlow();
+
+	// Edge label editor state
+	const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+	const [isEdgeLabelEditorOpen, setIsEdgeLabelEditorOpen] = useState(false);
 
 	// Expose methods to parent via ref
 	useImperativeHandle(ref, () => ({
@@ -156,6 +169,31 @@ function C4CanvasInner(
 		[onNodeClick, setCenter],
 	);
 
+	// Handle edge click to open label editor
+	const handleEdgeClick = useCallback(
+		(_event: React.MouseEvent, edge: Edge) => {
+			setSelectedEdgeId(edge.id);
+			setIsEdgeLabelEditorOpen(true);
+		},
+		[],
+	);
+
+	// Handle saving edge label
+	const handleSaveEdgeLabel = useCallback(
+		(edgeId: string, label: string) => {
+			if (onUpdateEdgeLabel) {
+				onUpdateEdgeLabel(edgeId, label);
+			}
+		},
+		[onUpdateEdgeLabel],
+	);
+
+	// Handle closing edge label editor
+	const handleCloseEdgeLabelEditor = useCallback(() => {
+		setIsEdgeLabelEditorOpen(false);
+		setSelectedEdgeId(null);
+	}, []);
+
 	return (
 		<div className={canvasStack}>
 			{isCommandBarOpen ? (
@@ -198,6 +236,7 @@ function C4CanvasInner(
 					{...(onConnect && { onConnect })}
 					{...(onNodeClick && { onNodeClick })}
 					onNodeDoubleClick={handleNodeDoubleClick}
+					onEdgeClick={handleEdgeClick}
 					nodeTypes={nodeTypes}
 					defaultEdgeOptions={defaultEdgeOptions}
 					fitView
@@ -246,6 +285,17 @@ function C4CanvasInner(
 					/>
 				</ReactFlow>
 			</div>
+			{selectedEdgeId && (
+				<EdgeLabelEditor
+					edgeId={selectedEdgeId}
+					currentLabel={
+						edges.find((e) => e.id === selectedEdgeId)?.label ?? "uses"
+					}
+					isOpen={isEdgeLabelEditorOpen}
+					onClose={handleCloseEdgeLabelEditor}
+					onSave={handleSaveEdgeLabel}
+				/>
+			)}
 		</div>
 	);
 }

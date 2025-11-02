@@ -309,6 +309,14 @@ export function C4CanvasContainer() {
 		[send],
 	);
 
+	// Handle edge label updates
+	const onUpdateEdgeLabel = useCallback(
+		(edgeId: string, label: string) => {
+			send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
+		},
+		[send],
+	);
+
 	const handleNewBoard = useCallback(async () => {
 		try {
 			// Send CREATE_NEW_BOARD event to transition to creatingDiagram state
@@ -621,6 +629,7 @@ export function C4CanvasContainer() {
 					onEdgesChange={onEdgesChange}
 					onConnect={onConnect}
 					onNodeClick={onNodeClick}
+					onUpdateEdgeLabel={onUpdateEdgeLabel}
 					isCommandBarOpen={isCommandBarOpen}
 					onToggleCommandBar={setCommandBarOpen}
 					onSelectNode={handleSelectNode}
