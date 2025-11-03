@@ -578,7 +578,7 @@ export function C4CanvasContainer() {
 						<span>v1.0.0</span>
 		
 					</div>
-							<p>PRECISION TOOLS FOR PROFESSIONALS WHO MAP BEFORE THEY MOVE</p>
+							<p>PRECISION TOOLS FOR PROFESSIONALS</p>
 							<a
 								href="/splashscreen"
 		
