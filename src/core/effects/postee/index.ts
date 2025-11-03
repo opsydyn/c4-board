@@ -76,3 +76,15 @@ export type {
 	PosteeEnvironmentVariable,
 	PosteeHistoryEntry,
 };
+
+// Export ConfigProvider (Effect Config-based)
+export {
+	PosteeConfigProvider,
+	PosteeConfigProviderLive,
+	makeConfigProvider,
+	makeEffectConfigProvider,
+	extractVariableNames,
+	hasVariables,
+	resolveTemplateSync,
+	type PosteeConfigProviderService,
+} from "./config-provider";

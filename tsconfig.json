@@ -11,6 +11,9 @@
     "jsxImportSource": "react",
     "baseUrl": ".",
     "paths": {
+      "@/ui/*": ["src/ui/*"],
+      "@/core/*": ["src/core/*"],
+      "@/schema/*": ["src/core/schema/*"],
       "@ui/*": ["src/ui/*"],
       "@core/*": ["src/core/*"],
       "@schema/*": ["src/core/schema/*"]

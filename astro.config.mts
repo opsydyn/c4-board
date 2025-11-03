@@ -12,6 +12,9 @@ export default defineConfig({
 		plugins: [vanillaExtractPlugin() as unknown as Plugin],
 		resolve: {
 			alias: {
+				"@/ui": "/src/ui",
+				"@/core": "/src/core",
+				"@/schema": "/src/core/schema",
 				"@ui": "/src/ui",
 				"@core": "/src/core",
 				"@schema": "/src/core/schema",

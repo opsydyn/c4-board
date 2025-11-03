@@ -21,7 +21,9 @@ import { Select } from "./Select";
 import { TabBar } from "./TabBar";
 import { HeadersEditor, type Header } from "./HeadersEditor";
 import { MonacoJsonEditor } from "./MonacoJsonEditor";
+import { EnvironmentEditor } from "./EnvironmentEditor";
 import { TabPanel } from "react-aria-components";
+import type { PosteeEnvironmentVariable } from "@/core/effects/database.postee";
 
 import {
 	workspace,
@@ -60,6 +62,9 @@ export function PosteeWorkspace() {
 		requestsByCollection,
 		activeCollectionId,
 		activeRequestId,
+		activeEnvironmentId,
+		environments,
+		variablesByEnvironment,
 		runner,
 		history,
 	} = state.context;
@@ -87,6 +92,10 @@ export function PosteeWorkspace() {
 	const [activeTab, setActiveTab] = useState<"Body" | "Headers">("Body");
 	const [requestHeaders, setRequestHeaders] = useState<Header[]>([]);
 	const [requestBody, setRequestBody] = useState<string>("{}");
+
+	// Environment editor state
+	const [showEnvironmentEditor, setShowEnvironmentEditor] = useState(true);
+	const [newEnvironmentName, setNewEnvironmentName] = useState("");
 
 	const activeCollectionKey = activeCollectionId
 		? (activeCollectionId as unknown as string)
@@ -241,6 +250,49 @@ export function PosteeWorkspace() {
 
 		send({ type: "RUN_CANCEL" });
 	}, [isRunning, send]);
+
+	const handleEnvironmentChange = useCallback(
+		(environmentId: string) => {
+			send({
+				type: "SELECT_ENVIRONMENT",
+				environmentId: environmentId as unknown as ReturnType<
+					typeof CollectionIdBrand
+				>,
+			});
+		},
+		[send],
+	);
+
+	const handleVariablesChange = useCallback(
+		(variables: PosteeEnvironmentVariable[]) => {
+			// TODO: Wire up to machine action to persist changes
+			console.log("Variables changed:", variables);
+		},
+		[],
+	);
+
+	const currentEnvironmentId = activeEnvironmentId
+		? (activeEnvironmentId as unknown as string)
+		: environments[0]?.id ?? "";
+
+	const currentVariables = currentEnvironmentId
+		? variablesByEnvironment[currentEnvironmentId] ?? []
+		: [];
+
+	const handleCreateEnvironment = useCallback(
+		(event: FormEvent<HTMLFormElement>) => {
+			event.preventDefault();
+			const name = newEnvironmentName.trim() || "Development";
+
+			// TODO: Wire up CREATE_ENVIRONMENT event to XState machine
+			// For now, show helpful instructions
+			const dbPath = "~/Library/Application Support/com.adorable-azimuth.app/adorable-azimuth.db";
+			alert(`Environment creation via UI is not yet wired to the database.\n\nTo create an environment named "${name}", run this SQL:\n\nINSERT INTO postee_environments (id, name, description, is_default, created_at, updated_at)\nVALUES ('${nanoid()}', '${name}', NULL, 1, ${Date.now()}, ${Date.now()});\n\nDatabase location: ${dbPath}\n\nThen reload the page.`);
+
+			setNewEnvironmentName("");
+		},
+		[newEnvironmentName],
+	);
 
 	const canRunRequest = Boolean(selectedRequest) && !isInitialising && !isRunning;
 	const lastResponse = runner.response;
@@ -481,6 +533,59 @@ export function PosteeWorkspace() {
 				</button>
 			</div>
 		)}
+
+		<section className={panel}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+				<h2 className={sectionTitle}>Environment Variables</h2>
+				<button
+					type="button"
+					className={submitButton}
+					onClick={() => setShowEnvironmentEditor(!showEnvironmentEditor)}
+				>
+					{showEnvironmentEditor ? "Hide" : "Show"} Editor
+				</button>
+			</div>
+
+			{showEnvironmentEditor && (
+				<>
+					{environments.length === 0 ? (
+						<div className={emptyState}>
+							<strong>No environments yet</strong>
+							<span>Create your first environment to start managing environment variables (e.g., Development, Staging, Production).</span>
+							<form className={createForm} onSubmit={handleCreateEnvironment} style={{ marginTop: "1rem" }}>
+								<input
+									className={textInput}
+									type="text"
+									placeholder="Environment name (e.g., Development)"
+									value={newEnvironmentName}
+									onChange={(event) => setNewEnvironmentName(event.target.value)}
+									required
+									aria-label="Environment name"
+								/>
+								<button
+									className={submitButton}
+									type="submit"
+								>
+									Create Environment
+								</button>
+							</form>
+						</div>
+					) : (
+						<EnvironmentEditor
+							environmentId={currentEnvironmentId}
+							environments={environments.map((env) => ({
+								id: env.id,
+								name: env.name,
+								is_default: env.is_default,
+							}))}
+							variables={currentVariables}
+							onEnvironmentChange={handleEnvironmentChange}
+							onVariablesChange={handleVariablesChange}
+						/>
+					)}
+				</>
+			)}
+		</section>
 	</section>
 </main>
 
