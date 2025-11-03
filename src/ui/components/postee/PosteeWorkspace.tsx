@@ -18,6 +18,10 @@ import {
 	durationToMillis,
 } from "../../../core/effects/postee/types";
 import { Select } from "./Select";
+import { TabBar } from "./TabBar";
+import { HeadersEditor, type Header } from "./HeadersEditor";
+import { MonacoJsonEditor } from "./MonacoJsonEditor";
+import { TabPanel } from "react-aria-components";
 
 import {
 	workspace,
@@ -44,6 +48,7 @@ import {
 	runButton,
 	cancelButton,
 	responseBody,
+	tabContent,
 } from "./PosteeWorkspace.css";
 
 export function PosteeWorkspace() {
@@ -77,6 +82,11 @@ export function PosteeWorkspace() {
 	const [editRequestName, setEditRequestName] = useState("");
 	const [editRequestUrl, setEditRequestUrl] = useState("");
 	const [editRequestMethod, setEditRequestMethod] = useState<HttpMethod>("GET");
+
+	// Request details state (headers, body, tabs)
+	const [activeTab, setActiveTab] = useState<"Body" | "Headers">("Body");
+	const [requestHeaders, setRequestHeaders] = useState<Header[]>([]);
+	const [requestBody, setRequestBody] = useState<string>("{}");
 
 	const activeCollectionKey = activeCollectionId
 		? (activeCollectionId as unknown as string)
@@ -424,6 +434,31 @@ export function PosteeWorkspace() {
 					Save Changes
 				</button>
 			</form>
+		)}
+
+		{selectedRequest && (
+			<section className={panel}>
+				<TabBar
+					tabs={["Body", "Headers"]}
+					activeTab={activeTab}
+					onTabChange={(tab) => setActiveTab(tab as "Body" | "Headers")}
+				>
+					<TabPanel id="Body" className={tabContent}>
+						<MonacoJsonEditor
+							value={requestBody}
+							onChange={setRequestBody}
+							height="300px"
+							placeholder="{}"
+						/>
+					</TabPanel>
+					<TabPanel id="Headers" className={tabContent}>
+						<HeadersEditor
+							headers={requestHeaders}
+							onChange={setRequestHeaders}
+						/>
+					</TabPanel>
+				</TabBar>
+			</section>
 		)}
 
 		{selectedRequest && (

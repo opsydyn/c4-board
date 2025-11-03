@@ -289,3 +289,8 @@ export const responseBody = style({
 	whiteSpace: "pre-wrap",
 	lineHeight: theme.typography.lineHeight.normal,
 });
+
+export const tabContent = style({
+	padding: `${theme.spacing["4"]} 0`,
+	minHeight: "200px",
+});
