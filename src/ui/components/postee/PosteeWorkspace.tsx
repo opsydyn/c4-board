@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useMachine } from "@xstate/react";
 import { nanoid } from "nanoid";
+import Fuse from "fuse.js";
 import {
 	createPosteeWorkspaceMachine,
 	type PosteeEvent,
@@ -14,6 +15,7 @@ import {
 import {
 	CollectionId as CollectionIdBrand,
 	RequestId as RequestIdBrand,
+	EnvironmentId as EnvironmentIdBrand,
 	type HttpMethod,
 	durationToMillis,
 } from "../../../core/effects/postee/types";
@@ -22,6 +24,8 @@ import { TabBar } from "./TabBar";
 import { HeadersEditor, type Header } from "./HeadersEditor";
 import { MonacoJsonEditor } from "./MonacoJsonEditor";
 import { EnvironmentEditor } from "./EnvironmentEditor";
+import { ResponseViewer } from "./ResponseViewer";
+import { SearchInput } from "../SearchInput";
 import { TabPanel } from "react-aria-components";
 import type { PosteeEnvironmentVariable } from "@/core/effects/database.postee";
 
@@ -96,6 +100,9 @@ export function PosteeWorkspace() {
 	// Environment editor state
 	const [showEnvironmentEditor, setShowEnvironmentEditor] = useState(true);
 	const [newEnvironmentName, setNewEnvironmentName] = useState("");
+
+	// Search state
+	const [historySearchQuery, setHistorySearchQuery] = useState("");
 
 	const activeCollectionKey = activeCollectionId
 		? (activeCollectionId as unknown as string)
@@ -236,40 +243,22 @@ export function PosteeWorkspace() {
 	);
 
 	const handleRunRequest = useCallback(() => {
-		if (!selectedRequest || isRunning) {
+		// Check state directly to avoid TDZ issues
+		if (!selectedRequest || state.matches({ ready: "running" })) {
 			return;
 		}
 
 		send({ type: "RUN_REQUEST" });
-	}, [isRunning, selectedRequest, send]);
+	}, [selectedRequest, state, send]);
 
 	const handleCancelRequest = useCallback(() => {
-		if (!isRunning) {
+		// Check state directly to avoid TDZ issues
+		if (!state.matches({ ready: "running" })) {
 			return;
 		}
 
 		send({ type: "RUN_CANCEL" });
-	}, [isRunning, send]);
-
-	const handleEnvironmentChange = useCallback(
-		(environmentId: string) => {
-			send({
-				type: "SELECT_ENVIRONMENT",
-				environmentId: environmentId as unknown as ReturnType<
-					typeof CollectionIdBrand
-				>,
-			});
-		},
-		[send],
-	);
-
-	const handleVariablesChange = useCallback(
-		(variables: PosteeEnvironmentVariable[]) => {
-			// TODO: Wire up to machine action to persist changes
-			console.log("Variables changed:", variables);
-		},
-		[],
-	);
+	}, [state, send]);
 
 	const currentEnvironmentId = activeEnvironmentId
 		? (activeEnvironmentId as unknown as string)
@@ -278,26 +267,82 @@ export function PosteeWorkspace() {
 	const currentVariables = currentEnvironmentId
 		? variablesByEnvironment[currentEnvironmentId] ?? []
 		: [];
+	const handleEnvironmentChange = useCallback(
+		(environmentId: string) => {
+			send({
+				type: "SELECT_ENVIRONMENT",
+				environmentId: environmentId as unknown as ReturnType<
+					typeof EnvironmentIdBrand
+				>,
+			});
+		},
+		[send],
+	);
+	
+	const handleVariablesChange = useCallback(
+		(variables: PosteeEnvironmentVariable[]) => {
+			if (!currentEnvironmentId) return;
+
+			send({
+				type: "UPDATE_ENVIRONMENT_VARIABLES",
+				payload: {
+					environmentId: currentEnvironmentId as unknown as ReturnType<
+						typeof EnvironmentIdBrand
+					>,
+					variables,
+				},
+			} satisfies PosteeEvent);
+		},
+		[currentEnvironmentId, send],
+	);
 
 	const handleCreateEnvironment = useCallback(
 		(event: FormEvent<HTMLFormElement>) => {
 			event.preventDefault();
 			const name = newEnvironmentName.trim() || "Development";
+			const id = nanoid();
 
-			// TODO: Wire up CREATE_ENVIRONMENT event to XState machine
-			// For now, show helpful instructions
-			const dbPath = "~/Library/Application Support/com.adorable-azimuth.app/adorable-azimuth.db";
-			alert(`Environment creation via UI is not yet wired to the database.\n\nTo create an environment named "${name}", run this SQL:\n\nINSERT INTO postee_environments (id, name, description, is_default, created_at, updated_at)\nVALUES ('${nanoid()}', '${name}', NULL, 1, ${Date.now()}, ${Date.now()});\n\nDatabase location: ${dbPath}\n\nThen reload the page.`);
+			send({
+				type: "CREATE_ENVIRONMENT",
+				payload: {
+					id,
+					name,
+					description: null,
+					is_default: environments.length === 0 ? 1 : 0,
+				},
+			} satisfies PosteeEvent);
 
 			setNewEnvironmentName("");
 		},
-		[newEnvironmentName],
+		[newEnvironmentName, send, environments.length],
 	);
 
 	const canRunRequest = Boolean(selectedRequest) && !isInitialising && !isRunning;
 	const lastResponse = runner.response;
 	const lastError = runner.status === "error" ? runner.error ?? "Request failed" : null;
 	const lastResponseDurationMs = lastResponse ? durationToMillis(lastResponse.duration) : null;
+
+	// Fuse.js search for history
+	const filteredHistory = useMemo(() => {
+		if (!historySearchQuery.trim()) {
+			return history;
+		}
+
+		const fuse = new Fuse(history, {
+			keys: [
+				"response_body",
+				"response_headers",
+				"request_snapshot",
+				{ name: "response_status", weight: 2 },
+			],
+			threshold: 0.3,
+			includeScore: true,
+			minMatchCharLength: 2,
+		});
+
+		const results = fuse.search(historySearchQuery);
+		return results.map((result) => result.item);
+	}, [history, historySearchQuery]);
 
 	return (
 		<div className={workspace}>
@@ -599,33 +644,15 @@ export function PosteeWorkspace() {
 	)}
 
 	{lastResponse && (
-		<div className={panel}>
-			<h3 className={sectionTitle}>Last Response</h3>
-			<div>
-				<strong>Status:</strong> {lastResponse.status} {lastResponse.statusText}
-			</div>
-			<div>
-				<strong>Duration:</strong> {lastResponseDurationMs ?? 0}ms
-			</div>
-			<div>
-				<strong>Body size:</strong> {Number(lastResponse.rawSize)} bytes
-			</div>
-			{Object.keys(lastResponse.headers).length > 0 && (
-				<div>
-					<strong>Headers:</strong>
-					<ul>
-						{Object.entries(lastResponse.headers).map(([key, value]) => (
-							<li key={key}>
-								<strong>{key}:</strong> {value}
-							</li>
-						))}
-					</ul>
-				</div>
-			)}
-			{lastResponse.bodyText && lastResponse.bodyText.trim().length > 0 && (
-				<pre className={responseBody}>{lastResponse.bodyText}</pre>
-			)}
-		</div>
+		<ResponseViewer
+			body={lastResponse.bodyText}
+			headers={lastResponse.headers}
+			status={lastResponse.status}
+			statusText={lastResponse.statusText}
+			duration={lastResponseDurationMs ?? undefined}
+			size={Number(lastResponse.rawSize)}
+			defaultExpanded={true}
+		/>
 	)}
 
 	{lastError && (
@@ -636,13 +663,27 @@ export function PosteeWorkspace() {
 	)}
 
 	<h2 className={sectionTitle}>Recent Activity</h2>
+
+	{history.length > 0 && (
+		<SearchInput
+			value={historySearchQuery}
+			onChange={setHistorySearchQuery}
+			placeholder="Search responses by status, body, headers..."
+		/>
+	)}
+
 	{history.length === 0 ? (
 		<div className={emptyState}>
 			<strong>No history yet</strong>
 			<span>Executed requests will appear here once the runner is wired up.</span>
 		</div>
+	) : filteredHistory.length === 0 ? (
+		<div className={emptyState}>
+			<strong>No results found</strong>
+			<span>Try a different search query.</span>
+		</div>
 	) : (
-		history.slice(0, 5).map((entry) => (
+		filteredHistory.slice(0, 10).map((entry) => (
 			<div key={entry.id} className={panel}>
 				<div>
 					<strong>Status:</strong>{" "}
@@ -653,9 +694,23 @@ export function PosteeWorkspace() {
 					{entry.response_time_ms ?? 0}ms
 				</div>
 				<div>
+					<strong>Size:</strong>{" "}
+					{entry.response_size_bytes ? `${entry.response_size_bytes} bytes` : "N/A"}
+				</div>
+				<div>
 					<strong>Executed:</strong>{" "}
 					{new Date(entry.executed_at).toLocaleString()}
 				</div>
+				{entry.response_body && (
+					<ResponseViewer
+						body={entry.response_body}
+						headers={entry.response_headers ?? undefined}
+						status={entry.response_status ?? undefined}
+						duration={entry.response_time_ms ?? undefined}
+						size={entry.response_size_bytes ?? undefined}
+						defaultExpanded={false}
+					/>
+				)}
 			</div>
 		))
 	)}

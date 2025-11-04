@@ -258,5 +258,116 @@ This is the **foundational architecture pattern** for the entire app:
 * [Tauri command guide](https://tauri.app/)
 * [Yjs docs](https://docs.yjs.dev/)
 
+---
+
+## 📊 Postee Database Schema
+
+Postee is an HTTP client tool (Postman-like) with environment variable management.
+
+### Database Migrations
+
+Located in `src-tauri/migrations/`:
+- **008_create_postee_tables.sql** - Creates all Postee tables
+- **009_seed_postee_environments.sql** - Seeds default environments (Development, Staging, Production)
+
+### Schema Overview
+
+```
+postee_collections
+├── id (TEXT, PK)
+├── name (TEXT)
+├── description (TEXT)
+├── sort_order (INTEGER)
+├── created_at (INTEGER)
+└── updated_at (INTEGER)
+
+postee_requests
+├── id (TEXT, PK)
+├── collection_id (TEXT, FK → postee_collections)
+├── name (TEXT)
+├── method (TEXT) -- GET, POST, PUT, etc.
+├── url (TEXT)
+├── description (TEXT)
+├── favorite (INTEGER)
+├── sort_order (INTEGER)
+├── created_at (INTEGER)
+└── updated_at (INTEGER)
+
+postee_request_headers
+├── id (INTEGER, PK AUTOINCREMENT)
+├── request_id (TEXT, FK → postee_requests)
+├── key (TEXT)
+├── value (TEXT)
+├── is_enabled (INTEGER)
+└── sort_order (INTEGER)
+
+postee_request_bodies
+├── request_id (TEXT, PK, FK → postee_requests)
+├── mode (TEXT) -- 'raw', 'json', 'form'
+├── raw (TEXT)
+└── form_values (TEXT)
+
+postee_environments ⭐
+├── id (TEXT, PK)
+├── name (TEXT) -- e.g., "Development", "Staging"
+├── description (TEXT)
+├── is_default (INTEGER) -- 1 for default environment
+├── created_at (INTEGER)
+└── updated_at (INTEGER)
+
+postee_environment_variables ⭐
+├── id (INTEGER, PK AUTOINCREMENT)
+├── environment_id (TEXT, FK → postee_environments)
+├── key (TEXT) -- e.g., "API_BASE_URL", "API_KEY"
+├── value (TEXT)
+├── is_secret (INTEGER) -- 1 for masked/secret values
+├── is_enabled (INTEGER) -- 1 for active variables
+├── sort_order (INTEGER)
+├── created_at (INTEGER)
+├── updated_at (INTEGER)
+└── UNIQUE(environment_id, key)
+
+postee_history
+├── id (TEXT, PK)
+├── request_id (TEXT, FK → postee_requests)
+├── request_snapshot (TEXT) -- JSON snapshot of request
+├── response_status (INTEGER)
+├── response_time_ms (INTEGER)
+├── response_size_bytes (INTEGER)
+├── error_message (TEXT)
+└── executed_at (INTEGER)
+```
+
+### Environment Variables Feature
+
+**Flow:**
+1. User selects an environment (Development/Staging/Production)
+2. User adds variables with key-value pairs
+3. Variables can be marked as "secret" (masked in UI)
+4. Variables can be enabled/disabled without deletion
+5. Variables use `{{varName}}` syntax in requests
+6. ConfigProvider resolves variables at runtime using Effect Config module
+
+**Implementation:**
+- **UI**: `EnvironmentEditor` component (React Aria)
+- **State**: XState machine in `postee.machine.ts`
+- **Effects**: `config-provider.ts` using Effect Config
+- **Database**: SQLite via Tauri commands
+
+**Variable Resolution:**
+```typescript
+// In request URL
+const url = "{{BASE_URL}}/api/users";
+// Resolves to: "https://api.dev.example.com/api/users"
+
+// In headers
+Authorization: Bearer {{API_KEY}}
+// Resolves to: "Bearer dev-api-key-12345"
+```
+
+**See also:**
+- [src/core/effects/postee/config-provider.ts](src/core/effects/postee/config-provider.ts) - Effect Config integration
+- [src/ui/components/postee/EnvironmentEditor.tsx](src/ui/components/postee/EnvironmentEditor.tsx) - UI component
+
 ```
 ```

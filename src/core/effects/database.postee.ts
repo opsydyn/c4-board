@@ -67,6 +67,8 @@ export interface PosteeHistoryEntry {
 	response_status: number | null;
 	response_time_ms: number | null;
 	response_size_bytes: number | null;
+	response_body: string | null; // JSON string
+	response_headers: string | null; // JSON string
 	error_message: string | null;
 	executed_at: number;
 }
@@ -311,8 +313,8 @@ export const insertPosteeHistory = (entry: PosteeHistoryEntry) =>
 	Effect.gen(function* () {
 		const service = yield* DatabaseService;
 		yield* service.execute(
-			`INSERT INTO postee_history (id, request_id, request_snapshot, response_status, response_time_ms, response_size_bytes, error_message, executed_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO postee_history (id, request_id, request_snapshot, response_status, response_time_ms, response_size_bytes, response_body, response_headers, error_message, executed_at)
+			 VALUES (?, ?, ?, ?, ?, ?, json(?), json(?), ?, ?)`,
 			[
 				entry.id,
 				entry.request_id ?? null,
@@ -320,6 +322,8 @@ export const insertPosteeHistory = (entry: PosteeHistoryEntry) =>
 				entry.response_status ?? null,
 				entry.response_time_ms ?? null,
 				entry.response_size_bytes ?? null,
+				entry.response_body ?? null,
+				entry.response_headers ?? null,
 				entry.error_message ?? null,
 				entry.executed_at,
 			],

@@ -380,6 +380,18 @@ pub fn run() {
             sql: include_str!("../migrations/008_create_postee_tables.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "seed_postee_environments",
+            sql: include_str!("../migrations/009_seed_postee_environments.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "add_response_body_json",
+            sql: include_str!("../migrations/010_add_response_body_json.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

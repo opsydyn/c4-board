@@ -8,6 +8,7 @@
  */
 
 import { assign, fromPromise, setup } from "xstate";
+import type { DoneActorEvent, ErrorActorEvent } from "xstate";
 import { nanoid } from "nanoid";
 import { Duration, Effect, Layer } from "effect";
 import {
@@ -109,7 +110,23 @@ export type PosteeEvent =
 			requestId: RequestId;
 			response: PreparedResponse;
 	  }
-	| { type: "REQUEST_RUN_ERROR"; requestId: RequestId; message: string };
+	| { type: "REQUEST_RUN_ERROR"; requestId: RequestId; message: string }
+	| {
+			type: "CREATE_ENVIRONMENT";
+			payload: {
+				id: string;
+				name: string;
+				description: string | null;
+				is_default: number;
+			};
+	  }
+	| {
+			type: "UPDATE_ENVIRONMENT_VARIABLES";
+			payload: {
+				environmentId: EnvironmentId;
+				variables: PosteeEnvironmentVariable[];
+			};
+	  };
 
 export interface LoadWorkspaceResult {
 	collections: PosteeCollection[];
@@ -121,6 +138,22 @@ export interface LoadWorkspaceResult {
 	defaultRequestId: RequestId | null;
 	defaultEnvironmentId: EnvironmentId | null;
 }
+
+export interface RunRequestResult {
+	response: PreparedResponse;
+	prepared: PreparedRequest;
+	historyEntry: PosteeHistoryEntry;
+}
+
+type LoadWorkspaceDoneEvent = DoneActorEvent<LoadWorkspaceResult, "loadWorkspace">;
+type RunRequestDoneEvent = DoneActorEvent<RunRequestResult, "runRequest">;
+type RunRequestErrorEvent = ErrorActorEvent<unknown, "runRequest">;
+
+type PosteeMachineEvent =
+	| PosteeEvent
+	| LoadWorkspaceDoneEvent
+	| RunRequestDoneEvent
+	| RunRequestErrorEvent;
 
 // =============================================================================
 // Helpers
@@ -149,273 +182,319 @@ const initialRunner = (): RunnerState => ({
 
 // @ts-nocheck - XState v5 has deep type inference that can cause stack overflow in tsc
 // The types are still checked by ESLint and the IDE
-export const createPosteeWorkspaceMachine = (options?: {
-	layer?: WorkspaceLayer;
-}) =>
-	setup({
-		types: {
-			context: {} as PosteeContext,
-			events: {} as PosteeEvent,
-		},
-		actors: {
-			loadWorkspace: fromPromise<
-				LoadWorkspaceResult,
-				{ layer: WorkspaceLayer }
-			>(async ({ input }) => {
-				const layer = input.layer;
-				return runLayeredEffect(
-					layer,
-					Effect.gen(function* () {
-						const collections = yield* PosteeCollections.list();
+const posteeWorkspaceSetup = setup({
+	types: {
+		context: {} as PosteeContext,
+		events: {} as PosteeMachineEvent,
+	},
+	actors: {
+		loadWorkspace: fromPromise<
+			LoadWorkspaceResult,
+			{ layer: WorkspaceLayer }
+		>(async ({ input }) => {
+			const layer = input.layer;
+			return runLayeredEffect(
+				layer,
+				Effect.gen(function* () {
+					const collections = yield* PosteeCollections.list();
 
-						const requestPairs = yield* Effect.forEach(
-							collections,
-							(collection) =>
-								Effect.map(PosteeRequests.list(collection.id), (requests) => [
-									collection.id,
-									requests,
-								] as const),
-							{ batching: true },
-						);
-
-						const environments = yield* PosteeEnvironments.list();
-
-						const variableEntries = yield* Effect.forEach(
-							environments,
-							(environment) =>
-								Effect.map(
-									PosteeEnvironments.listVariables(environment.id),
-									(variables) => [environment.id, variables] as const,
-								),
-							{ batching: true },
-						);
-
-						const history = yield* PosteeHistory.list(50);
-
-						const requestMap = Object.fromEntries(requestPairs);
-						const variables = Object.fromEntries(variableEntries);
-
-						// Brand IDs from database strings
-						const firstCollectionId = collections[0]?.id;
-						const firstCollection = firstCollectionId
-							? CollectionIdBrand(firstCollectionId)
-							: null;
-
-						const firstRequestId =
-							firstCollectionId && requestMap[firstCollectionId]?.[0]?.id;
-						const firstRequest = firstRequestId
-							? RequestIdBrand(firstRequestId)
-							: null;
-
-						const defaultEnvironmentId =
-							environments.find((env) => env.is_default === 1)?.id ??
-							environments[0]?.id;
-						const defaultEnvironment = defaultEnvironmentId
-							? EnvironmentIdBrand(defaultEnvironmentId)
-							: null;
-
-						return {
-							collections,
-							requestMap,
-							environments,
-							variables,
-							history,
-							defaultCollectionId: firstCollection,
-							defaultRequestId: firstRequest,
-							defaultEnvironmentId: defaultEnvironment,
-						} satisfies LoadWorkspaceResult;
-					}),
-				);
-			}),
-
-			runRequest: fromPromise<
-				{
-					response: PreparedResponse;
-					prepared: PreparedRequest;
-					historyEntry: PosteeHistoryEntry;
-				},
-				{
-					layer: WorkspaceLayer;
-					context: PosteeContext;
-				}
-			>(async ({ input }) => {
-				const { layer, context } = input;
-				const requestId = context.activeRequestId;
-				if (!requestId) {
-					throw new Error("No active request selected");
-				}
-
-				const environmentId = context.activeEnvironmentId;
-
-				const requestEffect = Effect.gen(function* () {
-					// Convert branded ID to string for database lookup
-					const requestIdString = requestId as unknown as string;
-
-					const request = yield* PosteeRequests.get(requestIdString);
-					if (!request) {
-						throw new Error(`Request ${requestId} not found`);
-					}
-
-					const headers = yield* PosteeRequests.listHeaders(requestIdString);
-					const body = yield* PosteeRequests.getBody(requestIdString);
-
-					// Lookup variables by environment (need string key for Record)
-					const variables =
-						(environmentId &&
-							context.variablesByEnvironment[
-								environmentId as unknown as string
-							]) ||
-						[];
-
-					// Convert database body format to sum type
-					const bodyMode = body?.mode ?? "raw";
-					const requestBody = bodyModeToSumType(
-						bodyMode as "raw" | "json" | "form",
-						body?.raw ?? null,
-						body?.form_values ?? null,
+					const requestPairs = yield* Effect.forEach(
+						collections,
+						(collection) =>
+							Effect.map(PosteeRequests.list(collection.id), (requests) => [
+								collection.id,
+								requests,
+							] as const),
+						{ batching: true },
 					);
 
-					const prepared = yield* prepareRequest({
-						id: RequestIdBrand(request.id),
-						method: request.method as HttpMethod,
-						url: request.url,
-						headers,
-						body: requestBody,
-						env: { variables },
-						timeout: Duration.seconds(30),
-					});
+					const environments = yield* PosteeEnvironments.list();
 
-					const client = yield* HttpClient;
-					const response = yield* client.send(prepared);
+					const variableEntries = yield* Effect.forEach(
+						environments,
+						(environment) =>
+							Effect.map(
+								PosteeEnvironments.listVariables(environment.id),
+								(variables) => [environment.id, variables] as const,
+							),
+						{ batching: true },
+					);
 
-					const historyEntry: PosteeHistoryEntry = {
-						id: nanoid(),
-						request_id: request.id,
-						request_snapshot: JSON.stringify(
-							{
-								request,
-								headers,
-								body,
-								environmentId,
-								prepared,
-							},
-							null,
-							2,
-						),
-						response_status: response.status,
-						response_time_ms: durationToMillis(response.duration),
-						response_size_bytes: response.rawSize,
-						error_message: null,
-						executed_at: Date.now(),
-					};
+					const history = yield* PosteeHistory.list(50);
 
-					yield* PosteeHistory.record(historyEntry);
+					const requestMap = Object.fromEntries(requestPairs);
+					const variables = Object.fromEntries(variableEntries);
 
-					return { prepared, response, historyEntry };
-				});
+					// Brand IDs from database strings
+					const firstCollectionId = collections[0]?.id;
+					const firstCollection = firstCollectionId
+						? CollectionIdBrand(firstCollectionId)
+						: null;
 
-				return runLayeredEffect(layer, requestEffect);
-			}),
-		},
-		guards: {
-			hasActiveRequest: ({ context }) => context.activeRequestId !== null,
-		},
-		actions: {
-			createCollection: assign(({ context, event }) => {
-				if (!event || event.type !== "CREATE_COLLECTION") {
-					return context;
+					const firstRequestId =
+						firstCollectionId && requestMap[firstCollectionId]?.[0]?.id;
+					const firstRequest = firstRequestId
+						? RequestIdBrand(firstRequestId)
+						: null;
+
+					const defaultEnvironmentId =
+						environments.find((env) => env.is_default === 1)?.id ??
+						environments[0]?.id;
+					const defaultEnvironment = defaultEnvironmentId
+						? EnvironmentIdBrand(defaultEnvironmentId)
+						: null;
+
+					return {
+						collections,
+						requestMap,
+						environments,
+						variables,
+						history,
+						defaultCollectionId: firstCollection,
+						defaultRequestId: firstRequest,
+						defaultEnvironmentId: defaultEnvironment,
+					} satisfies LoadWorkspaceResult;
+				}),
+			);
+		}),
+
+		runRequest: fromPromise<
+			RunRequestResult,
+			{
+				layer: WorkspaceLayer;
+				context: PosteeContext;
+			}
+		>(async ({ input }) => {
+			const { layer, context } = input;
+			const requestId = context.activeRequestId;
+			if (!requestId) {
+				throw new Error("No active request selected");
+			}
+
+			const environmentId = context.activeEnvironmentId;
+
+			const requestEffect = Effect.gen(function* () {
+				// Convert branded ID to string for database lookup
+				const requestIdString = requestId as unknown as string;
+
+				const request = yield* PosteeRequests.get(requestIdString);
+				if (!request) {
+					throw new Error(`Request ${requestId} not found`);
 				}
 
-				const collectionId = event.payload.id as unknown as string;
-				const now = Date.now();
+				const headers = yield* PosteeRequests.listHeaders(requestIdString);
+				const body = yield* PosteeRequests.getBody(requestIdString);
 
-				runLayeredEffect(
-					context.layer,
-					PosteeCollections.create({
-						id: collectionId,
-						name: event.payload.name,
-						description: event.payload.description ?? null,
-						sort_order: context.collections.length + 1,
-					}),
-				).catch(() => {
-					// TODO: surface error to user once notifications are wired up
+				// Lookup variables by environment (need string key for Record)
+				const variables =
+					(environmentId &&
+						context.variablesByEnvironment[environmentId as unknown as string]) ||
+					[];
+
+				// Convert database body format to sum type
+				const bodyMode = body?.mode ?? "raw";
+				const requestBody = bodyModeToSumType(
+					bodyMode as "raw" | "json" | "form",
+					body?.raw ?? null,
+					body?.form_values ?? null,
+				);
+
+				const prepared = yield* prepareRequest({
+					id: RequestIdBrand(request.id),
+					method: request.method as HttpMethod,
+					url: request.url,
+					headers,
+					body: requestBody,
+					env: { variables },
+					timeout: Duration.seconds(30),
 				});
 
-				const newCollection: PosteeCollection = {
+				const client = yield* HttpClient;
+				const response = yield* client.send(prepared);
+
+				const historyEntry: PosteeHistoryEntry = {
+					id: nanoid(),
+					request_id: request.id,
+					request_snapshot: JSON.stringify(
+						{
+							request,
+							headers,
+							body,
+							environmentId,
+							prepared,
+						},
+						null,
+						2,
+					),
+					response_status: response.status,
+					response_time_ms: durationToMillis(response.duration),
+					response_size_bytes: response.rawSize,
+					response_body: response.bodyText, // ✅ Save response body as JSON
+					response_headers: JSON.stringify(response.headers), // ✅ Save headers as JSON
+					error_message: null,
+					executed_at: Date.now(),
+				};
+
+				yield* PosteeHistory.record(historyEntry);
+
+				return { prepared, response, historyEntry };
+			});
+
+			return runLayeredEffect(layer, requestEffect);
+		}),
+	},
+	guards: {
+		hasActiveRequest: ({ context }) => context.activeRequestId !== null,
+	},
+	actions: {
+		createCollection: assign(({ context, event }) => {
+			if (!event || event.type !== "CREATE_COLLECTION") {
+				return context;
+			}
+
+			const collectionId = event.payload.id as unknown as string;
+			const now = Date.now();
+
+			runLayeredEffect(
+				context.layer,
+				PosteeCollections.create({
 					id: collectionId,
 					name: event.payload.name,
 					description: event.payload.description ?? null,
 					sort_order: context.collections.length + 1,
-					created_at: now,
-					updated_at: now,
-				};
+				}),
+			).catch(() => {
+				// TODO: surface error to user once notifications are wired up
+			});
 
-				return {
-					...context,
-					collections: [newCollection, ...context.collections],
-					requestsByCollection: {
-						...context.requestsByCollection,
-						[collectionId]: [],
-					},
-					activeCollectionId: event.payload.id,
-					activeRequestId: null,
-				};
-			}),
-			selectCollection: assign({
-				activeCollectionId: ({ event }) =>
-					event.type === "SELECT_COLLECTION" ? event.collectionId : null,
-				activeRequestId: ({ context, event }) => {
-					if (event.type !== "SELECT_COLLECTION") {
-						return context.activeRequestId;
-					}
-					// Need to look up by the raw string ID from database
-					const collectionId = event.collectionId as unknown as string;
-					const nextRequests = context.requestsByCollection[collectionId] ?? [];
-					const firstRequestId = nextRequests[0]?.id;
-					return firstRequestId ? RequestIdBrand(firstRequestId) : null;
+			const newCollection: PosteeCollection = {
+				id: collectionId,
+				name: event.payload.name,
+				description: event.payload.description ?? null,
+				sort_order: context.collections.length + 1,
+				created_at: now,
+				updated_at: now,
+			};
+
+			return {
+				...context,
+				collections: [newCollection, ...context.collections],
+				requestsByCollection: {
+					...context.requestsByCollection,
+					[collectionId]: [],
 				},
-				runner: () => initialRunner(),
-			}),
-			selectRequest: assign({
-				activeRequestId: ({ event }) =>
-					event.type === "SELECT_REQUEST" ? event.requestId : null,
-				runner: () => initialRunner(),
-			}),
-			selectEnvironment: assign({
-				activeEnvironmentId: ({ context, event }) => {
-					if (event.type !== "SELECT_ENVIRONMENT") {
-						return context.activeEnvironmentId;
-					}
-					return event.environmentId;
-				},
-			}),
-			createRequest: assign(({ context, event }) => {
-				if (!event || event.type !== "CREATE_REQUEST") {
-					return context;
+				activeCollectionId: event.payload.id,
+				activeRequestId: null,
+			};
+		}),
+		selectCollection: assign({
+			activeCollectionId: ({ event }) =>
+				event.type === "SELECT_COLLECTION" ? event.collectionId : null,
+			activeRequestId: ({ context, event }) => {
+				if (event.type !== "SELECT_COLLECTION") {
+					return context.activeRequestId;
 				}
+				// Need to look up by the raw string ID from database
+				const collectionId = event.collectionId as unknown as string;
+				const nextRequests = context.requestsByCollection[collectionId] ?? [];
+				const firstRequestId = nextRequests[0]?.id;
+				return firstRequestId ? RequestIdBrand(firstRequestId) : null;
+			},
+			runner: () => initialRunner(),
+		}),
+		selectRequest: assign({
+			activeRequestId: ({ event }) =>
+				event.type === "SELECT_REQUEST" ? event.requestId : null,
+			runner: () => initialRunner(),
+		}),
+		selectEnvironment: assign({
+			activeEnvironmentId: ({ context, event }) => {
+				if (event.type !== "SELECT_ENVIRONMENT") {
+					return context.activeEnvironmentId;
+				}
+				return event.environmentId;
+			},
+		}),
+		createEnvironment: assign(({ context, event }) => {
+			if (!event || event.type !== "CREATE_ENVIRONMENT") {
+				return context;
+			}
 
-				const collectionKey = event.payload.collectionId as unknown as string;
-				const requestId = event.payload.id as unknown as string;
-				const now = Date.now();
+			const now = Date.now();
 
-				runLayeredEffect(
-					context.layer,
-					PosteeRequests.create({
-						id: requestId,
-						collection_id: collectionKey,
-						name: event.payload.name,
-						method: event.payload.method,
-						url: event.payload.url,
-						description: null,
-						favorite: 0,
-						sort_order:
-							(context.requestsByCollection[collectionKey]?.length ?? 0) + 1,
-					}),
-				).catch(() => {
-					// TODO: surface error to user once notifications are wired up
-				});
+			runLayeredEffect(
+				context.layer,
+				PosteeEnvironments.create({
+					id: event.payload.id,
+					name: event.payload.name,
+					description: event.payload.description,
+					is_default: event.payload.is_default,
+				}),
+			).catch(() => {
+				// TODO: surface error to user once notifications are wired up
+			});
 
-				const nextRequest: PosteeRequest = {
+			const newEnvironment: PosteeEnvironment = {
+				id: event.payload.id,
+				name: event.payload.name,
+				description: event.payload.description,
+				is_default: event.payload.is_default,
+				created_at: now,
+				updated_at: now,
+			};
+
+			return {
+				...context,
+				environments: [...context.environments, newEnvironment],
+				activeEnvironmentId: EnvironmentIdBrand(event.payload.id),
+			};
+		}),
+		updateEnvironmentVariables: assign(({ context, event }) => {
+			if (!event || event.type !== "UPDATE_ENVIRONMENT_VARIABLES") {
+				return context;
+			}
+
+			const envId = event.payload.environmentId as unknown as string;
+
+			// Run the Effect to persist to database
+			runLayeredEffect(
+				context.layer,
+				PosteeEnvironments.saveVariables(
+					envId,
+					event.payload.variables.map((v) => ({
+						environment_id: v.environment_id,
+						key: v.key,
+						value: v.value,
+						is_secret: v.is_secret,
+						is_enabled: v.is_enabled,
+						sort_order: v.sort_order,
+					})),
+				),
+			).catch(() => {
+				// TODO: surface error to user once notifications are wired up
+			});
+
+			// Update local context
+			return {
+				...context,
+				variablesByEnvironment: {
+					...context.variablesByEnvironment,
+					[envId]: event.payload.variables,
+				},
+			};
+		}),
+		createRequest: assign(({ context, event }) => {
+			if (!event || event.type !== "CREATE_REQUEST") {
+				return context;
+			}
+
+			const collectionKey = event.payload.collectionId as unknown as string;
+			const requestId = event.payload.id as unknown as string;
+			const now = Date.now();
+
+			runLayeredEffect(
+				context.layer,
+				PosteeRequests.create({
 					id: requestId,
 					collection_id: collectionKey,
 					name: event.payload.name,
@@ -425,242 +504,371 @@ export const createPosteeWorkspaceMachine = (options?: {
 					favorite: 0,
 					sort_order:
 						(context.requestsByCollection[collectionKey]?.length ?? 0) + 1,
-					created_at: now,
-					updated_at: now,
-				};
-
-				const nextRequests = [
-					nextRequest,
-					...(context.requestsByCollection[collectionKey] ?? []),
-				];
-
-				return {
-					...context,
-					requestsByCollection: {
-						...context.requestsByCollection,
-						[collectionKey]: nextRequests,
-					},
-					activeCollectionId: event.payload.collectionId,
-					activeRequestId: event.payload.id,
-				};
-			}),
-			updateRequestMetadata: assign(({ context, event }) => {
-				if (!event || event.type !== "UPDATE_REQUEST_METADATA") {
-					return context;
-				}
-
-				const requestId = event.payload.id as unknown as string;
-				let targetCollectionKey: string | null = null;
-				let existingRequest: PosteeRequest | undefined;
-
-				for (const [key, requests] of Object.entries(
-					context.requestsByCollection,
-				)) {
-					const match = requests.find((request) => request.id === requestId);
-					if (match) {
-						targetCollectionKey = key;
-						existingRequest = match;
-						break;
-					}
-				}
-
-				if (!targetCollectionKey || !existingRequest) {
-					return context;
-				}
-
-				const updatedAt = Date.now();
-				const updatedRequest: PosteeRequest = {
-					...existingRequest,
-					name: event.payload.name ?? existingRequest.name,
-					method: event.payload.method ?? existingRequest.method,
-					url: event.payload.url ?? existingRequest.url,
-					description:
-						event.payload.description ?? existingRequest.description,
-					updated_at: updatedAt,
-				};
-
-				runLayeredEffect(
-					context.layer,
-					PosteeRequests.update(updatedRequest),
-				).catch(() => {
-					// TODO: surface error to user once notifications are wired up
-				});
-
-				return {
-					...context,
-					requestsByCollection: {
-						...context.requestsByCollection,
-						[targetCollectionKey]: context.requestsByCollection[targetCollectionKey]?.map(
-							(request) => (request.id === requestId ? updatedRequest : request),
-						) ?? [],
-					},
-					activeRequestId: event.payload.id,
-				};
-			}),
-			assignWorkspace: assign(({ context, event }) => {
-				// XState done events are not in the union type
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const doneEvent = event as any;
-				if (!doneEvent || doneEvent.type !== "xstate.done.actor.loadWorkspace") {
-					return context;
-				}
-
-				const {
-					collections,
-					requestMap,
-					environments,
-					variables,
-					history,
-					defaultCollectionId,
-					defaultRequestId,
-					defaultEnvironmentId,
-				} = doneEvent.output as LoadWorkspaceResult;
-
-				return {
-					...context,
-					collections,
-					requestsByCollection: requestMap,
-					environments,
-					variablesByEnvironment: variables,
-					history,
-					activeCollectionId: defaultCollectionId,
-					activeRequestId: defaultRequestId,
-					activeEnvironmentId: defaultEnvironmentId,
-					runner: initialRunner(),
-				};
-			}),
-			markRunnerIdle: assign({
-				runner: () => initialRunner(),
-			}),
-			markRunnerRunning: assign({
-				runner: ({ context }) => ({
-					...context.runner,
-					status: "running" as const,
-					requestId: context.activeRequestId,
-					error: null,
-					startedAt: Date.now(),
 				}),
-			}),
-			markRunnerSuccess: assign({
-				runner: ({ context, event }) => {
-					if (!event || event.type !== "REQUEST_RUN_RESULT") {
-						return context.runner;
-					}
+			).catch(() => {
+				// TODO: surface error to user once notifications are wired up
+			});
 
-					return {
-						status: "success" as const,
-						requestId: event.requestId,
-						response: event.response,
-						error: null,
-						startedAt: context.runner.startedAt,
-					};
-				},
-			}),
-			markRunnerError: assign({
-				runner: ({ context, event }) => {
-					if (!event || event.type !== "REQUEST_RUN_ERROR") {
-						return context.runner;
-					}
+			const nextRequest: PosteeRequest = {
+				id: requestId,
+				collection_id: collectionKey,
+				name: event.payload.name,
+				method: event.payload.method,
+				url: event.payload.url,
+				description: null,
+				favorite: 0,
+				sort_order:
+					(context.requestsByCollection[collectionKey]?.length ?? 0) + 1,
+				created_at: now,
+				updated_at: now,
+			};
 
-					const errorText = (() => {
-						const message = event.message;
-						if (typeof message === "string" && message.length > 0) {
-							return message;
-						}
-						try {
-							return JSON.stringify(message, null, 2);
-						} catch {
-							return String(message ?? "Request failed");
-						}
-					})();
+			const nextRequests = [
+				nextRequest,
+				...(context.requestsByCollection[collectionKey] ?? []),
+			];
 
-					return {
-						status: "error" as const,
-						requestId: event.requestId,
-						response: null,
-						error: errorText,
-						startedAt: context.runner.startedAt,
-					};
+			return {
+				...context,
+				requestsByCollection: {
+					...context.requestsByCollection,
+					[collectionKey]: nextRequests,
 				},
-			}),
-			updateRunnerOnSuccess: assign({
-				runner: ({ context, event }) => {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					const doneEvent = event as any;
-					if (!doneEvent?.output) return context.runner;
-					const { response, prepared } = doneEvent.output;
-					return {
-						status: "success" as const,
-						requestId: prepared.id,
-						response,
-						error: null,
-						startedAt: context.runner.startedAt,
-					};
+				activeCollectionId: event.payload.collectionId,
+				activeRequestId: event.payload.id,
+			};
+		}),
+		updateRequestMetadata: assign(({ context, event }) => {
+			if (!event || event.type !== "UPDATE_REQUEST_METADATA") {
+				return context;
+			}
+
+			const requestId = event.payload.id as unknown as string;
+			let targetCollectionKey: string | null = null;
+			let existingRequest: PosteeRequest | undefined;
+
+			for (const [key, requests] of Object.entries(
+				context.requestsByCollection,
+			)) {
+				const match = requests.find((request) => request.id === requestId);
+				if (match) {
+					targetCollectionKey = key;
+					existingRequest = match;
+					break;
+				}
+			}
+
+			if (!targetCollectionKey || !existingRequest) {
+				return context;
+			}
+
+			const updatedAt = Date.now();
+			const updatedRequest: PosteeRequest = {
+				...existingRequest,
+				name: event.payload.name ?? existingRequest.name,
+				method: event.payload.method ?? existingRequest.method,
+				url: event.payload.url ?? existingRequest.url,
+				description:
+					event.payload.description ?? existingRequest.description,
+				updated_at: updatedAt,
+			};
+
+			runLayeredEffect(
+				context.layer,
+				PosteeRequests.update(updatedRequest),
+			).catch(() => {
+				// TODO: surface error to user once notifications are wired up
+			});
+
+			return {
+				...context,
+				requestsByCollection: {
+					...context.requestsByCollection,
+					[targetCollectionKey]: context.requestsByCollection[targetCollectionKey]?.map(
+						(request) => (request.id === requestId ? updatedRequest : request),
+					) ?? [],
 				},
+				activeRequestId: event.payload.id,
+			};
+		}),
+		assignWorkspace: assign(({ context, event }) => {
+			if (event.type !== "xstate.done.actor.loadWorkspace") {
+				return context;
+			}
+
+			const {
+				collections,
+				requestMap,
+				environments,
+				variables,
+				history,
+				defaultCollectionId,
+				defaultRequestId,
+				defaultEnvironmentId,
+			} = event.output;
+
+			return {
+				...context,
+				collections,
+				requestsByCollection: requestMap,
+				environments,
+				variablesByEnvironment: variables,
+				history,
+				activeCollectionId: defaultCollectionId,
+				activeRequestId: defaultRequestId,
+				activeEnvironmentId: defaultEnvironmentId,
+				runner: initialRunner(),
+			};
+		}),
+		markRunnerIdle: assign({
+			runner: () => initialRunner(),
+		}),
+		markRunnerRunning: assign({
+			runner: ({ context }) => ({
+				...context.runner,
+				status: "running" as const,
+				requestId: context.activeRequestId,
+				error: null,
+				startedAt: Date.now(),
 			}),
-			updateHistoryOnSuccess: assign({
-				history: ({ context, event }) => {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					const doneEvent = event as any;
-					if (!doneEvent?.output?.historyEntry) return context.history;
-					const entry = doneEvent.output.historyEntry;
-					return [entry, ...context.history].slice(0, 50);
-				},
-			}),
-			updateRunnerOnError: assign({
-				runner: ({ context, event }) => {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					const errorEvent = event as any;
-					const rawError =
-						errorEvent?.error ?? errorEvent?.data ?? errorEvent ?? null;
-					const errorText = (() => {
-						if (!rawError) {
-							return "Request failed";
-						}
-						if (typeof rawError === "string") {
-							return rawError;
-						}
-						if (rawError instanceof Error) {
-							const base = rawError.stack ?? rawError.message;
-							// @ts-expect-error optional cause property
-							const cause = rawError.cause;
-							const causeText = cause
-								? `\nCause: ${JSON.stringify(cause, null, 2)}`
-								: "";
-							return `${base}${causeText}`;
-						}
-						try {
-							return JSON.stringify(rawError, null, 2);
-						} catch {
-							return String(rawError);
-						}
-					})();
-					return {
-						status: "error" as const,
-						requestId: context.activeRequestId,
-						response: null,
-						error: errorText,
-						startedAt: context.runner.startedAt,
-					};
-				},
-			}),
-			abortInFlight: ({ context }) => {
-				const requestId = context.activeRequestId;
-				if (!requestId) {
-					return;
+		}),
+		markRunnerSuccess: assign({
+			runner: ({ context, event }) => {
+				if (!event || event.type !== "REQUEST_RUN_RESULT") {
+					return context.runner;
 				}
 
-				// Fire and forget - we don't await the abort
-				// This is idiomatic for XState actions that trigger side effects
-				runLayeredEffect(
-					context.layer,
-					Effect.flatMap(HttpClient, (client) => client.abort(requestId)),
-				).catch(() => {
-					// Ignore abort errors
-				});
+				return {
+					status: "success" as const,
+					requestId: event.requestId,
+					response: event.response,
+					error: null,
+					startedAt: context.runner.startedAt,
+				};
+			},
+		}),
+		markRunnerError: assign({
+			runner: ({ context, event }) => {
+				if (!event || event.type !== "REQUEST_RUN_ERROR") {
+					return context.runner;
+				}
+
+				const errorText = (() => {
+					const message = event.message;
+					if (typeof message === "string" && message.length > 0) {
+						return message;
+					}
+					try {
+						return JSON.stringify(message, null, 2);
+					} catch {
+						return String(message ?? "Request failed");
+					}
+				})();
+
+				return {
+					status: "error" as const,
+					requestId: event.requestId,
+					response: null,
+					error: errorText,
+					startedAt: context.runner.startedAt,
+				};
+			},
+		}),
+		updateRunnerOnSuccess: assign({
+			runner: ({ context, event }) => {
+				if (event.type !== "xstate.done.actor.runRequest") {
+					return context.runner;
+				}
+				const { response, prepared } = event.output;
+				return {
+					status: "success" as const,
+					requestId: prepared.id,
+					response,
+					error: null,
+					startedAt: context.runner.startedAt,
+				};
+			},
+		}),
+		updateHistoryOnSuccess: assign({
+			history: ({ context, event }) => {
+				if (event.type !== "xstate.done.actor.runRequest") {
+					return context.history;
+				}
+				const entry = event.output.historyEntry;
+				return [entry, ...context.history].slice(0, 50);
+			},
+		}),
+		updateRunnerOnError: assign({
+			runner: ({ context, event }) => {
+				if (event.type !== "xstate.error.actor.runRequest") {
+					return context.runner;
+				}
+				const rawError = event.error ?? null;
+				const errorText = (() => {
+					if (!rawError) {
+						return "Request failed";
+					}
+					if (typeof rawError === "string") {
+						return rawError;
+					}
+					if (rawError instanceof Error) {
+						const base = rawError.stack ?? rawError.message;
+						const cause = rawError.cause;
+						const causeText = cause
+							? `\nCause: ${JSON.stringify(cause, null, 2)}`
+							: "";
+						return `${base}${causeText}`;
+					}
+					try {
+						return JSON.stringify(rawError, null, 2);
+					} catch {
+						return String(rawError);
+					}
+				})();
+				return {
+					status: "error" as const,
+					requestId: context.activeRequestId,
+					response: null,
+					error: errorText,
+					startedAt: context.runner.startedAt,
+				};
+			},
+		}),
+		abortInFlight: ({ context }) => {
+			const requestId = context.activeRequestId;
+			if (!requestId) {
+				return;
+			}
+
+			// Fire and forget - we don't await the abort
+			// This is idiomatic for XState actions that trigger side effects
+			runLayeredEffect(
+				context.layer,
+				Effect.flatMap(HttpClient, (client) => client.abort(requestId)),
+			).catch(() => {
+				// Ignore abort errors
+			});
+		},
+	},
+});
+
+const initialisingState = posteeWorkspaceSetup.createStateConfig({
+	entry: "markRunnerIdle",
+	invoke: {
+		id: "loadWorkspace",
+		src: "loadWorkspace",
+		input: ({ context }) => ({ layer: context.layer }),
+		onDone: {
+			target: "ready",
+			actions: "assignWorkspace",
+		},
+		onError: {
+			target: "failure",
+		},
+	},
+});
+
+const readyState = posteeWorkspaceSetup.createStateConfig({
+	initial: "idle",
+	states: {
+		idle: {
+			on: {
+				CREATE_COLLECTION: {
+					actions: "createCollection",
+				},
+				CREATE_REQUEST: {
+					actions: "createRequest",
+				},
+				UPDATE_REQUEST_METADATA: {
+					actions: "updateRequestMetadata",
+				},
+				RUN_REQUEST: {
+					target: "running",
+					guard: "hasActiveRequest",
+				},
+				SELECT_COLLECTION: {
+					actions: "selectCollection",
+				},
+				SELECT_REQUEST: {
+					actions: "selectRequest",
+				},
+				SELECT_ENVIRONMENT: {
+					actions: "selectEnvironment",
+				},
+				CREATE_ENVIRONMENT: {
+					actions: "createEnvironment",
+				},
+				UPDATE_ENVIRONMENT_VARIABLES: {
+					actions: "updateEnvironmentVariables",
+				},
 			},
 		},
-	}).createMachine({
+		running: {
+			entry: "markRunnerRunning",
+			exit: "markRunnerIdle",
+			invoke: {
+				id: "runRequest",
+				src: "runRequest",
+				input: ({ context }) => ({
+					layer: context.layer,
+					context,
+				}),
+				onDone: {
+					target: "success",
+					actions: ["updateRunnerOnSuccess", "updateHistoryOnSuccess"],
+				},
+				onError: {
+					target: "error",
+					actions: "updateRunnerOnError",
+				},
+			},
+			on: {
+				RUN_CANCEL: {
+					target: "idle",
+					actions: "abortInFlight",
+				},
+			},
+		},
+		success: {
+			after: {
+				10: {
+					target: "idle",
+					actions: assign({
+						runner: ({ context }) => ({
+							...context.runner,
+							status: "success" as const,
+						}),
+					}),
+				},
+			},
+			on: {
+				RUN_REQUEST: {
+					target: "running",
+					guard: "hasActiveRequest",
+				},
+			},
+		},
+		error: {
+			on: {
+				RUN_REQUEST: {
+					target: "running",
+					guard: "hasActiveRequest",
+				},
+			},
+		},
+	},
+});
+
+const failureState = posteeWorkspaceSetup.createStateConfig({
+	on: {
+		REFRESH: "initialising",
+	},
+});
+
+export const createPosteeWorkspaceMachine = (options?: {
+	layer?: WorkspaceLayer;
+}) =>
+	posteeWorkspaceSetup.createMachine({
 		id: "posteeWorkspace",
 		context: {
 			collections: [],
@@ -676,111 +884,8 @@ export const createPosteeWorkspaceMachine = (options?: {
 		},
 		initial: "initialising",
 		states: {
-			initialising: {
-				entry: "markRunnerIdle",
-				invoke: {
-					id: "loadWorkspace",
-					src: "loadWorkspace",
-					input: ({ context }) => ({ layer: context.layer }),
-					onDone: {
-						target: "ready",
-						actions: "assignWorkspace",
-					},
-					onError: {
-						target: "failure",
-					},
-				},
-			},
-
-			ready: {
-				initial: "idle",
-				states: {
-					idle: {
-						on: {
-							CREATE_COLLECTION: {
-								actions: "createCollection",
-							},
-							CREATE_REQUEST: {
-								actions: "createRequest",
-							},
-							UPDATE_REQUEST_METADATA: {
-								actions: "updateRequestMetadata",
-							},
-							RUN_REQUEST: {
-								target: "running",
-								guard: "hasActiveRequest",
-							},
-							SELECT_COLLECTION: {
-								actions: "selectCollection",
-							},
-							SELECT_REQUEST: {
-								actions: "selectRequest",
-							},
-							SELECT_ENVIRONMENT: {
-								actions: "selectEnvironment",
-							},
-						},
-					},
-					running: {
-						entry: "markRunnerRunning",
-						exit: "markRunnerIdle",
-						invoke: {
-							id: "runRequest",
-							src: "runRequest",
-							input: ({ context }) => ({
-								layer: context.layer,
-								context,
-							}),
-							onDone: {
-								target: "success",
-								actions: ["updateRunnerOnSuccess", "updateHistoryOnSuccess"],
-							},
-							onError: {
-								target: "error",
-								actions: "updateRunnerOnError",
-							},
-						},
-						on: {
-							RUN_CANCEL: {
-								target: "idle",
-								actions: "abortInFlight",
-							},
-						},
-					},
-					success: {
-						after: {
-							10: {
-								target: "idle",
-								actions: assign({
-									runner: ({ context }) => ({
-										...context.runner,
-										status: "success" as const,
-									}),
-								}),
-							},
-						},
-						on: {
-							RUN_REQUEST: {
-								target: "running",
-								guard: "hasActiveRequest",
-							},
-						},
-					},
-					error: {
-						on: {
-							RUN_REQUEST: {
-								target: "running",
-								guard: "hasActiveRequest",
-							},
-						},
-					},
-				},
-			},
-
-			failure: {
-				on: {
-					REFRESH: "initialising",
-				},
-			},
+			initialising: initialisingState,
+			ready: readyState,
+			failure: failureState,
 		},
 	});
