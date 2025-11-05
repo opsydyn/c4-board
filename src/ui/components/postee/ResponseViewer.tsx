@@ -10,7 +10,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import Editor from "@monaco-editor/react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react";
 import {
@@ -46,6 +46,12 @@ interface ResponseViewerProps {
 	duration?: number;
 	size?: number;
 	defaultExpanded?: boolean;
+	// Diff comparison props
+	baselineBody?: string | null;
+	showDiff?: boolean;
+	onSetBaseline?: () => void;
+	onClearBaseline?: () => void;
+	onToggleDiff?: () => void;
 }
 
 export function ResponseViewer({
@@ -56,6 +62,11 @@ export function ResponseViewer({
 	duration,
 	size,
 	defaultExpanded = true,
+	baselineBody = null,
+	showDiff = false,
+	onSetBaseline,
+	onClearBaseline,
+	onToggleDiff,
 }: ResponseViewerProps) {
 	const [showBody, setShowBody] = useState(defaultExpanded);
 	const [showHeaders, setShowHeaders] = useState(false);
@@ -81,6 +92,16 @@ export function ResponseViewer({
 	const formattedBody = isJson
 		? JSON.stringify(JSON.parse(body), null, 2)
 		: body;
+
+	// Format baseline body if exists and is JSON
+	const formattedBaselineBody = (() => {
+		if (!baselineBody) return "";
+		try {
+			return JSON.stringify(JSON.parse(baselineBody), null, 2);
+		} catch {
+			return baselineBody;
+		}
+	})();
 
 	// Parse headers if string
 	const parsedHeaders =
@@ -229,19 +250,84 @@ export function ResponseViewer({
 
 			{/* Response Body */}
 			<div className={responseViewerContent}>
-				<button
-					type="button"
-					className={toggleButton}
-					onClick={() => setShowBody(!showBody)}
-				>
-					{showBody ? "▼" : "▶"} <strong>Response Body</strong>
-					{isJson && <span> (JSON)</span>}
-				</button>
+				<div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+					<button
+						type="button"
+						className={toggleButton}
+						onClick={() => setShowBody(!showBody)}
+						style={{ marginBottom: 0 }}
+					>
+						{showBody ? "▼" : "▶"} <strong>Response Body</strong>
+						{isJson && <span> (JSON)</span>}
+					</button>
+
+					{/* Diff comparison controls - only show for JSON */}
+					{isJson && showBody && (
+						<div style={{ display: "flex", gap: "8px", marginLeft: "auto" }}>
+							{baselineBody ? (
+								<>
+									<button
+										type="button"
+										onClick={onToggleDiff}
+										style={{
+											padding: "4px 8px",
+											fontSize: "11px",
+											background: showDiff ? "#88C0D0" : "transparent",
+											color: showDiff ? "#0a0a0a" : "#88C0D0",
+											border: "1px solid #88C0D0",
+											borderRadius: "4px",
+											cursor: "pointer",
+											fontFamily: "monospace",
+											textTransform: "uppercase",
+										}}
+									>
+										{showDiff ? "■ DIFF" : "□ DIFF"}
+									</button>
+									<button
+										type="button"
+										onClick={onClearBaseline}
+										style={{
+											padding: "4px 8px",
+											fontSize: "11px",
+											background: "transparent",
+											color: "#ff6b6b",
+											border: "1px solid #ff6b6b",
+											borderRadius: "4px",
+											cursor: "pointer",
+											fontFamily: "monospace",
+											textTransform: "uppercase",
+										}}
+									>
+										✕ CLEAR
+									</button>
+								</>
+							) : (
+								<button
+									type="button"
+									onClick={onSetBaseline}
+									style={{
+										padding: "4px 8px",
+										fontSize: "11px",
+										background: "transparent",
+										color: "#88C0D0",
+										border: "1px solid #88C0D0",
+										borderRadius: "4px",
+										cursor: "pointer",
+										fontFamily: "monospace",
+										textTransform: "uppercase",
+									}}
+								>
+									☆ SET BASELINE
+								</button>
+							)}
+						</div>
+					)}
+				</div>
 
 				{showBody && (
 					<>
-						{/* Search Box - only show for JSON */}
-						{isJson && (
+						{/* Search Box - only show for JSON and not in diff mode */}
+						{isJson && !showDiff && (
 							<div className={searchContainer} ref={searchContainerRef}>
 								<div className={searchInputWrapper}>
 									<div className={searchIcon}>
@@ -307,14 +393,29 @@ export function ResponseViewer({
 							</div>
 						)}
 
-						<Editor
-							height="300px"
-							defaultLanguage={isJson ? "json" : "plaintext"}
-							value={formattedBody}
-							theme="hc-black"
-							options={editorOptions}
-							onMount={handleEditorDidMount}
-						/>
+						{showDiff && baselineBody ? (
+							<DiffEditor
+								height="300px"
+								language={isJson ? "json" : "plaintext"}
+								original={formattedBaselineBody}
+								modified={formattedBody}
+								theme="hc-black"
+								options={{
+									...editorOptions,
+									readOnly: true,
+									renderSideBySide: true,
+								}}
+							/>
+						) : (
+							<Editor
+								height="300px"
+								defaultLanguage={isJson ? "json" : "plaintext"}
+								value={formattedBody}
+								theme="hc-black"
+								options={editorOptions}
+								onMount={handleEditorDidMount}
+							/>
+						)}
 					</>
 				)}
 			</div>

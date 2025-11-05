@@ -55,6 +55,7 @@ export interface RunnerState {
 	status: "idle" | "running" | "success" | "error";
 	requestId: RequestId | null;
 	response: PreparedResponse | null;
+	baselineResponse: PreparedResponse | null; // For diff comparison
 	error: string | null;
 	startedAt: number | null;
 }
@@ -80,6 +81,8 @@ export type PosteeEvent =
 	| { type: "RUN_REQUEST" }
 	| { type: "RUN_CANCEL" }
 	| { type: "REFRESH_HISTORY" }
+	| { type: "SET_BASELINE_RESPONSE" } // Set current response as baseline for diff
+	| { type: "CLEAR_BASELINE_RESPONSE" } // Clear baseline
 	| {
 			type: "CREATE_COLLECTION";
 			payload: { id: CollectionId; name: string; description?: string };
@@ -172,6 +175,7 @@ const initialRunner = (): RunnerState => ({
 	status: "idle",
 	requestId: null,
 	response: null,
+	baselineResponse: null,
 	error: null,
 	startedAt: null,
 });
@@ -642,6 +646,7 @@ const posteeWorkspaceSetup = setup({
 					status: "success" as const,
 					requestId: event.requestId,
 					response: event.response,
+					baselineResponse: context.runner.baselineResponse, // Preserve baseline
 					error: null,
 					startedAt: context.runner.startedAt,
 				};
@@ -669,10 +674,23 @@ const posteeWorkspaceSetup = setup({
 					status: "error" as const,
 					requestId: event.requestId,
 					response: null,
+					baselineResponse: context.runner.baselineResponse, // Preserve baseline
 					error: errorText,
 					startedAt: context.runner.startedAt,
 				};
 			},
+		}),
+		setBaselineResponse: assign({
+			runner: ({ context }) => ({
+				...context.runner,
+				baselineResponse: context.runner.response,
+			}),
+		}),
+		clearBaselineResponse: assign({
+			runner: ({ context }) => ({
+				...context.runner,
+				baselineResponse: null,
+			}),
 		}),
 		updateRunnerOnSuccess: assign({
 			runner: ({ context, event }) => {
@@ -684,6 +702,7 @@ const posteeWorkspaceSetup = setup({
 					status: "success" as const,
 					requestId: prepared.id,
 					response,
+					baselineResponse: context.runner.baselineResponse, // Preserve baseline
 					error: null,
 					startedAt: context.runner.startedAt,
 				};
@@ -729,6 +748,7 @@ const posteeWorkspaceSetup = setup({
 					status: "error" as const,
 					requestId: context.activeRequestId,
 					response: null,
+					baselineResponse: context.runner.baselineResponse, // Preserve baseline
 					error: errorText,
 					startedAt: context.runner.startedAt,
 				};
@@ -801,6 +821,12 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 				UPDATE_ENVIRONMENT_VARIABLES: {
 					actions: "updateEnvironmentVariables",
 				},
+				SET_BASELINE_RESPONSE: {
+					actions: "setBaselineResponse",
+				},
+				CLEAR_BASELINE_RESPONSE: {
+					actions: "clearBaselineResponse",
+				},
 			},
 		},
 		running: {
@@ -846,6 +872,12 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 					target: "running",
 					guard: "hasActiveRequest",
 				},
+				SET_BASELINE_RESPONSE: {
+					actions: "setBaselineResponse",
+				},
+				CLEAR_BASELINE_RESPONSE: {
+					actions: "clearBaselineResponse",
+				},
 			},
 		},
 		error: {
@@ -853,6 +885,12 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 				RUN_REQUEST: {
 					target: "running",
 					guard: "hasActiveRequest",
+				},
+				SET_BASELINE_RESPONSE: {
+					actions: "setBaselineResponse",
+				},
+				CLEAR_BASELINE_RESPONSE: {
+					actions: "clearBaselineResponse",
 				},
 			},
 		},

@@ -97,6 +97,9 @@ export function PosteeWorkspace() {
 	const [requestHeaders, setRequestHeaders] = useState<Header[]>([]);
 	const [requestBody, setRequestBody] = useState<string>("{}");
 
+	// Diff comparison state
+	const [showDiff, setShowDiff] = useState(false);
+
 	// Environment editor state
 	const [showEnvironmentEditor, setShowEnvironmentEditor] = useState(true);
 	const [newEnvironmentName, setNewEnvironmentName] = useState("");
@@ -295,6 +298,20 @@ export function PosteeWorkspace() {
 		},
 		[currentEnvironmentId, send],
 	);
+
+	// Baseline comparison handlers
+	const handleSetBaseline = useCallback(() => {
+		send({ type: "SET_BASELINE_RESPONSE" });
+	}, [send]);
+
+	const handleClearBaseline = useCallback(() => {
+		send({ type: "CLEAR_BASELINE_RESPONSE" });
+		setShowDiff(false);
+	}, [send]);
+
+	const handleToggleDiff = useCallback(() => {
+		setShowDiff((prev) => !prev);
+	}, []);
 
 	const handleCreateEnvironment = useCallback(
 		(event: FormEvent<HTMLFormElement>) => {
@@ -652,6 +669,11 @@ export function PosteeWorkspace() {
 			duration={lastResponseDurationMs ?? undefined}
 			size={Number(lastResponse.rawSize)}
 			defaultExpanded={true}
+			baselineBody={runner.baselineResponse?.bodyText ?? null}
+			showDiff={showDiff}
+			onSetBaseline={handleSetBaseline}
+			onClearBaseline={handleClearBaseline}
+			onToggleDiff={handleToggleDiff}
 		/>
 	)}
 
