@@ -294,3 +294,185 @@ export const tabContent = style({
 	padding: `${theme.spacing["4"]} 0`,
 	minHeight: "200px",
 });
+
+export const loadTestPanel = style([
+	panel,
+	{
+		minHeight: "auto",
+		paddingBottom: theme.spacing["4"],
+	},
+]);
+
+export const loadTestControls = style({
+	display: "grid",
+	gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+	gap: theme.spacing["3"],
+
+	"@media": {
+		"(max-width: 1200px)": {
+			gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+		},
+		"(max-width: 900px)": {
+			gridTemplateColumns: "minmax(0, 1fr)",
+		},
+	},
+});
+
+export const loadTestButtonRow = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["3"],
+	justifyContent: "flex-start",
+
+	"@media": {
+		"(max-width: 900px)": {
+			flexDirection: "column",
+			alignItems: "stretch",
+		},
+	},
+});
+
+export const loadTestStatus = style({
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: "uppercase",
+	letterSpacing: theme.typography.letterSpacing.wide,
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	borderRadius: theme.border.radius.sm,
+	backgroundColor: "rgba(28, 46, 38, 0.8)",
+});
+
+export const loadTestMetrics = style({
+	display: "grid",
+	gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+	gap: theme.spacing["3"],
+
+	"@media": {
+		"(max-width: 1200px)": {
+			gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+		},
+		"(max-width: 900px)": {
+			gridTemplateColumns: "minmax(0, 1fr)",
+		},
+	},
+});
+
+export const metricCard = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+	padding: `${theme.spacing["3"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	borderRadius: theme.border.radius.sm,
+	backgroundColor: "rgba(14, 24, 19, 0.85)",
+});
+
+export const metricLabel = style({
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	color: theme.color.foreground.secondary,
+	textTransform: theme.typography.textTransform.uppercase,
+});
+
+export const metricValue = style({
+	fontSize: theme.typography.size.lg,
+	fontFamily: theme.typography.family.sans,
+	color: theme.color.foreground.primary,
+});
+
+export const chartWrapper = style({
+	width: "100%",
+	height: "180px",
+	backgroundColor: "rgba(12, 20, 16, 0.9)",
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	borderRadius: theme.border.radius.sm,
+	padding: theme.spacing["3"],
+});
+
+export const chartVisualizationGrid = style({
+	display: "grid",
+	gap: theme.spacing["4"],
+});
+
+export const chartSection = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["2"],
+});
+
+export const chartHeader = style({
+	display: "flex",
+	alignItems: "baseline",
+	justifyContent: "space-between",
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	color: theme.color.foreground.secondary,
+});
+
+export const chartRow = style({
+	display: "grid",
+	gridTemplateColumns: "minmax(140px, 180px) 1fr",
+	gap: theme.spacing["3"],
+	alignItems: "center",
+
+	"@media": {
+		"(max-width: 900px)": {
+			gridTemplateColumns: "minmax(0, 1fr)",
+		},
+	},
+});
+
+export const miniBarWrapper = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+});
+
+export const miniBarValue = style({
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	color: theme.color.foreground.primary,
+});
+
+export const latencyBandsCard = style([
+	panel,
+	{
+		minHeight: "auto",
+		padding: `${theme.spacing["4"]} ${theme.spacing["4"]}`,
+	},
+]);
+
+export const latencyBandsHeader = style({
+	display: "flex",
+	alignItems: "baseline",
+	justifyContent: "space-between",
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+	marginBottom: theme.spacing["2"],
+});
+
+export const latencyLegend = style({
+	display: "flex",
+	gap: theme.spacing["3"],
+	flexWrap: "wrap",
+	marginTop: theme.spacing["3"],
+});
+
+export const latencyLegendItem = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	color: theme.color.foreground.secondary,
+});
+
+export const latencyLegendSwatch = style({
+	width: 12,
+	height: 12,
+	borderRadius: theme.border.radius.sm,
+	display: "inline-block",
+});

@@ -6,6 +6,11 @@ use tauri::{Emitter, Listener, Manager};
 use tauri_plugin_sql::{Migration, MigrationKind};
 use tokio::time::sleep;
 
+// Load testing module
+mod load_test;
+
+use load_test::{LoadTestConfig, LoadTestEngine};
+
 // ============================================================================
 // Domain Models (Functional Core)
 // Pure data structures representing C4 diagram entities
@@ -217,6 +222,47 @@ fn save_custom_icon(
     })
 }
 
+#[tauri::command]
+async fn start_load_test(
+    app: tauri::AppHandle,
+    config: LoadTestConfig,
+) -> Result<(), String> {
+    // Validate config
+    config.validate()?;
+
+    // Spawn load test in background
+    tokio::spawn(async move {
+        let engine = match LoadTestEngine::new(config) {
+            Ok(engine) => engine,
+            Err(e) => {
+                let _ = app.emit("load-test-error", e);
+                return;
+            }
+        };
+
+        // Run load test with progress streaming
+        let app_clone = app.clone();
+        let result = engine
+            .run(move |progress| {
+                // Emit progress to frontend every 100ms
+                let _ = app_clone.emit("load-test-progress", progress);
+            })
+            .await;
+
+        // Emit final result
+        match result {
+            Ok(final_stats) => {
+                let _ = app.emit("load-test-complete", final_stats);
+            }
+            Err(e) => {
+                let _ = app.emit("load-test-error", e);
+            }
+        }
+    });
+
+    Ok(())
+}
+
 // ============================================================================
 // Menu Builder
 // Creates native window menu with keyboard shortcuts
@@ -404,7 +450,11 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![greet, save_custom_icon])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            save_custom_icon,
+            start_load_test
+        ])
         .setup(|app| {
             // Build and set the native menu
             let menu = build_menu(app.handle())?;

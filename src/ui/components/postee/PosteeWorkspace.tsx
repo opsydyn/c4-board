@@ -28,6 +28,7 @@ import { ResponseViewer } from "./ResponseViewer";
 import { SearchInput } from "../SearchInput";
 import { TabPanel } from "react-aria-components";
 import type { PosteeEnvironmentVariable } from "@/core/effects/database.postee";
+import { LoadTestPanel } from "./LoadTestPanel";
 
 import {
 	workspace,
@@ -652,6 +653,18 @@ export function PosteeWorkspace() {
 </main>
 
 <aside className={responseColumn}>
+	<LoadTestPanel
+		request={
+			selectedRequest
+				? {
+						id: selectedRequest.id,
+						name: selectedRequest.name,
+						method: selectedRequest.method,
+						url: selectedRequest.url,
+				  }
+				: undefined
+		}
+	/>
 	<h2 className={sectionTitle}>Execution</h2>
 	{isRunning && (
 		<div className={panel}>

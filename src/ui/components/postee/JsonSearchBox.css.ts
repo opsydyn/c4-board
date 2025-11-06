@@ -1,4 +1,4 @@
-import { style } from "@vanilla-extract/css";
+import { globalStyle, style } from "@vanilla-extract/css";
 import { theme } from "../../../styles/theme.css";
 import { componentsLayer } from "../../../styles/layers.css";
 
@@ -138,17 +138,16 @@ export const resultText = style({
 			lineHeight: theme.typography.lineHeight.normal,
 			wordBreak: "break-all",
 			whiteSpace: "pre-wrap",
-			selectors: {
-				"& mark": {
-					backgroundColor: theme.color.semantic.person,
-					color: theme.color.background.base,
-					fontWeight: theme.typography.weight.bold,
-					padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
-					borderRadius: theme.border.radius.sm,
-				},
-			},
 		},
 	},
+});
+
+globalStyle(`${resultText} mark`, {
+	backgroundColor: theme.color.semantic.person,
+	color: theme.color.background.base,
+	fontWeight: theme.typography.weight.bold,
+	padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
+	borderRadius: theme.border.radius.sm,
 });
 
 export const emptyState = style({

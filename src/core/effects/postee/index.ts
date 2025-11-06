@@ -88,3 +88,14 @@ export {
 	resolveTemplateSync,
 	type PosteeConfigProviderService,
 } from "./config-provider";
+
+export {
+	startLoadTest,
+	listenLoadTestProgress,
+	listenLoadTestComplete,
+	listenLoadTestError,
+	isTauriRuntime,
+	ensureTauriRuntime,
+	type LoadTestConfigInput,
+	type LoadTestProgress,
+} from "./load-test";
