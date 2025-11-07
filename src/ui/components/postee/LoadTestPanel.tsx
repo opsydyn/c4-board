@@ -10,6 +10,7 @@ import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import type { LoadTestProgress } from "@/core/effects/postee";
 import { useLoadTest } from "./useLoadTest";
+import { WarningOctagon } from "@phosphor-icons/react";
 import {
 	loadTestPanel,
 	loadTestControls,
@@ -517,21 +518,33 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	return (
 		<section className={loadTestPanel}>
 			<header>
-				<h3 className={sectionTitle}>Load Testing (Experimental)</h3>
-				<p style={{ marginTop: "0.25rem", fontSize: "0.9rem", opacity: 0.75 }}>
-					Benchmark the current request with a quick oha-inspired runner. Results stream every 100ms.
+				<h3 className={sectionTitle}>OPSYDYN Load Chamber (Experimental)</h3>
+				<p
+					style={{
+						marginTop: "0.25rem",
+						fontSize: "0.9rem",
+						opacity: 0.75,
+						display: "flex",
+						alignItems: "center",
+						gap: "0.5rem",
+					}}
+				>
+					<WarningOctagon size={18} weight="bold" />
+					<span>
+						Initiating a load test seals the blast doors and arms the sirens. A runner will pound this endpoint every 100ms until the alarms clear.
+					</span>
 				</p>
 			</header>
 
 			{isDetecting && (
 				<div style={{ opacity: 0.7 }}>
-					Waiting for the Tauri runtime to become ready…
+					Calibrating telemetry array and waiting for the OPSYDYN runtime to finish booting…
 				</div>
 			)}
 
 			{!isDetecting && !isSupported && (
 				<div style={{ opacity: 0.7 }}>
-					Load testing is only available in the desktop runtime. Launch the app to enable this feature.
+					Blast doors only unlock inside the desktop console. Launch the OPSYDYN app to wield the load chamber.
 				</div>
 			)}
 
@@ -611,7 +624,7 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 						type="submit"
 						disabled={status === "running" || !targetUrl.trim() || isDetecting}
 					>
-						{status === "running" ? "Running..." : "Start Load Test"}
+						{status === "running" ? "Load In Progress…" : "Initiate Load Test"}
 					</button>
 					<button
 						type="button"
@@ -624,9 +637,9 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 						onClick={reset}
 						disabled={status === "running"}
 					>
-						Clear Results
+						Purge Telemetry
 					</button>
-					<span className={loadTestStatus}>Status: {statusText}</span>
+					<span className={loadTestStatus}>Blast Door Status: {statusText}</span>
 				</div>
 			</form>
 

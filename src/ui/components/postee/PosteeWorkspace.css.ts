@@ -1,26 +1,21 @@
-import { style } from "@vanilla-extract/css";
+import { style, globalStyle } from "@vanilla-extract/css";
 import { theme } from "../../../styles/theme.css";
 
 export const workspace = style({
 	display: "grid",
 	gridTemplateColumns: "minmax(260px, 320px) 1fr minmax(300px, 360px)",
-	gridTemplateRows: "auto 1fr",
+	gridTemplateRows: "1fr",
 	minHeight: "100vh",
 	backgroundColor: theme.color.background.base,
 	color: theme.color.foreground.primary,
 	fontFamily: theme.typography.family.sans,
-
-	"@media": {
-		"(max-width: 1360px)": {
-			gridTemplateColumns: "minmax(240px, 280px) 1fr",
-			gridTemplateRows: "auto 1fr auto",
-		},
-	},
 });
 
 export const sidebar = style({
 	display: "flex",
 	flexDirection: "column",
+	gridColumn: "1 / 2",
+	gridRow: "1 / 2",
 	gap: theme.spacing["4"],
 	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
 	borderRight: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
@@ -43,6 +38,130 @@ export const collectionList = style({
 	display: "flex",
 	flexDirection: "column",
 	gap: theme.spacing["2"],
+});
+
+export const collectionTree = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+});
+
+const treeRowBase = {
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.thin} solid transparent`,
+	clipPath: theme.clipPath.sm,
+	cursor: "pointer",
+	transition: theme.transition.base,
+};
+
+export const treeCollectionRow = style({
+	...treeRowBase,
+	fontFamily: theme.typography.family.sans,
+	fontSize: theme.typography.size.sm,
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.border.secondary,
+			backgroundColor: "rgba(18, 28, 24, 0.7)",
+		},
+		'&[data-selected]': {
+			borderColor: theme.color.border.primary,
+			backgroundColor: "rgba(24, 40, 32, 0.9)",
+			boxShadow: theme.effect.glow.sm,
+		},
+	},
+});
+
+export const treeItemLabel = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+});
+
+export const treeIcon = style({
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	width: "20px",
+	flexShrink: 0,
+});
+
+export const treeCountBadge = style({
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+});
+
+export const treeChevronButton = style({
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	width: "28px",
+	height: "28px",
+	border: "none",
+	background: "transparent",
+	color: theme.color.foreground.secondary,
+	cursor: "pointer",
+	transition: "transform 0.2s ease",
+
+	selectors: {
+		"&:hover": {
+			color: theme.color.foreground.primary,
+		},
+	},
+});
+
+globalStyle(`${treeChevronButton} svg`, {
+	transition: "transform 0.2s ease",
+});
+
+globalStyle(`${treeChevronButton}[data-expanded] svg`, {
+	transform: "rotate(90deg)",
+});
+
+export const treeChevronSpacer = style({
+	display: "inline-flex",
+	width: "28px",
+	height: "28px",
+});
+
+export const treeRequestRow = style({
+	...treeRowBase,
+	paddingLeft: `${theme.spacing["3"]}`,
+	fontFamily: theme.typography.family.sans,
+	fontSize: theme.typography.size.sm,
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.border.secondary,
+			backgroundColor: "rgba(14, 24, 19, 0.7)",
+		},
+		'&[data-selected]': {
+			borderColor: theme.color.border.primary,
+			backgroundColor: "rgba(14, 24, 19, 0.9)",
+			boxShadow: theme.effect.glow.sm,
+		},
+	},
+});
+
+export const treeMethodBadge = style({
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	borderRadius: theme.border.radius.sm,
+});
+
+export const treeRequestName = style({
+	flex: 1,
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+	whiteSpace: "nowrap",
 });
 
 export const collectionButton = style({
@@ -114,6 +233,9 @@ export const requestButtonActive = style([
 export const mainColumn = style({
 	display: "flex",
 	flexDirection: "column",
+	position: "relative",
+	gridColumn: "2 / 3",
+	gridRow: "1 / 2",
 	padding: `${theme.spacing["5"]} ${theme.spacing["6"]}`,
 	gap: theme.spacing["4"],
 	minWidth: 0,
@@ -123,7 +245,24 @@ export const mainColumn = style({
 export const mainHeader = style({
 	display: "flex",
 	alignItems: "center",
+	justifyContent: "space-between",
+	columnGap: theme.spacing["3"],
+	rowGap: theme.spacing["2"],
+	flexWrap: "wrap",
+});
+
+export const mainHeaderTitle = style({
+	display: "flex",
+	alignItems: "center",
 	gap: theme.spacing["3"],
+});
+
+export const mainHeaderActions = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	marginLeft: "auto",
+	flexWrap: "wrap",
 });
 
 export const statusPill = style({
@@ -152,6 +291,8 @@ export const panel = style({
 export const responseColumn = style({
 	display: "flex",
 	flexDirection: "column",
+	gridColumn: "3 / 4",
+	gridRow: "1 / 2",
 	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
 	borderLeft: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 	backgroundColor: "rgba(8, 14, 12, 0.96)",
@@ -165,6 +306,16 @@ export const responseColumn = style({
 			borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 		},
 	},
+});
+
+export const responseInline = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["4"],
+	padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
+	backgroundColor: "rgba(8, 14, 12, 0.96)",
+	borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	marginTop: theme.spacing["4"],
 });
 
 export const sectionTitle = style({
@@ -293,6 +444,45 @@ export const responseBody = style({
 export const tabContent = style({
 	padding: `${theme.spacing["4"]} 0`,
 	minHeight: "200px",
+});
+
+export const responseTabContent = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["4"],
+	padding: `${theme.spacing["4"]} 0`,
+	minHeight: 0,
+});
+
+export const environmentContent = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["3"],
+	minHeight: 0,
+});
+
+export const environmentEmptyState = style({
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	padding: `${theme.spacing["6"]} ${theme.spacing["4"]}`,
+	textAlign: "center",
+	color: theme.color.foreground.secondary,
+});
+
+export const environmentForm = style({
+	display: "grid",
+	gridTemplateColumns: "minmax(0, 1fr) auto",
+	gap: theme.spacing["2"],
+	width: "100%",
+	marginTop: theme.spacing["3"],
+
+	"@media": {
+		"(max-width: 720px)": {
+			gridTemplateColumns: "1fr",
+		},
+	},
 });
 
 export const loadTestPanel = style([
@@ -432,6 +622,34 @@ export const miniBarValue = style({
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.sm,
 	color: theme.color.foreground.primary,
+});
+
+export const historyDetailHeader = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: theme.spacing["3"],
+});
+
+export const historyCloseButton = style({
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "transparent",
+	color: theme.color.foreground.secondary,
+	cursor: "pointer",
+	clipPath: theme.clipPath.sm,
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover": {
+			backgroundColor: theme.color.surface.overlay,
+			boxShadow: theme.effect.glow.sm,
+		},
+	},
 });
 
 export const latencyBandsCard = style([
