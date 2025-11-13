@@ -10,7 +10,7 @@ import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import type { LoadTestProgress } from "@/core/effects/postee";
 import { useLoadTest } from "./useLoadTest";
-import { WarningOctagon } from "@phosphor-icons/react";
+import { WarningOctagonIcon } from "@phosphor-icons/react";
 import {
 	loadTestPanel,
 	loadTestControls,
@@ -71,7 +71,7 @@ interface ChartProps {
 	field: keyof LoadTestProgress;
 	color: string;
 	label: string;
-	units?: string;
+	units?: string | undefined;
 	showHeader?: boolean;
 	maxValue?: number;
 }
@@ -243,7 +243,7 @@ const MetricVisualization = ({
 
 	const latestValue =
 		numericValues.length > 0
-			? numericValues[numericValues.length - 1]
+			? numericValues[numericValues.length - 1] ?? 0
 			: 0;
 	const observedMax =
 		numericValues.length > 0
@@ -344,7 +344,7 @@ const LatencyBandsChart = ({ samples }: { samples: LoadTestProgress[] }) => {
 					Latest P95:{" "}
 					{formatNumber(
 						chartData.length
-							? chartData[chartData.length - 1].p95
+							? chartData[chartData.length - 1]?.p95 ?? 0
 							: 0,
 						2,
 					)}{" "}
@@ -529,7 +529,7 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 						gap: "0.5rem",
 					}}
 				>
-					<WarningOctagon size={18} weight="bold" />
+					<WarningOctagonIcon size={18} weight="bold" />
 					<span>
 						Initiating a load test seals the blast doors and arms the sirens. A runner will pound this endpoint every 100ms until the alarms clear.
 					</span>

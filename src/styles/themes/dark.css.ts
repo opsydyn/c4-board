@@ -18,6 +18,8 @@ export const darkTheme = createTheme(themeContract, {
 			raised: "#2b3035",     // Bootstrap tertiary bg
 			input: "#0f0f0f",      // Dark input contrast
 			inputFocus: "#161719", // Bootstrap secondary subtle
+			hover: "#2b3035",      // Bootstrap tertiary bg (hover state)
+			selected: "#212529",   // Bootstrap gray-900 (selected state)
 		},
 
 		foreground: {

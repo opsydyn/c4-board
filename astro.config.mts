@@ -5,11 +5,22 @@ import type { Plugin } from 'vite';
 // import playformInline from "@playform/inline";
 import { vanillaExtractPlugin } from "@vanilla-extract/vite-plugin";
 import { defineConfig } from "astro/config";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 // https://astro.build/config
 export default defineConfig({
 	vite: {
-		plugins: [vanillaExtractPlugin() as unknown as Plugin],
+		plugins: [
+			vanillaExtractPlugin() as unknown as Plugin,
+			viteStaticCopy({
+				targets: [
+					{
+						src: "node_modules/monaco-editor/min/vs",
+						dest: "monaco",
+					},
+				],
+			}),
+		],
 		resolve: {
 			alias: {
 				"@/ui": "/src/ui",

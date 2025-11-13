@@ -40,6 +40,48 @@ export const collectionList = style({
 	gap: theme.spacing["2"],
 });
 
+export const selectionToolbar = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: theme.spacing["2"],
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	borderRadius: theme.border.radius.sm,
+	backgroundColor: "rgba(12, 20, 16, 0.8)",
+	boxShadow: theme.effect.glow.sm,
+	fontSize: theme.typography.size.sm,
+	marginBottom: theme.spacing["2"],
+});
+
+export const selectionToolbarButton = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["1"],
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	backgroundColor: "transparent",
+	border: `${theme.border.width.thin} dashed ${theme.color.border.secondary}`,
+	borderRadius: theme.border.radius.sm,
+	color: theme.color.foreground.secondary,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	cursor: "pointer",
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover:not(:disabled)": {
+			color: theme.color.foreground.primary,
+			borderColor: theme.color.border.primary,
+		},
+		"&:disabled": {
+			opacity: theme.opacity.disabled,
+			cursor: "not-allowed",
+		},
+	},
+});
+
 export const collectionTree = style({
 	display: "flex",
 	flexDirection: "column",
@@ -76,8 +118,38 @@ export const treeCollectionRow = style({
 
 export const treeItemLabel = style({
 	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	flex: 1,
+	minWidth: 0,
+});
+
+export const treeLabelContent = style({
+	display: "flex",
 	flexDirection: "column",
 	gap: theme.spacing["1"],
+	flex: 1,
+	minWidth: 0,
+});
+
+export const treeNameButton = style({
+	all: "unset",
+	display: "block",
+	width: "100%",
+	fontFamily: theme.typography.family.sans,
+	fontSize: theme.typography.size.sm,
+	fontWeight: theme.typography.weight.semibold,
+	color: theme.color.foreground.primary,
+	cursor: "text",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+	whiteSpace: "nowrap",
+
+	selectors: {
+		"&:focus-visible": {
+			outline: `${theme.border.width.thin} solid ${theme.color.border.focus}`,
+		},
+	},
 });
 
 export const treeIcon = style({

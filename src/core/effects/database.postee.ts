@@ -112,6 +112,20 @@ export const deletePosteeCollection = (id: string) =>
 		yield* service.execute(`DELETE FROM postee_collections WHERE id = ?`, [id]);
 	});
 
+export const deletePosteeCollections = (ids: ReadonlyArray<string>) =>
+	Effect.gen(function* () {
+		if (ids.length === 0) {
+			return;
+		}
+
+		const service = yield* DatabaseService;
+		const placeholders = ids.map(() => "?").join(", ");
+		yield* service.execute(
+			`DELETE FROM postee_collections WHERE id IN (${placeholders})`,
+			Array.from(ids),
+		);
+	});
+
 // Requests
 
 export const listPosteeRequests = (collectionId: string) =>

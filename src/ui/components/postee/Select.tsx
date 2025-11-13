@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useCallback } from "react";
-import { CaretDown } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import {
 	selectButton,
 	selectMenu,
@@ -90,7 +90,7 @@ export function Select<T extends string>({
 				aria-haspopup="listbox"
 			>
 				<span>{value}</span>
-				<CaretDown size={16} weight="bold" />
+				<CaretDownIcon size={16} weight="bold" />
 			</button>
 
 			{isOpen && (

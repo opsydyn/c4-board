@@ -20,6 +20,8 @@ export const themeContract = createThemeContract({
 			raised: null,      // Hover/focus states
 			input: null,       // Input field backgrounds
 			inputFocus: null,  // Input focus state
+			hover: null,       // Hover background state
+			selected: null,    // Selected item background
 		},
 
 		// Foreground colors - text hierarchy

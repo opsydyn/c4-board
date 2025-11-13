@@ -88,6 +88,14 @@ export type PosteeEvent =
 			payload: { id: CollectionId; name: string; description?: string };
 	  }
 	| {
+			type: "RENAME_COLLECTION";
+			payload: { id: CollectionId; name: string };
+	  }
+	| {
+			type: "DELETE_COLLECTIONS";
+			payload: { ids: CollectionId[] };
+	  }
+	| {
 			type: "CREATE_REQUEST";
 			payload: {
 				collectionId: CollectionId;
@@ -389,6 +397,103 @@ const posteeWorkspaceSetup = setup({
 				},
 				activeCollectionId: event.payload.id,
 				activeRequestId: null,
+			};
+		}),
+		renameCollection: assign(({ context, event }) => {
+			if (!event || event.type !== "RENAME_COLLECTION") {
+				return context;
+			}
+
+			const collectionId = event.payload.id as unknown as string;
+			const existing = context.collections.find(
+				(collection) => collection.id === collectionId,
+			);
+
+			if (!existing) {
+				return context;
+			}
+
+			const updatedAt = Date.now();
+			const updatedCollection: PosteeCollection = {
+				...existing,
+				name: event.payload.name,
+				updated_at: updatedAt,
+			};
+
+			runLayeredEffect(
+				context.layer,
+				PosteeCollections.update(updatedCollection),
+			).catch(() => {
+				// TODO: surface error to user once notifications are wired up
+			});
+
+			return {
+				...context,
+				collections: context.collections.map((collection) =>
+					collection.id === collectionId ? updatedCollection : collection,
+				),
+			};
+		}),
+		deleteCollections: assign(({ context, event }) => {
+			if (!event || event.type !== "DELETE_COLLECTIONS" || event.payload.ids.length === 0) {
+				return context;
+			}
+
+			const ids = event.payload.ids.map((id) => id as unknown as string);
+			const deletedSet = new Set(ids);
+
+			const remainingCollections = context.collections.filter(
+				(collection) => !deletedSet.has(collection.id),
+			);
+
+			const nextRequestsByCollection = Object.fromEntries(
+				Object.entries(context.requestsByCollection).filter(
+					([collectionId]) => !deletedSet.has(collectionId),
+				),
+			);
+
+			runLayeredEffect(
+				context.layer,
+				ids.length === 1 && ids[0]
+					? PosteeCollections.remove(ids[0])
+					: PosteeCollections.removeMany(ids),
+			).catch(() => {
+				// TODO: surface error to user once notifications are wired up
+			});
+
+			let nextActiveCollectionId = context.activeCollectionId;
+			if (
+				!nextActiveCollectionId ||
+				deletedSet.has(nextActiveCollectionId as unknown as string)
+			) {
+				const first = remainingCollections[0];
+				nextActiveCollectionId = first ? CollectionIdBrand(first.id) : null;
+			}
+
+			let nextActiveRequestId: RequestId | null = context.activeRequestId;
+			if (nextActiveCollectionId) {
+				const collectionKey = nextActiveCollectionId as unknown as string;
+				const requests = nextRequestsByCollection[collectionKey] ?? [];
+				if (
+					!nextActiveRequestId ||
+					!requests.some(
+						(request) => request.id === (nextActiveRequestId as unknown as string),
+					)
+				) {
+					nextActiveRequestId = requests[0]
+						? RequestIdBrand(requests[0].id)
+						: null;
+				}
+			} else {
+				nextActiveRequestId = null;
+			}
+
+			return {
+				...context,
+				collections: remainingCollections,
+				requestsByCollection: nextRequestsByCollection,
+				activeCollectionId: nextActiveCollectionId,
+				activeRequestId: nextActiveRequestId,
 			};
 		}),
 		selectCollection: assign({
@@ -795,6 +900,12 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 			on: {
 				CREATE_COLLECTION: {
 					actions: "createCollection",
+				},
+				RENAME_COLLECTION: {
+					actions: "renameCollection",
+				},
+				DELETE_COLLECTIONS: {
+					actions: "deleteCollections",
 				},
 				CREATE_REQUEST: {
 					actions: "createRequest",

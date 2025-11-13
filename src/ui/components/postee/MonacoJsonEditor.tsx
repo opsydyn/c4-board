@@ -10,9 +10,12 @@
  */
 
 import { useRef, useCallback } from "react";
-import Editor, { type Monaco } from "@monaco-editor/react";
+import Editor, { type Monaco, loader } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { monacoEditorContainer, monacoEditorWrapper, actionBar, actionButton } from "./MonacoJsonEditor.css";
+
+const baseUrl = (import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
+loader.config({ paths: { vs: `${baseUrl}monaco/vs` } });
 
 /**
  * Get JSON path at cursor position (e.g., "data.user.email")
@@ -22,7 +25,7 @@ function getJsonPathAtPosition(
 	position: { lineNumber: number; column: number }
 ): string {
 	const content = model.getValue();
-	const offset = model.getOffsetAt(position);
+	// const _offset = model.getOffsetAt(position); // Currently unused
 
 	try {
 		// Simple JSON path extraction by parsing line by line
@@ -42,7 +45,7 @@ function getJsonPathAtPosition(
 			// Extract key from line (simplified)
 			const keyMatch = line.match(/"([^"]+)"\s*:/);
 			if (keyMatch && depth > path.length) {
-				path.push(keyMatch[1]);
+				path.push(keyMatch[1]!);
 			} else if (closeBraces > 0 && path.length > 0) {
 				path.pop();
 			}
@@ -291,18 +294,18 @@ export function MonacoJsonEditor({
 		console.log("Copied JSON path:", jsonPath);
 	}, []);
 
-	const handleCopyValue = useCallback(() => {
-		if (!editorRef.current) return;
+	// const handleCopyValue = useCallback(() => {
+	// 	if (!editorRef.current) return;
 
-		const selection = editorRef.current.getSelection();
-		if (!selection) return;
+	// 	const selection = editorRef.current.getSelection();
+	// 	if (!selection) return;
 
-		const model = editorRef.current.getModel();
-		if (!model) return;
+	// 	const model = editorRef.current.getModel();
+	// 	if (!model) return;
 
-		const selectedText = model.getValueInRange(selection);
-		navigator.clipboard.writeText(selectedText);
-	}, []);
+	// 	const selectedText = model.getValueInRange(selection);
+	// 	navigator.clipboard.writeText(selectedText);
+	// }, []);
 
 	const handleExpandAll = useCallback(() => {
 		editorRef.current?.getAction("editor.unfoldAll")?.run();

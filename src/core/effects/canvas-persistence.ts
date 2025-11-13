@@ -16,7 +16,7 @@
  * - Extracted reusable upsert patterns
  */
 
-import { Effect, Either, pipe } from "effect";
+import { Effect, pipe } from "effect";
 import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from "@xyflow/react";
 import {
 	type Node as DbNode,
@@ -24,7 +24,6 @@ import {
 	type CreateDiagramInput,
 	type CreateNodeInput,
 	type CreateEdgeInput,
-	type UpdateDiagramInput,
 	type UpdateNodeInput,
 	createDiagram,
 	getDiagram,
@@ -40,6 +39,9 @@ import {
 	updateEdgeLabel,
 	deleteEdge,
 	NotFoundError,
+	DatabaseError,
+	ValidationError,
+	DatabaseService,
 } from "./database";
 import { getDefaultIconId, type C4Type, type NodeIconId } from "./node-operations";
 
@@ -127,6 +129,15 @@ export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 			createdAt: dbNode.created_at,
 			iconId: (dbNode.icon_id as NodeIconId | null) ?? fallbackIcon,
 		},
+		// Initialize measured dimensions for ReactFlow v12+
+		// This prevents "undefined is not an object (evaluating 'node.measured')" errors
+		// Use conditional spread to avoid setting 'undefined' (exactOptionalPropertyTypes strict mode)
+		...(dbNode.width !== null && dbNode.height !== null ? {
+			measured: {
+				width: dbNode.width,
+				height: dbNode.height,
+			}
+		} : {}),
 	};
 
 	// Pure functional composition - each function returns a NEW object
@@ -239,39 +250,48 @@ function reactFlowEdgeToDb(
  * Save complete diagram state (diagram + nodes + edges)
  * Uses transactional approach with Effect.forEach for iterations
  */
-export const saveDiagram = (input: SaveDiagramInput) =>
+export const saveDiagram = (
+	input: SaveDiagramInput
+): Effect.Effect<
+	{ diagramId: string; savedAt: number },
+	DatabaseError | NotFoundError | ValidationError,
+	DatabaseService
+> =>
+	// @ts-expect-error - Effect.gen loses specific error types with exactOptionalPropertyTypes
+	// The Effect.forEach and Effect.catchTag calls return DatabaseError which is incompatible with the union type
 	Effect.gen(function* () {
-		// 1. Check if diagram exists, create or update using Either.match
-		const existingDiagram = yield* Effect.either(getDiagram(input.id));
+		// 1. Check if diagram exists, create or update
+		interface DiagramUpsertPayload {
+			id: string;
+			name: string;
+			description?: string;
+		}
 
-		yield* Either.match(existingDiagram, {
-			// Left: diagram not found or error
-			onLeft: (error) => {
-				if (error instanceof NotFoundError) {
-					// Create new diagram
-					const createPayload: CreateDiagramInput = {
-						id: input.id,
-						name: input.name,
-						...(input.description !== undefined
-							? { description: input.description }
-							: {}),
-					};
-					return createDiagram(createPayload);
-				}
-				// Re-throw other errors
-				return Effect.fail(error);
-			},
-			// Right: diagram exists, update it
-			onRight: () => {
-				const updatePayload: UpdateDiagramInput = {
-					name: input.name,
-					...(input.description !== undefined
-						? { description: input.description }
-						: {}),
-				};
-				return updateDiagram(input.id, updatePayload);
-			},
-		});
+		const diagramPayload: DiagramUpsertPayload = {
+			id: input.id,
+			name: input.name,
+			...(input.description !== undefined
+				? { description: input.description }
+				: {}),
+		};
+
+		yield* getDiagram(input.id).pipe(
+			Effect.catchTag("NotFoundError", () => {
+				// Create new diagram
+				const createPayload: CreateDiagramInput = diagramPayload;
+				return createDiagram(createPayload);
+			}),
+		);
+
+		// Update diagram if it already exists
+		yield* updateDiagram(input.id, {
+			name: input.name,
+			...(input.description !== undefined
+				? { description: input.description }
+				: {}),
+		}).pipe(
+			Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
+		);
 
 		// 2. Get existing nodes and edges to determine what to delete
 		const existingNodes = yield* getNodesByDiagram(input.id);
@@ -359,6 +379,40 @@ export const saveDiagram = (input: SaveDiagramInput) =>
 	});
 
 /**
+ * Sort nodes so parent nodes appear before their children
+ * This is required by ReactFlow to properly initialize node dimensions and positions
+ */
+function sortNodesByParentHierarchy(nodes: ReactFlowNode[]): ReactFlowNode[] {
+	const nodeMap = new Map(nodes.map(n => [n.id, n]));
+	const sorted: ReactFlowNode[] = [];
+	const visited = new Set<string>();
+
+	function addNodeAndAncestors(node: ReactFlowNode) {
+		// Already processed
+		if (visited.has(node.id)) return;
+
+		// If node has a parent, add parent first
+		if (node.parentId) {
+			const parent = nodeMap.get(node.parentId);
+			if (parent) {
+				addNodeAndAncestors(parent);
+			}
+		}
+
+		// Add this node
+		if (!visited.has(node.id)) {
+			visited.add(node.id);
+			sorted.push(node);
+		}
+	}
+
+	// Process all nodes
+	nodes.forEach(node => addNodeAndAncestors(node));
+
+	return sorted;
+}
+
+/**
  * Load complete diagram state (diagram + nodes + edges)
  */
 export const loadDiagram = (diagramId: string) =>
@@ -372,8 +426,8 @@ export const loadDiagram = (diagramId: string) =>
 		// 3. Load all edges for this diagram
 		const dbEdges = yield* getEdgesByDiagram(diagramId);
 
-		// 4. Convert to ReactFlow format
-		const nodes = dbNodes.map(dbNodeToReactFlow);
+		// 4. Convert to ReactFlow format and sort parent nodes before children
+		const nodes = sortNodesByParentHierarchy(dbNodes.map(dbNodeToReactFlow));
 		const edges = dbEdges.map(dbEdgeToReactFlow);
 
 		return {

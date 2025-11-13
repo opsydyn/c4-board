@@ -87,8 +87,6 @@ export function EdgeLabelEditor({
 		<div className={edgeEditorOverlay} onClick={onClose}>
 			<Dialog
 				className={edgeEditorDialog}
-				isOpen={isOpen}
-				onOpenChange={onClose}
 				aria-label="Edit edge label"
 			>
 				<div onClick={(e) => e.stopPropagation()}>

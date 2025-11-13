@@ -1,16 +1,47 @@
 {
-	"typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.tsdk": "./node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
-	"editor.formatOnSave": true,
-	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": "explicit"
-	},
-	
-	"eslint.validate": [
-		"javascript",
-		"javascriptreact",
-		"typescript",
-		"typescriptreact",
-		"astro"
-	]
+
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact",
+    "astro"
+  ],
+
+  // 🔍 inlay hints: global default
+  "editor.inlayHints.enabled": "on",
+
+
+  // 🔍 typescript inlay hints
+  "typescript.inlayHints.parameterNames.enabled": "all",
+  "typescript.inlayHints.parameterNames.suppressWhenArgumentMatchesName": false,
+
+  "typescript.inlayHints.parameterTypes.enabled": true,
+  "typescript.inlayHints.variableTypes.enabled": true,
+  "typescript.inlayHints.propertyDeclarationTypes.enabled": true,
+  "typescript.inlayHints.functionLikeReturnTypes.enabled": true,
+  "typescript.inlayHints.enumMemberValues.enabled": true,
+
+  
+  "editor.inlayHints.fontSize": 10,
+  "editor.inlayHints.padding": true,
+  "workbench.colorCustomizations": {
+  "editorInlayHint.foreground": "#9A9C9F",
+  "editorInlayHint.background": "#333333",
+  "editorInlayHint.typeBackground": "#333333",
+  "editorInlayHint.parameterBackground": "#333333",
+  //   "editorError.foreground": "#ff0000",
+  // "editorWarning.foreground": "#ffaa00",
 }
+}
+
+
+
+

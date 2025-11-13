@@ -5,10 +5,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { Effect, ConfigError, Layer } from "effect";
+import { Effect, ConfigError } from "effect";
 import {
 	makeConfigProvider,
-	makeEffectConfigProvider,
 	PosteeConfigProviderLive,
 	extractVariableNames,
 	hasVariables,
@@ -178,20 +177,13 @@ describe("ConfigProvider", () => {
 		});
 
 		it("should fail for invalid URL", async () => {
-			const invalidLayer = PosteeConfigProviderLive([
-				{
-					...mockVariables[0],
-					key: "invalidUrl",
-					value: "not-a-url",
-				},
-			]);
-			const invalidProvider = makeConfigProvider([
-				{
-					...mockVariables[0],
-					key: "invalidUrl",
-					value: "not-a-url",
-				},
-			]);
+			const invalidVariable = {
+				...mockVariables[0],
+				key: "invalidUrl",
+				value: "not-a-url",
+			} as EnvironmentVariable;
+			const invalidLayer = PosteeConfigProviderLive([invalidVariable]);
+			const invalidProvider = makeConfigProvider([invalidVariable]);
 
 			const result = await Effect.runPromise(
 				invalidProvider.getUrl("invalidUrl").pipe(

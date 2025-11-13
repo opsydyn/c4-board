@@ -174,7 +174,7 @@ export function EnvironmentEditor({
 								<Input
 									type={isSecret && !isVisible ? "password" : "text"}
 									placeholder="value"
-									className={isSecret ? secretValue : undefined}
+									className={isSecret ? secretValue : ""}
 								/>
 							</TextField>
 

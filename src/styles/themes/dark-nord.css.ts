@@ -16,6 +16,8 @@ export const darkTheme = createTheme(themeContract, {
 			raised: "#1a1a1a",     // Elevated elements
 			input: "#0a0a0a",      // Input backgrounds
 			inputFocus: "#0f0f0f", // Focused input
+			hover: "#1a1a1a",      // Hover state
+			selected: "#212529",   // Selected state
 		},
 
 		foreground: {

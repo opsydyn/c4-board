@@ -10,7 +10,7 @@
 
 import type { Edge, Node, NodeChange, EdgeChange } from "@xyflow/react";
 import { applyNodeChanges, applyEdgeChanges } from "@xyflow/react";
-import { assign, setup } from "xstate";
+import { assign, setup, type AnyStateMachine } from "xstate";
 import { Effect } from "effect";
 import { autoLayout, autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetName } from "../../core/effects/layout";
 import * as NodeOps from "../../core/effects/node-operations";
@@ -110,7 +110,7 @@ function runEffectSync<A>(effect: Effect.Effect<A>): A {
 	return result as A;
 }
 
-export const canvasMachine = setup({
+const canvasMachineDefinition = setup({
 	types: {
 		context: {} as CanvasContext,
 		events: {} as CanvasEvent,
@@ -640,3 +640,8 @@ export const canvasMachine = setup({
 		},
 	},
 });
+
+export type CanvasMachine = typeof canvasMachineDefinition;
+
+export const canvasMachine: CanvasMachine & AnyStateMachine =
+	canvasMachineDefinition as CanvasMachine & AnyStateMachine;

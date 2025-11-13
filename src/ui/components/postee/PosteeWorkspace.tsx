@@ -44,60 +44,15 @@ import {
 	CaretLeftIcon,
 	CaretRightIcon,
 	CaretUpIcon,
-	FolderSimple,
-	FileText,
+	Folder,
+	File,
+	TrashSimple,
+	PencilLine,
 } from "@phosphor-icons/react";
+import { InlineEditor } from "../nodes/InlineEditor";
 
-import {
-	workspace,
-	sidebar,
-	branding,
-	collectionList,
-	mainColumn,
-	mainHeader,
-	statusPill,
-	panel,
-	responseColumn,
-	responseInline,
-	sectionTitle,
-	emptyState,
-	collectionForm,
-	createForm,
-	textInput,
-	submitButton,
-	actionRow,
-	runButton,
-	cancelButton,
-	responseBody,
-	tabContent,
-	collectionTree,
-	treeCollectionRow,
-	treeIcon,
-	treeItemLabel,
-	treeCountBadge,
-	treeChevronButton,
-	treeChevronSpacer,
-	treeRequestRow,
-	treeMethodBadge,
-	treeRequestName,
-	responseTabContent,
-	historyDetailHeader,
-	historyCloseButton,
-	mainHeaderTitle,
-	mainHeaderActions,
-	environmentContent,
-	environmentEmptyState,
-	environmentForm,
-} from "./PosteeWorkspace.css";
-import {
-	bottomHandle,
-	bottomPanel,
-	bottomPanelHeader,
-	collapseHandleLeft,
-	collapseHandleRight,
-	collapseToggle,
-	panelHeader,
-} from "../styles.css";
+import * as styles from "./PosteeWorkspace.css";
+import * as layoutStyles from "../styles.css";
 
 type RequestStatus = "success" | "error" | "unknown";
 
@@ -159,6 +114,10 @@ export function PosteeWorkspace() {
 	const [expandedKeys, setExpandedKeys] = useState<Set<Key> | "all">(
 		() => new Set<Key>(),
 	);
+	const [selectedTreeKeys, setSelectedTreeKeys] = useState<Selection>(
+		() => new Set<Key>(),
+	);
+	const [isRenamingCollectionId, setRenamingCollectionId] = useState<string | null>(null);
 	const [newEnvironmentName, setNewEnvironmentName] = useState("");
 	const [inspectedHistoryEntry, setInspectedHistoryEntry] = useState<PosteeHistoryEntry | null>(null);
 
@@ -221,8 +180,11 @@ export function PosteeWorkspace() {
 	const handleTreeSelectionChange = useCallback(
 		(keys: Selection) => {
 			if (keys === "all") {
+				setSelectedTreeKeys(keys);
 				return;
 			}
+
+			setSelectedTreeKeys(keys);
 
 			const iterator = keys.values();
 			const first = iterator.next();
@@ -234,6 +196,7 @@ export function PosteeWorkspace() {
 			if (key.startsWith("collection:")) {
 				const collectionId = key.replace("collection:", "");
 				handleSelectCollection(collectionId);
+				setRenamingCollectionId(null);
 			} else if (key.startsWith("request:")) {
 				const requestId = key.replace("request:", "");
 				const collectionId = requestCollectionMap.get(requestId);
@@ -241,9 +204,15 @@ export function PosteeWorkspace() {
 					handleSelectCollection(collectionId);
 				}
 				handleSelectRequest(requestId);
+				setRenamingCollectionId(null);
 			}
 		},
-		[handleSelectCollection, handleSelectRequest, requestCollectionMap, activeCollectionKey],
+		[
+			handleSelectCollection,
+			handleSelectRequest,
+			requestCollectionMap,
+			activeCollectionKey,
+		],
 	);
 
 	const handleExpandedChange = useCallback((keys: Iterable<Key> | "all") => {
@@ -254,6 +223,91 @@ export function PosteeWorkspace() {
 
 		setExpandedKeys(new Set(keys));
 	}, []);
+
+	const selectedCollectionIds = useMemo(() => {
+		if (selectedTreeKeys === "all") {
+			return collections.map((collection: { id: string }) => collection.id);
+		}
+
+		const ids: string[] = [];
+		selectedTreeKeys.forEach((key) => {
+			if (typeof key === "string" && key.startsWith("collection:")) {
+				ids.push(key.replace("collection:", ""));
+			}
+		});
+		return ids;
+	}, [selectedTreeKeys, collections]);
+
+	const canRenameCollection = selectedCollectionIds.length === 1;
+	const canDeleteCollections = selectedCollectionIds.length > 0;
+	const selectionCount = selectedCollectionIds.length;
+
+	const handleStartRename = useCallback(() => {
+		if (!canRenameCollection) {
+			return;
+		}
+
+		const targetId = selectedCollectionIds[0];
+		if (!targetId) {
+			return;
+		}
+
+		setRenamingCollectionId(targetId);
+	}, [canRenameCollection, selectedCollectionIds]);
+
+	const handleRenameSave = useCallback(
+		(collectionId: string, name: string) => {
+			send({
+				type: "RENAME_COLLECTION",
+				payload: {
+					id: CollectionIdBrand(collectionId),
+					name,
+				},
+			});
+			setRenamingCollectionId(null);
+		},
+		[send],
+	);
+
+	const handleRenameCancel = useCallback(() => {
+		setRenamingCollectionId(null);
+	}, []);
+
+	useEffect(() => {
+		if (
+			isRenamingCollectionId &&
+			(!canRenameCollection ||
+				selectedCollectionIds[0] !== isRenamingCollectionId)
+		) {
+			setRenamingCollectionId(null);
+		}
+	}, [canRenameCollection, isRenamingCollectionId, selectedCollectionIds]);
+
+	const handleDeleteCollections = useCallback(() => {
+		if (!canDeleteCollections) {
+			return;
+		}
+
+		const label =
+			selectionCount === 1
+				? "this collection"
+				: `${selectionCount} collections`;
+		const confirmed = window.confirm(
+			`Delete ${label}? This will remove all nested requests and history.`,
+		);
+		if (!confirmed) {
+			return;
+		}
+
+		const payloadIds = selectedCollectionIds.map((id: string) => CollectionIdBrand(id));
+		send({
+			type: "DELETE_COLLECTIONS",
+			payload: { ids: payloadIds },
+		});
+
+		setSelectedTreeKeys(new Set<Key>());
+		setRenamingCollectionId(null);
+	}, [canDeleteCollections, selectionCount, selectedCollectionIds, send]);
 
 	const handleCreateRequest = useCallback(
 		(event: FormEvent<HTMLFormElement>) => {
@@ -354,24 +408,15 @@ export function PosteeWorkspace() {
 		: [];
 
 	const selectedRequest = requestsForActiveCollection.find(
-		(request) => request.id === (activeRequestId as unknown as string),
+		(request: { id: string }) => request.id === (activeRequestId as unknown as string),
 	);
 
-	const selectedTreeKey =
+const selectedTreeKey =
 		activeRequestId !== null && activeRequestId !== undefined
 			? `request:${activeRequestId as unknown as string}`
 			: activeCollectionKey
 				? `collection:${activeCollectionKey}`
 				: null;
-
-	const treeSelectedKeys = useMemo<Selection>(() => {
-		if (!selectedTreeKey) {
-			return new Set<Key>();
-		}
-		const selection = new Set<Key>();
-		selection.add(selectedTreeKey);
-		return selection;
-	}, [selectedTreeKey]);
 
 	const isInitialising = state.matches("initialising");
 	const isRunning = state.matches({ ready: "running" });
@@ -514,10 +559,33 @@ export function PosteeWorkspace() {
 		[newEnvironmentName, send, environments.length],
 	);
 
-	useEffect(() => {
+useEffect(() => {
+	setSelectedTreeKeys((prev) => {
+		if (prev === "all") {
+			return prev;
+		}
+		if (prev.size > 1) {
+			return prev;
+		}
+
+		if (!selectedTreeKey) {
+			return prev.size === 0 ? prev : new Set<Key>();
+		}
+
+		if (prev.has(selectedTreeKey)) {
+			return prev;
+		}
+
+		const next = new Set<Key>();
+		next.add(selectedTreeKey);
+		return next;
+	});
+}, [selectedTreeKey]);
+
+useEffect(() => {
 		if (
 			inspectedHistoryEntry &&
-			!history.some((entry) => entry.id === inspectedHistoryEntry.id)
+			!history.some((entry: { id: string }) => entry.id === inspectedHistoryEntry.id)
 		) {
 			setInspectedHistoryEntry(null);
 		}
@@ -624,11 +692,11 @@ export function PosteeWorkspace() {
 	const isResponseDocked = isResponseOpen && !isCompactLayout;
 	const responsePanelContent = (
 		<>
-			<div className={panelHeader}>
+				<div className={layoutStyles.panelHeader}>
 				<ToggleButton
 					isSelected={isResponseOpen}
 					onChange={setResponseOpen}
-					className={collapseToggle}
+					className={layoutStyles.collapseToggle}
 					aria-label="Collapse response panel"
 				>
 					<CaretRightIcon size={16} weight="bold" />
@@ -643,10 +711,10 @@ export function PosteeWorkspace() {
 				activeTab={activeResponseTab}
 				onTabChange={(tab) => setActiveResponseTab(tab as "Execution" | "LoadTest")}
 			>
-				<TabPanel id="Execution" className={responseTabContent}>
-					<h2 className={sectionTitle}>Execution</h2>
+				<TabPanel id="Execution" className={styles.responseTabContent}>
+					<h2 className={styles.sectionTitle}>Execution</h2>
 					{isRunning && (
-						<div className={panel}>
+						<div className={styles.panel}>
 							<strong>Sending request…</strong>
 							<span>The request is currently in-flight. You can cancel above.</span>
 						</div>
@@ -658,7 +726,9 @@ export function PosteeWorkspace() {
 							headers={lastResponse.headers}
 							status={lastResponse.status}
 							statusText={lastResponse.statusText}
-							duration={lastResponseDurationMs ?? undefined}
+							{...(lastResponseDurationMs !== undefined && lastResponseDurationMs !== null && {
+								duration: lastResponseDurationMs,
+							})}
 							size={Number(lastResponse.rawSize)}
 							defaultExpanded
 							baselineBody={runner.baselineResponse?.bodyText ?? null}
@@ -670,21 +740,21 @@ export function PosteeWorkspace() {
 					)}
 
 					{lastError && (
-						<div className={panel}>
-							<h3 className={sectionTitle}>Last Error</h3>
-							<pre className={responseBody}>{lastError}</pre>
+						<div className={styles.panel}>
+							<h3 className={styles.sectionTitle}>Last Error</h3>
+					<pre className={styles.responseBody}>{lastError}</pre>
 						</div>
 					)}
 
 					<PosteeHistoryTable history={history} onInspectEntry={handleInspectHistoryEntry} />
 
 					{inspectedHistoryResponse && (
-						<div className={panel}>
-							<div className={historyDetailHeader}>
-								<h2 className={sectionTitle}>History Response</h2>
+						<div className={styles.panel}>
+							<div className={styles.historyDetailHeader}>
+								<h2 className={styles.sectionTitle}>History Response</h2>
 								<button
 									type="button"
-									className={historyCloseButton}
+									className={styles.historyCloseButton}
 									onClick={clearInspectedHistoryEntry}
 								>
 									Close
@@ -692,29 +762,37 @@ export function PosteeWorkspace() {
 							</div>
 							<ResponseViewer
 								body={inspectedHistoryResponse.body}
-								headers={inspectedHistoryResponse.headers}
-								status={inspectedHistoryResponse.status}
-								statusText={inspectedHistoryResponse.statusText}
-								duration={inspectedHistoryResponse.duration}
-								size={inspectedHistoryResponse.size}
+								{...(inspectedHistoryResponse.headers !== undefined && {
+									headers: inspectedHistoryResponse.headers,
+								})}
+								{...(inspectedHistoryResponse.status !== undefined && {
+									status: inspectedHistoryResponse.status,
+								})}
+								{...(inspectedHistoryResponse.statusText !== undefined && {
+									statusText: inspectedHistoryResponse.statusText,
+								})}
+								{...(inspectedHistoryResponse.duration !== undefined && {
+									duration: inspectedHistoryResponse.duration,
+								})}
+								{...(inspectedHistoryResponse.size !== undefined && {
+									size: inspectedHistoryResponse.size,
+								})}
 								defaultExpanded
 							/>
 						</div>
 					)}
 				</TabPanel>
-				<TabPanel id="LoadTest" className={responseTabContent}>
-					<LoadTestPanel
-						request={
-							selectedRequest
-								? {
-										id: selectedRequest.id,
-										name: selectedRequest.name,
-										method: selectedRequest.method,
-										url: selectedRequest.url,
-								  }
-								: undefined
-						}
-					/>
+				<TabPanel id="LoadTest" className={styles.responseTabContent}>
+					{selectedRequest && (
+						<LoadTestPanel
+							request={{
+								id: selectedRequest.id,
+								name: selectedRequest.name,
+								method: selectedRequest.method,
+								url: selectedRequest.url,
+							}}
+						/>
+					)}
 				</TabPanel>
 			</TabBar>
 		</>
@@ -733,26 +811,26 @@ export function PosteeWorkspace() {
 
 	return (
 		<div
-			className={workspace}
+			className={styles.workspace}
 			style={{
 				gridTemplateColumns: templateColumns,
 				gridTemplateRows: templateRows,
 			}}
 		>
 			{isSidebarOpen && (
-				<aside className={sidebar} aria-label="Collections panel">
-					<div className={panelHeader}>
+				<aside className={styles.sidebar} aria-label="Collections panel">
+				<div className={layoutStyles.panelHeader}>
 						<ToggleButton
 							isSelected={isSidebarOpen}
 							onChange={setSidebarOpen}
-							className={collapseToggle}
+							className={layoutStyles.collapseToggle}
 							aria-label="Collapse collections panel"
 						>
 							<CaretLeftIcon size={16} weight="bold" />
 							Hide
 						</ToggleButton>
 					</div>
-					<header className={branding}>
+					<header className={styles.branding}>
 						<span>Postee Collections</span>
 						<span>
 							<a href="/">C4:BOARD</a>
@@ -760,9 +838,12 @@ export function PosteeWorkspace() {
 						<span>{collections.length}</span>
 					</header>
 
-					<form className={collectionForm} onSubmit={handleCreateCollection}>
+				<form
+					className={styles.collectionForm}
+					onSubmit={handleCreateCollection}
+				>
 						<input
-							className={textInput}
+							className={styles.textInput}
 							type="text"
 							placeholder="New collection name"
 							value={newCollectionName}
@@ -770,7 +851,7 @@ export function PosteeWorkspace() {
 							aria-label="New collection name"
 						/>
 						<button
-							className={submitButton}
+							className={styles.submitButton}
 							type="submit"
 							disabled={!newCollectionName.trim()}
 						>
@@ -778,24 +859,59 @@ export function PosteeWorkspace() {
 						</button>
 					</form>
 
-					<div className={collectionList}>
+				{selectionCount > 0 && (
+					<div className={styles.selectionToolbar}>
+							<span>
+								{selectionCount} collection
+								{selectionCount === 1 ? "" : "s"} selected
+							</span>
+							<div style={{ display: "flex", gap: "0.5rem" }}>
+							<button
+								type="button"
+								className={styles.selectionToolbarButton}
+									onClick={handleStartRename}
+									disabled={!canRenameCollection}
+									aria-label="Rename collection"
+								>
+									<PencilLine size={14} weight="bold" />
+									<span>Rename</span>
+								</button>
+								<button
+									type="button"
+									className={styles.selectionToolbarButton}
+									onClick={handleDeleteCollections}
+									disabled={!canDeleteCollections}
+									aria-label="Delete selected collections"
+								>
+									<TrashSimple size={14} weight="bold" />
+									<span>
+										Delete
+										{selectionCount > 1 ? ` (${selectionCount})` : ""}
+									</span>
+								</button>
+							</div>
+						</div>
+					)}
+
+				<div className={styles.collectionList}>
 						{collections.length === 0 ? (
-							<div className={emptyState}>
+							<div className={styles.emptyState}>
 								<strong>No collections yet</strong>
 								<span>Use the upcoming controls to create your first workspace.</span>
 							</div>
 						) : (
 							<Tree
 								aria-label="Postee collections"
-								selectionMode="single"
-								disallowEmptySelection
-								className={collectionTree}
-								selectedKeys={treeSelectedKeys}
+								selectionMode="multiple"
+								selectionBehavior="toggle"
+								disallowEmptySelection={false}
+								className={styles.collectionTree}
+								selectedKeys={selectedTreeKeys}
 								onSelectionChange={handleTreeSelectionChange}
 								expandedKeys={expandedKeys}
 								onExpandedChange={handleExpandedChange}
 							>
-								{collections.map((collection) => {
+								{collections.map((collection: { id: string; name: string }) => {
 									const treeKey = `collection:${collection.id}`;
 									const collectionRequests =
 										requestsByCollection[collection.id] ?? [];
@@ -809,10 +925,10 @@ export function PosteeWorkspace() {
 											textValue={collection.name}
 											hasChildItems={collectionRequests.length > 0}
 										>
-												<TreeItemContent>
+											<TreeItemContent>
 													{(itemProps) => (
 														<div
-															className={treeCollectionRow}
+															className={styles.treeCollectionRow}
 															data-selected={itemProps.isSelected || undefined}
 														>
 															{collectionRequests.length > 0 ? (
@@ -823,34 +939,58 @@ export function PosteeWorkspace() {
 																			? `Collapse ${collection.name}`
 																			: `Expand ${collection.name}`
 																	}
-																	className={treeChevronButton}
+																	className={styles.treeChevronButton}
 																	data-expanded={itemProps.isExpanded || undefined}
 																>
 																	<CaretRightIcon size={14} weight="bold" />
 																</Button>
 															) : (
-																<span className={treeChevronSpacer} aria-hidden="true" />
+																<span className={styles.treeChevronSpacer} aria-hidden="true" />
 															)}
-															<div className={treeItemLabel}>
-																<span className={treeIcon}>
-																	<FolderSimple
+															<div className={styles.treeItemLabel}>
+																<span className={styles.treeIcon}>
+																	<Folder
 																		size={18}
 																		weight="duotone"
 																		color={folderColor}
 																	/>
 																</span>
-																<span>{collection.name}</span>
-																<span className={treeCountBadge}>
-																	{collectionRequests.length}{" "}
-																	{collectionRequests.length === 1
-																		? "request"
-																		: "requests"}
-															</span>
+																<div className={styles.treeLabelContent}>
+																	{isRenamingCollectionId === collection.id ? (
+																		<InlineEditor
+																			value={collection.name}
+																			mode="plain"
+																			placeholder="Collection name"
+																			maxLength={120}
+																			onSave={(value) =>
+																				handleRenameSave(collection.id, value)
+																			}
+																			onCancel={handleRenameCancel}
+																		/>
+																	) : (
+																		<button
+																			type="button"
+																			className={styles.treeNameButton}
+																			onDoubleClick={(event) => {
+																				event.stopPropagation();
+																				setRenamingCollectionId(collection.id);
+																			}}
+																		>
+																			{collection.name}
+																		</button>
+																	)}
+																	<span className={styles.treeCountBadge}>
+																		{collectionRequests.length}{" "}
+																		{collectionRequests.length === 1
+																			? "request"
+																			: "requests"}
+																	</span>
+																</div>
 														</div>
 													</div>
 												)}
 											</TreeItemContent>
-											{collectionRequests.map((request) => {
+											{collectionRequests.map((request: { id: string; method: string; name: string }) => {
 												const requestStatus =
 													requestStatusMap.get(request.id) ?? "unknown";
 												const requestColor =
@@ -864,20 +1004,20 @@ export function PosteeWorkspace() {
 														<TreeItemContent>
 															{(itemProps) => (
 																<div
-																	className={treeRequestRow}
+																	className={styles.treeRequestRow}
 																	data-selected={itemProps.isSelected || undefined}
 																>
-																	<span className={treeIcon}>
-																		<FileText
+																	<span className={styles.treeIcon}>
+																		<File
 																			size={18}
 																			weight="duotone"
 																			color={requestColor}
 																		/>
 																	</span>
-																	<span className={treeMethodBadge}>
+																	<span className={styles.treeMethodBadge}>
 																		{request.method}
 																	</span>
-																	<span className={treeRequestName}>
+																	<span className={styles.treeRequestName}>
 																		{request.name}
 																	</span>
 																</div>
@@ -895,17 +1035,16 @@ export function PosteeWorkspace() {
 				</aside>
 			)}
 
-			<main className={mainColumn} aria-label="Request builder">
-				<header className={mainHeader}>
-					<div className={mainHeaderTitle}>
+			<main className={styles.mainColumn} aria-label="Request builder">
+				<header className={styles.mainHeader}>
+					<div className={styles.mainHeaderTitle}>
 						<h1>Request Builder</h1>
-						<span className={statusPill}>{statusLabel}</span>
+						<span className={styles.statusPill}>{statusLabel}</span>
 					</div>
-					<div className={mainHeaderActions}>
+					<div className={styles.mainHeaderActions}>
 						<ToggleButton
 							isSelected={isResponseOpen}
 							onChange={setResponseOpen}
-							className={collapseToggle}
 							aria-label={
 								isResponseOpen ? "Hide response panel" : "Show response panel"
 							}
@@ -916,7 +1055,7 @@ export function PosteeWorkspace() {
 						<ToggleButton
 							isSelected={isEnvironmentOpen}
 							onChange={setEnvironmentOpen}
-							className={collapseToggle}
+							className={layoutStyles.collapseToggle}
 							aria-label={
 								isEnvironmentOpen
 									? "Hide environment panel"
@@ -929,9 +1068,9 @@ export function PosteeWorkspace() {
 					</div>
 				</header>
 
-				<section className={panel}>
-					<h2 className={sectionTitle}>Create HTTP Request</h2>
-					<form className={createForm} onSubmit={handleCreateRequest}>
+				<section className={styles.panel}>
+					<h2 className={styles.sectionTitle}>Create HTTP Request</h2>
+					<form className={styles.createForm} onSubmit={handleCreateRequest}>
 						<Select
 							value={newRequestMethod}
 							options={methodOptions}
@@ -939,7 +1078,7 @@ export function PosteeWorkspace() {
 							disabled={!activeCollectionKey}
 						/>
 						<input
-							className={textInput}
+							className={styles.textInput}
 							type="text"
 							placeholder="Request name"
 							value={newRequestName}
@@ -949,7 +1088,7 @@ export function PosteeWorkspace() {
 							aria-label="Request name"
 						/>
 						<input
-							className={textInput}
+							className={styles.textInput}
 							type="url"
 							placeholder="https://api.example.com/users"
 							value={newRequestUrl}
@@ -959,7 +1098,7 @@ export function PosteeWorkspace() {
 							aria-label="Request URL"
 						/>
 						<button
-							className={submitButton}
+							className={styles.submitButton}
 							type="submit"
 							disabled={
 								!activeCollectionKey ||
@@ -972,7 +1111,7 @@ export function PosteeWorkspace() {
 					</form>
 
 					{!activeCollectionKey && (
-						<div className={emptyState}>
+						<div className={styles.emptyState}>
 							<strong>Select a collection</strong>
 							<span>
 								Pick a collection on the left to add your first HTTP request.
@@ -980,16 +1119,16 @@ export function PosteeWorkspace() {
 						</div>
 					)}
 
-					<h2 className={sectionTitle}>Request Details</h2>
+					<h2 className={styles.sectionTitle}>Request Details</h2>
 					{isInitialising && (
-						<div className={emptyState}>
+						<div className={styles.emptyState}>
 							<strong>Loading workspace…</strong>
 							<span>Fetching collections, requests, and environments.</span>
 						</div>
 					)}
 
 					{!isInitialising && !selectedRequest && (
-						<div className={emptyState}>
+						<div className={styles.emptyState}>
 							<strong>Select or create a request</strong>
 							<span>
 								Choose a collection and request on the left to start editing.
@@ -998,14 +1137,14 @@ export function PosteeWorkspace() {
 					)}
 
 					{selectedRequest && (
-						<form className={createForm} onSubmit={handleUpdateRequest}>
+						<form className={styles.createForm} onSubmit={handleUpdateRequest}>
 							<Select
 								value={editRequestMethod}
 								options={methodOptions}
 								onChange={setEditRequestMethod}
 							/>
 							<input
-								className={textInput}
+								className={styles.textInput}
 								type="text"
 								placeholder="Request name"
 								value={editRequestName}
@@ -1014,7 +1153,7 @@ export function PosteeWorkspace() {
 								aria-label="Selected request name"
 							/>
 							<input
-								className={textInput}
+								className={styles.textInput}
 								type="url"
 								placeholder="https://api.example.com/users"
 								value={editRequestUrl}
@@ -1023,7 +1162,7 @@ export function PosteeWorkspace() {
 								aria-label="Selected request URL"
 							/>
 							<button
-								className={submitButton}
+								className={styles.submitButton}
 								type="submit"
 								disabled={!editRequestName.trim() || !editRequestUrl.trim()}
 							>
@@ -1034,13 +1173,13 @@ export function PosteeWorkspace() {
 				</section>
 
 				{selectedRequest && (
-					<section className={panel}>
+					<section className={styles.panel}>
 						<TabBar
 							tabs={["Body", "Headers"]}
 							activeTab={activeTab}
 							onTabChange={(tab) => setActiveTab(tab as "Body" | "Headers")}
 						>
-							<TabPanel id="Body" className={tabContent}>
+							<TabPanel id="Body" className={styles.tabContent}>
 								<MonacoJsonEditor
 									value={requestBody}
 									onChange={setRequestBody}
@@ -1048,7 +1187,7 @@ export function PosteeWorkspace() {
 									placeholder="{}"
 								/>
 							</TabPanel>
-							<TabPanel id="Headers" className={tabContent}>
+							<TabPanel id="Headers" className={styles.tabContent}>
 								<HeadersEditor
 									headers={requestHeaders}
 									onChange={setRequestHeaders}
@@ -1059,10 +1198,10 @@ export function PosteeWorkspace() {
 				)}
 
 				{selectedRequest && (
-					<div className={actionRow}>
+					<div className={styles.actionRow}>
 						<button
 							type="button"
-							className={runButton}
+							className={styles.runButton}
 							onClick={handleRunRequest}
 							disabled={!canRunRequest}
 						>
@@ -1070,7 +1209,7 @@ export function PosteeWorkspace() {
 						</button>
 						<button
 							type="button"
-							className={cancelButton}
+							className={styles.cancelButton}
 							onClick={handleCancelRequest}
 							disabled={!isRunning}
 						>
@@ -1083,7 +1222,7 @@ export function PosteeWorkspace() {
 					<ToggleButton
 						isSelected={isSidebarOpen}
 						onChange={setSidebarOpen}
-						className={collapseHandleLeft}
+						className={layoutStyles.collapseHandleLeft}
 						aria-label="Expand collections panel"
 					>
 						<CaretRightIcon size={16} weight="bold" />
@@ -1094,7 +1233,7 @@ export function PosteeWorkspace() {
 						<ToggleButton
 							isSelected={isResponseOpen}
 							onChange={setResponseOpen}
-							className={collapseHandleRight}
+							className={layoutStyles.collapseHandleRight}
 							aria-label="Expand response panel"
 					>
 						<CaretLeftIcon size={16} weight="bold" />
@@ -1105,7 +1244,7 @@ export function PosteeWorkspace() {
 					<ToggleButton
 						isSelected={isEnvironmentOpen}
 						onChange={setEnvironmentOpen}
-						className={bottomHandle}
+						className={layoutStyles.bottomHandle}
 						aria-label="Expand environment panel"
 					>
 						<CaretUpIcon size={16} weight="bold" />
@@ -1116,12 +1255,12 @@ export function PosteeWorkspace() {
 
 			{isResponseOpen &&
 				(isResponseDocked ? (
-					<aside className={responseColumn} aria-label="Response panel">
+					<aside className={styles.responseColumn} aria-label="Response panel">
 						{responsePanelContent}
 					</aside>
 				) : (
 					<section
-						className={responseInline}
+						className={styles.responseInline}
 						aria-label="Response panel"
 						style={responseInlineStyle}
 					>
@@ -1131,36 +1270,36 @@ export function PosteeWorkspace() {
 
 			{isEnvironmentOpen && (
 				<section
-					className={bottomPanel}
+					className={layoutStyles.bottomPanel}
 					aria-label="Environment panel"
 					style={environmentGridStyle}
 				>
-					<div className={bottomPanelHeader}>
-						<h2 className={sectionTitle}>Environment Variables</h2>
+					<div className={layoutStyles.bottomPanelHeader}>
+						<h2 className={styles.sectionTitle}>Environment Variables</h2>
 						<ToggleButton
 							isSelected={isEnvironmentOpen}
 							onChange={setEnvironmentOpen}
-							className={collapseToggle}
+							className={layoutStyles.collapseToggle}
 							aria-label="Collapse environment panel"
 						>
 							<CaretDownIcon size={16} weight="bold" />
 							Hide
 						</ToggleButton>
 					</div>
-					<div className={environmentContent}>
+					<div className={styles.environmentContent}>
 						{environments.length === 0 ? (
-							<div className={environmentEmptyState}>
+							<div className={styles.environmentEmptyState}>
 								<strong>No environments yet</strong>
 								<span>
 									Create your first environment to start managing environment
 									variables (e.g., Development, Staging, Production).
 								</span>
 								<form
-									className={environmentForm}
+									className={styles.environmentForm}
 									onSubmit={handleCreateEnvironment}
 								>
 									<input
-										className={textInput}
+										className={styles.textInput}
 										type="text"
 										placeholder="Environment name (e.g., Development)"
 										value={newEnvironmentName}
@@ -1168,7 +1307,7 @@ export function PosteeWorkspace() {
 										required
 										aria-label="Environment name"
 									/>
-									<button className={submitButton} type="submit">
+									<button className={styles.submitButton} type="submit">
 										Create Environment
 									</button>
 								</form>
@@ -1176,7 +1315,7 @@ export function PosteeWorkspace() {
 						) : (
 							<EnvironmentEditor
 								environmentId={currentEnvironmentId}
-								environments={environments.map((env) => ({
+								environments={environments.map((env: { id: string; name: string; is_default: number }) => ({
 									id: env.id,
 									name: env.name,
 									is_default: env.is_default,

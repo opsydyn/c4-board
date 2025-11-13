@@ -33,18 +33,7 @@ import { PersonNode } from "./nodes/PersonNode";
 import { SystemNode } from "./nodes/SystemNode";
 import { ContainerNode } from "./nodes/ContainerNode";
 import { ComponentNode } from "./nodes/ComponentNode";
-import {
-	canvasContainer,
-	canvasStack,
-	commandBar,
-	commandBarButton,
-	commandBarHandle,
-	commandBarToggle,
-	commandBarLeft,
-	commandBarRight,
-	commandBarSearch,
-	reactFlowControls,
-} from "./styles.css";
+import * as styles from "./styles.css";
 import { theme } from "../../styles/theme.css";
 import { DownloadButton } from "./DownloadButton";
 import { ToggleButton } from "react-aria-components";
@@ -195,20 +184,20 @@ function C4CanvasInner(
 	}, []);
 
 	return (
-		<div className={canvasStack}>
+		<div className={styles.canvasStack}>
 			{isCommandBarOpen ? (
-				<div className={commandBar}>
-					<div className={commandBarLeft}>
-						<DownloadButton variant="inline" className={commandBarButton} />
+				<div className={styles.commandBar}>
+					<div className={styles.commandBarLeft}>
+						<DownloadButton variant="inline" className={styles.commandBarButton} />
 					</div>
-					<div className={commandBarRight}>
-						<div className={commandBarSearch}>
+					<div className={styles.commandBarRight}>
+						<div className={styles.commandBarSearch}>
 							<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
 						</div>
 						<ToggleButton
 							isSelected={isCommandBarOpen}
 							onChange={onToggleCommandBar}
-							className={commandBarToggle}
+							className={styles.commandBarToggle}
 							aria-label="Collapse command bar"
 						>
 							<CaretUpIcon size={14} weight="bold" />
@@ -220,13 +209,13 @@ function C4CanvasInner(
 				<ToggleButton
 					isSelected={isCommandBarOpen}
 					onChange={onToggleCommandBar}
-					className={commandBarHandle}
+					className={styles.commandBarHandle}
 					aria-label="Expand command bar"
 				>
 					<CaretDownIcon size={16} weight="bold" />
 				</ToggleButton>
 			)}
-			<div className={canvasContainer}>
+			<div className={styles.canvasContainer}>
 				<ReactFlow
 					proOptions={{ hideAttribution: true }}
 					nodes={nodes}
@@ -248,7 +237,7 @@ function C4CanvasInner(
 					connectionMode={ConnectionMode.Loose}
 				>
 					<Background color={theme.color.border.primary} />
-					<Controls className={reactFlowControls} />
+					<Controls className={styles.reactFlowControls} />
 					<MiniMap
 						pannable
 						zoomable
@@ -289,7 +278,7 @@ function C4CanvasInner(
 				<EdgeLabelEditor
 					edgeId={selectedEdgeId}
 					currentLabel={
-						edges.find((e) => e.id === selectedEdgeId)?.label ?? "uses"
+						String(edges.find((e) => e.id === selectedEdgeId)?.label ?? "uses")
 					}
 					isOpen={isEdgeLabelEditorOpen}
 					onClose={handleCloseEdgeLabelEditor}

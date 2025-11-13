@@ -45,10 +45,11 @@ export const selectButton = style({
 				opacity: theme.opacity.disabled,
 				cursor: "not-allowed",
 			},
-
-			'[aria-expanded="true"]': {
-				borderColor: theme.color.border.focus,
-			},
+		},
+	},
+	selectors: {
+		'&[aria-expanded="true"]': {
+			borderColor: theme.color.border.focus,
 		},
 	},
 });

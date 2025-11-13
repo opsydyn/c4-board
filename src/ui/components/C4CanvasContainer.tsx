@@ -12,6 +12,7 @@
  */
 
 import { useMachine } from "@xstate/react";
+import type { Actor, AnyStateMachine, StateFrom } from "xstate";
 import {
 	type Connection,
 	type EdgeChange,
@@ -23,19 +24,7 @@ import { canvasMachine, type CanvasEvent } from "../machines/canvas.machine";
 import { C4Canvas, type C4CanvasRef } from "./C4Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { Toolbar } from "./Toolbar";
-import {
-	workspace,
-	sidebarColumn,
-	canvasRegion,
-	detailsColumn,
-	panelHeader,
-	collapseToggle,
-	collapseHandleLeft,
-	collapseHandleRight,
-	sidebarBrand,
-	sidebarBrandIcon,
-	bottomHandle,
-} from "./styles.css";
+import * as styles from "./styles.css";
 import { BalancedMudChart } from "./BalancedMudChart";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DataBar } from "./DataBar";
@@ -54,8 +43,18 @@ import type { NodeData } from "../../core/effects/node-operations";
 import { ToggleButton } from "react-aria-components";
 import { CaretLeftIcon, CaretRightIcon, CaretUpIcon } from "@phosphor-icons/react";
 
+type UseMachineParam = Parameters<typeof useMachine>[0];
+
+type UseMachineTuple<TMachine extends AnyStateMachine> = [
+	StateFrom<TMachine>,
+	Actor<TMachine>["send"],
+	Actor<TMachine>,
+];
+
 export function C4CanvasContainer() {
-	const [state, send] = useMachine(canvasMachine);
+	const [state, send] = useMachine(
+		canvasMachine as unknown as UseMachineParam,
+	) as unknown as UseMachineTuple<typeof canvasMachine>;
 	const { runEffect } = useDatabase();
 	const canvasRef = useRef<C4CanvasRef>(null);
 	const lastDiagramIdRef = useRef<string | null>(null);
@@ -319,7 +318,7 @@ export function C4CanvasContainer() {
 
 	// Enrich nodes with onUpdate callback for inline editing
 	const enrichedNodes = useMemo(() => {
-		return state.context.nodes.map((node) => ({
+		return state.context.nodes.map((node: Node<NodeData>) => ({
 			...node,
 			data: {
 				...node.data,
@@ -477,7 +476,7 @@ export function C4CanvasContainer() {
 
 	// Get selected node object (cast to Node<NodeData> since our nodes always have NodeData)
 	const selectedNode = (state.context.nodes.find(
-		(n) => n.id === state.context.selectedNodeId,
+		(n: { id: string }) => n.id === state.context.selectedNodeId,
 	) as Node<NodeData> | undefined) || null;
 
 	// Handle node selection from search
@@ -558,19 +557,19 @@ export function C4CanvasContainer() {
 
 	return (
 		<div
-			className={workspace}
+			className={styles.workspace}
 			style={{
 				gridTemplateColumns: `${leftTrack} 1fr ${rightTrack}`,
 				gridTemplateRows: rowTrack,
 			}}
 		>
 			{isSidebarOpen && (
-				<aside className={sidebarColumn} aria-label="Toolbar panel">
-					<div className={sidebarBrand}>
+				<aside className={styles.sidebarColumn} aria-label="Toolbar panel">
+					<div className={styles.sidebarBrand}>
 						<img
 							src="/app-icon.png"
 							alt="C4 Canvas"
-							className={sidebarBrandIcon}
+							className={styles.sidebarBrandIcon}
 							width={50}
 							height={50}
 						/>
@@ -591,11 +590,20 @@ export function C4CanvasContainer() {
 							>
 								USE POSTEE API CLIENT
 							</a>
-					<div className={panelHeader}>
+
+								<a
+								href="/saved-diagrams"
+		
+							>
+								SAVED DIAGRAMS
+							</a>
+
+							
+					<div className={styles.panelHeader}>
 						<ToggleButton
 							isSelected={isSidebarOpen}
 							onChange={setSidebarOpen}
-							className={collapseToggle}
+							className={styles.collapseToggle}
 							aria-label="Collapse left panel"
 						>
 							<CaretLeftIcon size={16} weight="bold" />
@@ -633,7 +641,7 @@ export function C4CanvasContainer() {
 				</aside>
 			)}
 
-			<section className={canvasRegion}>
+			<section className={styles.canvasRegion}>
 				<C4Canvas
 					ref={canvasRef}
 					nodes={enrichedNodes}
@@ -651,7 +659,7 @@ export function C4CanvasContainer() {
 					<ToggleButton
 						isSelected={isSidebarOpen}
 						onChange={setSidebarOpen}
-						className={collapseHandleLeft}
+						className={styles.collapseHandleLeft}
 						aria-label="Expand left panel"
 					>
 						<CaretRightIcon size={16} weight="bold" />
@@ -661,7 +669,7 @@ export function C4CanvasContainer() {
 					<ToggleButton
 						isSelected={isDetailsOpen}
 						onChange={setDetailsOpen}
-						className={collapseHandleRight}
+						className={styles.collapseHandleRight}
 						aria-label="Expand right panel"
 					>
 						<CaretLeftIcon size={16} weight="bold" />
@@ -671,7 +679,7 @@ export function C4CanvasContainer() {
 					<ToggleButton
 						isSelected={isDataBarOpen}
 						onChange={(selected) => setDataBarOpen(selected)}
-						className={bottomHandle}
+						className={styles.bottomHandle}
 						aria-label="Expand data bar"
 					>
 						<CaretUpIcon size={16} weight="bold" />
@@ -681,12 +689,12 @@ export function C4CanvasContainer() {
 			</section>
 
 			{!isCompactLayout && isDetailsOpen && (
-				<aside className={detailsColumn} aria-label="Properties panel">
-					<div className={panelHeader}>
+				<aside className={styles.detailsColumn} aria-label="Properties panel">
+					<div className={styles.panelHeader}>
 						<ToggleButton
 							isSelected={isDetailsOpen}
 							onChange={setDetailsOpen}
-							className={collapseToggle}
+							className={styles.collapseToggle}
 							aria-label="Collapse right panel"
 						>
 							<CaretRightIcon size={16} weight="bold" />

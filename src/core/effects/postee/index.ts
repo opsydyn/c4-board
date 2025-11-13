@@ -3,6 +3,7 @@ import {
 	createPosteeEnvironment,
 	createPosteeRequest,
 	deletePosteeCollection,
+	deletePosteeCollections,
 	deletePosteeEnvironment,
 	deletePosteeRequest,
 	getPosteeRequest,
@@ -37,6 +38,7 @@ export const PosteeCollections = {
 	create: (collection: Omit<PosteeCollection, "created_at" | "updated_at">) => createPosteeCollection(collection),
 	update: updatePosteeCollection,
 	remove: deletePosteeCollection,
+	removeMany: (ids: ReadonlyArray<string>) => deletePosteeCollections(ids),
 };
 
 export const PosteeRequests = {

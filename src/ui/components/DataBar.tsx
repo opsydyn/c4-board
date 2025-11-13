@@ -13,8 +13,9 @@ import {
 	collapseToggle,
 	historyPlaceholder,
 } from "./styles.css";
+// import { Effect } from 'effect'
 
-type DataBarTab = "diagrams" | "history" | "docs";
+type DataBarTab = "diagrams" | "diagrams_alt" | "history" | "docs";
 
 interface DataBarProps {
 	isOpen: boolean;
@@ -36,6 +37,23 @@ const TABS: Array<{ id: DataBarTab; label: string }> = [
 		label: "RTFM:V1",
 	},
 ];
+
+
+// Effect.sync(() => {
+// 	console.log('[DataBar] Component mounted');
+// });
+
+// const loadDataEffect = Effect.try({
+// 	try: () => {
+// 		console.log('[DataBar] Attempting to load data...');
+// 		// Simulate data loading
+// 	},
+// 	catch: (error) => {
+// 		console.error('[DataBar] Error loading data:', error);
+// 	},
+// })
+
+
 
 export function DataBar({ isOpen, onToggle, onLoadDiagram }: DataBarProps) {
 	const [activeTab, setActiveTab] = useState<DataBarTab>("diagrams");

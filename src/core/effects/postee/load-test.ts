@@ -11,7 +11,7 @@ const hasTauriInjection = (): boolean => {
 		return false;
 	}
 
-	const anyWindow = window as Record<string, unknown>;
+	const anyWindow = window as unknown as Record<string, unknown>;
 	const userAgentLooksLikeTauri =
 		typeof navigator !== "undefined" &&
 		/tauri/i.test(navigator.userAgent ?? "");

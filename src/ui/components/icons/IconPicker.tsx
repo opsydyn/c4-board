@@ -26,22 +26,7 @@ import {
 	upsertCustomIcon,
 	type CustomIcon as CustomIconRecord,
 } from "../../../core/effects/database";
-import {
-	pickerContainer,
-	trigger,
-	triggerIcon,
-	popoverContent,
-	quickFilterRow,
-	searchInput,
-	iconGrid,
-	iconButton,
-	footerRow,
-	footerButton,
-	helperRow,
-	sectionHeading,
-	statusText,
-	errorText,
-} from "./IconPicker.css";
+import * as styles from "./IconPicker.css";
 
 const ICON_OPTIONS: Array<{ id: BuiltInIconId; label: string; group: string }> = [
 	{ id: "phosphor:user-duotone", label: "Operator", group: "Actors" },
@@ -158,7 +143,7 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 	const defaultStatus = isTauri
 		? "PNG, SVG, JPEG, WEBP • 512KB max"
 		: "Custom uploads require the desktop runtime";
-	const statusClass = errorMessage ? errorText : statusText;
+	const statusClass = errorMessage ? styles.errorText : styles.statusText;
 	const statusContent = errorMessage ?? statusMessage ?? defaultStatus;
 
 	const fetchCustomIcons = useCallback(async () => {
@@ -385,24 +370,24 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 	}, [fetchCustomIcons, onChange, runEffect]);
 
 	return (
-		<div className={pickerContainer}>
+		<div className={styles.pickerContainer}>
 			<DialogTrigger onOpenChange={handleOpenChange}>
-				<Button className={trigger} aria-label="Select icon">
-					<div className={triggerIcon}>
+				<Button className={styles.trigger} aria-label="Select icon">
+					<div className={styles.triggerIcon}>
 						<Icon size={24} weight="duotone" />
 					</div>
 					<span>{resolvedLabel}</span>
 				</Button>
 
-				<Popover offset={8} className={popoverContent}>
+				<Popover offset={8} className={styles.popoverContent}>
 					<Dialog aria-label="Select node icon">
 						{({ close }) => (
 							<>
-								<div className={quickFilterRow}>
+								<div className={styles.quickFilterRow}>
 									<MagnifyingGlassIcon size={16} weight="bold" />
 									<input
 										type="search"
-										className={searchInput}
+										className={styles.searchInput}
 										placeholder="Filter icons"
 										value={filter}
 										onChange={(event) => setFilter(event.target.value)}
@@ -410,10 +395,10 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 									/>
 								</div>
 
-								<div className={helperRow}>
+								<div className={styles.helperRow}>
 									<span className={statusClass}>{statusContent}</span>
 									<Button
-										className={footerButton}
+										className={styles.footerButton}
 										onPress={handleUploadClick}
 										isDisabled={!isTauri || uploading}
 									>
@@ -425,11 +410,11 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 								{isTauri && (
 									<>
 										{customLoading ? (
-											<span className={statusText}>Loading custom icons…</span>
+											<span className={styles.statusText}>Loading custom icons…</span>
 										) : filteredCustomIcons.length > 0 ? (
 											<>
-												<div className={sectionHeading}>Custom Icons</div>
-												<div className={iconGrid}>
+												<div className={styles.sectionHeading}>Custom Icons</div>
+												<div className={styles.iconGrid}>
 													{filteredCustomIcons.map((option) => {
 														const OptionIcon = getNodeIconComponent(
 															option.id,
@@ -441,7 +426,7 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 															<Button
 																key={option.id}
 																type="button"
-																className={iconButton}
+																className={styles.iconButton}
 																data-selected={
 																	isSelected ? "true" : undefined
 																}
@@ -460,13 +445,13 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 												</div>
 											</>
 										) : (
-											<span className={statusText}>No custom icons yet.</span>
+											<span className={styles.statusText}>No custom icons yet.</span>
 										)}
 									</>
 								)}
 
-								<div className={sectionHeading}>Library Icons</div>
-								<div className={iconGrid}>
+								<div className={styles.sectionHeading}>Library Icons</div>
+								<div className={styles.iconGrid}>
 									{filteredBuiltIns.map((option) => {
 										const OptionIcon = getNodeIconComponent(option.id, type);
 										const isSelected = option.id === resolvedIconId;
@@ -474,7 +459,7 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 											<Button
 												key={option.id}
 												type="button"
-												className={iconButton}
+												className={styles.iconButton}
 												data-selected={isSelected ? "true" : undefined}
 												aria-pressed={isSelected}
 												aria-label={option.label}
@@ -490,9 +475,9 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 									})}
 								</div>
 
-								<div className={footerRow}>
+								<div className={styles.footerRow}>
 									<Button
-										className={footerButton}
+										className={styles.footerButton}
 										onPress={() => {
 											handleReset();
 											close();
@@ -500,7 +485,7 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 									>
 										<CheckIcon size={16} weight="bold" /> Reset to default
 									</Button>
-									<Button className={footerButton} onPress={() => close()}>
+									<Button className={styles.footerButton} onPress={() => close()}>
 										<XIcon size={16} weight="bold" /> ESC
 									</Button>
 								</div>

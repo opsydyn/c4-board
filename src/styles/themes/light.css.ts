@@ -16,6 +16,8 @@ export const lightTheme = createTheme(themeContract, {
 			raised: "#f0f0f0",
 			input: "#ffffff",
 			inputFocus: "#ffffff",
+			hover: "#f0f0f0",      // Light gray hover state
+			selected: "#e6f0ff",   // Light blue selected state
 		},
 
 		foreground: {
