@@ -47,7 +47,7 @@ describe("reactFlowNodeToDb", () => {
 
 describe("dbNodeToReactFlow", () => {
 	it("falls back to the default icon when the database value is null", () => {
-		const dbNode: DbNode = {
+		const dbNode: Partial<DbNode> = {
 			id: "node-3",
 			diagram_id: "diagram-1",
 			type: "component",
@@ -66,14 +66,14 @@ describe("dbNodeToReactFlow", () => {
 			updated_at: 2,
 		};
 
-		const result = dbNodeToReactFlow(dbNode);
+		const result = dbNodeToReactFlow(dbNode as DbNode);
 
 		expect(result.data?.iconId).toBe(DEFAULT_ICON_BY_TYPE.component);
 	});
 
 	it("hydrates the iconId from the database value when present", () => {
 		const iconId = "phosphor:user-duotone" as NodeIconId;
-		const dbNode: DbNode = {
+		const dbNode: Partial<DbNode> = {
 			id: "node-4",
 			diagram_id: "diagram-1",
 			type: "person",
@@ -92,7 +92,7 @@ describe("dbNodeToReactFlow", () => {
 			updated_at: 2,
 		};
 
-		const result = dbNodeToReactFlow(dbNode);
+		const result = dbNodeToReactFlow(dbNode as DbNode);
 
 		expect(result.data?.iconId).toBe(iconId);
 	});

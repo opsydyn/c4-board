@@ -76,7 +76,8 @@ export const commandBar = style({
 	position: "relative",
 	zIndex: theme.zIndex.sticky,
 	display: "flex",
-	alignItems: "center",
+	flexDirection: "column",
+	alignItems: "stretch",
 	gap: theme.spacing["2"],
 	clipPath: theme.clipPath.md,
 	margin: `${theme.spacing["5"]} ${theme.spacing["5"]} ${theme.spacing["3"]}`,
@@ -85,6 +86,13 @@ export const commandBar = style({
 	backgroundColor: "rgba(8, 14, 11, 0.95)",
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
 	minHeight: 200,
+});
+
+export const commandBarRow = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	width: "100%",
 });
 
 export const commandBarLeft = style({
@@ -104,6 +112,7 @@ export const commandBarSearch = style({
 	display: "flex",
 	alignItems: "center",
 	minWidth: "280px",
+	width: "100%",
 });
 
 export const canvasRegion = style({

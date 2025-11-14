@@ -55,6 +55,7 @@ export function DatabaseTest() {
 				createNode({
 					id: `node-${Date.now()}`,
 					diagram_id: diagramId,
+					domain: "c4",
 					type: "person",
 					label: "Test User",
 					technology: "Human",

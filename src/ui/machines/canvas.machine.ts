@@ -16,6 +16,8 @@ import { autoLayout, autoLayoutSelected, getPreset, type LayoutOptions, type Lay
 import * as NodeOps from "../../core/effects/node-operations";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import * as DiagramOps from "../../core/effects/diagram-operations";
+import * as PlantUMLExport from "../../core/effects/export-plantuml-c4";
+import * as MermaidExport from "../../core/effects/export-mermaid";
 
 export type DiagramDomain = "c4" | "ddd";
 
@@ -89,7 +91,11 @@ export type CanvasEvent =
 	| { type: "AUTO_SAVE" }
 	| { type: "UPDATE_DIAGRAM_NAME"; name: string }
 	| { type: "UPDATE_DIAGRAM_DESCRIPTION"; description: string }
-	| { type: "UPDATE_SESSION_NAME"; name: string };
+	| { type: "UPDATE_SESSION_NAME"; name: string }
+	// Export events
+	| { type: "EXPORT_PLANTUML" }
+	| { type: "EXPORT_MERMAID" }
+	| { type: "CLOSE_EXPORT_MODAL" };
 
 export interface CanvasContext {
 	// Canvas state
@@ -113,6 +119,11 @@ export interface CanvasContext {
 	// Layout state
 	previousLayout: Node[] | null; // For undo functionality
 	currentLayout: LayoutPresetName | null; // Track currently applied layout preset
+
+	// Export state
+	exportModalOpen: boolean;
+	exportFormat: "plantuml" | "mermaid" | null;
+	exportedCode: string | null;
 }
 
 /**
@@ -740,6 +751,59 @@ const canvasMachineDefinition = setup({
 				return event.diagram.updatedAt;
 			},
 		}),
+
+		// === Export Actions ===
+
+		exportPlantUML: assign({
+			exportModalOpen: () => true,
+			exportFormat: () => "plantuml" as const,
+			exportedCode: ({ context }) => {
+				// Generate PlantUML using Effect service
+				const plantUML = runEffectSync(
+					PlantUMLExport.exportC4ToPlantUML(
+						context.nodes,
+						context.edges,
+						{
+							title: context.diagramName !== "DIAGRAM::UNTITLED"
+								? context.diagramName
+								: "C4 Diagram",
+							includeDescriptions: true,
+							includeTechnology: true,
+						}
+					)
+				);
+				return plantUML;
+			},
+		}),
+
+		exportMermaid: assign({
+			exportModalOpen: () => true,
+			exportFormat: () => "mermaid" as const,
+			exportedCode: ({ context }) => {
+				// Generate Mermaid using Effect service
+				const mermaid = runEffectSync(
+					MermaidExport.exportC4ToMermaid(
+						context.nodes,
+						context.edges,
+						{
+							title: context.diagramName !== "DIAGRAM::UNTITLED"
+								? context.diagramName
+								: "C4 Diagram",
+							includeDescriptions: true,
+							includeTechnology: true,
+							direction: "TB",
+						}
+					)
+				);
+				return mermaid;
+			},
+		}),
+
+		closeExportModal: assign({
+			exportModalOpen: () => false,
+			exportFormat: () => null,
+			exportedCode: () => null,
+		}),
 	},
 }).createMachine({
 	id: "canvas",
@@ -766,6 +830,11 @@ const canvasMachineDefinition = setup({
 		// Layout state
 		previousLayout: null,
 		currentLayout: null,
+
+		// Export state
+		exportModalOpen: false,
+		exportFormat: null,
+		exportedCode: null,
 	},
 	states: {
 		idle: {
@@ -872,6 +941,15 @@ const canvasMachineDefinition = setup({
 				},
 				AUTO_LAYOUT_SELECTED: {
 					actions: "applyLayoutSelected",
+				},
+				EXPORT_PLANTUML: {
+					actions: "exportPlantUML",
+				},
+				EXPORT_MERMAID: {
+					actions: "exportMermaid",
+				},
+				CLOSE_EXPORT_MODAL: {
+					actions: "closeExportModal",
 				},
 				// Persistence events
 				CREATE_NEW_DIAGRAM: {

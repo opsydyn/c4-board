@@ -17,7 +17,7 @@ export const sampleNodes: Node<NodeData>[] = [
 			technology: "Human",
 			c4Type: "person",
 			createdAt: Date.now() - 60_000,
-			iconId: DEFAULT_ICON_BY_TYPE.person,
+			iconId: DEFAULT_ICON_BY_TYPE.person!,
 		},
 	},
 	{
@@ -30,7 +30,7 @@ export const sampleNodes: Node<NodeData>[] = [
 			technology: "Rust",
 			c4Type: "system",
 			createdAt: Date.now() - 30_000,
-			iconId: DEFAULT_ICON_BY_TYPE.system,
+			iconId: DEFAULT_ICON_BY_TYPE.system!,
 		},
 	},
 	{
@@ -43,7 +43,7 @@ export const sampleNodes: Node<NodeData>[] = [
 			technology: "TypeScript",
 			c4Type: "container",
 			createdAt: Date.now() - 10_000,
-			iconId: DEFAULT_ICON_BY_TYPE.container,
+			iconId: DEFAULT_ICON_BY_TYPE.container!,
 		},
 	},
 ];

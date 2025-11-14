@@ -101,7 +101,7 @@ class PosteeConfigProviderImpl implements PosteeConfigProviderService {
 		key: string,
 	): Effect.Effect<Redacted.Redacted, ConfigError.ConfigError> {
 		// Use Effect's Config.secret for sensitive values
-		return Config.secret(key);
+		return Config.redacted(key);
 	}
 
 	getUrl(key: string): Effect.Effect<URL, ConfigError.ConfigError> {

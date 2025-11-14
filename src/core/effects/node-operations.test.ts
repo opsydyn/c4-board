@@ -14,14 +14,25 @@ const {
 	updateNodeData,
 } = await import("./node-operations");
 
-const buildNodeData = (type: C4Type, overrides: Partial<NodeData> = {}): NodeData => ({
-	label: `${type} node`,
-	description: "",
-	technology: "",
-	c4Type: type,
-	...overrides,
-	iconId: overrides.iconId ?? DEFAULT_ICON_BY_TYPE[type],
-});
+const buildNodeData = (type: C4Type, overrides: Partial<NodeData> = {}): NodeData => {
+	const { iconId, ...rest } = overrides;
+	const baseData: NodeData = {
+		label: `${type} node`,
+		description: "",
+		technology: "",
+		c4Type: type,
+		...rest,
+	};
+	
+	// Only set iconId if it has a defined value
+	if (iconId !== undefined) {
+		baseData.iconId = iconId;
+	} else if (DEFAULT_ICON_BY_TYPE[type] !== undefined) {
+		baseData.iconId = DEFAULT_ICON_BY_TYPE[type];
+	}
+	
+	return baseData;
+};
 
 describe("createNode", () => {
 	const fixedNow = new Date("2024-01-01T00:00:00.000Z").getTime();

@@ -153,6 +153,14 @@ export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
 }
 
 /**
+ * Determine if a node type is C4 or DDD
+ */
+function determineNodeDomain(type: string): "c4" | "ddd" {
+	const c4Types = ["person", "system", "externalSystem", "container", "component"];
+	return c4Types.includes(type) ? "c4" : "ddd";
+}
+
+/**
  * Convert ReactFlow node to database node format using helper functions
  */
 export function reactFlowNodeToDb(
@@ -170,8 +178,11 @@ export function reactFlowNodeToDb(
 	const dataType =
 		typeof dataRecord.c4Type === "string" && dataRecord.c4Type.length > 0
 			? (dataRecord.c4Type as string)
+			: typeof dataRecord.dddType === "string" && dataRecord.dddType.length > 0
+			? (dataRecord.dddType as string)
 			: undefined;
 	const resolvedType = (explicitType ?? dataType ?? "system") as CreateNodeInput["type"];
+	const domain = determineNodeDomain(resolvedType);
 	const styleWidth = extractNumericDimension(node.style?.width);
 	const styleHeight = extractNumericDimension(node.style?.height);
 	const widthValue = typeof node.width === "number" ? node.width : styleWidth;
@@ -192,6 +203,7 @@ export function reactFlowNodeToDb(
 	return {
 		id: node.id,
 		diagram_id: diagramId,
+		domain,
 		type: resolvedType,
 		label,
 		...optional("technology", technology),
@@ -249,6 +261,9 @@ function reactFlowEdgeToDb(
 /**
  * Save complete diagram state (diagram + nodes + edges)
  * Uses transactional approach with Effect.forEach for iterations
+ *
+ * Note: The return type annotation is required because exactOptionalPropertyTypes
+ * prevents Effect.gen from inferring the error union type correctly.
  */
 export const saveDiagram = (
 	input: SaveDiagramInput
@@ -256,10 +271,8 @@ export const saveDiagram = (
 	{ diagramId: string; savedAt: number },
 	DatabaseError | NotFoundError | ValidationError,
 	DatabaseService
-> =>
-	// @ts-expect-error - Effect.gen loses specific error types with exactOptionalPropertyTypes
-	// The Effect.forEach and Effect.catchTag calls return DatabaseError which is incompatible with the union type
-	Effect.gen(function* () {
+> => {
+	const effect = Effect.gen(function* () {
 		// 1. Check if diagram exists, create or update
 		interface DiagramUpsertPayload {
 			id: string;
@@ -377,6 +390,14 @@ export const saveDiagram = (
 			savedAt: Date.now(),
 		};
 	});
+
+	// Return the effect with explicit type annotation to satisfy exactOptionalPropertyTypes
+	return effect as Effect.Effect<
+		{ diagramId: string; savedAt: number },
+		DatabaseError | NotFoundError | ValidationError,
+		DatabaseService
+	>;
+};
 
 /**
  * Sort nodes so parent nodes appear before their children

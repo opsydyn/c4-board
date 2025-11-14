@@ -13,7 +13,7 @@ import {
 	collapseToggle,
 	historyPlaceholder,
 } from "./styles.css";
-// import { Effect } from 'effect'
+import { Effect } from 'effect'
 
 type DataBarTab = "diagrams" | "diagrams_alt" | "history" | "docs";
 
@@ -43,15 +43,17 @@ const TABS: Array<{ id: DataBarTab; label: string }> = [
 // 	console.log('[DataBar] Component mounted');
 // });
 
-// const loadDataEffect = Effect.try({
-// 	try: () => {
-// 		console.log('[DataBar] Attempting to load data...');
-// 		// Simulate data loading
-// 	},
-// 	catch: (error) => {
-// 		console.error('[DataBar] Error loading data:', error);
-// 	},
-// })
+const loadDataEffect = Effect.try({ 
+	try: () => {
+		console.log('[DataBar] Attempting to load data...');
+		// Simulate data loading
+	},
+	catch: (error) => {
+		console.error('[DataBar] Error loading data:', error);
+	},
+})
+
+Effect.runSync(loadDataEffect);
 
 
 

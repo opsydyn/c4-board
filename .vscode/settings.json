@@ -18,6 +18,20 @@
   // 🔍 inlay hints: global default
   "editor.inlayHints.enabled": "on",
 
+  "editor.codeLens": true,
+  "editor.inlineSuggest.enabled": true,
+  "editor.showUnused": true,
+
+
+   "errorLens.enabled": true,
+  "errorLens.messageEnabled": true,          // show the text inline
+  "errorLens.messageBackgroundMode": "line", // red line like your screenshot
+  "errorLens.fontSize": "11px",
+  "errorLens.padding": "0 1ch",
+  "errorLens.margin": "0 0 0 1ch",
+
+
+
 
   // 🔍 typescript inlay hints
   "typescript.inlayHints.parameterNames.enabled": "all",

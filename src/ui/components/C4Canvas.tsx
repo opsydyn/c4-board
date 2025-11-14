@@ -55,7 +55,7 @@ import * as styles from "./styles.css";
 import { theme } from "../../styles/theme.css";
 import { DownloadButton } from "./DownloadButton";
 import { ToggleButton } from "react-aria-components";
-import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretUpIcon, FileCodeIcon } from "@phosphor-icons/react";
 import { SearchBox } from "./SearchBox";
 import { EdgeLabelEditor } from "./EdgeLabelEditor";
 
@@ -70,6 +70,8 @@ interface C4CanvasProps {
 	isCommandBarOpen: boolean;
 	onToggleCommandBar: (open: boolean) => void;
 	onSelectNode: (nodeId: string) => void;
+	onExportPlantUML?: () => void;
+	onExportMermaid?: () => void;
 }
 
 export interface C4CanvasRef {
@@ -89,6 +91,8 @@ function C4CanvasInner(
 		isCommandBarOpen,
 		onToggleCommandBar,
 		onSelectNode,
+		onExportPlantUML,
+		onExportMermaid,
 	}: C4CanvasProps,
 	ref: React.Ref<C4CanvasRef>,
 ) {
@@ -224,22 +228,44 @@ function C4CanvasInner(
 		<div className={styles.canvasStack}>
 			{isCommandBarOpen ? (
 				<div className={styles.commandBar}>
-					<div className={styles.commandBarLeft}>
-						<DownloadButton variant="inline" className={styles.commandBarButton} />
+					<div className={styles.commandBarSearch}>
+						<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
 					</div>
-					<div className={styles.commandBarRight}>
-						<div className={styles.commandBarSearch}>
-							<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
+					<div className={styles.commandBarRow}>
+						<div className={styles.commandBarLeft}>
+							<DownloadButton variant="inline" className={styles.commandBarButton} />
+							{onExportPlantUML && (
+								<button
+									type="button"
+									className={styles.commandBarButton}
+									onClick={onExportPlantUML}
+								>
+									<FileCodeIcon size={18} weight="duotone" />
+									EXPORT::PUML
+								</button>
+							)}
+							{onExportMermaid && (
+								<button
+									type="button"
+									className={styles.commandBarButton}
+									onClick={onExportMermaid}
+								>
+									<FileCodeIcon size={18} weight="duotone" />
+									EXPORT::MERMAID
+								</button>
+							)}
 						</div>
-						<ToggleButton
-							isSelected={isCommandBarOpen}
-							onChange={onToggleCommandBar}
-							className={styles.commandBarToggle}
-							aria-label="Collapse command bar"
-						>
-							<CaretUpIcon size={14} weight="bold" />
-							ESC
-						</ToggleButton>
+						<div className={styles.commandBarRight}>
+							<ToggleButton
+								isSelected={isCommandBarOpen}
+								onChange={onToggleCommandBar}
+								className={styles.commandBarToggle}
+								aria-label="Collapse command bar"
+							>
+								<CaretUpIcon size={14} weight="bold" />
+								ESC
+							</ToggleButton>
+						</div>
 					</div>
 				</div>
 			) : (

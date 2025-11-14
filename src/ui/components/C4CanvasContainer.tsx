@@ -30,6 +30,7 @@ import * as styles from "./styles.css";
 import { BalancedMudChart } from "./BalancedMudChart";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DataBar } from "./DataBar";
+import { ExportModal } from "./ExportModal";
 import { useDatabase } from "../../core/effects/useDatabase";
 import {
 	saveDiagram,
@@ -697,6 +698,8 @@ export function C4CanvasContainer() {
 					isCommandBarOpen={isCommandBarOpen}
 					onToggleCommandBar={setCommandBarOpen}
 					onSelectNode={handleSelectNode}
+					onExportPlantUML={() => send({ type: "EXPORT_PLANTUML" })}
+					onExportMermaid={() => send({ type: "EXPORT_MERMAID" })}
 				/>
 				{!isSidebarOpen && (
 					<ToggleButton
@@ -766,6 +769,15 @@ export function C4CanvasContainer() {
 					onLoadDiagram={handleLoadDiagram}
 				/>
 			)}
+
+			{/* Export Modal */}
+			<ExportModal
+				isOpen={state.context.exportModalOpen}
+				exportedCode={state.context.exportedCode}
+				exportFormat={state.context.exportFormat}
+				diagramName={state.context.diagramName}
+				onClose={() => send({ type: "CLOSE_EXPORT_MODAL" })}
+			/>
 		</div>
 	);
 }

@@ -197,7 +197,9 @@ export function IconPicker({ value, type, onChange, onReset }: IconPickerProps) 
 
 	const handleReset = useCallback(() => {
 		const fallback = DEFAULT_ICON_BY_TYPE[type];
-		onChange(fallback);
+		if (fallback) {
+			onChange(fallback);
+		}
 		onReset?.();
 		setStatusMessage(null);
 		setErrorMessage(null);
