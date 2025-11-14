@@ -17,12 +17,42 @@ import * as NodeOps from "../../core/effects/node-operations";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import * as DiagramOps from "../../core/effects/diagram-operations";
 
+export type DiagramDomain = "c4" | "ddd";
+
 export type CanvasEvent =
+	// === Domain Toggle ===
+	| { type: "SET_DOMAIN"; domain: DiagramDomain }
+
+	// === C4 Architecture Events ===
 	| { type: "ADD_PERSON" }
 	| { type: "ADD_SYSTEM" }
 	| { type: "ADD_EXTERNAL_SYSTEM" }
 	| { type: "ADD_CONTAINER" }
 	| { type: "ADD_COMPONENT" }
+
+	// === DDD Strategic Events ===
+	| { type: "ADD_BOUNDED_CONTEXT" }
+	| { type: "ADD_AGGREGATE" }
+	| { type: "ADD_DOMAIN_EVENT" }
+
+	// === DDD Tactical Events ===
+	| { type: "ADD_ENTITY" }
+	| { type: "ADD_VALUE_OBJECT" }
+	| { type: "ADD_DOMAIN_SERVICE" }
+	| { type: "ADD_REPOSITORY" }
+	| { type: "ADD_FACTORY" }
+
+	// === DDD Application Events ===
+	| { type: "ADD_COMMAND" }
+	| { type: "ADD_QUERY" }
+	| { type: "ADD_APPLICATION_SERVICE" }
+
+	// === DDD Infrastructure Events ===
+	| { type: "ADD_INTEGRATION_EVENT" }
+	| { type: "ADD_ACL" }
+	| { type: "ADD_SAGA" }
+
+	// === Canvas Events ===
 	| { type: "SELECT_NODE"; nodeId: string }
 	| { type: "DESELECT_NODE" }
 	| { type: "AUTO_LAYOUT"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
@@ -67,6 +97,7 @@ export interface CanvasContext {
 	edges: Edge[];
 	selectedNodeId: string | null;
 	nodeCounter: number;
+	currentDomain: DiagramDomain; // Current diagram domain (C4 or DDD)
 
 	// Diagram metadata
 	currentDiagramId: string | null;
@@ -202,6 +233,238 @@ const canvasMachineDefinition = setup({
 			nodeCounter: ({ context }) => context.nodeCounter + 1,
 		}),
 
+		// === DDD Strategic Actions ===
+
+		addBoundedContext: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "boundedContext",
+						label: "Bounded Context",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addAggregate: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "aggregate",
+						label: "Aggregate",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addDomainEvent: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "domainEvent",
+						label: "Domain Event",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		// === DDD Tactical Actions ===
+
+		addEntity: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "entity",
+						label: "Entity",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addValueObject: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "valueObject",
+						label: "Value Object",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addDomainService: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "domainService",
+						label: "Domain Service",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addRepository: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "repository",
+						label: "Repository",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addFactory: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "factory",
+						label: "Factory",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		// === DDD Application Actions ===
+
+		addCommand: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "command",
+						label: "Command",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addQuery: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "query",
+						label: "Query",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addApplicationService: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "applicationService",
+						label: "Application Service",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		// === DDD Infrastructure Actions ===
+
+		addIntegrationEvent: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "integrationEvent",
+						label: "Integration Event",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addACL: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "antiCorruptionLayer",
+						label: "Anti-Corruption Layer",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
+		addSaga: assign({
+			nodes: ({ context }) => {
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: "saga",
+						label: "Saga",
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+				return runEffectSync(NodeOps.addNode(context.nodes, newNode));
+			},
+			nodeCounter: ({ context }) => context.nodeCounter + 1,
+		}),
+
 		selectNode: assign({
 			selectedNodeId: ({ event }) => {
 				if (event.type !== "SELECT_NODE") return null;
@@ -211,6 +474,13 @@ const canvasMachineDefinition = setup({
 
 		deselectNode: assign({
 			selectedNodeId: null,
+		}),
+
+		setDomain: assign({
+			currentDomain: ({ event }) => {
+				if (event.type !== "SET_DOMAIN") return "c4";
+				return event.domain;
+			},
 		}),
 
 		updateNode: assign({
@@ -480,6 +750,7 @@ const canvasMachineDefinition = setup({
 		edges: [],
 		selectedNodeId: null,
 		nodeCounter: 0,
+		currentDomain: "c4" as DiagramDomain, // Default to C4
 
 		// Diagram metadata
 		currentDiagramId: null,
@@ -499,6 +770,9 @@ const canvasMachineDefinition = setup({
 	states: {
 		idle: {
 			on: {
+				SET_DOMAIN: {
+					actions: "setDomain",
+				},
 				ADD_PERSON: {
 					actions: "addPerson",
 				},
@@ -513,6 +787,52 @@ const canvasMachineDefinition = setup({
 				},
 				ADD_COMPONENT: {
 					actions: "addComponent",
+				},
+				// === DDD Strategic Events ===
+				ADD_BOUNDED_CONTEXT: {
+					actions: "addBoundedContext",
+				},
+				ADD_AGGREGATE: {
+					actions: "addAggregate",
+				},
+				ADD_DOMAIN_EVENT: {
+					actions: "addDomainEvent",
+				},
+				// === DDD Tactical Events ===
+				ADD_ENTITY: {
+					actions: "addEntity",
+				},
+				ADD_VALUE_OBJECT: {
+					actions: "addValueObject",
+				},
+				ADD_DOMAIN_SERVICE: {
+					actions: "addDomainService",
+				},
+				ADD_REPOSITORY: {
+					actions: "addRepository",
+				},
+				ADD_FACTORY: {
+					actions: "addFactory",
+				},
+				// === DDD Application Events ===
+				ADD_COMMAND: {
+					actions: "addCommand",
+				},
+				ADD_QUERY: {
+					actions: "addQuery",
+				},
+				ADD_APPLICATION_SERVICE: {
+					actions: "addApplicationService",
+				},
+				// === DDD Infrastructure Events ===
+				ADD_INTEGRATION_EVENT: {
+					actions: "addIntegrationEvent",
+				},
+				ADD_ACL: {
+					actions: "addACL",
+				},
+				ADD_SAGA: {
+					actions: "addSaga",
 				},
 				SELECT_NODE: {
 					actions: "selectNode",
@@ -613,6 +933,52 @@ const canvasMachineDefinition = setup({
 				},
 				ADD_COMPONENT: {
 					actions: "addComponent",
+				},
+				// === DDD Strategic Events ===
+				ADD_BOUNDED_CONTEXT: {
+					actions: "addBoundedContext",
+				},
+				ADD_AGGREGATE: {
+					actions: "addAggregate",
+				},
+				ADD_DOMAIN_EVENT: {
+					actions: "addDomainEvent",
+				},
+				// === DDD Tactical Events ===
+				ADD_ENTITY: {
+					actions: "addEntity",
+				},
+				ADD_VALUE_OBJECT: {
+					actions: "addValueObject",
+				},
+				ADD_DOMAIN_SERVICE: {
+					actions: "addDomainService",
+				},
+				ADD_REPOSITORY: {
+					actions: "addRepository",
+				},
+				ADD_FACTORY: {
+					actions: "addFactory",
+				},
+				// === DDD Application Events ===
+				ADD_COMMAND: {
+					actions: "addCommand",
+				},
+				ADD_QUERY: {
+					actions: "addQuery",
+				},
+				ADD_APPLICATION_SERVICE: {
+					actions: "addApplicationService",
+				},
+				// === DDD Infrastructure Events ===
+				ADD_INTEGRATION_EVENT: {
+					actions: "addIntegrationEvent",
+				},
+				ADD_ACL: {
+					actions: "addACL",
+				},
+				ADD_SAGA: {
+					actions: "addSaga",
 				},
 				SELECT_NODE: {
 					actions: "selectNode",

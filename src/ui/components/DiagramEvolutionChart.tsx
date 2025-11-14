@@ -8,12 +8,25 @@ import { scaleLinear, scaleTime } from "@visx/scale";
 import { Circle } from "@visx/shape";
 import {
 	CubeIcon,
-		GitBranchIcon,
-		ClockIcon,
+	GitBranchIcon,
+	ClockIcon,
 	UserIcon,
 	PackageIcon,
 	CloudIcon,
 	StackIcon,
+	BoundingBoxIcon,
+	LightningIcon,
+	SquareIcon,
+	DiamondIcon,
+	GearIcon,
+	DatabaseIcon,
+	FactoryIcon,
+	ArrowRightIcon,
+	MagnifyingGlassIcon,
+	UsersIcon,
+	ShareNetworkIcon,
+	ShieldIcon,
+	GitBranchIcon as SagaIcon,
 } from "@phosphor-icons/react";
 import {
 	evolutionCard,
@@ -32,11 +45,29 @@ import {
 	evolutionEmptyState,
 } from "./styles.css";
 import { theme } from "../../styles/theme.css";
-import type { C4Type, NodeData } from "../../core/effects/node-operations";
+import type { C4Type, DDDType, NodeType, NodeData } from "../../core/effects/node-operations";
+import type { DiagramDomain } from "../machines/canvas.machine";
 
-const NODE_TYPE_ORDER: C4Type[] = ["person", "system", "externalSystem", "container", "component"];
+const C4_TYPE_ORDER: C4Type[] = ["person", "system", "externalSystem", "container", "component"];
 
-const NODE_TYPE_SINGULAR_LABEL: Record<C4Type, string> = {
+const DDD_TYPE_ORDER: DDDType[] = [
+	"boundedContext",
+	"aggregate",
+	"domainEvent",
+	"entity",
+	"valueObject",
+	"domainService",
+	"repository",
+	"factory",
+	"command",
+	"query",
+	"applicationService",
+	"integrationEvent",
+	"antiCorruptionLayer",
+	"saga",
+];
+
+const C4_SINGULAR_LABEL: Record<C4Type, string> = {
 	person: "Person",
 	system: "System",
 	externalSystem: "External System",
@@ -44,7 +75,7 @@ const NODE_TYPE_SINGULAR_LABEL: Record<C4Type, string> = {
 	component: "Component",
 };
 
-const NODE_TYPE_PLURAL_LABEL: Record<C4Type, string> = {
+const C4_PLURAL_LABEL: Record<C4Type, string> = {
 	person: "People",
 	system: "Systems",
 	externalSystem: "External Systems",
@@ -52,7 +83,41 @@ const NODE_TYPE_PLURAL_LABEL: Record<C4Type, string> = {
 	component: "Components",
 };
 
-const NODE_TYPE_COLOR: Record<C4Type, string> = {
+const DDD_SINGULAR_LABEL: Record<DDDType, string> = {
+	boundedContext: "Bounded Context",
+	aggregate: "Aggregate",
+	domainEvent: "Domain Event",
+	entity: "Entity",
+	valueObject: "Value Object",
+	domainService: "Domain Service",
+	repository: "Repository",
+	factory: "Factory",
+	command: "Command",
+	query: "Query",
+	applicationService: "Application Service",
+	integrationEvent: "Integration Event",
+	antiCorruptionLayer: "ACL",
+	saga: "Saga",
+};
+
+const DDD_PLURAL_LABEL: Record<DDDType, string> = {
+	boundedContext: "Bounded Contexts",
+	aggregate: "Aggregates",
+	domainEvent: "Domain Events",
+	entity: "Entities",
+	valueObject: "Value Objects",
+	domainService: "Domain Services",
+	repository: "Repositories",
+	factory: "Factories",
+	command: "Commands",
+	query: "Queries",
+	applicationService: "Application Services",
+	integrationEvent: "Integration Events",
+	antiCorruptionLayer: "ACLs",
+	saga: "Sagas",
+};
+
+const C4_COLOR: Record<C4Type, string> = {
 	person: theme.color.semantic.person,
 	system: theme.color.semantic.system,
 	externalSystem: theme.color.semantic.external,
@@ -60,7 +125,24 @@ const NODE_TYPE_COLOR: Record<C4Type, string> = {
 	component: theme.color.semantic.component,
 };
 
-const NODE_TYPE_ICON = {
+const DDD_COLOR: Record<DDDType, string> = {
+	boundedContext: theme.color.semantic.boundedContext,
+	aggregate: theme.color.semantic.aggregate,
+	domainEvent: theme.color.semantic.domainEvent,
+	entity: theme.color.semantic.entity,
+	valueObject: theme.color.semantic.valueObject,
+	domainService: theme.color.semantic.domainService,
+	repository: theme.color.semantic.repository,
+	factory: theme.color.semantic.factory,
+	command: theme.color.semantic.command,
+	query: theme.color.semantic.query,
+	applicationService: theme.color.semantic.applicationService,
+	integrationEvent: theme.color.semantic.integrationEvent,
+	antiCorruptionLayer: theme.color.semantic.acl,
+	saga: theme.color.semantic.saga,
+};
+
+const C4_ICON = {
 	person: UserIcon,
 	system: PackageIcon,
 	externalSystem: CloudIcon,
@@ -68,12 +150,40 @@ const NODE_TYPE_ICON = {
 	component: CubeIcon,
 } as const;
 
-const isC4Type = (value: unknown): value is C4Type =>
-	typeof value === "string" && (NODE_TYPE_ORDER as readonly string[]).includes(value);
+const DDD_ICON = {
+	boundedContext: BoundingBoxIcon,
+	aggregate: CubeIcon,
+	domainEvent: LightningIcon,
+	entity: SquareIcon,
+	valueObject: DiamondIcon,
+	domainService: GearIcon,
+	repository: DatabaseIcon,
+	factory: FactoryIcon,
+	command: ArrowRightIcon,
+	query: MagnifyingGlassIcon,
+	applicationService: UsersIcon,
+	integrationEvent: ShareNetworkIcon,
+	antiCorruptionLayer: ShieldIcon,
+	saga: SagaIcon,
+} as const;
 
-const createEmptyTypeCounts = (): Record<C4Type, number> => {
+const isC4Type = (value: unknown): value is C4Type =>
+	typeof value === "string" && (C4_TYPE_ORDER as readonly string[]).includes(value);
+
+const isDDDType = (value: unknown): value is DDDType =>
+	typeof value === "string" && (DDD_TYPE_ORDER as readonly string[]).includes(value);
+
+const createEmptyC4TypeCounts = (): Record<C4Type, number> => {
 	const counts = {} as Record<C4Type, number>;
-	for (const type of NODE_TYPE_ORDER) {
+	for (const type of C4_TYPE_ORDER) {
+		counts[type] = 0;
+	}
+	return counts;
+};
+
+const createEmptyDDDTypeCounts = (): Record<DDDType, number> => {
+	const counts = {} as Record<DDDType, number>;
+	for (const type of DDD_TYPE_ORDER) {
 		counts[type] = 0;
 	}
 	return counts;
@@ -83,7 +193,8 @@ type EvolutionPoint = {
 	time: number;
 	totalNodes: number;
 	edgeCount: number;
-	typeCounts: Record<C4Type, number>;
+	c4TypeCounts: Record<C4Type, number>;
+	dddTypeCounts: Record<DDDType, number>;
 };
 
 type EvolutionEvent =
@@ -91,7 +202,7 @@ type EvolutionEvent =
 			time: number;
 			type: "node";
 			label: string;
-			nodeType: C4Type;
+			nodeType: NodeType;
 	  }
 	| {
 			time: number;
@@ -104,9 +215,11 @@ interface EvolutionModel {
 	latestEvent: EvolutionEvent | null;
 	totalNodes: number;
 	totalEdges: number;
-	typeTotals: Record<C4Type, number>;
+	c4TypeTotals: Record<C4Type, number>;
+	dddTypeTotals: Record<DDDType, number>;
 	firstSeenAt: number | null;
 	lastUpdatedAt: number | null;
+	domain: DiagramDomain;
 }
 
 const ensureTimestamp = (value: unknown, fallback: number): number => {
@@ -125,14 +238,18 @@ const formatEventLabel = (event: EvolutionEvent | null): string => {
 	const timeLabel = time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 	if (event.type === "node") {
-		const typeLabel = NODE_TYPE_SINGULAR_LABEL[event.nodeType] ?? "Node";
+		const typeLabel = isC4Type(event.nodeType)
+			? C4_SINGULAR_LABEL[event.nodeType]
+			: isDDDType(event.nodeType)
+			? DDD_SINGULAR_LABEL[event.nodeType]
+			: "Node";
 		return `+ ${typeLabel} · ${event.label} · ${timeLabel}`;
 	}
 
 	return `+ Connection · ${event.label} · ${timeLabel}`;
 };
 
-const useEvolutionModel = (nodes: Node[], edges: Edge[]): EvolutionModel =>
+const useEvolutionModel = (nodes: Node[], edges: Edge[], domain: DiagramDomain): EvolutionModel =>
 	useMemo(() => {
 		if (nodes.length === 0 && edges.length === 0) {
 			return {
@@ -140,9 +257,11 @@ const useEvolutionModel = (nodes: Node[], edges: Edge[]): EvolutionModel =>
 				latestEvent: null,
 				totalNodes: 0,
 				totalEdges: 0,
-				typeTotals: createEmptyTypeCounts(),
+				c4TypeTotals: createEmptyC4TypeCounts(),
+				dddTypeTotals: createEmptyDDDTypeCounts(),
 				firstSeenAt: null,
 				lastUpdatedAt: null,
+				domain,
 			};
 		}
 
@@ -152,17 +271,42 @@ const useEvolutionModel = (nodes: Node[], edges: Edge[]): EvolutionModel =>
 		const eventCount = nodes.length + edges.length;
 		const fallbackBase = Date.now() - eventCount * 60000;
 
-		const nodeEvents: EvolutionEvent[] = nodes.map((node, index) => {
+		// Filter nodes based on domain
+		const filteredNodes = nodes.filter((node) => {
+			const data = (node.data ?? {}) as Partial<NodeData>;
+			const nodeType = data.c4Type ?? data.dddType ?? node.type;
+
+			if (domain === "c4") {
+				return isC4Type(nodeType);
+			} else if (domain === "ddd") {
+				return isDDDType(nodeType);
+			}
+			// domain === "combined" - show all
+			return true;
+		});
+
+		const nodeEvents: EvolutionEvent[] = filteredNodes.map((node, index) => {
 			const data = (node.data ?? {}) as Partial<NodeData>;
 			const timestamp = ensureTimestamp(data.createdAt, fallbackBase + index * 60000);
 			const label =
 				typeof data.label === "string" && data.label.trim().length > 0
 					? data.label.trim()
 					: node.id;
-			const nodeType =
-				(isC4Type(data.c4Type) ? data.c4Type : undefined) ??
-				(isC4Type(node.type) ? (node.type as C4Type) : undefined) ??
-				"system";
+
+			// Determine node type - prefer explicit type from data, fallback to node.type
+			let nodeType: NodeType;
+			if (data.c4Type && isC4Type(data.c4Type)) {
+				nodeType = data.c4Type;
+			} else if (data.dddType && isDDDType(data.dddType)) {
+				nodeType = data.dddType;
+			} else if (isC4Type(node.type)) {
+				nodeType = node.type as C4Type;
+			} else if (isDDDType(node.type)) {
+				nodeType = node.type as DDDType;
+			} else {
+				// Fallback
+				nodeType = "system";
+			}
 
 			return {
 				time: timestamp,
@@ -197,7 +341,8 @@ const useEvolutionModel = (nodes: Node[], edges: Edge[]): EvolutionModel =>
 
 		const combined = [...nodeEvents, ...edgeEvents].sort((a, b) => a.time - b.time);
 
-		const typeCounts = createEmptyTypeCounts();
+		const c4TypeCounts = createEmptyC4TypeCounts();
+		const dddTypeCounts = createEmptyDDDTypeCounts();
 		let totalNodeCount = 0;
 		let totalEdgeCount = 0;
 
@@ -206,7 +351,11 @@ const useEvolutionModel = (nodes: Node[], edges: Edge[]): EvolutionModel =>
 		for (const event of combined) {
 			if (event.type === "node") {
 				totalNodeCount += 1;
-				typeCounts[event.nodeType] += 1;
+				if (isC4Type(event.nodeType)) {
+					c4TypeCounts[event.nodeType] += 1;
+				} else if (isDDDType(event.nodeType)) {
+					dddTypeCounts[event.nodeType] += 1;
+				}
 			} else {
 				totalEdgeCount += 1;
 			}
@@ -215,14 +364,16 @@ const useEvolutionModel = (nodes: Node[], edges: Edge[]): EvolutionModel =>
 				time: event.time,
 				totalNodes: totalNodeCount,
 				edgeCount: totalEdgeCount,
-				typeCounts: { ...typeCounts },
+				c4TypeCounts: { ...c4TypeCounts },
+				dddTypeCounts: { ...dddTypeCounts },
 			};
 
 			const lastPoint = points[points.length - 1];
 			if (lastPoint && lastPoint.time === event.time) {
 				lastPoint.totalNodes = snapshot.totalNodes;
 				lastPoint.edgeCount = snapshot.edgeCount;
-				lastPoint.typeCounts = snapshot.typeCounts;
+				lastPoint.c4TypeCounts = snapshot.c4TypeCounts;
+				lastPoint.dddTypeCounts = snapshot.dddTypeCounts;
 			} else {
 				points.push(snapshot);
 			}
@@ -238,19 +389,22 @@ const useEvolutionModel = (nodes: Node[], edges: Edge[]): EvolutionModel =>
 			latestEvent,
 			totalNodes: totalNodeCount,
 			totalEdges: totalEdgeCount,
-			typeTotals: { ...typeCounts },
+			c4TypeTotals: { ...c4TypeCounts },
+			dddTypeTotals: { ...dddTypeCounts },
 			firstSeenAt: firstPoint ? firstPoint.time : null,
 			lastUpdatedAt: lastPoint ? lastPoint.time : null,
+			domain,
 		};
-	}, [nodes, edges]);
+	}, [nodes, edges, domain]);
 
 interface EvolutionVizProps {
 	points: EvolutionPoint[];
 	width: number;
 	height: number;
+	domain: DiagramDomain;
 }
 
-const EvolutionViz = ({ points, width, height }: EvolutionVizProps) => {
+const EvolutionViz = ({ points, width, height, domain }: EvolutionVizProps) => {
 	if (width === 0 || height === 0 || points.length === 0) {
 		return null;
 	}
@@ -270,12 +424,17 @@ const EvolutionViz = ({ points, width, height }: EvolutionVizProps) => {
 		lastPoint.time === firstPoint.time ? firstPoint.time + 60000 : lastPoint.time,
 	];
 
+	// Determine which type orders to use based on domain
+	const c4TypeOrder = domain === "ddd" ? [] : C4_TYPE_ORDER;
+	const dddTypeOrder = domain === "c4" ? [] : DDD_TYPE_ORDER;
+
 	const maxValue = Math.max(
 		0,
 		...points.flatMap((point) => [
 			point.totalNodes,
 			point.edgeCount,
-			...NODE_TYPE_ORDER.map((type) => point.typeCounts[type]),
+			...c4TypeOrder.map((type) => point.c4TypeCounts[type]),
+			...dddTypeOrder.map((type) => point.dddTypeCounts[type]),
 		]),
 	);
 
@@ -312,15 +471,29 @@ const EvolutionViz = ({ points, width, height }: EvolutionVizProps) => {
 					strokeDasharray="4 4"
 				/>
 
-				{/* Node lines by type */}
-				{NODE_TYPE_ORDER.map((type) => (
+				{/* C4 Node lines by type */}
+				{c4TypeOrder.map((type) => (
 					<LinePath<EvolutionPoint>
-						key={type}
+						key={`c4-${type}`}
 						data={points}
 						x={(d) => xScale(d.time)}
-						y={(d) => yScale(d.typeCounts[type])}
+						y={(d) => yScale(d.c4TypeCounts[type])}
 						curve={curveMonotoneX}
-						stroke={NODE_TYPE_COLOR[type]}
+						stroke={C4_COLOR[type]}
+						strokeWidth={1.6}
+						opacity={0.9}
+					/>
+				))}
+
+				{/* DDD Node lines by type */}
+				{dddTypeOrder.map((type) => (
+					<LinePath<EvolutionPoint>
+						key={`ddd-${type}`}
+						data={points}
+						x={(d) => xScale(d.time)}
+						y={(d) => yScale(d.dddTypeCounts[type])}
+						curve={curveMonotoneX}
+						stroke={DDD_COLOR[type]}
 						strokeWidth={1.6}
 						opacity={0.9}
 					/>
@@ -340,18 +513,37 @@ const EvolutionViz = ({ points, width, height }: EvolutionVizProps) => {
 				{/* Latest markers */}
 				{latestPoint ? (
 					<>
-						{NODE_TYPE_ORDER.map((type) => {
-							const value = latestPoint.typeCounts[type];
+						{/* C4 markers */}
+						{c4TypeOrder.map((type) => {
+							const value = latestPoint.c4TypeCounts[type];
 							if (value === 0) {
 								return null;
 							}
 							return (
 								<Circle
-									key={type}
+									key={`c4-marker-${type}`}
 									cx={xScale(latestPoint.time)}
 									cy={yScale(value)}
 									r={3.5}
-									fill={NODE_TYPE_COLOR[type]}
+									fill={C4_COLOR[type]}
+									stroke={theme.color.background.base}
+									strokeWidth={1}
+								/>
+							);
+						})}
+						{/* DDD markers */}
+						{dddTypeOrder.map((type) => {
+							const value = latestPoint.dddTypeCounts[type];
+							if (value === 0) {
+								return null;
+							}
+							return (
+								<Circle
+									key={`ddd-marker-${type}`}
+									cx={xScale(latestPoint.time)}
+									cy={yScale(value)}
+									r={3.5}
+									fill={DDD_COLOR[type]}
 									stroke={theme.color.background.base}
 									strokeWidth={1}
 								/>
@@ -377,10 +569,11 @@ const EvolutionViz = ({ points, width, height }: EvolutionVizProps) => {
 interface DiagramEvolutionChartProps {
 	nodes: Node[];
 	edges: Edge[];
+	domain: DiagramDomain;
 }
 
-export function DiagramEvolutionChart({ nodes, edges }: DiagramEvolutionChartProps) {
-	const model = useEvolutionModel(nodes, edges);
+export function DiagramEvolutionChart({ nodes, edges, domain }: DiagramEvolutionChartProps) {
+	const model = useEvolutionModel(nodes, edges, domain);
 
 	if (model.points.length === 0) {
 		return (
@@ -414,21 +607,34 @@ export function DiagramEvolutionChart({ nodes, edges }: DiagramEvolutionChartPro
 
 			<div className={evolutionChart}>
 				<ParentSize debounceTime={80}>
-					{({ width, height }) => (
-						<EvolutionViz points={model.points} width={width} height={height} />
+					{({ width, height}) => (
+						<EvolutionViz points={model.points} width={width} height={height} domain={domain} />
 					)}
 				</ParentSize>
 			</div>
 
 			<div className={evolutionLegend}>
-				{NODE_TYPE_ORDER.map((type) => (
-					<div key={`legend-${type}`} className={evolutionLegendItem}>
+				{/* C4 types legend */}
+				{domain !== "ddd" && C4_TYPE_ORDER.map((type) => (
+					<div key={`legend-c4-${type}`} className={evolutionLegendItem}>
 						<span
 							className={evolutionLegendSwatch}
-							style={{ backgroundColor: NODE_TYPE_COLOR[type] }}
+							style={{ backgroundColor: C4_COLOR[type] }}
 						/>
 						<span className={evolutionLegendLabel}>
-							{NODE_TYPE_PLURAL_LABEL[type]}
+							{C4_PLURAL_LABEL[type]}
+						</span>
+					</div>
+				))}
+				{/* DDD types legend */}
+				{domain !== "c4" && DDD_TYPE_ORDER.map((type) => (
+					<div key={`legend-ddd-${type}`} className={evolutionLegendItem}>
+						<span
+							className={evolutionLegendSwatch}
+							style={{ backgroundColor: DDD_COLOR[type] }}
+						/>
+						<span className={evolutionLegendLabel}>
+							{DDD_PLURAL_LABEL[type]}
 						</span>
 					</div>
 				))}
@@ -470,20 +676,40 @@ export function DiagramEvolutionChart({ nodes, edges }: DiagramEvolutionChartPro
 							: "—"}
 					</span>
 				</div>
-				{NODE_TYPE_ORDER.map((type) => {
-					const Icon = NODE_TYPE_ICON[type];
+				{/* C4 type summaries */}
+				{domain !== "ddd" && C4_TYPE_ORDER.map((type) => {
+					const Icon = C4_ICON[type];
 					return (
-						<div key={`summary-${type}`} className={evolutionSummaryItem}>
+						<div key={`summary-c4-${type}`} className={evolutionSummaryItem}>
 							<span className={evolutionSummaryLabel}>
 								<Icon
 									size={14}
 									weight="duotone"
-									color={NODE_TYPE_COLOR[type]}
+									color={C4_COLOR[type]}
 								/>{" "}
-								{NODE_TYPE_PLURAL_LABEL[type]}
+								{C4_PLURAL_LABEL[type]}
 							</span>
 							<span className={evolutionSummaryValue}>
-								{model.typeTotals[type]}
+								{model.c4TypeTotals[type]}
+							</span>
+						</div>
+					);
+				})}
+				{/* DDD type summaries */}
+				{domain !== "c4" && DDD_TYPE_ORDER.map((type) => {
+					const Icon = DDD_ICON[type];
+					return (
+						<div key={`summary-ddd-${type}`} className={evolutionSummaryItem}>
+							<span className={evolutionSummaryLabel}>
+								<Icon
+									size={14}
+									weight="duotone"
+									color={DDD_COLOR[type]}
+								/>{" "}
+								{DDD_PLURAL_LABEL[type]}
+							</span>
+							<span className={evolutionSummaryValue}>
+								{model.dddTypeTotals[type]}
 							</span>
 						</div>
 					);

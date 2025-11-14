@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { DatabaseService, NotFoundError } from "./database.base";
 
 // ============================================================================
-// Domain Models (C4)
+// Domain Models (C4 + DDD)
 // ============================================================================
 
 export interface Diagram {
@@ -13,10 +13,53 @@ export interface Diagram {
 	updated_at: number;
 }
 
+/**
+ * C4 Node Types
+ */
+export type C4NodeType = "person" | "system" | "externalSystem" | "container" | "component";
+
+/**
+ * DDD Node Types
+ */
+export type DDDNodeType =
+	// Strategic DDD
+	| "boundedContext"
+	| "aggregate"
+	| "domainEvent"
+	// Tactical DDD
+	| "entity"
+	| "valueObject"
+	| "domainService"
+	| "repository"
+	| "factory"
+	// Application Layer
+	| "command"
+	| "query"
+	| "applicationService"
+	// Infrastructure
+	| "integrationEvent"
+	| "antiCorruptionLayer"
+	| "saga";
+
+/**
+ * Combined Node Type (C4 + DDD)
+ */
+export type NodeType = C4NodeType | DDDNodeType;
+
+/**
+ * Node Domain
+ */
+export type NodeDomain = "c4" | "ddd";
+
+/**
+ * Node Model
+ * Supports both C4 and DDD modeling domains
+ */
 export interface Node {
 	id: string;
 	diagram_id: string;
-	type: "person" | "system" | "externalSystem" | "container" | "component";
+	domain: NodeDomain;
+	type: NodeType;
 	label: string;
 	technology: string | null;
 	description: string | null;
@@ -28,6 +71,35 @@ export interface Node {
 	extent: "parent" | null;
 	expand_parent: number;
 	icon_id: string | null;
+
+	// DDD-specific fields (nullable for C4 nodes)
+	aggregate_root: string | null;
+	invariants: string | null; // JSON array
+	ubiquitous_language: string | null; // JSON array
+	team_ownership: string | null;
+	event_schema: string | null; // JSON schema
+	identity_field: string | null;
+	attributes: string | null; // JSON array
+	parent_aggregate: string | null;
+	parent_context: string | null;
+	operations: string | null; // JSON array
+	managed_aggregate: string | null;
+	persistence_technology: string | null;
+	created_objects: string | null; // JSON array
+	creation_rules: string | null; // JSON array
+	parameters: string | null; // JSON schema
+	target_aggregate: string | null;
+	return_type: string | null;
+	use_cases: string | null; // JSON array
+	dependencies: string | null; // JSON array
+	publishing_context: string | null;
+	subscribing_contexts: string | null; // JSON array
+	from_context: string | null;
+	to_context: string | null;
+	translation_rules: string | null; // JSON array
+	saga_steps: string | null; // JSON array
+	compensation_logic: string | null; // JSON array
+
 	created_at: number;
 	updated_at: number;
 }
@@ -68,7 +140,8 @@ export interface UpdateDiagramInput {
 export interface CreateNodeInput {
 	id: string;
 	diagram_id: string;
-	type: "person" | "system" | "externalSystem" | "container" | "component";
+	domain: NodeDomain;
+	type: NodeType;
 	label: string;
 	technology?: string;
 	description?: string;
@@ -80,6 +153,34 @@ export interface CreateNodeInput {
 	extent?: "parent";
 	expand_parent?: boolean;
 	icon_id?: string;
+
+	// DDD-specific fields (optional)
+	aggregate_root?: string;
+	invariants?: string[]; // Will be JSON.stringified
+	ubiquitous_language?: string[]; // Will be JSON.stringified
+	team_ownership?: string;
+	event_schema?: string;
+	identity_field?: string;
+	attributes?: string[]; // Will be JSON.stringified
+	parent_aggregate?: string;
+	parent_context?: string;
+	operations?: string[]; // Will be JSON.stringified
+	managed_aggregate?: string;
+	persistence_technology?: string;
+	created_objects?: string[]; // Will be JSON.stringified
+	creation_rules?: string[]; // Will be JSON.stringified
+	parameters?: string;
+	target_aggregate?: string;
+	return_type?: string;
+	use_cases?: string[]; // Will be JSON.stringified
+	dependencies?: string[]; // Will be JSON.stringified
+	publishing_context?: string;
+	subscribing_contexts?: string[]; // Will be JSON.stringified
+	from_context?: string;
+	to_context?: string;
+	translation_rules?: string[]; // Will be JSON.stringified
+	saga_steps?: string[]; // Will be JSON.stringified
+	compensation_logic?: string[]; // Will be JSON.stringified
 }
 
 export interface UpdateNodeInput {
@@ -208,12 +309,25 @@ export const createNode = (input: CreateNodeInput) =>
 		const service = yield* DatabaseService;
 		const now = Date.now();
 
+		// Helper to convert arrays to JSON strings
+		const toJson = (arr?: string[]) => (arr ? JSON.stringify(arr) : null);
+
 		yield* service.execute(
-			`INSERT INTO nodes (id, diagram_id, type, label, technology, description, position_x, position_y, width, height, parent_id, extent, expand_parent, icon_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO nodes (
+				id, diagram_id, domain, type, label, technology, description,
+				position_x, position_y, width, height, parent_id, extent, expand_parent, icon_id,
+				aggregate_root, invariants, ubiquitous_language, team_ownership, event_schema,
+				identity_field, attributes, parent_aggregate, parent_context, operations,
+				managed_aggregate, persistence_technology, created_objects, creation_rules,
+				parameters, target_aggregate, return_type, use_cases, dependencies,
+				publishing_context, subscribing_contexts, from_context, to_context, translation_rules,
+				saga_steps, compensation_logic,
+				created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				input.id,
 				input.diagram_id,
+				input.domain,
 				input.type,
 				input.label,
 				input.technology ?? null,
@@ -226,6 +340,33 @@ export const createNode = (input: CreateNodeInput) =>
 				input.extent ?? null,
 				input.expand_parent ? 1 : 0,
 				input.icon_id ?? null,
+				// DDD fields
+				input.aggregate_root ?? null,
+				toJson(input.invariants),
+				toJson(input.ubiquitous_language),
+				input.team_ownership ?? null,
+				input.event_schema ?? null,
+				input.identity_field ?? null,
+				toJson(input.attributes),
+				input.parent_aggregate ?? null,
+				input.parent_context ?? null,
+				toJson(input.operations),
+				input.managed_aggregate ?? null,
+				input.persistence_technology ?? null,
+				toJson(input.created_objects),
+				toJson(input.creation_rules),
+				input.parameters ?? null,
+				input.target_aggregate ?? null,
+				input.return_type ?? null,
+				toJson(input.use_cases),
+				toJson(input.dependencies),
+				input.publishing_context ?? null,
+				toJson(input.subscribing_contexts),
+				input.from_context ?? null,
+				input.to_context ?? null,
+				toJson(input.translation_rules),
+				toJson(input.saga_steps),
+				toJson(input.compensation_logic),
 				now,
 				now,
 			],
@@ -234,6 +375,7 @@ export const createNode = (input: CreateNodeInput) =>
 		return {
 			id: input.id,
 			diagram_id: input.diagram_id,
+			domain: input.domain,
 			type: input.type,
 			label: input.label,
 			technology: input.technology ?? null,
@@ -246,6 +388,33 @@ export const createNode = (input: CreateNodeInput) =>
 			extent: input.extent ?? null,
 			expand_parent: input.expand_parent ? 1 : 0,
 			icon_id: input.icon_id ?? null,
+			// DDD fields
+			aggregate_root: input.aggregate_root ?? null,
+			invariants: toJson(input.invariants),
+			ubiquitous_language: toJson(input.ubiquitous_language),
+			team_ownership: input.team_ownership ?? null,
+			event_schema: input.event_schema ?? null,
+			identity_field: input.identity_field ?? null,
+			attributes: toJson(input.attributes),
+			parent_aggregate: input.parent_aggregate ?? null,
+			parent_context: input.parent_context ?? null,
+			operations: toJson(input.operations),
+			managed_aggregate: input.managed_aggregate ?? null,
+			persistence_technology: input.persistence_technology ?? null,
+			created_objects: toJson(input.created_objects),
+			creation_rules: toJson(input.creation_rules),
+			parameters: input.parameters ?? null,
+			target_aggregate: input.target_aggregate ?? null,
+			return_type: input.return_type ?? null,
+			use_cases: toJson(input.use_cases),
+			dependencies: toJson(input.dependencies),
+			publishing_context: input.publishing_context ?? null,
+			subscribing_contexts: toJson(input.subscribing_contexts),
+			from_context: input.from_context ?? null,
+			to_context: input.to_context ?? null,
+			translation_rules: toJson(input.translation_rules),
+			saga_steps: toJson(input.saga_steps),
+			compensation_logic: toJson(input.compensation_logic),
 			created_at: now,
 			updated_at: now,
 		} satisfies Node;

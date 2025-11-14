@@ -37,12 +37,35 @@ export const darkTheme = createTheme(themeContract, {
 		},
 
 		semantic: {
+			// C4 Architecture elements
 			person: "#88C0D0",     // KEEP Nord cyan - brand signature
 			system: "#75b798",     // Bootstrap success-text-emphasis (softer green)
 			external: "#ffda6a",   // Bootstrap warning-text-emphasis (brighter amber)
 			container: "#6ea8fe",  // Bootstrap primary-text-emphasis (blue)
 			component: "#e685b5",  // Bootstrap code-color (pink/purple)
 			relationship: "#6c757d", // Bootstrap gray-600 (subtle)
+
+			// DDD Strategic elements
+			boundedContext: "#818cf8", // Indigo-400 (strategic, grouping)
+			aggregate: "#34d399",      // Emerald-400 (tactical core)
+			domainEvent: "#fbbf24",    // Amber-400 (events, actions)
+
+			// DDD Tactical elements
+			entity: "#60a5fa",         // Blue-400 (identity)
+			valueObject: "#22d3ee",    // Cyan-400 (immutable)
+			domainService: "#f472b6",  // Pink-400 (operations)
+			repository: "#94a3b8",     // Slate-400 (persistence)
+			factory: "#fb923c",        // Orange-400 (creation)
+
+			// DDD Application elements
+			command: "#f87171",        // Red-400 (write operations)
+			query: "#2dd4bf",          // Teal-400 (read operations)
+			applicationService: "#a78bfa", // Violet-400 (orchestration)
+
+			// DDD Infrastructure elements
+			integrationEvent: "#e879f9", // Fuchsia-400 (cross-context)
+			acl: "#a3e635",            // Lime-400 (translation)
+			saga: "#fb7185",           // Rose-400 (long-running)
 		},
 
 		status: {
@@ -58,20 +81,68 @@ export const darkTheme = createTheme(themeContract, {
 			primary: "#495057",    // Bootstrap gray-700 (structural)
 			secondary: "#343a40",  // Bootstrap gray-800 (subtle)
 			focus: "#6ea8fe",      // Bootstrap primary (blue focus)
+
+			// C4 node borders
 			person: "#88C0D0",     // KEEP Nord cyan - brand signature
 			system: "#75b798",     // Bootstrap success (green)
 			external: "#ffda6a",   // Bootstrap warning (amber)
 			container: "#6ea8fe",  // Bootstrap primary (blue)
 			component: "#e685b5",  // Bootstrap code-color (pink/purple)
+
+			// DDD Strategic borders
+			boundedContext: "#818cf8", // Indigo-400
+			aggregate: "#34d399",      // Emerald-400
+			domainEvent: "#fbbf24",    // Amber-400
+
+			// DDD Tactical borders
+			entity: "#60a5fa",         // Blue-400
+			valueObject: "#22d3ee",    // Cyan-400
+			domainService: "#f472b6",  // Pink-400
+			repository: "#94a3b8",     // Slate-400
+			factory: "#fb923c",        // Orange-400
+
+			// DDD Application borders
+			command: "#f87171",        // Red-400
+			query: "#2dd4bf",          // Teal-400
+			applicationService: "#a78bfa", // Violet-400
+
+			// DDD Infrastructure borders
+			integrationEvent: "#e879f9", // Fuchsia-400
+			acl: "#a3e635",            // Lime-400
+			saga: "#fb7185",           // Rose-400
 		},
 
 		surface: {
+			// C4 node backgrounds
 			person: "#1a1d20",     // Bootstrap subtle bg (consistent)
 			system: "#1a1d20",     // Bootstrap subtle bg
 			external: "#1a1d20",   // Bootstrap subtle bg
 			container: "#1a1d20",  // Bootstrap subtle bg
 			component: "#1a1d20",  // Bootstrap subtle bg
 			containerSelected: "#2b3035", // Bootstrap tertiary bg (lighter)
+
+			// DDD Strategic backgrounds
+			boundedContext: "rgba(129, 140, 248, 0.08)", // Indigo with transparency
+			aggregate: "rgba(52, 211, 153, 0.08)",      // Emerald with transparency
+			domainEvent: "rgba(251, 191, 36, 0.08)",    // Amber with transparency
+
+			// DDD Tactical backgrounds
+			entity: "rgba(96, 165, 250, 0.08)",         // Blue with transparency
+			valueObject: "rgba(34, 211, 238, 0.08)",    // Cyan with transparency
+			domainService: "rgba(244, 114, 182, 0.08)", // Pink with transparency
+			repository: "rgba(148, 163, 184, 0.08)",    // Slate with transparency
+			factory: "rgba(251, 146, 60, 0.08)",        // Orange with transparency
+
+			// DDD Application backgrounds
+			command: "rgba(248, 113, 113, 0.08)",       // Red with transparency
+			query: "rgba(45, 212, 191, 0.08)",          // Teal with transparency
+			applicationService: "rgba(167, 139, 250, 0.08)", // Violet with transparency
+
+			// DDD Infrastructure backgrounds
+			integrationEvent: "rgba(232, 121, 249, 0.08)", // Fuchsia with transparency
+			acl: "rgba(163, 230, 53, 0.08)",            // Lime with transparency
+			saga: "rgba(251, 113, 133, 0.08)",          // Rose with transparency
+
 			// UI overlays - semantic rgba values for compositing
 			overlay: "rgba(13, 23, 18, 0.95)",  // Dark overlay with opacity
 			elevated: "rgba(16, 28, 22, 0.98)",  // Slightly lighter elevated surface

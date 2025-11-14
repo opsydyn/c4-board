@@ -14,7 +14,7 @@ import {
 	isCustomIconId,
 	type BuiltInIconId,
 	type CustomIconId,
-	type C4Type,
+	type NodeType,
 	type NodeIconId,
 } from "../../core/effects/node-operations";
 
@@ -40,13 +40,13 @@ const customIconComponentCache = new Map<CustomIconId, IconComponent>();
 
 type ResolveOptions = {
 	iconId?: NodeIconId;
-	type: C4Type;
+	type: NodeType;
 	size?: number;
 	weight?: IconWeight;
 	className?: string;
 };
 
-export function resolveNodeIconId(iconId: NodeIconId | undefined, type: C4Type): NodeIconId {
+export function resolveNodeIconId(iconId: NodeIconId | undefined, type: NodeType): NodeIconId {
 	return iconId ?? DEFAULT_ICON_BY_TYPE[type] ?? fallbackIconId;
 }
 
@@ -62,7 +62,7 @@ export function renderNodeIcon({
 	return <IconComponent size={size} weight={weight} {...(className !== undefined && { className })} />;
 }
 
-export function getNodeIconComponent(iconId: NodeIconId | undefined, type: C4Type) {
+export function getNodeIconComponent(iconId: NodeIconId | undefined, type: NodeType) {
 	const resolvedId = resolveNodeIconId(iconId, type);
 	if (isCustomIconId(resolvedId)) {
 		return getOrCreateCustomIconComponent(resolvedId);

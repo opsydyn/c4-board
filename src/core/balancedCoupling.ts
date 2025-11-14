@@ -1,6 +1,8 @@
 import type { Edge, Node } from "@xyflow/react";
 import type {
 	C4Type,
+	DDDType,
+	NodeType,
 	CouplingProfile,
 	IntegrationType,
 	NodeData,
@@ -17,7 +19,7 @@ export type RiskTier = "low" | "medium" | "high";
 export interface ModuleCouplingSnapshot {
 	id: string;
 	label: string;
-	type: C4Type;
+	type: NodeType; // Changed from C4Type to NodeType to support both C4 and DDD
 	subdomainType: SubdomainType;
 	integrationType: IntegrationType;
 	profile: CouplingProfile;
@@ -57,22 +59,28 @@ const toNodeData = (node: Node): Partial<NodeData> => {
 	return {};
 };
 
-const resolveType = (node: Node): C4Type => {
+const resolveType = (node: Node): NodeType => {
 	const data = toNodeData(node);
-	const fromData = data.c4Type;
-	const fallback = typeof node.type === "string" ? (node.type as C4Type) : undefined;
+	const c4Type = data.c4Type;
+	const dddType = data.dddType;
+	const fallback = typeof node.type === "string" ? (node.type as NodeType) : undefined;
 
-	if (fromData && isC4Type(fromData)) {
-		return fromData;
+	// Prefer explicit type annotations
+	if (c4Type && isC4Type(c4Type)) {
+		return c4Type;
 	}
-	if (fallback && isC4Type(fallback)) {
+	if (dddType && isDDDType(dddType)) {
+		return dddType;
+	}
+	// Fallback to node.type
+	if (fallback && (isC4Type(fallback) || isDDDType(fallback))) {
 		return fallback;
 	}
 
-	return "system";
+	return "system"; // Default fallback
 };
 
-const resolveSubdomainType = (type: C4Type, data: Partial<NodeData>): SubdomainType => {
+const resolveSubdomainType = (type: NodeType, data: Partial<NodeData>): SubdomainType => {
 	const candidate = data.subdomainType;
 	if (candidate && isSubdomainType(candidate)) {
 		return candidate;
@@ -81,7 +89,7 @@ const resolveSubdomainType = (type: C4Type, data: Partial<NodeData>): SubdomainT
 };
 
 const resolveIntegrationType = (
-	type: C4Type,
+	type: NodeType,
 	data: Partial<NodeData>,
 ): IntegrationType => {
 	const candidate = data.integrationType;
@@ -91,7 +99,7 @@ const resolveIntegrationType = (
 	return getDefaultIntegrationType(type);
 };
 
-const resolveCouplingProfile = (type: C4Type, data: Partial<NodeData>): CouplingProfile => {
+const resolveCouplingProfile = (type: NodeType, data: Partial<NodeData>): CouplingProfile => {
 	const candidate = data.couplingProfile;
 
 	if (
@@ -121,6 +129,22 @@ const isC4Type = (value: unknown): value is C4Type =>
 	value === "externalSystem" ||
 	value === "container" ||
 	value === "component";
+
+const isDDDType = (value: unknown): value is DDDType =>
+	value === "boundedContext" ||
+	value === "aggregate" ||
+	value === "domainEvent" ||
+	value === "entity" ||
+	value === "valueObject" ||
+	value === "domainService" ||
+	value === "repository" ||
+	value === "factory" ||
+	value === "command" ||
+	value === "query" ||
+	value === "applicationService" ||
+	value === "integrationEvent" ||
+	value === "antiCorruptionLayer" ||
+	value === "saga";
 
 const isSubdomainType = (value: unknown): value is SubdomainType =>
 	value === "core" || value === "generic" || value === "supporting";

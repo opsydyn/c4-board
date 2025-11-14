@@ -33,6 +33,24 @@ import { PersonNode } from "./nodes/PersonNode";
 import { SystemNode } from "./nodes/SystemNode";
 import { ContainerNode } from "./nodes/ContainerNode";
 import { ComponentNode } from "./nodes/ComponentNode";
+// DDD Strategic Nodes
+import { BoundedContextNode } from "./nodes/BoundedContextNode";
+import { AggregateNode } from "./nodes/AggregateNode";
+import { DomainEventNode } from "./nodes/DomainEventNode";
+// DDD Tactical Nodes
+import { EntityNode } from "./nodes/EntityNode";
+import { ValueObjectNode } from "./nodes/ValueObjectNode";
+import { DomainServiceNode } from "./nodes/DomainServiceNode";
+import { RepositoryNode } from "./nodes/RepositoryNode";
+import { FactoryNode } from "./nodes/FactoryNode";
+// DDD Application Nodes
+import { CommandNode } from "./nodes/CommandNode";
+import { QueryNode } from "./nodes/QueryNode";
+import { ApplicationServiceNode } from "./nodes/ApplicationServiceNode";
+// DDD Infrastructure Nodes
+import { IntegrationEventNode } from "./nodes/IntegrationEventNode";
+import { ACLNode } from "./nodes/ACLNode";
+import { SagaNode } from "./nodes/SagaNode";
 import * as styles from "./styles.css";
 import { theme } from "../../styles/theme.css";
 import { DownloadButton } from "./DownloadButton";
@@ -98,14 +116,33 @@ function C4CanvasInner(
 		},
 	}));
 
-	// Define custom node types for C4 elements
+	// Define custom node types for C4 and DDD elements
 	const nodeTypes = useMemo(
 		() => ({
+			// C4 Architecture nodes
 			person: PersonNode,
 			system: SystemNode,
 			externalSystem: ExternalSystemNode,
 			container: ContainerNode,
 			component: ComponentNode,
+			// DDD Strategic nodes
+			boundedContext: BoundedContextNode,
+			aggregate: AggregateNode,
+			domainEvent: DomainEventNode,
+			// DDD Tactical nodes
+			entity: EntityNode,
+			valueObject: ValueObjectNode,
+			domainService: DomainServiceNode,
+			repository: RepositoryNode,
+			factory: FactoryNode,
+			// DDD Application nodes
+			command: CommandNode,
+			query: QueryNode,
+			applicationService: ApplicationServiceNode,
+			// DDD Infrastructure nodes
+			integrationEvent: IntegrationEventNode,
+			antiCorruptionLayer: ACLNode,
+			saga: SagaNode,
 		}),
 		[],
 	);

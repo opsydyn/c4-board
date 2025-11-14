@@ -15,6 +15,39 @@ import { nanoid } from "nanoid";
  */
 export type C4Type = "person" | "system" | "externalSystem" | "container" | "component";
 
+/**
+ * DDD model node types
+ */
+export type DDDType =
+	// Strategic DDD
+	| "boundedContext"
+	| "aggregate"
+	| "domainEvent"
+	// Tactical DDD
+	| "entity"
+	| "valueObject"
+	| "domainService"
+	| "repository"
+	| "factory"
+	// Application Layer
+	| "command"
+	| "query"
+	| "applicationService"
+	// Infrastructure
+	| "integrationEvent"
+	| "antiCorruptionLayer"
+	| "saga";
+
+/**
+ * Combined node type (C4 + DDD)
+ */
+export type NodeType = C4Type | DDDType;
+
+/**
+ * Node domain discriminator
+ */
+export type NodeDomain = "c4" | "ddd";
+
 export type SubdomainType = "core" | "generic" | "supporting";
 
 export type IntegrationType = "intrusive" | "contract" | "functional";
@@ -55,12 +88,41 @@ export interface NodeData extends Record<string, unknown> {
 	label: string;
 	description: string;
 	technology: string;
-	c4Type: C4Type;
+	c4Type?: C4Type; // Optional now, may be dddType instead
+	dddType?: DDDType; // DDD type
 	createdAt?: number;
 	subdomainType?: SubdomainType;
 	integrationType?: IntegrationType;
 	couplingProfile?: CouplingProfile;
 	iconId?: NodeIconId;
+
+	// DDD-specific fields
+	aggregateRoot?: string;
+	invariants?: string[];
+	ubiquitousLanguage?: string[];
+	teamOwnership?: string;
+	eventSchema?: string;
+	identityField?: string;
+	attributes?: string[];
+	parentAggregate?: string;
+	parentContext?: string;
+	operations?: string[];
+	managedAggregate?: string;
+	persistenceTechnology?: string;
+	createdObjects?: string[];
+	creationRules?: string[];
+	parameters?: string;
+	targetAggregate?: string;
+	returnType?: string;
+	useCases?: string[];
+	dependencies?: string[];
+	publishingContext?: string;
+	subscribingContexts?: string[];
+	fromContext?: string;
+	toContext?: string;
+	translationRules?: string[];
+	sagaSteps?: string[];
+	compensationLogic?: string[];
 }
 
 /**
@@ -75,7 +137,7 @@ export interface NodePosition {
  * Options for creating a new node
  */
 export interface CreateNodeOptions {
-	type: C4Type;
+	type: NodeType; // Now supports both C4 and DDD types
 	label: string;
 	nodeCounter: number;
 	selectedNodeId: string | null;
@@ -85,12 +147,36 @@ export interface CreateNodeOptions {
 const GRID_SIZE = 20;
 const DEFAULT_PLACEMENT_CENTER = { x: 360, y: 280 };
 
-const DEFAULT_DIMENSIONS: Record<C4Type | "default", { width: number; height: number }> = {
+const DEFAULT_DIMENSIONS: Record<NodeType | "default", { width: number; height: number }> = {
+	// C4 types
 	person: { width: 220, height: 160 },
 	system: { width: 240, height: 170 },
 	externalSystem: { width: 240, height: 170 },
 	container: { width: 400, height: 300 },
 	component: { width: 200, height: 140 },
+
+	// DDD Strategic types (larger, grouping)
+	boundedContext: { width: 500, height: 400 },
+	aggregate: { width: 320, height: 240 },
+	domainEvent: { width: 180, height: 120 },
+
+	// DDD Tactical types (medium)
+	entity: { width: 220, height: 160 },
+	valueObject: { width: 180, height: 140 },
+	domainService: { width: 200, height: 150 },
+	repository: { width: 200, height: 150 },
+	factory: { width: 200, height: 150 },
+
+	// DDD Application types (medium)
+	command: { width: 180, height: 120 },
+	query: { width: 180, height: 120 },
+	applicationService: { width: 240, height: 170 },
+
+	// DDD Infrastructure types (medium to large)
+	integrationEvent: { width: 200, height: 140 },
+	antiCorruptionLayer: { width: 280, height: 200 },
+	saga: { width: 300, height: 200 },
+
 	default: { width: 240, height: 170 },
 };
 
@@ -118,37 +204,172 @@ const DEFAULT_COUPLING_PROFILE: Record<C4Type, CouplingProfile> = {
 	component: { strength: 7, distance: 4, volatility: 5 },
 };
 
-export const DEFAULT_ICON_BY_TYPE: Record<C4Type, BuiltInIconId> = {
+// DDD type defaults
+const DDD_DEFAULT_SUBDOMAIN: Record<DDDType, SubdomainType> = {
+	// Strategic - typically core domain
+	boundedContext: "core",
+	aggregate: "core",
+	domainEvent: "core",
+	// Tactical - core domain elements
+	entity: "core",
+	valueObject: "core",
+	domainService: "core",
+	repository: "supporting",
+	factory: "supporting",
+	// Application - supporting
+	command: "supporting",
+	query: "supporting",
+	applicationService: "supporting",
+	// Infrastructure - generic/supporting
+	integrationEvent: "generic",
+	antiCorruptionLayer: "supporting",
+	saga: "supporting",
+};
+
+const DDD_DEFAULT_INTEGRATION: Record<DDDType, IntegrationType> = {
+	// Strategic - contract-based boundaries
+	boundedContext: "contract",
+	aggregate: "contract",
+	domainEvent: "functional",
+	// Tactical - varies by role
+	entity: "intrusive",
+	valueObject: "functional",
+	domainService: "contract",
+	repository: "contract",
+	factory: "contract",
+	// Application - contract-based
+	command: "functional",
+	query: "functional",
+	applicationService: "contract",
+	// Infrastructure - contract boundaries
+	integrationEvent: "functional",
+	antiCorruptionLayer: "contract",
+	saga: "contract",
+};
+
+const DDD_DEFAULT_COUPLING_PROFILE: Record<DDDType, CouplingProfile> = {
+	// Strategic - high distance, moderate strength
+	boundedContext: { strength: 4, distance: 9, volatility: 5 },
+	aggregate: { strength: 7, distance: 6, volatility: 6 },
+	domainEvent: { strength: 2, distance: 9, volatility: 4 },
+	// Tactical - varies by role
+	entity: { strength: 8, distance: 4, volatility: 7 },
+	valueObject: { strength: 3, distance: 8, volatility: 2 },
+	domainService: { strength: 6, distance: 5, volatility: 5 },
+	repository: { strength: 5, distance: 7, volatility: 4 },
+	factory: { strength: 4, distance: 7, volatility: 3 },
+	// Application - moderate coupling
+	command: { strength: 3, distance: 7, volatility: 4 },
+	query: { strength: 2, distance: 8, volatility: 3 },
+	applicationService: { strength: 6, distance: 5, volatility: 6 },
+	// Infrastructure - low to moderate coupling
+	integrationEvent: { strength: 2, distance: 9, volatility: 5 },
+	antiCorruptionLayer: { strength: 5, distance: 8, volatility: 4 },
+	saga: { strength: 7, distance: 4, volatility: 8 },
+};
+
+export const DEFAULT_ICON_BY_TYPE: Partial<Record<NodeType, BuiltInIconId>> = {
+	// C4 icons
 	person: "phosphor:user-duotone",
 	system: "phosphor:package-duotone",
 	externalSystem: "phosphor:cloud-duotone",
 	container: "phosphor:stack-duotone",
 	component: "phosphor:cube-duotone",
+
+	// DDD Strategic icons
+	boundedContext: "phosphor:package-duotone",
+	aggregate: "phosphor:cube-duotone",
+	domainEvent: "phosphor:package-duotone",
+
+	// DDD Tactical icons
+	entity: "phosphor:user-duotone",
+	valueObject: "phosphor:package-duotone",
+	domainService: "phosphor:package-duotone",
+	repository: "phosphor:package-duotone",
+	factory: "phosphor:package-duotone",
+
+	// DDD Application icons
+	command: "phosphor:package-duotone",
+	query: "phosphor:package-duotone",
+	applicationService: "phosphor:package-duotone",
+
+	// DDD Infrastructure icons
+	integrationEvent: "phosphor:package-duotone",
+	antiCorruptionLayer: "phosphor:package-duotone",
+	saga: "phosphor:package-duotone",
 };
 
 const snapToGrid = (value: number): number =>
 	Math.round(value / GRID_SIZE) * GRID_SIZE;
 
-const resolveType = (node: Node): C4Type => {
+const resolveType = (node: Node): NodeType => {
 	const data = node.data as NodeData | undefined;
-	const inferred = (data?.c4Type as C4Type | undefined) ?? (node.type as C4Type | undefined);
-	return inferred ?? "system";
+	const c4Type = data?.c4Type as C4Type | undefined;
+	const dddType = data?.dddType as DDDType | undefined;
+	const nodeType = (node.type as NodeType | undefined);
+
+	// Prefer explicit type annotations, fallback to node.type
+	return c4Type ?? dddType ?? nodeType ?? "system";
 };
 
-const getTypeDimensions = (type: C4Type): { width: number; height: number } =>
+const getTypeDimensions = (type: NodeType): { width: number; height: number } =>
 	DEFAULT_DIMENSIONS[type] ?? DEFAULT_DIMENSIONS.default;
 
-export const getDefaultIconId = (type: C4Type): NodeIconId =>
-	DEFAULT_ICON_BY_TYPE[type] ?? DEFAULT_ICON_BY_TYPE.system;
+export const getDefaultIconId = (type: NodeType): NodeIconId =>
+	DEFAULT_ICON_BY_TYPE[type] ?? DEFAULT_ICON_BY_TYPE.system ?? "phosphor:package-duotone";
 
-export const getDefaultSubdomainType = (type: C4Type): SubdomainType =>
-	DEFAULT_SUBDOMAIN[type] ?? "supporting";
+const isC4Type = (value: unknown): value is C4Type =>
+	value === "person" ||
+	value === "system" ||
+	value === "externalSystem" ||
+	value === "container" ||
+	value === "component";
 
-export const getDefaultIntegrationType = (type: C4Type): IntegrationType =>
-	DEFAULT_INTEGRATION[type] ?? "contract";
+const isDDDType = (value: unknown): value is DDDType =>
+	value === "boundedContext" ||
+	value === "aggregate" ||
+	value === "domainEvent" ||
+	value === "entity" ||
+	value === "valueObject" ||
+	value === "domainService" ||
+	value === "repository" ||
+	value === "factory" ||
+	value === "command" ||
+	value === "query" ||
+	value === "applicationService" ||
+	value === "integrationEvent" ||
+	value === "antiCorruptionLayer" ||
+	value === "saga";
 
-export const getDefaultCouplingProfile = (type: C4Type): CouplingProfile => {
-	const profile = DEFAULT_COUPLING_PROFILE[type];
+export const getDefaultSubdomainType = (type: NodeType): SubdomainType => {
+	if (isC4Type(type)) {
+		return DEFAULT_SUBDOMAIN[type] ?? "supporting";
+	}
+	if (isDDDType(type)) {
+		return DDD_DEFAULT_SUBDOMAIN[type] ?? "core";
+	}
+	return "supporting";
+};
+
+export const getDefaultIntegrationType = (type: NodeType): IntegrationType => {
+	if (isC4Type(type)) {
+		return DEFAULT_INTEGRATION[type] ?? "contract";
+	}
+	if (isDDDType(type)) {
+		return DDD_DEFAULT_INTEGRATION[type] ?? "contract";
+	}
+	return "contract";
+};
+
+export const getDefaultCouplingProfile = (type: NodeType): CouplingProfile => {
+	let profile: CouplingProfile | undefined;
+
+	if (isC4Type(type)) {
+		profile = DEFAULT_COUPLING_PROFILE[type];
+	} else if (isDDDType(type)) {
+		profile = DDD_DEFAULT_COUPLING_PROFILE[type];
+	}
+
 	return {
 		strength: profile?.strength ?? 5,
 		distance: profile?.distance ?? 5,
@@ -234,10 +455,16 @@ const calculateBounds = (nodes: Node[]): Bounds | null => {
 const generateNodeId = (prefix: string): string => `${prefix}-${nanoid(12)}`;
 
 /**
- * Check if a node is a container type
+ * Check if a node is a container type (can contain child nodes)
+ * - C4: container
+ * - DDD: boundedContext (strategic grouping), aggregate (tactical grouping)
  */
 export const isContainerNode = (node: Node | null): Effect.Effect<boolean> => {
-	return Effect.succeed(node?.type === "container");
+	return Effect.succeed(
+		node?.type === "container" ||
+		node?.type === "boundedContext" ||
+		node?.type === "aggregate"
+	);
 };
 
 /**
@@ -254,7 +481,7 @@ export const determineNodePosition = (
 	nodeCount: number,
 	selectedNode: Node | null,
 	existingNodes: Node[],
-	newNodeType: C4Type,
+	newNodeType: NodeType,
 ): Effect.Effect<NodePosition> => {
 	return Effect.gen(function* () {
 		const isContainer = yield* isContainerNode(selectedNode);
@@ -314,26 +541,53 @@ export const createParentRelationship = (
 /**
  * Get default label for a node type
  */
-export const getDefaultLabel = (type: C4Type): Effect.Effect<string> => {
-	const labels: Record<C4Type, string> = {
+export const getDefaultLabel = (type: NodeType): Effect.Effect<string> => {
+	const labels: Partial<Record<NodeType, string>> = {
+		// C4 labels
 		person: "New Person",
 		system: "New System",
 		externalSystem: "External System",
 		container: "Container",
 		component: "Component",
+
+		// DDD Strategic labels
+		boundedContext: "Bounded Context",
+		aggregate: "Aggregate",
+		domainEvent: "Domain Event",
+
+		// DDD Tactical labels
+		entity: "Entity",
+		valueObject: "Value Object",
+		domainService: "Domain Service",
+		repository: "Repository",
+		factory: "Factory",
+
+		// DDD Application labels
+		command: "Command",
+		query: "Query",
+		applicationService: "Application Service",
+
+		// DDD Infrastructure labels
+		integrationEvent: "Integration Event",
+		antiCorruptionLayer: "Anti-Corruption Layer",
+		saga: "Saga",
 	};
 
-	return Effect.succeed(labels[type]);
+	return Effect.succeed(labels[type] ?? "New Node");
 };
 
 /**
  * Get default size for a node type
  */
-export const getDefaultSize = (type: C4Type): Effect.Effect<{ width: number; height: number } | null> => {
-	if (type === "container") {
-		return Effect.succeed({ width: 400, height: 300 });
-	}
-	return Effect.succeed(null);
+export const getDefaultSize = (type: NodeType): Effect.Effect<{ width: number; height: number } | null> => {
+	// Return explicit sizes for container-like types
+	const sizes: Partial<Record<NodeType, { width: number; height: number }>> = {
+		container: { width: 400, height: 300 },
+		boundedContext: { width: 500, height: 400 },
+		aggregate: { width: 320, height: 240 },
+	};
+
+	return Effect.succeed(sizes[type] ?? null);
 };
 
 /**
@@ -370,27 +624,40 @@ export const createNode = (options: CreateNodeOptions): Effect.Effect<Node> => {
 		// Get default size
 		const size = yield* getDefaultSize(type);
 
+		// Determine if this is a C4 or DDD type
+		const isC4 = isC4Type(type);
+		const isDDD = isDDDType(type);
+
+		// Get defaults for both C4 and DDD types
 		const subdomainType = getDefaultSubdomainType(type);
 		const integrationType = getDefaultIntegrationType(type);
-	const couplingProfile = getDefaultCouplingProfile(type);
-	const createdAt = Date.now();
+		const couplingProfile = getDefaultCouplingProfile(type);
+		const createdAt = Date.now();
 
-	// Build node
-	const node: Node = {
-			id,
-			type: type === "externalSystem" ? "externalSystem" : type,
-			position,
-		data: {
+		// Build node data
+		const nodeData: NodeData = {
 			label: finalLabel,
 			description: "",
 			technology: "",
-			c4Type: type,
 			createdAt,
+			iconId: getDefaultIconId(type),
 			subdomainType,
 			integrationType,
 			couplingProfile,
-			iconId: getDefaultIconId(type),
-		} as NodeData,
+			...(isC4 && {
+				c4Type: type as C4Type,
+			}),
+			...(isDDD && {
+				dddType: type as DDDType,
+			}),
+		};
+
+		// Build node
+		const node: Node = {
+			id,
+			type: type === "externalSystem" ? "externalSystem" : type,
+			position,
+			data: nodeData,
 			...(size && { style: size }),
 			...(parentRelationship && parentRelationship),
 		};

@@ -42,12 +42,35 @@ export const themeContract = createThemeContract({
 
 		// Semantic colors - element types with meaning
 		semantic: {
+			// C4 Architecture elements
 			person: null,      // C4 Person element (cyan)
 			system: null,      // C4 System element (green)
 			external: null,    // C4 External system (amber)
 			container: null,   // C4 Container element (blue)
 			component: null,   // C4 Component element (purple)
 			relationship: null, // Connections/edges
+
+			// DDD Strategic elements
+			boundedContext: null,     // DDD Bounded Context (indigo)
+			aggregate: null,          // DDD Aggregate (emerald)
+			domainEvent: null,        // DDD Domain Event (amber)
+
+			// DDD Tactical elements
+			entity: null,             // DDD Entity (blue)
+			valueObject: null,        // DDD Value Object (cyan)
+			domainService: null,      // DDD Domain Service (pink)
+			repository: null,         // DDD Repository (slate)
+			factory: null,            // DDD Factory (orange)
+
+			// DDD Application elements
+			command: null,            // DDD Command (red)
+			query: null,              // DDD Query (teal)
+			applicationService: null, // DDD Application Service (violet)
+
+			// DDD Infrastructure elements
+			integrationEvent: null,   // DDD Integration Event (fuchsia)
+			acl: null,                // DDD Anti-Corruption Layer (lime)
+			saga: null,               // DDD Saga (rose)
 		},
 
 		// Operational status colors - military/engineering
@@ -66,21 +89,69 @@ export const themeContract = createThemeContract({
 			primary: null,     // Main borders
 			secondary: null,   // Subtle borders
 			focus: null,       // Focus indicator
+
+			// C4 node borders
 			person: null,      // Person node border
 			system: null,      // System node border
 			external: null,    // External system border
 			container: null,   // Container node border
 			component: null,   // Component node border
+
+			// DDD Strategic borders
+			boundedContext: null,
+			aggregate: null,
+			domainEvent: null,
+
+			// DDD Tactical borders
+			entity: null,
+			valueObject: null,
+			domainService: null,
+			repository: null,
+			factory: null,
+
+			// DDD Application borders
+			command: null,
+			query: null,
+			applicationService: null,
+
+			// DDD Infrastructure borders
+			integrationEvent: null,
+			acl: null,
+			saga: null,
 		},
 
 		// Surface tints - subtle background colors
 		surface: {
+			// C4 node backgrounds
 			person: null,      // Person node background
 			system: null,      // System node background
 			external: null,    // External system background
 			container: null,   // Container node background
 			component: null,   // Component node background
 			containerSelected: null, // Container when selected
+
+			// DDD Strategic backgrounds
+			boundedContext: null,
+			aggregate: null,
+			domainEvent: null,
+
+			// DDD Tactical backgrounds
+			entity: null,
+			valueObject: null,
+			domainService: null,
+			repository: null,
+			factory: null,
+
+			// DDD Application backgrounds
+			command: null,
+			query: null,
+			applicationService: null,
+
+			// DDD Infrastructure backgrounds
+			integrationEvent: null,
+			acl: null,
+			saga: null,
+
 			// UI overlays - for dialogs, popovers, elevated panels
 			overlay: null,     // Overlay backgrounds (dropdowns, modals)
 			elevated: null,    // Elevated surfaces (hover states)

@@ -41,12 +41,14 @@ import {
 	type RiskTier,
 } from "../../core/balancedCoupling";
 import { useBalancedCouplingModel } from "./useBalancedCouplingModel";
+import type { DiagramDomain } from "../machines/canvas.machine";
 
 interface BalancedMudChartProps {
 	nodes: Node[];
 	edges: Edge[];
 	selectedModuleId?: string | null;
 	onSelectModule?: (moduleId: string) => void;
+	domain: DiagramDomain;
 }
 
 const subdomainPalette: Record<ModuleCouplingSnapshot["subdomainType"], string> = {
@@ -300,8 +302,9 @@ export function BalancedMudChart({
 	edges,
 	onSelectModule,
 	selectedModuleId,
+	domain,
 }: BalancedMudChartProps) {
-	const model = useBalancedCouplingModel(nodes, edges);
+	const model = useBalancedCouplingModel(nodes, edges, domain);
 	const {
 		tooltipData,
 		tooltipOpen,

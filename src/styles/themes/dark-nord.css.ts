@@ -35,12 +35,35 @@ export const darkTheme = createTheme(themeContract, {
 		},
 
 		semantic: {
+			// C4 Architecture elements
 			person: "#88C0D0",     // Nord8 - cyan for people
 			system: "#A3BE8C",     // Nord14 - tactical green for systems
 			external: "#D08770",   // Nord12 - amber for external
 			container: "#81A1C1",  // Nord9 - blue for containers
 			component: "#B48EAD",  // Nord15 - purple for components
 			relationship: "#4C566A", // Nord3 - dim gray for connections
+
+			// DDD Strategic elements
+			boundedContext: "#818cf8", // Indigo-400
+			aggregate: "#34d399",      // Emerald-400
+			domainEvent: "#fbbf24",    // Amber-400
+
+			// DDD Tactical elements
+			entity: "#60a5fa",         // Blue-400
+			valueObject: "#22d3ee",    // Cyan-400
+			domainService: "#f472b6",  // Pink-400
+			repository: "#94a3b8",     // Slate-400
+			factory: "#fb923c",        // Orange-400
+
+			// DDD Application elements
+			command: "#f87171",        // Red-400
+			query: "#2dd4bf",          // Teal-400
+			applicationService: "#a78bfa", // Violet-400
+
+			// DDD Infrastructure elements
+			integrationEvent: "#e879f9", // Fuchsia-400
+			acl: "#a3e635",            // Lime-400
+			saga: "#fb7185",           // Rose-400
 		},
 
 		status: {
@@ -56,20 +79,68 @@ export const darkTheme = createTheme(themeContract, {
 			primary: "#81A1C1",    // Nord9 - tactical blue borders
 			secondary: "#4C566A",  // Nord3 - subtle gray
 			focus: "#88C0D0",      // Nord8 - cyan focus
+
+			// C4 node borders
 			person: "#88C0D0",     // Nord8 - cyan
 			system: "#A3BE8C",     // Nord14 - green
 			external: "#D08770",   // Nord12 - amber
 			container: "#81A1C1",  // Nord9 - blue
 			component: "#B48EAD",  // Nord15 - purple
+
+			// DDD Strategic borders
+			boundedContext: "#818cf8",
+			aggregate: "#34d399",
+			domainEvent: "#fbbf24",
+
+			// DDD Tactical borders
+			entity: "#60a5fa",
+			valueObject: "#22d3ee",
+			domainService: "#f472b6",
+			repository: "#94a3b8",
+			factory: "#fb923c",
+
+			// DDD Application borders
+			command: "#f87171",
+			query: "#2dd4bf",
+			applicationService: "#a78bfa",
+
+			// DDD Infrastructure borders
+			integrationEvent: "#e879f9",
+			acl: "#a3e635",
+			saga: "#fb7185",
 		},
 
 		surface: {
+			// C4 node backgrounds
 			person: "#2E3440",     // Nord0 - dark tint
 			system: "#2E3440",     // Nord0 - dark tint
 			external: "#2E3440",   // Nord0 - dark tint
 			container: "#2E3440",  // Nord0 - dark tint
 			component: "#2E3440",  // Nord0 - dark tint
 			containerSelected: "#3B4252", // Nord1 - slightly lighter
+
+			// DDD Strategic backgrounds
+			boundedContext: "rgba(129, 140, 248, 0.08)",
+			aggregate: "rgba(52, 211, 153, 0.08)",
+			domainEvent: "rgba(251, 191, 36, 0.08)",
+
+			// DDD Tactical backgrounds
+			entity: "rgba(96, 165, 250, 0.08)",
+			valueObject: "rgba(34, 211, 238, 0.08)",
+			domainService: "rgba(244, 114, 182, 0.08)",
+			repository: "rgba(148, 163, 184, 0.08)",
+			factory: "rgba(251, 146, 60, 0.08)",
+
+			// DDD Application backgrounds
+			command: "rgba(248, 113, 113, 0.08)",
+			query: "rgba(45, 212, 191, 0.08)",
+			applicationService: "rgba(167, 139, 250, 0.08)",
+
+			// DDD Infrastructure backgrounds
+			integrationEvent: "rgba(232, 121, 249, 0.08)",
+			acl: "rgba(163, 230, 53, 0.08)",
+			saga: "rgba(251, 113, 133, 0.08)",
+
 			// UI overlays - semantic rgba values for compositing
 			overlay: "rgba(46, 52, 64, 0.95)",   // Nord0 with opacity
 			elevated: "rgba(59, 66, 82, 0.98)",  // Nord1 with opacity

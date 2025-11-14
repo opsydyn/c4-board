@@ -24,6 +24,8 @@ import { canvasMachine, type CanvasEvent } from "../machines/canvas.machine";
 import { C4Canvas, type C4CanvasRef } from "./C4Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { Toolbar } from "./Toolbar";
+import { DDDToolbar } from "./DDDToolbar";
+import { DomainToggle } from "./DomainToggle";
 import * as styles from "./styles.css";
 import { BalancedMudChart } from "./BalancedMudChart";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
@@ -609,34 +611,75 @@ export function C4CanvasContainer() {
 							<CaretLeftIcon size={16} weight="bold" />
 							ESC
 						</ToggleButton>
+						<DomainToggle
+							currentDomain={state.context.currentDomain}
+							onDomainChange={(domain) => send({ type: "SET_DOMAIN", domain })}
+						/>
 					</div>
-					<Toolbar
-						onAddPerson={() => send({ type: "ADD_PERSON" })}
-						onAddSystem={() => send({ type: "ADD_SYSTEM" })}
-						onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
-						onAddContainer={() => send({ type: "ADD_CONTAINER" })}
-						onAddComponent={() => send({ type: "ADD_COMPONENT" })}
-						onSave={handleSave}
-						onNewBoard={handleNewBoard}
-						onAutoLayout={handleAutoLayout}
-						onAutoLayoutSelected={handleAutoLayoutSelected}
-						onSessionNameChange={(name) =>
-							send({ type: "UPDATE_SESSION_NAME", name })
-						}
-						onDiagramNameChange={(name) =>
-							send({ type: "UPDATE_DIAGRAM_NAME", name })
-						}
-						sessionName={state.context.sessionName}
-						isSaving={state.context.isSaving}
-						lastSaved={state.context.lastSaved}
-						diagramName={state.context.diagramName}
-						{...(state.context.currentLayout && {
-							currentLayout: state.context.currentLayout,
-						})}
-					/>
+					{state.context.currentDomain === "c4" ? (
+						<Toolbar
+							onAddPerson={() => send({ type: "ADD_PERSON" })}
+							onAddSystem={() => send({ type: "ADD_SYSTEM" })}
+							onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
+							onAddContainer={() => send({ type: "ADD_CONTAINER" })}
+							onAddComponent={() => send({ type: "ADD_COMPONENT" })}
+							onSave={handleSave}
+							onNewBoard={handleNewBoard}
+							onAutoLayout={handleAutoLayout}
+							onAutoLayoutSelected={handleAutoLayoutSelected}
+							onSessionNameChange={(name) =>
+								send({ type: "UPDATE_SESSION_NAME", name })
+							}
+							onDiagramNameChange={(name) =>
+								send({ type: "UPDATE_DIAGRAM_NAME", name })
+							}
+							sessionName={state.context.sessionName}
+							isSaving={state.context.isSaving}
+							lastSaved={state.context.lastSaved}
+							diagramName={state.context.diagramName}
+							{...(state.context.currentLayout && {
+								currentLayout: state.context.currentLayout,
+							})}
+						/>
+					) : (
+						<DDDToolbar
+							onAddBoundedContext={() => send({ type: "ADD_BOUNDED_CONTEXT" })}
+							onAddAggregate={() => send({ type: "ADD_AGGREGATE" })}
+							onAddDomainEvent={() => send({ type: "ADD_DOMAIN_EVENT" })}
+							onAddEntity={() => send({ type: "ADD_ENTITY" })}
+							onAddValueObject={() => send({ type: "ADD_VALUE_OBJECT" })}
+							onAddDomainService={() => send({ type: "ADD_DOMAIN_SERVICE" })}
+							onAddRepository={() => send({ type: "ADD_REPOSITORY" })}
+							onAddFactory={() => send({ type: "ADD_FACTORY" })}
+							onAddCommand={() => send({ type: "ADD_COMMAND" })}
+							onAddQuery={() => send({ type: "ADD_QUERY" })}
+							onAddApplicationService={() => send({ type: "ADD_APPLICATION_SERVICE" })}
+							onAddIntegrationEvent={() => send({ type: "ADD_INTEGRATION_EVENT" })}
+							onAddACL={() => send({ type: "ADD_ACL" })}
+							onAddSaga={() => send({ type: "ADD_SAGA" })}
+							onSave={handleSave}
+							onNewBoard={handleNewBoard}
+							onAutoLayout={handleAutoLayout}
+							onAutoLayoutSelected={handleAutoLayoutSelected}
+							onSessionNameChange={(name) =>
+								send({ type: "UPDATE_SESSION_NAME", name })
+							}
+							onDiagramNameChange={(name) =>
+								send({ type: "UPDATE_DIAGRAM_NAME", name })
+							}
+							sessionName={state.context.sessionName}
+							isSaving={state.context.isSaving}
+							lastSaved={state.context.lastSaved}
+							diagramName={state.context.diagramName}
+							{...(state.context.currentLayout && {
+								currentLayout: state.context.currentLayout,
+							})}
+						/>
+					)}
 					<DiagramEvolutionChart
 						nodes={state.context.nodes}
 						edges={state.context.edges}
+						domain={state.context.currentDomain}
 					/>
 				</aside>
 			)}
@@ -683,7 +726,6 @@ export function C4CanvasContainer() {
 						aria-label="Expand data bar"
 					>
 						<CaretUpIcon size={16} weight="bold" />
-						Data
 					</ToggleButton>
 				)}
 			</section>
@@ -706,6 +748,7 @@ export function C4CanvasContainer() {
 						edges={state.context.edges}
 						selectedModuleId={selectedNode?.id ?? null}
 						onSelectModule={handleSelectNode}
+						domain={state.context.currentDomain}
 					/>
 					<PropertiesPanel
 						selectedNode={selectedNode}

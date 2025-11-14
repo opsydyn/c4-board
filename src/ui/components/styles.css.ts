@@ -312,6 +312,62 @@ export const toolbarLink = style([
 ]);
 
 /**
+ * Domain Toggle
+ * Switch between C4 and DDD modeling modes
+ */
+export const domainToggle = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	clipPath: theme.clipPath.base,
+	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	padding: theme.spacing["2"],
+	marginBottom: theme.spacing["3"],
+	boxShadow: theme.effect.glow.sm,
+});
+
+export const domainToggleButton = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	flex: 1,
+	transition: theme.transition.base,
+	clipPath: theme.clipPath.sm,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "transparent",
+	cursor: "pointer",
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	textTransform: "uppercase",
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.tertiary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	fontWeight: theme.typography.weight.semibold,
+
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.border.primary,
+			color: theme.color.foreground.secondary,
+		},
+	},
+});
+
+export const domainToggleActive = style({
+	borderColor: theme.color.interactive.focus,
+	backgroundColor: "rgba(136, 192, 208, 0.12)",
+	boxShadow: theme.effect.glow.sm,
+	color: theme.color.foreground.primary,
+
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.interactive.focus,
+			color: theme.color.foreground.primary,
+		},
+	},
+});
+
+/**
  * Properties Panel
  * Sidebar for editing selected node properties
  */

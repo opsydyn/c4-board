@@ -35,12 +35,35 @@ export const lightTheme = createTheme(themeContract, {
 		},
 
 		semantic: {
+			// C4 Architecture elements
 			person: "#08427B",
 			system: "#1168BD",
 			external: "#996600",
 			container: "#0066cc",   // Blue for containers
 			component: "#8855cc",   // Purple for components
 			relationship: "#666666",
+
+			// DDD Strategic elements
+			boundedContext: "#6366F1", // Indigo-500
+			aggregate: "#10B981",      // Emerald-500
+			domainEvent: "#F59E0B",    // Amber-500
+
+			// DDD Tactical elements
+			entity: "#3B82F6",         // Blue-500
+			valueObject: "#06B6D4",    // Cyan-500
+			domainService: "#EC4899",  // Pink-500
+			repository: "#64748B",     // Slate-500
+			factory: "#F97316",        // Orange-500
+
+			// DDD Application elements
+			command: "#EF4444",        // Red-500
+			query: "#14B8A6",          // Teal-500
+			applicationService: "#8B5CF6", // Violet-500
+
+			// DDD Infrastructure elements
+			integrationEvent: "#D946EF", // Fuchsia-500
+			acl: "#84CC16",            // Lime-500
+			saga: "#F43F5E",           // Rose-500
 		},
 
 		status: {
@@ -56,20 +79,68 @@ export const lightTheme = createTheme(themeContract, {
 			primary: "#e0e0e0",
 			secondary: "#f0f0f0",
 			focus: "#0066cc",
+
+			// C4 node borders
 			person: "#08427B",
 			system: "#1168BD",
 			external: "#996600",
 			container: "#0066cc",   // Blue border for containers
 			component: "#8855cc",   // Purple border for components
+
+			// DDD Strategic borders
+			boundedContext: "#6366F1",
+			aggregate: "#10B981",
+			domainEvent: "#F59E0B",
+
+			// DDD Tactical borders
+			entity: "#3B82F6",
+			valueObject: "#06B6D4",
+			domainService: "#EC4899",
+			repository: "#64748B",
+			factory: "#F97316",
+
+			// DDD Application borders
+			command: "#EF4444",
+			query: "#14B8A6",
+			applicationService: "#8B5CF6",
+
+			// DDD Infrastructure borders
+			integrationEvent: "#D946EF",
+			acl: "#84CC16",
+			saga: "#F43F5E",
 		},
 
 		surface: {
+			// C4 node backgrounds
 			person: "#E8F4F8",
 			system: "#EBF3FA",
 			external: "#FFF9E6",
 			container: "#E6F0FF",   // Light blue tint for containers
 			component: "#F0E6FF",   // Light purple tint for components
 			containerSelected: "#CCE0FF", // Slightly darker blue when selected
+
+			// DDD Strategic backgrounds
+			boundedContext: "rgba(99, 102, 241, 0.08)",  // Indigo with transparency
+			aggregate: "rgba(16, 185, 129, 0.08)",       // Emerald with transparency
+			domainEvent: "rgba(245, 158, 11, 0.08)",     // Amber with transparency
+
+			// DDD Tactical backgrounds
+			entity: "rgba(59, 130, 246, 0.08)",          // Blue with transparency
+			valueObject: "rgba(6, 182, 212, 0.08)",      // Cyan with transparency
+			domainService: "rgba(236, 72, 153, 0.08)",   // Pink with transparency
+			repository: "rgba(100, 116, 139, 0.08)",     // Slate with transparency
+			factory: "rgba(249, 115, 22, 0.08)",         // Orange with transparency
+
+			// DDD Application backgrounds
+			command: "rgba(239, 68, 68, 0.08)",          // Red with transparency
+			query: "rgba(20, 184, 166, 0.08)",           // Teal with transparency
+			applicationService: "rgba(139, 92, 246, 0.08)", // Violet with transparency
+
+			// DDD Infrastructure backgrounds
+			integrationEvent: "rgba(217, 70, 239, 0.08)", // Fuchsia with transparency
+			acl: "rgba(132, 204, 22, 0.08)",            // Lime with transparency
+			saga: "rgba(244, 63, 94, 0.08)",            // Rose with transparency
+
 			// UI overlays - semantic rgba values for compositing
 			overlay: "rgba(255, 255, 255, 0.95)",  // Light overlay with opacity
 			elevated: "rgba(248, 249, 250, 0.98)",  // Slightly elevated surface

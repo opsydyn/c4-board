@@ -212,10 +212,11 @@ function calculateCenter(nodes: Node[]): { x: number; y: number } {
 }
 
 /**
- * Get default node width based on type
+ * Get default node width based on type (C4 + DDD)
  */
 function getDefaultNodeWidth(nodeType: string | undefined): number {
 	switch (nodeType) {
+		// C4 types
 		case "person":
 			return 220;
 		case "system":
@@ -226,16 +227,54 @@ function getDefaultNodeWidth(nodeType: string | undefined): number {
 			return 280;
 		case "component":
 			return 200;
+
+		// DDD Strategic types (larger)
+		case "boundedContext":
+			return 500;
+		case "aggregate":
+			return 320;
+		case "domainEvent":
+			return 180;
+
+		// DDD Tactical types (medium)
+		case "entity":
+			return 220;
+		case "valueObject":
+			return 180;
+		case "domainService":
+			return 200;
+		case "repository":
+			return 200;
+		case "factory":
+			return 200;
+
+		// DDD Application types (medium)
+		case "command":
+			return 180;
+		case "query":
+			return 180;
+		case "applicationService":
+			return 240;
+
+		// DDD Infrastructure types (medium to large)
+		case "integrationEvent":
+			return 200;
+		case "antiCorruptionLayer":
+			return 280;
+		case "saga":
+			return 300;
+
 		default:
 			return 220;
 	}
 }
 
 /**
- * Get default node height based on type
+ * Get default node height based on type (C4 + DDD)
  */
 function getDefaultNodeHeight(nodeType: string | undefined): number {
 	switch (nodeType) {
+		// C4 types
 		case "person":
 			return 160;
 		case "system":
@@ -246,6 +285,43 @@ function getDefaultNodeHeight(nodeType: string | undefined): number {
 			return 200;
 		case "component":
 			return 120;
+
+		// DDD Strategic types (larger)
+		case "boundedContext":
+			return 400;
+		case "aggregate":
+			return 240;
+		case "domainEvent":
+			return 120;
+
+		// DDD Tactical types (medium)
+		case "entity":
+			return 160;
+		case "valueObject":
+			return 140;
+		case "domainService":
+			return 150;
+		case "repository":
+			return 150;
+		case "factory":
+			return 150;
+
+		// DDD Application types (medium)
+		case "command":
+			return 120;
+		case "query":
+			return 120;
+		case "applicationService":
+			return 170;
+
+		// DDD Infrastructure types (medium to large)
+		case "integrationEvent":
+			return 140;
+		case "antiCorruptionLayer":
+			return 200;
+		case "saga":
+			return 200;
+
 		default:
 			return 140;
 	}
@@ -412,24 +488,183 @@ export const C4_LAYOUT_PRESETS = {
 } as const;
 
 /**
- * Get layout preset by name
+ * DDD-optimized layout presets for domain modeling
+ */
+export const DDD_LAYOUT_PRESETS = {
+	// ============================================================================
+	// STRATEGIC DDD LAYOUTS
+	// ============================================================================
+
+	/**
+	 * Context Map (Strategic)
+	 * Bounded contexts with relationships
+	 * Use for: Strategic DDD, context mapping, team boundaries
+	 */
+	contextMap: {
+		direction: "TB" as const,
+		rankSpacing: 200,
+		nodeSpacing: 150,
+	},
+
+	/**
+	 * Domain Model (Hierarchical)
+	 * Bounded Contexts → Aggregates → Entities
+	 * Use for: Domain model exploration, aggregate design
+	 */
+	domainModel: {
+		direction: "TB" as const,
+		rankSpacing: 140,
+		nodeSpacing: 100,
+	},
+
+	/**
+	 * Subdomain Classification
+	 * Core → Supporting → Generic domains
+	 * Use for: Strategic planning, domain prioritization
+	 */
+	subdomain: {
+		direction: "LR" as const,
+		rankSpacing: 180,
+		nodeSpacing: 120,
+	},
+
+	// ============================================================================
+	// TACTICAL DDD LAYOUTS
+	// ============================================================================
+
+	/**
+	 * Aggregate Design
+	 * Aggregate roots with entities and value objects
+	 * Use for: Tactical DDD, aggregate boundaries
+	 */
+	aggregate: {
+		direction: "TB" as const,
+		rankSpacing: 120,
+		nodeSpacing: 80,
+	},
+
+	/**
+	 * CQRS Flow
+	 * Commands → Aggregates → Events → Queries
+	 * Use for: CQRS patterns, command/query separation
+	 */
+	cqrs: {
+		direction: "LR" as const,
+		rankSpacing: 150,
+		nodeSpacing: 100,
+	},
+
+	/**
+	 * Event Storming
+	 * Domain events with commands and policies
+	 * Use for: Event storming workshops, event modeling
+	 */
+	eventStorming: {
+		direction: "LR" as const,
+		rankSpacing: 180,
+		nodeSpacing: 90,
+	},
+
+	// ============================================================================
+	// APPLICATION LAYER LAYOUTS
+	// ============================================================================
+
+	/**
+	 * Use Case Flow
+	 * Application services orchestrating domain
+	 * Use for: Application layer design, use case modeling
+	 */
+	useCase: {
+		direction: "TB" as const,
+		rankSpacing: 140,
+		nodeSpacing: 100,
+	},
+
+	/**
+	 * Onion Architecture
+	 * Domain core with application and infrastructure layers
+	 * Use for: Clean architecture, dependency inversion
+	 */
+	onion: {
+		direction: "TB" as const,
+		rankSpacing: 160,
+		nodeSpacing: 100,
+	},
+
+	// ============================================================================
+	// INTEGRATION PATTERNS
+	// ============================================================================
+
+	/**
+	 * Anti-Corruption Layer
+	 * Context translation and integration
+	 * Use for: Legacy integration, context boundaries
+	 */
+	acl: {
+		direction: "LR" as const,
+		rankSpacing: 180,
+		nodeSpacing: 120,
+	},
+
+	/**
+	 * Saga Pattern
+	 * Long-running transactions with compensation
+	 * Use for: Distributed transactions, process managers
+	 */
+	saga: {
+		direction: "LR" as const,
+		rankSpacing: 160,
+		nodeSpacing: 100,
+	},
+} as const;
+
+/**
+ * Combined layout presets (C4 + DDD)
+ */
+export const ALL_LAYOUT_PRESETS = {
+	...C4_LAYOUT_PRESETS,
+	...DDD_LAYOUT_PRESETS,
+} as const;
+
+/**
+ * Layout preset names for type safety
+ */
+export type C4LayoutPresetName = keyof typeof C4_LAYOUT_PRESETS;
+export type DDDLayoutPresetName = keyof typeof DDD_LAYOUT_PRESETS;
+export type LayoutPresetName = keyof typeof ALL_LAYOUT_PRESETS;
+
+/**
+ * Get layout preset by name (works for both C4 and DDD)
  */
 export function getPreset(
-	name: keyof typeof C4_LAYOUT_PRESETS,
+	name: LayoutPresetName,
+): Partial<LayoutOptions> {
+	return ALL_LAYOUT_PRESETS[name];
+}
+
+/**
+ * Get C4-specific preset
+ */
+export function getC4Preset(
+	name: C4LayoutPresetName,
 ): Partial<LayoutOptions> {
 	return C4_LAYOUT_PRESETS[name];
 }
 
 /**
- * Layout preset names for type safety
+ * Get DDD-specific preset
  */
-export type LayoutPresetName = keyof typeof C4_LAYOUT_PRESETS;
+export function getDDDPreset(
+	name: DDDLayoutPresetName,
+): Partial<LayoutOptions> {
+	return DDD_LAYOUT_PRESETS[name];
+}
 
 /**
- * Get all available layout presets
+ * Get all available C4 layout presets
  */
-export function getAllPresets(): Array<{
-	name: LayoutPresetName;
+export function getAllC4Presets(): Array<{
+	name: C4LayoutPresetName;
 	label: string;
 	description: string;
 	category: "essential" | "advanced" | "utility";
@@ -517,6 +752,91 @@ export function getAllPresets(): Array<{
 			category: "utility",
 		},
 	];
+}
+
+/**
+ * Get all available DDD layout presets
+ */
+export function getAllDDDPresets(): Array<{
+	name: DDDLayoutPresetName;
+	label: string;
+	description: string;
+	category: "strategic" | "tactical" | "application" | "integration";
+}> {
+	return [
+		// Strategic DDD
+		{
+			name: "contextMap",
+			label: "Context Map",
+			description: "Bounded contexts with relationships",
+			category: "strategic",
+		},
+		{
+			name: "domainModel",
+			label: "Domain Model",
+			description: "Contexts → Aggregates → Entities",
+			category: "strategic",
+		},
+		{
+			name: "subdomain",
+			label: "Subdomain Classification",
+			description: "Core → Supporting → Generic",
+			category: "strategic",
+		},
+		// Tactical DDD
+		{
+			name: "aggregate",
+			label: "Aggregate Design",
+			description: "Aggregate roots with entities",
+			category: "tactical",
+		},
+		{
+			name: "cqrs",
+			label: "CQRS Flow",
+			description: "Commands → Events → Queries",
+			category: "tactical",
+		},
+		{
+			name: "eventStorming",
+			label: "Event Storming",
+			description: "Domain events with commands",
+			category: "tactical",
+		},
+		// Application Layer
+		{
+			name: "useCase",
+			label: "Use Case Flow",
+			description: "Application services orchestration",
+			category: "application",
+		},
+		{
+			name: "onion",
+			label: "Onion Architecture",
+			description: "Domain core with layers",
+			category: "application",
+		},
+		// Integration
+		{
+			name: "acl",
+			label: "Anti-Corruption Layer",
+			description: "Context translation",
+			category: "integration",
+		},
+		{
+			name: "saga",
+			label: "Saga Pattern",
+			description: "Long-running transactions",
+			category: "integration",
+		},
+	];
+}
+
+/**
+ * Get all available layout presets (combined C4 + DDD)
+ * @deprecated Use getAllC4Presets() or getAllDDDPresets() instead
+ */
+export function getAllPresets() {
+	return getAllC4Presets();
 }
 
 /**
