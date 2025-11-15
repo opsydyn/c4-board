@@ -8,7 +8,7 @@
  * to the functional core (Effect services).
  */
 
-import type { Edge, Node, NodeChange, EdgeChange } from "@xyflow/react";
+import type { Edge, Node, NodeChange, EdgeChange, Viewport } from "@xyflow/react";
 import { applyNodeChanges, applyEdgeChanges } from "@xyflow/react";
 import { assign, setup, type AnyStateMachine } from "xstate";
 import { Effect } from "effect";
@@ -18,6 +18,8 @@ import * as EdgeOps from "../../core/effects/edge-operations";
 import * as DiagramOps from "../../core/effects/diagram-operations";
 import * as PlantUMLExport from "../../core/effects/export-plantuml-c4";
 import * as MermaidExport from "../../core/effects/export-mermaid";
+import * as PlantUMLImport from "../../core/effects/import-plantuml-c4";
+import * as MermaidImport from "../../core/effects/import-mermaid";
 
 export type DiagramDomain = "c4" | "ddd";
 
@@ -93,9 +95,11 @@ export type CanvasEvent =
 	| { type: "UPDATE_DIAGRAM_DESCRIPTION"; description: string }
 	| { type: "UPDATE_SESSION_NAME"; name: string }
 	// Export events
-	| { type: "EXPORT_PLANTUML" }
-	| { type: "EXPORT_MERMAID" }
-	| { type: "CLOSE_EXPORT_MODAL" };
+	| { type: "EXPORT_PLANTUML"; viewport?: Viewport }
+	| { type: "EXPORT_MERMAID"; viewport?: Viewport }
+	| { type: "CLOSE_EXPORT_MODAL" }
+	// Import events
+	| { type: "IMPORT_DIAGRAM"; content: string; format: "plantuml" | "mermaid"; mode: "replace" | "merge" };
 
 export interface CanvasContext {
 	// Canvas state
@@ -124,6 +128,9 @@ export interface CanvasContext {
 	exportModalOpen: boolean;
 	exportFormat: "plantuml" | "mermaid" | null;
 	exportedCode: string | null;
+
+	// Viewport state (for import/export)
+	viewport: Viewport | null;
 }
 
 /**
@@ -757,19 +764,27 @@ const canvasMachineDefinition = setup({
 		exportPlantUML: assign({
 			exportModalOpen: () => true,
 			exportFormat: () => "plantuml" as const,
-			exportedCode: ({ context }) => {
+			exportedCode: ({ context, event }) => {
+				if (event.type !== "EXPORT_PLANTUML") return null;
+
 				// Generate PlantUML using Effect service
+				const options: PlantUMLExport.PlantUMLExportOptions = {
+					title: context.diagramName !== "DIAGRAM::UNTITLED"
+						? context.diagramName
+						: "C4 Diagram",
+					includeDescriptions: true,
+					includeTechnology: true,
+				};
+
+				if (event.viewport) {
+					options.viewport = event.viewport;
+				}
+
 				const plantUML = runEffectSync(
 					PlantUMLExport.exportC4ToPlantUML(
 						context.nodes,
 						context.edges,
-						{
-							title: context.diagramName !== "DIAGRAM::UNTITLED"
-								? context.diagramName
-								: "C4 Diagram",
-							includeDescriptions: true,
-							includeTechnology: true,
-						}
+						options
 					)
 				);
 				return plantUML;
@@ -779,20 +794,28 @@ const canvasMachineDefinition = setup({
 		exportMermaid: assign({
 			exportModalOpen: () => true,
 			exportFormat: () => "mermaid" as const,
-			exportedCode: ({ context }) => {
+			exportedCode: ({ context, event }) => {
+				if (event.type !== "EXPORT_MERMAID") return null;
+
 				// Generate Mermaid using Effect service
+				const options: MermaidExport.MermaidExportOptions = {
+					title: context.diagramName !== "DIAGRAM::UNTITLED"
+						? context.diagramName
+						: "C4 Diagram",
+					includeDescriptions: true,
+					includeTechnology: true,
+					direction: "TB",
+				};
+
+				if (event.viewport) {
+					options.viewport = event.viewport;
+				}
+
 				const mermaid = runEffectSync(
 					MermaidExport.exportC4ToMermaid(
 						context.nodes,
 						context.edges,
-						{
-							title: context.diagramName !== "DIAGRAM::UNTITLED"
-								? context.diagramName
-								: "C4 Diagram",
-							includeDescriptions: true,
-							includeTechnology: true,
-							direction: "TB",
-						}
+						options
 					)
 				);
 				return mermaid;
@@ -803,6 +826,117 @@ const canvasMachineDefinition = setup({
 			exportModalOpen: () => false,
 			exportFormat: () => null,
 			exportedCode: () => null,
+		}),
+
+		// === Import Actions ===
+
+		importDiagram: assign({
+			nodes: ({ context, event }) => {
+				if (event.type !== "IMPORT_DIAGRAM") return context.nodes;
+
+				// Parse the diagram content
+				const parseEffect =
+					event.format === "plantuml"
+						? PlantUMLImport.importPlantUMLC4(event.content)
+						: MermaidImport.importMermaid(event.content);
+
+				try {
+					const result = runEffectSync(
+						Effect.catchAll(parseEffect, (error) => {
+							console.error("Import failed:", error);
+							return Effect.succeed({ nodes: [], edges: [], viewport: undefined });
+						})
+					);
+
+					// Replace or merge based on mode
+					if (event.mode === "replace") {
+						return result.nodes;
+					} else {
+						// Merge: add imported nodes with offset to avoid overlap
+						const maxX = context.nodes.reduce(
+							(max, node) => Math.max(max, node.position.x),
+							0
+						);
+						const offsetX = maxX + 400; // Offset imported nodes to the right
+
+						const offsetNodes = result.nodes.map((node) => ({
+							...node,
+							id: `imported_${node.id}`, // Prefix to avoid ID conflicts
+							position: {
+								x: node.position.x + offsetX,
+								y: node.position.y,
+							},
+						}));
+
+						return [...context.nodes, ...offsetNodes];
+					}
+				} catch (error) {
+					console.error("Import failed:", error);
+					return context.nodes; // Keep existing nodes on error
+				}
+			},
+			edges: ({ context, event }) => {
+				if (event.type !== "IMPORT_DIAGRAM") return context.edges;
+
+				const parseEffect =
+					event.format === "plantuml"
+						? PlantUMLImport.importPlantUMLC4(event.content)
+						: MermaidImport.importMermaid(event.content);
+
+				try {
+					const result = runEffectSync(
+						Effect.catchAll(parseEffect, (error) => {
+							console.error("Import failed:", error);
+							return Effect.succeed({ nodes: [], edges: [], viewport: undefined });
+						})
+					);
+
+					if (event.mode === "replace") {
+						return result.edges;
+					} else {
+						// Merge: update edge IDs to match prefixed node IDs
+						const importedEdges = result.edges.map((edge) => ({
+							...edge,
+							id: `imported_${edge.id}`,
+							source: `imported_${edge.source}`,
+							target: `imported_${edge.target}`,
+						}));
+
+						return [...context.edges, ...importedEdges];
+					}
+				} catch (error) {
+					console.error("Import failed:", error);
+					return context.edges; // Keep existing edges on error
+				}
+			},
+			selectedNodeId: () => null, // Deselect on import
+			viewport: ({ event }) => {
+				if (event.type !== "IMPORT_DIAGRAM") return null;
+
+				const parseEffect =
+					event.format === "plantuml"
+						? PlantUMLImport.importPlantUMLC4(event.content)
+						: MermaidImport.importMermaid(event.content);
+
+				try {
+					const result = runEffectSync(
+						Effect.catchAll(parseEffect, (error) => {
+							console.error("Import failed:", error);
+							return Effect.succeed({ nodes: [], edges: [], viewport: undefined });
+						})
+					);
+
+					// Return viewport from import if available (only in replace mode)
+					if (event.mode === "replace" && result.viewport) {
+						return result.viewport;
+					}
+
+					return null;
+				} catch (error) {
+					console.error("Import failed:", error);
+					return null;
+				}
+			},
 		}),
 	},
 }).createMachine({
@@ -835,6 +969,9 @@ const canvasMachineDefinition = setup({
 		exportModalOpen: false,
 		exportFormat: null,
 		exportedCode: null,
+
+		// Viewport state
+		viewport: null,
 	},
 	states: {
 		idle: {
@@ -950,6 +1087,9 @@ const canvasMachineDefinition = setup({
 				},
 				CLOSE_EXPORT_MODAL: {
 					actions: "closeExportModal",
+				},
+				IMPORT_DIAGRAM: {
+					actions: "importDiagram",
 				},
 				// Persistence events
 				CREATE_NEW_DIAGRAM: {

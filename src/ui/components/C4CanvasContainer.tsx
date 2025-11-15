@@ -698,8 +698,12 @@ export function C4CanvasContainer() {
 					isCommandBarOpen={isCommandBarOpen}
 					onToggleCommandBar={setCommandBarOpen}
 					onSelectNode={handleSelectNode}
-					onExportPlantUML={() => send({ type: "EXPORT_PLANTUML" })}
-					onExportMermaid={() => send({ type: "EXPORT_MERMAID" })}
+					onExportPlantUML={(viewport) => send({ type: "EXPORT_PLANTUML", viewport })}
+					onExportMermaid={(viewport) => send({ type: "EXPORT_MERMAID", viewport })}
+					onImportDiagram={(content, format, mode) =>
+						send({ type: "IMPORT_DIAGRAM", content, format, mode })
+					}
+					viewportToApply={state.context.viewport}
 				/>
 				{!isSidebarOpen && (
 					<ToggleButton

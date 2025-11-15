@@ -15,6 +15,7 @@ import {
 	type OnNodesChange,
 	type OnEdgesChange,
 	type OnConnect,
+	type Viewport,
 	ReactFlow,
 	ReactFlowProvider,
 	ConnectionMode,
@@ -26,6 +27,7 @@ import {
 	useImperativeHandle,
 	useCallback,
 	useState,
+	useEffect,
 } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
@@ -54,6 +56,7 @@ import { SagaNode } from "./nodes/SagaNode";
 import * as styles from "./styles.css";
 import { theme } from "../../styles/theme.css";
 import { DownloadButton } from "./DownloadButton";
+import { ImportButton } from "./ImportButton";
 import { ToggleButton } from "react-aria-components";
 import { CaretDownIcon, CaretUpIcon, FileCodeIcon } from "@phosphor-icons/react";
 import { SearchBox } from "./SearchBox";
@@ -70,8 +73,10 @@ interface C4CanvasProps {
 	isCommandBarOpen: boolean;
 	onToggleCommandBar: (open: boolean) => void;
 	onSelectNode: (nodeId: string) => void;
-	onExportPlantUML?: () => void;
-	onExportMermaid?: () => void;
+	onExportPlantUML?: (viewport: Viewport) => void;
+	onExportMermaid?: (viewport: Viewport) => void;
+	onImportDiagram?: (content: string, format: "plantuml" | "mermaid", mode: "replace" | "merge") => void;
+	viewportToApply?: Viewport | null;
 }
 
 export interface C4CanvasRef {
@@ -93,14 +98,26 @@ function C4CanvasInner(
 		onSelectNode,
 		onExportPlantUML,
 		onExportMermaid,
+		onImportDiagram,
+		viewportToApply,
 	}: C4CanvasProps,
 	ref: React.Ref<C4CanvasRef>,
 ) {
-	const { setCenter, getNode, fitView } = useReactFlow();
+	const { setCenter, getNode, fitView, getViewport, setViewport } = useReactFlow();
 
 	// Edge label editor state
 	const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 	const [isEdgeLabelEditorOpen, setIsEdgeLabelEditorOpen] = useState(false);
+
+	// Apply viewport after import if available
+	useEffect(() => {
+		if (viewportToApply) {
+			// Small delay to ensure nodes are rendered before applying viewport
+			setTimeout(() => {
+				setViewport(viewportToApply, { duration: 300 });
+			}, 100);
+		}
+	}, [viewportToApply, setViewport]);
 
 	// Expose methods to parent via ref
 	useImperativeHandle(ref, () => ({
@@ -238,7 +255,7 @@ function C4CanvasInner(
 								<button
 									type="button"
 									className={styles.commandBarButton}
-									onClick={onExportPlantUML}
+									onClick={() => onExportPlantUML(getViewport())}
 								>
 									<FileCodeIcon size={18} weight="duotone" />
 									EXPORT::PUML
@@ -248,11 +265,17 @@ function C4CanvasInner(
 								<button
 									type="button"
 									className={styles.commandBarButton}
-									onClick={onExportMermaid}
+									onClick={() => onExportMermaid(getViewport())}
 								>
 									<FileCodeIcon size={18} weight="duotone" />
 									EXPORT::MERMAID
 								</button>
+							)}
+							{onImportDiagram && (
+								<ImportButton
+									onImport={onImportDiagram}
+									className={styles.commandBarButton}
+								/>
 							)}
 						</div>
 						<div className={styles.commandBarRight}>

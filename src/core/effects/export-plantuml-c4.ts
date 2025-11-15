@@ -20,7 +20,7 @@
  */
 
 import { Effect } from "effect";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge, Viewport } from "@xyflow/react";
 import type { C4Type, NodeData } from "./node-operations";
 
 // ============================================================================
@@ -50,6 +50,8 @@ export interface PlantUMLExportOptions {
 	title?: string;
 	/** Include C4-PlantUML library import */
 	includeLibraryImport?: boolean;
+	/** ReactFlow viewport state (pan/zoom) to preserve */
+	viewport?: Viewport;
 }
 
 // ============================================================================
@@ -112,7 +114,7 @@ function toPlantUMLId(id: string): string {
 }
 
 /**
- * Convert a single C4 node to PlantUML element definition
+ * Convert a single C4 node to PlantUML element definition with position metadata
  */
 function nodeToPlantUML(node: Node, options: PlantUMLExportOptions): string | null {
 	const c4Type = getNodeC4Type(node);
@@ -141,7 +143,13 @@ function nodeToPlantUML(node: Node, options: PlantUMLExportOptions): string | nu
 		params.push(`"${escapeString(data.description)}"`);
 	}
 
-	return `${macro}(${params.join(", ")})`;
+	const nodeLine = `${macro}(${params.join(", ")})`;
+
+	// Add position metadata as comment for round-trip preservation
+	// Format: ' @pos(x,y,width,height)
+	const posMetadata = `' @pos(${node.position.x},${node.position.y},${node.width ?? 0},${node.height ?? 0})`;
+
+	return `${nodeLine}\n${posMetadata}`;
 }
 
 /**
@@ -188,7 +196,7 @@ export const exportC4ToPlantUML = (
 	options: PlantUMLExportOptions = {}
 ): Effect.Effect<string> =>
 	Effect.gen(function* () {
-		const opts: Required<PlantUMLExportOptions> = {
+		const opts: Required<Omit<PlantUMLExportOptions, "viewport">> = {
 			includeDescriptions: options.includeDescriptions ?? true,
 			includeTechnology: options.includeTechnology ?? true,
 			title: options.title ?? "C4 Diagram",
@@ -199,6 +207,11 @@ export const exportC4ToPlantUML = (
 
 		// Header
 		lines.push("@startuml");
+
+		// ReactFlow viewport metadata (preserved as comment for round-trip import)
+		if (options.viewport) {
+			lines.push(`' ReactFlow Viewport: ${JSON.stringify(options.viewport)}`);
+		}
 
 		// C4-PlantUML library import
 		if (opts.includeLibraryImport) {

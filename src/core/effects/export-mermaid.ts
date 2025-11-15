@@ -6,7 +6,7 @@
  */
 
 import { Effect } from "effect";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node, Edge, Viewport } from "@xyflow/react";
 import type { C4Type, NodeData } from "./node-operations";
 
 /**
@@ -25,6 +25,8 @@ export interface MermaidExportOptions {
 	includeTechnology?: boolean;
 	direction?: "TB" | "LR" | "BT" | "RL"; // Top-Bottom, Left-Right, etc.
 	title?: string;
+	/** ReactFlow viewport state (pan/zoom) to preserve */
+	viewport?: Viewport;
 }
 
 /**
@@ -85,7 +87,7 @@ function getNodeData(node: Node): NodeData {
 }
 
 /**
- * Convert a node to Mermaid syntax
+ * Convert a node to Mermaid syntax with position metadata
  */
 function nodeToMermaid(node: Node, options: MermaidExportOptions): string | null {
 	const c4Type = getNodeC4Type(node);
@@ -108,7 +110,13 @@ function nodeToMermaid(node: Node, options: MermaidExportOptions): string | null
 		fullLabel += `<br/><small>${desc}</small>`;
 	}
 
-	return `    ${id}${shape.start}"${fullLabel}"${shape.end}`;
+	const nodeLine = `    ${id}${shape.start}"${fullLabel}"${shape.end}`;
+
+	// Add position metadata as comment for round-trip preservation
+	// Format: %% @pos(x,y,width,height)
+	const posMetadata = `    %% @pos(${node.position.x},${node.position.y},${node.width ?? 0},${node.height ?? 0})`;
+
+	return `${nodeLine}\n${posMetadata}`;
 }
 
 /**
@@ -154,6 +162,11 @@ export const exportC4ToMermaid = (
 		// Add title as comment if provided
 		if (options.title) {
 			lines.push(`    %% ${options.title}`);
+		}
+
+		// ReactFlow viewport metadata (preserved as comment for round-trip import)
+		if (options.viewport) {
+			lines.push(`    %% ReactFlow Viewport: ${JSON.stringify(options.viewport)}`);
 		}
 
 		// Filter to only C4 nodes
