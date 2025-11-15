@@ -57,6 +57,7 @@ Effect.runSync(loadDataEffect);
 
 
 
+
 export function DataBar({ isOpen, onToggle, onLoadDiagram }: DataBarProps) {
 	const [activeTab, setActiveTab] = useState<DataBarTab>("diagrams");
 

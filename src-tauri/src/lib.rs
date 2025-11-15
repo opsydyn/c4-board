@@ -223,10 +223,7 @@ fn save_custom_icon(
 }
 
 #[tauri::command]
-async fn start_load_test(
-    app: tauri::AppHandle,
-    config: LoadTestConfig,
-) -> Result<(), String> {
+async fn start_load_test(app: tauri::AppHandle, config: LoadTestConfig) -> Result<(), String> {
     // Validate config
     config.validate()?;
 
@@ -436,6 +433,12 @@ pub fn run() {
             version: 10,
             description: "add_response_body_json",
             sql: include_str!("../migrations/010_add_response_body_json.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "add_ddd_support",
+            sql: include_str!("../migrations/011_add_ddd_support.sql"),
             kind: MigrationKind::Up,
         },
     ];

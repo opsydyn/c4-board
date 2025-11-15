@@ -69,6 +69,12 @@ CREATE TABLE IF NOT EXISTS nodes_new (
     FOREIGN KEY (parent_id) REFERENCES nodes(id) ON DELETE CASCADE
 );
 
+-- Ensure existing parent references are valid before copying rows
+UPDATE nodes
+SET parent_id = NULL
+WHERE parent_id IS NOT NULL
+  AND parent_id NOT IN (SELECT id FROM nodes);
+
 -- Copy existing data (all existing nodes are C4 domain)
 INSERT INTO nodes_new (
     id, diagram_id, domain, type, label, technology, description,
