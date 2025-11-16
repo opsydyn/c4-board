@@ -19,6 +19,7 @@ import {
 	ReactFlow,
 	ReactFlowProvider,
 	ConnectionMode,
+	type EdgeMouseHandler,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -61,6 +62,14 @@ import { ToggleButton } from "react-aria-components";
 import { CaretDownIcon, CaretUpIcon, FileCodeIcon } from "@phosphor-icons/react";
 import { SearchBox } from "./SearchBox";
 import { EdgeLabelEditor } from "./EdgeLabelEditor";
+import {
+	createNodeContextMenu,
+	createEdgeContextMenu,
+	createCanvasContextMenu,
+	showContextMenu,
+	type ContextMenuAction,
+} from "../utils/contextMenu";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
 
 interface C4CanvasProps {
 	nodes: Node[];
@@ -77,6 +86,7 @@ interface C4CanvasProps {
 	onExportMermaid?: (viewport: Viewport) => void;
 	onImportDiagram?: (content: string, format: "plantuml" | "mermaid", mode: "replace" | "merge") => void;
 	viewportToApply?: Viewport | null;
+	onContextMenuAction?: (action: ContextMenuAction, nodeId?: string, edgeId?: string) => void;
 }
 
 export interface C4CanvasRef {
@@ -100,6 +110,7 @@ function C4CanvasInner(
 		onExportMermaid,
 		onImportDiagram,
 		viewportToApply,
+		onContextMenuAction,
 	}: C4CanvasProps,
 	ref: React.Ref<C4CanvasRef>,
 ) {
@@ -241,6 +252,66 @@ function C4CanvasInner(
 		setSelectedEdgeId(null);
 	}, []);
 
+	// Context menu handlers
+	const handleNodeContextMenu = useCallback<NodeMouseHandler>(
+		async (event, node) => {
+			event.preventDefault();
+
+			if (!onContextMenuAction) return;
+
+			const menu = await createNodeContextMenu((action) => {
+				onContextMenuAction(action, node.id);
+			});
+
+			const position = new PhysicalPosition(event.clientX, event.clientY);
+			await showContextMenu(menu, position);
+		},
+		[onContextMenuAction],
+	);
+
+	const handleEdgeContextMenu = useCallback<EdgeMouseHandler>(
+		async (event, edge) => {
+			event.preventDefault();
+
+			if (!onContextMenuAction) return;
+
+			const menu = await createEdgeContextMenu((action) => {
+				onContextMenuAction(action, undefined, edge.id);
+			});
+
+			const position = new PhysicalPosition(event.clientX, event.clientY);
+			await showContextMenu(menu, position);
+		},
+		[onContextMenuAction],
+	);
+
+	const handlePaneContextMenu = useCallback(
+		(event: MouseEvent | React.MouseEvent) => {
+			event.preventDefault();
+
+			if (!onContextMenuAction) return;
+
+			// Get the ReactFlow viewport to convert screen coordinates to canvas coordinates
+			const viewport = getViewport();
+			const canvasX = (event.clientX - viewport.x) / viewport.zoom;
+			const canvasY = (event.clientY - viewport.y) / viewport.zoom;
+
+			// Run async operations without blocking
+			(async () => {
+				const menu = await createCanvasContextMenu(
+					(action) => {
+						onContextMenuAction(action);
+					},
+					{ x: canvasX, y: canvasY },
+				);
+
+				const position = new PhysicalPosition(event.clientX, event.clientY);
+				await showContextMenu(menu, position);
+			})().catch(console.error);
+		},
+		[onContextMenuAction, getViewport],
+	);
+
 	return (
 		<div className={styles.canvasStack}>
 			{isCommandBarOpen ? (
@@ -311,7 +382,10 @@ function C4CanvasInner(
 					{...(onConnect && { onConnect })}
 					{...(onNodeClick && { onNodeClick })}
 					onNodeDoubleClick={handleNodeDoubleClick}
+					onNodeContextMenu={handleNodeContextMenu}
 					onEdgeClick={handleEdgeClick}
+					onEdgeContextMenu={handleEdgeContextMenu}
+					onPaneContextMenu={handlePaneContextMenu}
 					nodeTypes={nodeTypes}
 					defaultEdgeOptions={defaultEdgeOptions}
 					fitView

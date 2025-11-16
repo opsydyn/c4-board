@@ -44,7 +44,7 @@ export function GlobalMenuListener() {
 			// File menu - navigation
 			await register("menu:new-board", () => {
 				console.log("📋 Menu: New Board");
-				if (window.location.pathname !== "/canvas") {
+				if (window.location.pathname !== "/") {
 					navigateToCanvas({ action: "new-board" });
 				}
 			});

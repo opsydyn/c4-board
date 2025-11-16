@@ -16,6 +16,76 @@ import type { Edge } from "@xyflow/react";
 import { Data, Effect,  pipe } from "effect";
 
 /**
+ * Communication protocols supported by edges
+ */
+export type EdgeProtocol =
+	| "http"
+	| "https"
+	| "grpc"
+	| "graphql"
+	| "websocket"
+	| "kafka"
+	| "rabbitmq"
+	| "redis"
+	| "rest"
+	| "soap"
+	| "tcp"
+	| "udp"
+	| "custom";
+
+/**
+ * Edge communication style
+ */
+export type EdgeCommunicationStyle = "synchronous" | "asynchronous" | "optional";
+
+/**
+ * Visual style mapping for edge communication
+ */
+export const EDGE_STYLE_MAP: Record<EdgeCommunicationStyle, string> = {
+	synchronous: "0", // Solid line
+	asynchronous: "5,5", // Dashed line
+	optional: "2,2", // Dotted line
+};
+
+/**
+ * Protocol color coding for better visual distinction
+ */
+export const PROTOCOL_COLOR_MAP: Record<EdgeProtocol, string> = {
+	http: "#4CAF50",
+	https: "#2E7D32",
+	grpc: "#1976D2",
+	graphql: "#E91E63",
+	websocket: "#9C27B0",
+	kafka: "#000000",
+	rabbitmq: "#FF6600",
+	redis: "#DC382D",
+	rest: "#4CAF50",
+	soap: "#607D8B",
+	tcp: "#795548",
+	udp: "#FF9800",
+	custom: "#9E9E9E",
+};
+
+/**
+ * Edge metadata for smart edges
+ */
+export interface EdgeMetadata {
+	protocol?: EdgeProtocol;
+	communicationStyle?: EdgeCommunicationStyle;
+	requestVolume?: number; // Requests per second
+	latency?: number; // Average latency in ms
+	notes?: string; // Additional notes
+}
+
+/**
+ * Extended edge data with metadata
+ */
+export interface EdgeData {
+	createdAt: number;
+	metadata?: EdgeMetadata;
+}
+
+/**
  * Validation errors for edge operations
  */
 export class EdgeValidationError extends Data.TaggedError("EdgeValidationError")<{
@@ -75,7 +145,7 @@ export const validateEdgeConnection = (
  * Create a new edge between two nodes
  * Pure function - no Effect wrapper needed
  */
-const createEdge = (source: string, target: string, label: string = "uses"): Edge => {
+const createEdge = (source: string, target: string, label: string = "uses", metadata?: EdgeMetadata): Edge => {
 	const createdAt = Date.now();
 	return {
 		id: `edge-${Date.now()}`,
@@ -85,7 +155,8 @@ const createEdge = (source: string, target: string, label: string = "uses"): Edg
 		type: "default",
 		data: {
 			createdAt,
-		},
+			metadata,
+		} as EdgeData,
 	};
 };
 

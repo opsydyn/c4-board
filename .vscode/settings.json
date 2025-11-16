@@ -23,7 +23,7 @@
   "editor.showUnused": true,
 
 
-   "errorLens.enabled": true,
+  "errorLens.enabled": true,
   "errorLens.messageEnabled": true,          // show the text inline
   "errorLens.messageBackgroundMode": "line", // red line like your screenshot
   "errorLens.fontSize": "11px",

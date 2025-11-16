@@ -67,10 +67,20 @@ export type CanvasEvent =
 			updates: Partial<NodeOps.NodeData>;
 	  }
 	| { type: "DELETE_NODE"; nodeId: string }
+	| { type: "DUPLICATE_NODE"; nodeId: string }
+	| { type: "CHANGE_NODE_TYPE"; nodeId: string; nodeType: string }
 	| { type: "CONNECT_NODES"; source: string; target: string; label?: string }
 	| { type: "UPDATE_EDGE_LABEL"; edgeId: string; label: string }
+	| { type: "DELETE_EDGE"; edgeId: string }
+	| { type: "CHANGE_EDGE_STYLE"; edgeId: string; style: "solid" | "dashed" | "dotted" }
+	| { type: "REVERSE_EDGE_DIRECTION"; edgeId: string }
 	| { type: "NODES_CHANGED"; changes: NodeChange[] }
 	| { type: "EDGES_CHANGED"; changes: EdgeChange[] }
+	// Context menu events
+	| { type: "SHOW_NODE_CONTEXT_MENU"; nodeId: string; position: { x: number; y: number } }
+	| { type: "SHOW_EDGE_CONTEXT_MENU"; edgeId: string; position: { x: number; y: number } }
+	| { type: "SHOW_CANVAS_CONTEXT_MENU"; position: { x: number; y: number } }
+	| { type: "ADD_NODE_AT_POSITION"; nodeType: string; position: { x: number; y: number } }
 	// Persistence events
 	| { type: "CREATE_NEW_DIAGRAM"; name: string; description?: string }
 	| { type: "CREATE_NEW_BOARD" }
@@ -938,6 +948,121 @@ const canvasMachineDefinition = setup({
 				}
 			},
 		}),
+
+		// === Context Menu Actions ===
+
+		duplicateNode: assign({
+			nodes: ({ context, event }) => {
+				if (event.type !== "DUPLICATE_NODE") return context.nodes;
+
+				const nodeToDuplicate = context.nodes.find((n) => n.id === event.nodeId);
+				if (!nodeToDuplicate) return context.nodes;
+
+				// TODO: Implement duplicateNode Effect function
+				// For now, manually duplicate
+				const newNodeId = `node-${context.nodeCounter}`;
+				const newNode = {
+					...nodeToDuplicate,
+					id: newNodeId,
+					position: {
+						x: nodeToDuplicate.position.x + 50,
+						y: nodeToDuplicate.position.y + 50,
+					},
+				};
+
+				return [...context.nodes, newNode];
+			},
+			nodeCounter: ({ context, event }) => {
+				if (event.type !== "DUPLICATE_NODE") return context.nodeCounter;
+				return context.nodeCounter + 1;
+			},
+		}),
+
+		changeNodeType: assign({
+			nodes: ({ context, event }) => {
+				if (event.type !== "CHANGE_NODE_TYPE") return context.nodes;
+
+				// TODO: Implement changeNodeType Effect function
+				// For now, update the type directly
+				return context.nodes.map((node) =>
+					node.id === event.nodeId
+						? { ...node, type: event.nodeType }
+						: node
+				);
+			},
+		}),
+
+		deleteEdge: assign({
+			edges: ({ context, event }) => {
+				if (event.type !== "DELETE_EDGE") return context.edges;
+				return context.edges.filter((edge) => edge.id !== event.edgeId);
+			},
+		}),
+
+		changeEdgeStyle: assign({
+			edges: ({ context, event }) => {
+				if (event.type !== "CHANGE_EDGE_STYLE") return context.edges;
+
+				// TODO: Implement updateEdgeStyle Effect function
+				// For now, update the style directly
+				return context.edges.map((edge) =>
+					edge.id === event.edgeId
+						? {
+								...edge,
+								style: {
+									...edge.style,
+									strokeDasharray: event.style === "solid" ? "0" : event.style === "dashed" ? "5,5" : "2,2"
+								}
+							}
+						: edge
+				);
+			},
+		}),
+
+		reverseEdgeDirection: assign({
+			edges: ({ context, event }) => {
+				if (event.type !== "REVERSE_EDGE_DIRECTION") return context.edges;
+
+				// TODO: Implement reverseEdge Effect function
+				// For now, reverse manually
+				return context.edges.map((edge) => {
+					if (edge.id !== event.edgeId) return edge;
+
+					return {
+						...edge,
+						source: edge.target,
+						target: edge.source,
+						sourceHandle: edge.targetHandle ?? null,
+						targetHandle: edge.sourceHandle ?? null,
+					};
+				});
+			},
+		}),
+
+		addNodeAtPosition: assign({
+			nodes: ({ context, event }) => {
+				if (event.type !== "ADD_NODE_AT_POSITION") return context.nodes;
+
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: event.nodeType as NodeOps.NodeType,
+						label: event.nodeType as string,
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					})
+				);
+
+				// Override position with the clicked position
+				newNode.position = event.position;
+
+				return [...context.nodes, newNode];
+			},
+			nodeCounter: ({ context, event }) => {
+				if (event.type !== "ADD_NODE_AT_POSITION") return context.nodeCounter;
+				return context.nodeCounter + 1;
+			},
+		}),
 	},
 }).createMachine({
 	id: "canvas",
@@ -1052,11 +1177,29 @@ const canvasMachineDefinition = setup({
 				DELETE_NODE: {
 					actions: "deleteNode",
 				},
+				DUPLICATE_NODE: {
+					actions: "duplicateNode",
+				},
+				CHANGE_NODE_TYPE: {
+					actions: "changeNodeType",
+				},
 				CONNECT_NODES: {
 					actions: "connectNodes",
 				},
 				UPDATE_EDGE_LABEL: {
 					actions: "updateEdgeLabel",
+				},
+				DELETE_EDGE: {
+					actions: "deleteEdge",
+				},
+				CHANGE_EDGE_STYLE: {
+					actions: "changeEdgeStyle",
+				},
+				REVERSE_EDGE_DIRECTION: {
+					actions: "reverseEdgeDirection",
+				},
+				ADD_NODE_AT_POSITION: {
+					actions: "addNodeAtPosition",
 				},
 				NODES_CHANGED: {
 					actions: "updateNodesFromReactFlow",

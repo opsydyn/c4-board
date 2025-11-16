@@ -45,6 +45,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { NodeData } from "../../core/effects/node-operations";
 import { ToggleButton } from "react-aria-components";
 import { CaretLeftIcon, CaretRightIcon, CaretUpIcon } from "@phosphor-icons/react";
+import type { ContextMenuAction } from "../utils/contextMenu";
 
 type UseMachineParam = Parameters<typeof useMachine>[0];
 
@@ -315,6 +316,91 @@ export function C4CanvasContainer() {
 	const onUpdateEdgeLabel = useCallback(
 		(edgeId: string, label: string) => {
 			send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
+		},
+		[send],
+	);
+
+	// Handle context menu actions
+	const onContextMenuAction = useCallback(
+		(action: ContextMenuAction, nodeId?: string, edgeId?: string) => {
+			switch (action.type) {
+				case "edit":
+					if (nodeId) {
+						send({ type: "SELECT_NODE", nodeId });
+					}
+					break;
+
+				case "duplicate":
+					if (nodeId) {
+						send({ type: "DUPLICATE_NODE", nodeId });
+					}
+					break;
+
+				case "delete":
+					if (nodeId) {
+						send({ type: "DELETE_NODE", nodeId });
+					}
+					break;
+
+				case "change-type":
+					if (nodeId) {
+						send({ type: "CHANGE_NODE_TYPE", nodeId, nodeType: action.nodeType });
+					}
+					break;
+
+				case "add-node":
+					send({
+						type: "ADD_NODE_AT_POSITION",
+						nodeType: action.nodeType,
+						position: action.position ?? { x: 100, y: 100 },
+					});
+					break;
+
+				case "auto-layout":
+					send({ type: "AUTO_LAYOUT" });
+					break;
+
+				case "export":
+					// Open export modal - use current viewport
+					if (canvasRef.current) {
+						send({ type: "EXPORT_PLANTUML" });
+					}
+					break;
+
+				case "edit-label":
+					if (edgeId) {
+						send({ type: "UPDATE_EDGE_LABEL", edgeId, label: "" });
+					}
+					break;
+
+				case "change-edge-style":
+					if (edgeId) {
+						send({ type: "CHANGE_EDGE_STYLE", edgeId, style: action.style });
+					}
+					break;
+
+				case "reverse-direction":
+					if (edgeId) {
+						send({ type: "REVERSE_EDGE_DIRECTION", edgeId });
+					}
+					break;
+
+				case "delete-edge":
+					if (edgeId) {
+						send({ type: "DELETE_EDGE", edgeId });
+					}
+					break;
+
+				case "paste":
+					// TODO: Implement paste functionality
+					console.log("Paste action not yet implemented");
+					break;
+
+				case "add-connected":
+					// TODO: Implement add connected node
+					console.log("Add connected node not yet implemented");
+					break;
+			}
 		},
 		[send],
 	);
@@ -704,6 +790,7 @@ export function C4CanvasContainer() {
 						send({ type: "IMPORT_DIAGRAM", content, format, mode })
 					}
 					viewportToApply={state.context.viewport}
+					onContextMenuAction={onContextMenuAction}
 				/>
 				{!isSidebarOpen && (
 					<ToggleButton
