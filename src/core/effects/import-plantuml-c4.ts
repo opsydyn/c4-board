@@ -8,6 +8,7 @@
 import { Effect } from "effect";
 import type { Node, Edge, Viewport } from "@xyflow/react";
 import type { C4Type, NodeData } from "./node-operations";
+import type { EdgeData, EdgeMetadata, EdgeProtocol, EdgeCommunicationStyle, EdgeAnimationSpeed } from "./edge-operations";
 
 /**
  * PlantUML C4 macro to C4Type mapping
@@ -42,6 +43,7 @@ interface ParsedRelationship {
 	source: string;
 	target: string;
 	label: string;
+	metadata?: EdgeMetadata | undefined;
 }
 
 export interface ImportResult {
@@ -160,16 +162,69 @@ function createNodeFromElement(element: ParsedElement, index: number): Node {
 }
 
 /**
- * Generate ReactFlow edge from parsed relationship
+ * Generate ReactFlow edge from parsed relationship with metadata
  */
 function createEdgeFromRelationship(relationship: ParsedRelationship, index: number): Edge {
+	const edgeData: EdgeData = {
+		createdAt: Date.now(),
+		...(relationship.metadata && { metadata: relationship.metadata }),
+	};
+
 	return {
 		id: `edge-${relationship.source}-${relationship.target}-${index}`,
 		source: relationship.source,
 		target: relationship.target,
 		label: relationship.label,
 		type: "smoothstep",
+		data: edgeData,
 	};
+}
+
+/**
+ * Parse OVL metadata comment
+ * Example: ' @ovl: protocol=grpc, style=synchronous, volume=100, latency=50, animation=auto
+ */
+function parseOVLMetadata(line: string): EdgeMetadata | null {
+	const match = line.match(/\' @ovl:\s*(.+)/);
+	if (!match) return null;
+
+	const [, metadataStr] = match;
+	if (!metadataStr) return null;
+
+	const metadata: EdgeMetadata = {};
+	const pairs = metadataStr.split(",").map((p) => p.trim());
+
+	for (const pair of pairs) {
+		const [key, value] = pair.split("=").map((s) => s.trim());
+		if (!key || !value) continue;
+
+		switch (key) {
+			case "protocol":
+				metadata.protocol = value as EdgeProtocol;
+				break;
+			case "style":
+				metadata.communicationStyle = value as EdgeCommunicationStyle;
+				break;
+			case "volume":
+				metadata.requestVolume = parseFloat(value);
+				break;
+			case "latency":
+				metadata.latency = parseFloat(value);
+				break;
+			case "animation":
+				metadata.animationSpeed = value as EdgeAnimationSpeed;
+				break;
+			case "notes":
+				// Unescape notes (reverse of escapeString)
+				metadata.notes = value
+					.replace(/\\n/g, "\n")
+					.replace(/\\"/g, '"')
+					.replace(/\\\\/g, "\\");
+				break;
+		}
+	}
+
+	return Object.keys(metadata).length > 0 ? metadata : null;
 }
 
 /**
@@ -187,7 +242,10 @@ export const importPlantUMLC4 = (
 		const relationships: ParsedRelationship[] = [];
 		let viewport: Viewport | undefined;
 
-		for (const line of lines) {
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			if (!line) continue;
+
 			// Parse ReactFlow viewport metadata from comment
 			if (line.startsWith("' ReactFlow Viewport:")) {
 				try {
@@ -214,8 +272,8 @@ export const importPlantUMLC4 = (
 				continue;
 			}
 
-			// Skip empty lines, comments, and directives
-			if (!line || line.startsWith("'") || line.startsWith("@") || line.startsWith("!")) {
+			// Skip empty lines, comments (except @ovl), and directives
+			if (line.startsWith("@") || line.startsWith("!")) {
 				continue;
 			}
 
@@ -229,6 +287,17 @@ export const importPlantUMLC4 = (
 			// Try to parse as relationship
 			const relationship = parseRelationship(line);
 			if (relationship) {
+				// Check if next line has OVL metadata
+				if (i + 1 < lines.length) {
+					const nextLine = lines[i + 1]?.trim();
+					if (nextLine?.startsWith("' @ovl:")) {
+						const metadata = parseOVLMetadata(nextLine);
+						if (metadata) {
+							relationship.metadata = metadata;
+						}
+						i++; // Skip the metadata line in next iteration
+					}
+				}
 				relationships.push(relationship);
 			}
 		}

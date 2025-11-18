@@ -54,6 +54,7 @@ import { ApplicationServiceNode } from "./nodes/ApplicationServiceNode";
 import { IntegrationEventNode } from "./nodes/IntegrationEventNode";
 import { ACLNode } from "./nodes/ACLNode";
 import { SagaNode } from "./nodes/SagaNode";
+import { CustomAnimatedEdge } from "./CustomAnimatedEdge";
 import * as styles from "./styles.css";
 import { theme } from "../../styles/theme.css";
 import { DownloadButton } from "./DownloadButton";
@@ -61,7 +62,7 @@ import { ImportButton } from "./ImportButton";
 import { ToggleButton } from "react-aria-components";
 import { CaretDownIcon, CaretUpIcon, FileCodeIcon } from "@phosphor-icons/react";
 import { SearchBox } from "./SearchBox";
-import { EdgeLabelEditor } from "./EdgeLabelEditor";
+import { EdgeMetadataEditor } from "./EdgeMetadataEditor";
 import {
 	createNodeContextMenu,
 	createEdgeContextMenu,
@@ -70,6 +71,14 @@ import {
 	type ContextMenuAction,
 } from "../utils/contextMenu";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
+import {
+	getEdgeStyle,
+	getEdgeColor,
+	getEdgeThickness,
+	getEdgeAnimation,
+	type EdgeData,
+	type EdgeMetadata,
+} from "../../core/effects/edge-operations";
 
 interface C4CanvasProps {
 	nodes: Node[];
@@ -79,6 +88,7 @@ interface C4CanvasProps {
 	onConnect?: OnConnect;
 	onNodeClick?: NodeMouseHandler<Node>;
 	onUpdateEdgeLabel?: (edgeId: string, label: string) => void;
+	onUpdateEdgeMetadata?: (edgeId: string, label: string, metadata: EdgeMetadata) => void;
 	isCommandBarOpen: boolean;
 	onToggleCommandBar: (open: boolean) => void;
 	onSelectNode: (nodeId: string) => void;
@@ -103,6 +113,7 @@ function C4CanvasInner(
 		onConnect,
 		onNodeClick,
 		onUpdateEdgeLabel,
+		onUpdateEdgeMetadata,
 		isCommandBarOpen,
 		onToggleCommandBar,
 		onSelectNode,
@@ -179,6 +190,50 @@ function C4CanvasInner(
 		[],
 	);
 
+	// Define custom edge types
+	const edgeTypes = useMemo(
+		() => ({
+			animated: CustomAnimatedEdge,
+		}),
+		[],
+	);
+
+	// Enrich edges with metadata-based styling and animation
+	const enrichedEdges = useMemo(() => {
+		return edges.map((edge) => {
+			const edgeData = edge.data as EdgeData | undefined;
+			const metadata = edgeData?.metadata;
+
+			// Get style properties based on metadata
+			const strokeDasharray = getEdgeStyle(metadata?.communicationStyle);
+			const stroke = getEdgeColor(metadata?.protocol);
+			const strokeWidth = getEdgeThickness(metadata?.requestVolume);
+			const animation = getEdgeAnimation(metadata);
+
+			return {
+				...edge,
+				// Use custom edge type when animation is enabled for advanced effects
+				type: animation.animated ? "animated" : "smoothstep",
+				animated: animation.animated,
+				style: {
+					...edge.style,
+					stroke,
+					strokeWidth,
+					strokeDasharray,
+					...(animation.duration && {
+						animationDuration: `${animation.duration}ms`,
+					}),
+				},
+				markerEnd: {
+					type: "arrowclosed" as const,
+					width: 20,
+					height: 20,
+					color: stroke,
+				},
+			};
+		});
+	}, [edges]);
+
 	// Default edge styling for C4 relationships with directional arrows
 	const defaultEdgeOptions = useMemo(
 		() => ({
@@ -236,14 +291,17 @@ function C4CanvasInner(
 		[],
 	);
 
-	// Handle saving edge label
-	const handleSaveEdgeLabel = useCallback(
-		(edgeId: string, label: string) => {
-			if (onUpdateEdgeLabel) {
+	// Handle saving edge label and metadata
+	const handleSaveEdgeMetadata = useCallback(
+		(edgeId: string, label: string, metadata: EdgeMetadata) => {
+			if (onUpdateEdgeMetadata) {
+				onUpdateEdgeMetadata(edgeId, label, metadata);
+			} else if (onUpdateEdgeLabel) {
+				// Fallback to label-only update
 				onUpdateEdgeLabel(edgeId, label);
 			}
 		},
-		[onUpdateEdgeLabel],
+		[onUpdateEdgeMetadata, onUpdateEdgeLabel],
 	);
 
 	// Handle closing edge label editor
@@ -376,7 +434,7 @@ function C4CanvasInner(
 				<ReactFlow
 					proOptions={{ hideAttribution: true }}
 					nodes={nodes}
-					edges={edges}
+					edges={enrichedEdges}
 					{...(onNodesChange && { onNodesChange })}
 					{...(onEdgesChange && { onEdgesChange })}
 					{...(onConnect && { onConnect })}
@@ -387,6 +445,7 @@ function C4CanvasInner(
 					onEdgeContextMenu={handleEdgeContextMenu}
 					onPaneContextMenu={handlePaneContextMenu}
 					nodeTypes={nodeTypes}
+					edgeTypes={edgeTypes}
 					defaultEdgeOptions={defaultEdgeOptions}
 					fitView
 					snapToGrid
@@ -434,17 +493,21 @@ function C4CanvasInner(
 					/>
 				</ReactFlow>
 			</div>
-			{selectedEdgeId && (
-				<EdgeLabelEditor
-					edgeId={selectedEdgeId}
-					currentLabel={
-						String(edges.find((e) => e.id === selectedEdgeId)?.label ?? "uses")
-					}
-					isOpen={isEdgeLabelEditorOpen}
-					onClose={handleCloseEdgeLabelEditor}
-					onSave={handleSaveEdgeLabel}
-				/>
-			)}
+			{selectedEdgeId && (() => {
+				const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
+				const edgeData = selectedEdge?.data as EdgeData | undefined;
+
+				return (
+					<EdgeMetadataEditor
+						edgeId={selectedEdgeId}
+						currentLabel={String(selectedEdge?.label ?? "uses")}
+						currentMetadata={edgeData?.metadata}
+						isOpen={isEdgeLabelEditorOpen}
+						onClose={handleCloseEdgeLabelEditor}
+						onSave={handleSaveEdgeMetadata}
+					/>
+				);
+			})()}
 		</div>
 	);
 }

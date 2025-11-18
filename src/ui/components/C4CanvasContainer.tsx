@@ -46,6 +46,7 @@ import type { NodeData } from "../../core/effects/node-operations";
 import { ToggleButton } from "react-aria-components";
 import { CaretLeftIcon, CaretRightIcon, CaretUpIcon } from "@phosphor-icons/react";
 import type { ContextMenuAction } from "../utils/contextMenu";
+import type { EdgeMetadata } from "../../core/effects/edge-operations";
 
 type UseMachineParam = Parameters<typeof useMachine>[0];
 
@@ -316,6 +317,17 @@ export function C4CanvasContainer() {
 	const onUpdateEdgeLabel = useCallback(
 		(edgeId: string, label: string) => {
 			send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
+		},
+		[send],
+	);
+
+	// Handle edge metadata updates
+	const onUpdateEdgeMetadata = useCallback(
+		(edgeId: string, label: string, metadata: EdgeMetadata) => {
+			// First update label
+			send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
+			// Then update metadata
+			send({ type: "UPDATE_EDGE_METADATA", edgeId, metadata });
 		},
 		[send],
 	);
@@ -781,6 +793,7 @@ export function C4CanvasContainer() {
 					onConnect={onConnect}
 					onNodeClick={onNodeClick}
 					onUpdateEdgeLabel={onUpdateEdgeLabel}
+					onUpdateEdgeMetadata={onUpdateEdgeMetadata}
 					isCommandBarOpen={isCommandBarOpen}
 					onToggleCommandBar={setCommandBarOpen}
 					onSelectNode={handleSelectNode}

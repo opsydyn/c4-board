@@ -20,6 +20,7 @@ import * as PlantUMLExport from "../../core/effects/export-plantuml-c4";
 import * as MermaidExport from "../../core/effects/export-mermaid";
 import * as PlantUMLImport from "../../core/effects/import-plantuml-c4";
 import * as MermaidImport from "../../core/effects/import-mermaid";
+import type { EdgeMetadata } from "../../core/effects/edge-operations";
 
 export type DiagramDomain = "c4" | "ddd";
 
@@ -71,6 +72,7 @@ export type CanvasEvent =
 	| { type: "CHANGE_NODE_TYPE"; nodeId: string; nodeType: string }
 	| { type: "CONNECT_NODES"; source: string; target: string; label?: string }
 	| { type: "UPDATE_EDGE_LABEL"; edgeId: string; label: string }
+	| { type: "UPDATE_EDGE_METADATA"; edgeId: string; metadata: EdgeMetadata }
 	| { type: "DELETE_EDGE"; edgeId: string }
 	| { type: "CHANGE_EDGE_STYLE"; edgeId: string; style: "solid" | "dashed" | "dotted" }
 	| { type: "REVERSE_EDGE_DIRECTION"; edgeId: string }
@@ -583,6 +585,32 @@ const canvasMachineDefinition = setup({
 							context.edges,
 							event.edgeId,
 							event.label,
+						);
+					}).pipe(
+						Effect.catchAll((error) => {
+							if (error instanceof EdgeOps.EdgeValidationError) {
+								console.warn(`⚠️ ${error.message}`);
+							}
+							return Effect.succeed(context.edges); // Return unchanged edges on error
+						}),
+					),
+				);
+
+				return result;
+			},
+		}),
+
+		updateEdgeMetadata: assign({
+			edges: ({ context, event }) => {
+				if (event.type !== "UPDATE_EDGE_METADATA") return context.edges;
+
+				// Use Effect service to update metadata
+				const result = Effect.runSync(
+					Effect.gen(function* () {
+						return yield* EdgeOps.updateEdgeMetadata(
+							context.edges,
+							event.edgeId,
+							event.metadata,
 						);
 					}).pipe(
 						Effect.catchAll((error) => {
@@ -1188,6 +1216,9 @@ const canvasMachineDefinition = setup({
 				},
 				UPDATE_EDGE_LABEL: {
 					actions: "updateEdgeLabel",
+				},
+				UPDATE_EDGE_METADATA: {
+					actions: "updateEdgeMetadata",
 				},
 				DELETE_EDGE: {
 					actions: "deleteEdge",

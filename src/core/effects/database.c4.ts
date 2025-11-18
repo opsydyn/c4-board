@@ -110,6 +110,7 @@ export interface Edge {
 	source: string;
 	target: string;
 	label: string | null;
+	metadata: string | null; // JSON string containing EdgeMetadata
 	created_at: number;
 	updated_at: number;
 }
@@ -203,6 +204,7 @@ export interface CreateEdgeInput {
 	source: string;
 	target: string;
 	label?: string;
+	metadata?: string; // JSON string containing EdgeMetadata
 }
 
 export interface UpsertCustomIconInput {
@@ -513,14 +515,15 @@ export const createEdge = (input: CreateEdgeInput) =>
 		const now = Date.now();
 
 		yield* service.execute(
-			`INSERT INTO edges (id, diagram_id, source, target, label, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO edges (id, diagram_id, source, target, label, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				input.id,
 				input.diagram_id,
 				input.source,
 				input.target,
 				input.label ?? null,
+				input.metadata ?? null,
 				now,
 				now,
 			],
@@ -532,6 +535,7 @@ export const createEdge = (input: CreateEdgeInput) =>
 			source: input.source,
 			target: input.target,
 			label: input.label ?? null,
+			metadata: input.metadata ?? null,
 			created_at: now,
 			updated_at: now,
 		} satisfies Edge;
@@ -562,6 +566,66 @@ export const updateEdgeLabel = (edgeId: string, label: string) =>
 		yield* service.execute(
 			`UPDATE edges SET label = ?, updated_at = ? WHERE id = ?`,
 			[label, now, edgeId],
+		);
+
+		// Return updated edge
+		const rows = yield* service.query<Edge>(
+			`SELECT * FROM edges WHERE id = ?`,
+			[edgeId],
+		);
+
+		if (rows.length === 0) {
+			return yield* Effect.fail(
+				new Error(`Edge ${edgeId} not found after update`),
+			);
+		}
+
+		return rows[0];
+	});
+
+export interface UpdateEdgeInput {
+	label?: string | undefined;
+	metadata?: string | undefined; // JSON string containing EdgeMetadata
+}
+
+export const updateEdge = (edgeId: string, input: UpdateEdgeInput) =>
+	Effect.gen(function* () {
+		const service = yield* DatabaseService;
+		const now = Date.now();
+
+		// Build update query dynamically based on provided fields
+		const updates: string[] = [];
+		const values: (string | number)[] = [];
+
+		if (input.label !== undefined) {
+			updates.push("label = ?");
+			values.push(input.label);
+		}
+
+		if (input.metadata !== undefined) {
+			updates.push("metadata = ?");
+			values.push(input.metadata);
+		}
+
+		if (updates.length === 0) {
+			// Nothing to update, just return the current edge
+			const rows = yield* service.query<Edge>(
+				`SELECT * FROM edges WHERE id = ?`,
+				[edgeId],
+			);
+			if (rows.length === 0) {
+				return yield* Effect.fail(new Error(`Edge ${edgeId} not found`));
+			}
+			return rows[0];
+		}
+
+		updates.push("updated_at = ?");
+		values.push(now);
+		values.push(edgeId);
+
+		yield* service.execute(
+			`UPDATE edges SET ${updates.join(", ")} WHERE id = ?`,
+			values,
 		);
 
 		// Return updated edge

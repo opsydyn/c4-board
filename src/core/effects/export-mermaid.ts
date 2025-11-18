@@ -8,6 +8,7 @@
 import { Effect } from "effect";
 import type { Node, Edge, Viewport } from "@xyflow/react";
 import type { C4Type, NodeData } from "./node-operations";
+import type { EdgeData } from "./edge-operations";
 
 /**
  * Mermaid shape syntax for C4 element types
@@ -120,7 +121,7 @@ function nodeToMermaid(node: Node, options: MermaidExportOptions): string | null
 }
 
 /**
- * Convert an edge to Mermaid relationship syntax
+ * Convert an edge to Mermaid relationship syntax with metadata
  */
 function edgeToMermaid(edge: Edge, nodes: Node[]): string | null {
 	// Find source and target nodes
@@ -137,8 +138,32 @@ function edgeToMermaid(edge: Edge, nodes: Node[]): string | null {
 	// Edge label (default to "uses" if not provided)
 	const label = edge.label ? escapeString(String(edge.label)) : "uses";
 
-	// Mermaid arrow with label: A -->|label| B
-	return `    ${sourceId} -->|"${label}"| ${targetId}`;
+	// Get edge metadata
+	const edgeData = edge.data as EdgeData | undefined;
+	const metadata = edgeData?.metadata;
+
+	const lines: string[] = [];
+
+	// Main relationship line
+	lines.push(`    ${sourceId} -->|"${label}"| ${targetId}`);
+
+	// Add OVL metadata as comment for round-trip preservation
+	if (metadata) {
+		const metaParts: string[] = [];
+
+		if (metadata.protocol) metaParts.push(`protocol=${metadata.protocol}`);
+		if (metadata.communicationStyle) metaParts.push(`style=${metadata.communicationStyle}`);
+		if (metadata.requestVolume !== undefined) metaParts.push(`volume=${metadata.requestVolume}`);
+		if (metadata.latency !== undefined) metaParts.push(`latency=${metadata.latency}`);
+		if (metadata.animationSpeed) metaParts.push(`animation=${metadata.animationSpeed}`);
+		if (metadata.notes) metaParts.push(`notes=${escapeString(metadata.notes)}`);
+
+		if (metaParts.length > 0) {
+			lines.push(`    %% @ovl: ${metaParts.join(", ")}`);
+		}
+	}
+
+	return lines.join("\n");
 }
 
 /**

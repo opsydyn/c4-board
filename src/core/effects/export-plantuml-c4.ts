@@ -22,6 +22,7 @@
 import { Effect } from "effect";
 import type { Node, Edge, Viewport } from "@xyflow/react";
 import type { C4Type, NodeData } from "./node-operations";
+import type { EdgeData } from "./edge-operations";
 
 // ============================================================================
 // Type Definitions
@@ -153,7 +154,7 @@ function nodeToPlantUML(node: Node, options: PlantUMLExportOptions): string | nu
 }
 
 /**
- * Convert an edge to PlantUML relationship
+ * Convert an edge to PlantUML relationship with metadata
  */
 function edgeToPlantUML(edge: Edge, nodes: Node[]): string | null {
 	// Find source and target nodes to verify they're C4 types
@@ -176,8 +177,32 @@ function edgeToPlantUML(edge: Edge, nodes: Node[]): string | null {
 	const targetId = toPlantUMLId(edge.target);
 	const label = typeof edge.label === "string" ? escapeString(edge.label) : "uses";
 
-	// Rel(from, to, "label", "technology")
-	return `Rel(${sourceId}, ${targetId}, "${label}")`;
+	// Get edge metadata
+	const edgeData = edge.data as EdgeData | undefined;
+	const metadata = edgeData?.metadata;
+
+	const lines: string[] = [];
+
+	// Main relationship line
+	lines.push(`Rel(${sourceId}, ${targetId}, "${label}")`);
+
+	// Add OVL metadata as comment for round-trip preservation
+	if (metadata) {
+		const metaParts: string[] = [];
+
+		if (metadata.protocol) metaParts.push(`protocol=${metadata.protocol}`);
+		if (metadata.communicationStyle) metaParts.push(`style=${metadata.communicationStyle}`);
+		if (metadata.requestVolume !== undefined) metaParts.push(`volume=${metadata.requestVolume}`);
+		if (metadata.latency !== undefined) metaParts.push(`latency=${metadata.latency}`);
+		if (metadata.animationSpeed) metaParts.push(`animation=${metadata.animationSpeed}`);
+		if (metadata.notes) metaParts.push(`notes=${escapeString(metadata.notes)}`);
+
+		if (metaParts.length > 0) {
+			lines.push(`' @ovl: ${metaParts.join(", ")}`);
+		}
+	}
+
+	return lines.join("\n");
 }
 
 // ============================================================================

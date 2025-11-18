@@ -2,13 +2,15 @@
  * DocumentationTable - System usage documentation
  *
  * Blue-themed table showing how to use the diagram system
+ * Includes OPSYDYN Visual Language legend
  */
 
 import { useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef } from "ag-grid-community";
 import "ag-grid-community/styles/ag-theme-quartz.css";
-import { docTableContainer, docGridTheme } from "./DocumentationTable.css";
+import { docTableContainer, docGridTheme, docContentWrapper } from "./DocumentationTable.css";
+import { OVLLegend } from "./OVLLegend";
 
 interface DocRow {
 	action: string;
@@ -85,16 +87,22 @@ export function DocumentationTable() {
 	);
 
 	return (
-		<div className={docTableContainer}>
-			<div className={`${docGridTheme} ag-theme-quartz`}>
-				<AgGridReact<DocRow>
-					rowData={DOCUMENTATION_DATA}
-					columnDefs={columnDefs}
-					defaultColDef={defaultColDef}
-					domLayout="autoHeight"
-					suppressMovableColumns
-					headerHeight={40}
-				/>
+		<div className={docContentWrapper}>
+			{/* OPSYDYN Visual Language Legend */}
+			<OVLLegend />
+
+			{/* Keyboard Shortcuts & Usage Table */}
+			<div className={docTableContainer}>
+				<div className={`${docGridTheme} ag-theme-quartz`}>
+					<AgGridReact<DocRow>
+						rowData={DOCUMENTATION_DATA}
+						columnDefs={columnDefs}
+						defaultColDef={defaultColDef}
+						domLayout="autoHeight"
+						suppressMovableColumns
+						headerHeight={40}
+					/>
+				</div>
 			</div>
 		</div>
 	);

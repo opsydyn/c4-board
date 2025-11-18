@@ -24,6 +24,7 @@ export type EdgeProtocol =
 	| "grpc"
 	| "graphql"
 	| "websocket"
+	| "mcp" // Model Context Protocol
 	| "kafka"
 	| "rabbitmq"
 	| "redis"
@@ -56,6 +57,7 @@ export const PROTOCOL_COLOR_MAP: Record<EdgeProtocol, string> = {
 	grpc: "#1976D2",
 	graphql: "#E91E63",
 	websocket: "#9C27B0",
+	mcp: "#7C3AED", // Purple for MCP (Model Context Protocol)
 	kafka: "#000000",
 	rabbitmq: "#FF6600",
 	redis: "#DC382D",
@@ -67,22 +69,39 @@ export const PROTOCOL_COLOR_MAP: Record<EdgeProtocol, string> = {
 };
 
 /**
+ * Animation speed for edge data flow visualization
+ */
+export type EdgeAnimationSpeed = "none" | "slow" | "medium" | "fast" | "auto";
+
+/**
+ * Animation speed mapping to durations (in ms)
+ */
+export const ANIMATION_SPEED_MAP: Record<EdgeAnimationSpeed, number | null> = {
+	none: null, // No animation
+	slow: 3000, // 3 seconds per cycle
+	medium: 1500, // 1.5 seconds per cycle
+	fast: 750, // 0.75 seconds per cycle
+	auto: 1500, // Auto-calculated based on request volume (default to medium)
+};
+
+/**
  * Edge metadata for smart edges
  */
 export interface EdgeMetadata {
-	protocol?: EdgeProtocol;
-	communicationStyle?: EdgeCommunicationStyle;
-	requestVolume?: number; // Requests per second
-	latency?: number; // Average latency in ms
-	notes?: string; // Additional notes
+	protocol?: EdgeProtocol | undefined;
+	communicationStyle?: EdgeCommunicationStyle | undefined;
+	requestVolume?: number | undefined; // Requests per second
+	latency?: number | undefined; // Average latency in ms
+	animationSpeed?: EdgeAnimationSpeed | undefined; // Animation speed for data flow
+	notes?: string | undefined; // Additional notes
 }
 
 /**
  * Extended edge data with metadata
  */
-export interface EdgeData {
+export interface EdgeData extends Record<string, unknown> {
 	createdAt: number;
-	metadata?: EdgeMetadata;
+	metadata?: EdgeMetadata | undefined;
 }
 
 /**
@@ -270,3 +289,107 @@ export const updateEdgeLabel = (
 			edges.map((e) => (e.id === edgeId ? { ...e, label: validatedLabel } : e)),
 		),
 	);
+
+/**
+ * Update the metadata of an existing edge
+ * Merges new metadata with existing metadata
+ */
+export const updateEdgeMetadata = (
+	edges: Edge[],
+	edgeId: string,
+	metadata: Partial<EdgeMetadata>,
+): Effect.Effect<Edge[], EdgeValidationError> =>
+	pipe(
+		// Find the edge and fail if not found
+		findEdgeById(edges, edgeId),
+		Effect.filterOrFail(
+			(edge): edge is Edge => edge !== null,
+			() =>
+				new EdgeValidationError({
+					message: `Edge with ID ${edgeId} not found`,
+				}),
+		),
+		// Update the edge with merged metadata
+		Effect.map(() =>
+			edges.map((e) => {
+				if (e.id !== edgeId) return e;
+
+				const currentData = (e.data as EdgeData | undefined) ?? { createdAt: Date.now() };
+				const currentMetadata = currentData.metadata ?? {};
+
+				return {
+					...e,
+					data: {
+						...currentData,
+						metadata: {
+							...currentMetadata,
+							...metadata,
+						},
+					} as EdgeData,
+				};
+			}),
+		),
+	);
+
+/**
+ * Get the visual style (stroke-dasharray) for an edge based on communication style
+ */
+export const getEdgeStyle = (communicationStyle?: EdgeCommunicationStyle): string => {
+	if (!communicationStyle) return EDGE_STYLE_MAP.synchronous;
+	return EDGE_STYLE_MAP[communicationStyle];
+};
+
+/**
+ * Get the color for an edge based on protocol
+ */
+export const getEdgeColor = (protocol?: EdgeProtocol): string => {
+	if (!protocol) return "#666666"; // Default gray
+	return PROTOCOL_COLOR_MAP[protocol];
+};
+
+/**
+ * Calculate edge thickness based on request volume
+ * Returns stroke width (1-10)
+ */
+export const getEdgeThickness = (requestVolume?: number): number => {
+	if (!requestVolume || requestVolume <= 0) return 2; // Default thickness
+
+	// Logarithmic scale for better visual distribution
+	// 1-10 requests = 2px
+	// 10-100 requests = 3-4px
+	// 100-1000 requests = 5-7px
+	// 1000+ requests = 8-10px
+	const thickness = Math.min(10, Math.max(2, Math.floor(Math.log10(requestVolume) * 2) + 2));
+	return thickness;
+};
+
+/**
+ * Calculate animation speed based on metadata
+ * Returns whether edge should be animated and optional duration
+ */
+export const getEdgeAnimation = (metadata?: EdgeMetadata): { animated: boolean; duration?: number | undefined } => {
+	const speed = metadata?.animationSpeed ?? "none";
+
+	if (speed === "none") {
+		return { animated: false, duration: undefined };
+	}
+
+	if (speed === "auto") {
+		// Auto-calculate based on request volume
+		const volume = metadata?.requestVolume ?? 0;
+		if (volume <= 0) return { animated: false, duration: undefined };
+
+		// Higher volume = faster animation
+		// 1-10 req/s = slow (3000ms)
+		// 10-100 req/s = medium (1500ms)
+		// 100-1000 req/s = fast (750ms)
+		// 1000+ req/s = very fast (500ms)
+		if (volume < 10) return { animated: true, duration: 3000 };
+		if (volume < 100) return { animated: true, duration: 1500 };
+		if (volume < 1000) return { animated: true, duration: 750 };
+		return { animated: true, duration: 500 };
+	}
+
+	const duration = ANIMATION_SPEED_MAP[speed];
+	return { animated: duration !== null, duration: duration ?? undefined };
+};

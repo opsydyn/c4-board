@@ -25,6 +25,7 @@ import {
 	type CreateNodeInput,
 	type CreateEdgeInput,
 	type UpdateNodeInput,
+	type UpdateEdgeInput,
 	createDiagram,
 	getDiagram,
 	listDiagrams,
@@ -36,7 +37,7 @@ import {
 	deleteNode,
 	createEdge,
 	getEdgesByDiagram,
-	updateEdgeLabel,
+	updateEdge,
 	deleteEdge,
 	NotFoundError,
 	DatabaseError,
@@ -44,6 +45,7 @@ import {
 	DatabaseService,
 } from "./database";
 import { getDefaultIconId, type C4Type, type NodeIconId } from "./node-operations";
+import type { EdgeData, EdgeMetadata } from "./edge-operations";
 
 // ============================================================================
 // Type Definitions
@@ -221,23 +223,36 @@ export function reactFlowNodeToDb(
 }
 
 /**
- * Convert database edge to ReactFlow edge format
+ * Convert database edge to ReactFlow edge format with metadata parsing
  */
 function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
+	// Parse metadata JSON if present
+	let metadata: EdgeMetadata | undefined;
+	if (dbEdge.metadata) {
+		try {
+			metadata = JSON.parse(dbEdge.metadata) as EdgeMetadata;
+		} catch (error) {
+			console.warn(`Failed to parse edge metadata for edge ${dbEdge.id}:`, error);
+		}
+	}
+
+	const edgeData: EdgeData = {
+		createdAt: dbEdge.created_at,
+		...(metadata && { metadata }),
+	};
+
 	return {
 		id: dbEdge.id,
 		source: dbEdge.source,
 		target: dbEdge.target,
 		label: dbEdge.label ?? undefined,
 		type: "default",
-		data: {
-			createdAt: dbEdge.created_at,
-		},
+		data: edgeData,
 	};
 }
 
 /**
- * Convert ReactFlow edge to database edge format using helper
+ * Convert ReactFlow edge to database edge format with metadata serialization
  */
 function reactFlowEdgeToDb(
 	edge: ReactFlowEdge,
@@ -245,12 +260,18 @@ function reactFlowEdgeToDb(
 ): CreateEdgeInput {
 	const labelValue = typeof edge.label === "string" ? edge.label : undefined;
 
+	// Extract and serialize metadata from edge.data
+	const edgeData = edge.data as EdgeData | undefined;
+	const metadata = edgeData?.metadata;
+	const metadataJson = metadata ? JSON.stringify(metadata) : undefined;
+
 	return {
 		id: edge.id,
 		diagram_id: diagramId,
 		source: edge.source,
 		target: edge.target,
 		...optional("label", labelValue),
+		...optional("metadata", metadataJson),
 	};
 }
 
@@ -371,13 +392,26 @@ export const saveDiagram = (
 				const existingEdge = existingEdges.find((e) => e.id === edge.id);
 
 				if (existingEdge) {
-					// Update existing edge if label has changed
+					// Update existing edge if label or metadata has changed
 					const newLabel = dbEdgeInput.label ?? "uses";
 					const currentLabel = existingEdge.label ?? "uses";
+					const newMetadata = dbEdgeInput.metadata ?? null;
+					const currentMetadata = existingEdge.metadata ?? null;
 
-					return newLabel !== currentLabel
-						? updateEdgeLabel(edge.id, newLabel)
-						: Effect.succeed(undefined);
+					const hasChanges = newLabel !== currentLabel || newMetadata !== currentMetadata;
+
+					if (hasChanges) {
+						const updateInput: UpdateEdgeInput = {};
+						if (newLabel !== currentLabel) {
+							updateInput.label = newLabel;
+						}
+						if (newMetadata !== currentMetadata) {
+							updateInput.metadata = newMetadata !== null ? newMetadata : undefined;
+						}
+						return updateEdge(edge.id, updateInput);
+					}
+
+					return Effect.succeed(undefined);
 				}
 				// Create new edge
 				return createEdge(dbEdgeInput);

@@ -7,6 +7,17 @@
 import { globalStyle, style } from "@vanilla-extract/css";
 import { theme } from "../../styles/theme.css";
 
+export const docContentWrapper = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["6"],
+	padding: theme.spacing["4"],
+	width: "100%",
+	minWidth: 0,
+	overflowY: "auto",
+	maxHeight: "100%",
+});
+
 export const docTableContainer = style({
 	display: "flex",
 	flex: 1,

@@ -49,6 +49,7 @@ pub struct Edge {
     pub source: String,
     pub target: String,
     pub label: Option<String>,
+    pub metadata: Option<String>, // JSON string containing EdgeMetadata
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -103,6 +104,7 @@ pub struct CreateEdgeInput {
     pub source: String,
     pub target: String,
     pub label: Option<String>,
+    pub metadata: Option<String>, // JSON string containing EdgeMetadata
 }
 
 #[derive(Debug, Deserialize)]
@@ -439,6 +441,12 @@ pub fn run() {
             version: 11,
             description: "add_ddd_support",
             sql: include_str!("../migrations/011_add_ddd_support.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 12,
+            description: "add_edge_metadata",
+            sql: include_str!("../migrations/012_add_edge_metadata.sql"),
             kind: MigrationKind::Up,
         },
     ];
