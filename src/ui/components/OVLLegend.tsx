@@ -31,6 +31,7 @@ import {
 	ovlLegendGrid,
 	ovlLegendItem,
 	ovlLegendLabel,
+	// ovlLegendBadge,
 	ovlLegendRow,
 	ovlLegendGroup,
 } from "./OVLLegend.css";

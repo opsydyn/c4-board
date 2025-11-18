@@ -219,3 +219,26 @@ globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-medium:hover`, {
 globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-row.complexity-high:hover`, {
 	backgroundColor: `${theme.color.status.critical}12`,
 });
+
+// Checkbox styling - square edges to match brand aesthetic
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-checkbox-input-wrapper`, {
+	borderRadius: "0",
+	clipPath: theme.clipPath.sm,
+	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	backgroundColor: theme.color.background.input,
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-checkbox-input-wrapper:focus-within`, {
+	outline: `${theme.border.width.thin} solid ${theme.color.border.focus}`,
+	outlineOffset: "1px",
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-checkbox-input-wrapper.ag-checked`, {
+	backgroundColor: theme.color.interactive.primary,
+	borderColor: theme.color.interactive.primary,
+});
+
+globalStyle(`.${agGridTheme}.ag-theme-quartz .ag-checkbox-input-wrapper.ag-indeterminate`, {
+	backgroundColor: theme.color.interactive.hover,
+	borderColor: theme.color.interactive.hover,
+});

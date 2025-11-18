@@ -23,6 +23,8 @@ import {
 	CheckCircleIcon,
 	ListBulletsIcon,
 	PlusIcon,
+	PlayIcon,
+	PauseIcon,
 } from "@phosphor-icons/react";
 import {
 	toolbar,
@@ -60,11 +62,13 @@ interface DDDToolbarProps {
 	onAutoLayoutSelected: (presetName: LayoutPresetName) => void;
 	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
+	onToggleAnimations: () => void;
 	sessionName: string;
 	isSaving?: boolean;
 	lastSaved?: number | null;
 	diagramName?: string;
 	currentLayout?: LayoutPresetName;
+	animationsEnabled?: boolean;
 }
 
 function formatSaveTime(timestamp: number): string {
@@ -103,11 +107,13 @@ export function DDDToolbar({
 	onAutoLayoutSelected,
 	onDiagramNameChange,
 	onSessionNameChange,
+	onToggleAnimations,
 	sessionName,
 	isSaving = false,
 	lastSaved = null,
 	diagramName = "Untitled",
 	currentLayout,
+	animationsEnabled = true,
 }: DDDToolbarProps) {
 	return (
 		<div className={toolbar}>
@@ -161,6 +167,26 @@ export function DDDToolbar({
 			>
 				<FloppyDiskIcon size={20} weight="duotone" />
 				SAVE::STATE
+			</button>
+
+			{/* Animation toggle button */}
+			<button
+				type="button"
+				className={toolbarButton}
+				onClick={onToggleAnimations}
+				title={animationsEnabled ? "Disable edge animations" : "Enable edge animations"}
+			>
+				{animationsEnabled ? (
+					<>
+						<PauseIcon size={20} weight="duotone" />
+						ANIM::ON
+					</>
+				) : (
+					<>
+						<PlayIcon size={20} weight="duotone" />
+						ANIM::OFF
+					</>
+				)}
 			</button>
 
 			{/* Auto-layout menus */}

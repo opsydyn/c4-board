@@ -11,9 +11,9 @@ import { componentsLayer } from "../../styles/layers.css";
 export const ovlLegendCard = style({
 	"@layer": {
 		[componentsLayer]: {
+			clipPath: theme.clipPath.base,
 			backgroundColor: theme.color.background.surface,
-			border: `1px solid ${theme.color.border.primary}`,
-			borderRadius: "8px",
+			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
 			padding: theme.spacing["4"],
 			display: "flex",
 			flexDirection: "column",
@@ -110,10 +110,10 @@ export const ovlLegendItem = style({
 			display: "flex",
 			flexDirection: "column",
 			gap: theme.spacing["1"],
+			clipPath: theme.clipPath.sm,
 			padding: theme.spacing["2"],
 			backgroundColor: theme.color.background.base,
-			border: `1px solid ${theme.color.border.secondary}`,
-			borderRadius: "4px",
+			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 			transition: "all 0.2s ease",
 
 			":hover": {
@@ -134,6 +134,21 @@ export const ovlLegendLabel = style({
 	},
 });
 
+export const ovlLegendBadge = style({
+	"@layer": {
+		[componentsLayer]: {
+			clipPath: theme.clipPath.sm,
+			fontSize: theme.typography.size.xs,
+			color: theme.color.foreground.secondary,
+			fontFamily: theme.typography.family.mono,
+			backgroundColor: theme.color.background.raised,
+			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+			display: "inline-block",
+		},
+	},
+});
+
 export const ovlLegendRow = style({
 	"@layer": {
 		[componentsLayer]: {
@@ -150,10 +165,10 @@ export const ovlLegendGroup = style({
 			display: "flex",
 			alignItems: "center",
 			gap: theme.spacing["2"],
+			clipPath: theme.clipPath.sm,
 			padding: theme.spacing["2"],
 			backgroundColor: theme.color.background.base,
-			border: `1px solid ${theme.color.border.secondary}`,
-			borderRadius: "4px",
+			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 		},
 	},
 });

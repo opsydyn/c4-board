@@ -97,6 +97,7 @@ interface C4CanvasProps {
 	onImportDiagram?: (content: string, format: "plantuml" | "mermaid", mode: "replace" | "merge") => void;
 	viewportToApply?: Viewport | null;
 	onContextMenuAction?: (action: ContextMenuAction, nodeId?: string, edgeId?: string) => void;
+	animationsEnabled?: boolean;
 }
 
 export interface C4CanvasRef {
@@ -122,6 +123,7 @@ function C4CanvasInner(
 		onImportDiagram,
 		viewportToApply,
 		onContextMenuAction,
+		animationsEnabled = true,
 	}: C4CanvasProps,
 	ref: React.Ref<C4CanvasRef>,
 ) {
@@ -210,17 +212,20 @@ function C4CanvasInner(
 			const strokeWidth = getEdgeThickness(metadata?.requestVolume);
 			const animation = getEdgeAnimation(metadata);
 
+			// Respect global animation toggle
+			const shouldAnimate = animationsEnabled && animation.animated;
+
 			return {
 				...edge,
 				// Use custom edge type when animation is enabled for advanced effects
-				type: animation.animated ? "animated" : "smoothstep",
-				animated: animation.animated,
+				type: shouldAnimate ? "animated" : "smoothstep",
+				animated: shouldAnimate,
 				style: {
 					...edge.style,
 					stroke,
 					strokeWidth,
 					strokeDasharray,
-					...(animation.duration && {
+					...(animation.duration && shouldAnimate && {
 						animationDuration: `${animation.duration}ms`,
 					}),
 				},
@@ -232,7 +237,7 @@ function C4CanvasInner(
 				},
 			};
 		});
-	}, [edges]);
+	}, [edges, animationsEnabled]);
 
 	// Default edge styling for C4 relationships with directional arrows
 	const defaultEdgeOptions = useMemo(

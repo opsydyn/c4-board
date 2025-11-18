@@ -14,6 +14,8 @@ import {
 	PlusIcon,
 	StackIcon,
 	CubeIcon,
+	PlayIcon,
+	PauseIcon,
 } from "@phosphor-icons/react";
 import {
 	toolbar,
@@ -24,6 +26,7 @@ import {
 } from "./styles.css";
 import { LayoutMenu } from "./LayoutMenu";
 import type { LayoutPresetName } from "../../core/effects/layout";
+import {Button} from 'react-aria-components';
 
 interface ToolbarProps {
 	onAddPerson: () => void;
@@ -37,11 +40,13 @@ interface ToolbarProps {
 	onAutoLayoutSelected: (presetName: LayoutPresetName) => void;
 	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
+	onToggleAnimations: () => void;
 	sessionName: string;
 	isSaving?: boolean;
 	lastSaved?: number | null;
 	diagramName?: string;
 	currentLayout?: LayoutPresetName;
+	animationsEnabled?: boolean;
 }
 
 function formatSaveTime(timestamp: number): string {
@@ -74,11 +79,13 @@ export function Toolbar({
 	onAutoLayoutSelected,
 	onDiagramNameChange,
 	onSessionNameChange,
+	onToggleAnimations,
 	sessionName,
 	isSaving = false,
 	lastSaved = null,
 	diagramName = "Untitled",
 	currentLayout,
+	animationsEnabled = true,
 }: ToolbarProps) {
 	return (
 		<div className={toolbar}>
@@ -132,7 +139,27 @@ export function Toolbar({
 			>
 				<FloppyDiskIcon size={20} weight="duotone" />
 				SAVE::STATE
-		</button>
+			</button>
+
+			{/* Animation toggle button */}
+			<Button
+				type="button"
+				className={toolbarButton}
+				onPress={onToggleAnimations}
+				aria-label={animationsEnabled ? "Disable edge animations" : "Enable edge animations"}
+			>
+				{animationsEnabled ? (
+					<>
+						<PauseIcon size={20} weight="duotone" />
+						ANIM::ON
+					</>
+				) : (
+					<>
+						<PlayIcon size={20} weight="duotone" />
+						ANIM::OFF
+					</>
+				)}
+			</Button>
 
 			{/* Auto-layout menus */}
 			<LayoutMenu

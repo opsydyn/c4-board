@@ -47,6 +47,13 @@ import { ToggleButton } from "react-aria-components";
 import { CaretLeftIcon, CaretRightIcon, CaretUpIcon } from "@phosphor-icons/react";
 import type { ContextMenuAction } from "../utils/contextMenu";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
+import { flex } from "../../styles/sprinkles.css";
+
+const sidebarBrandMetaClass = flex({
+	direction: "column",
+	align: "start",
+	gap: "1",
+});
 
 type UseMachineParam = Parameters<typeof useMachine>[0];
 
@@ -674,8 +681,10 @@ export function C4CanvasContainer() {
 							width={50}
 							height={50}
 						/>
-						<span>OPSYDYN C4</span>
+						<span className={sidebarBrandMetaClass}>
+						<span>OPSYDYN HUD::9000</span>
 						<span>v1.0.0</span>
+						</span>
 		
 					</div>
 							<p>PRECISION TOOLS FOR PROFESSIONALS</p>
@@ -736,6 +745,8 @@ export function C4CanvasContainer() {
 							isSaving={state.context.isSaving}
 							lastSaved={state.context.lastSaved}
 							diagramName={state.context.diagramName}
+							onToggleAnimations={() => send({ type: "TOGGLE_ANIMATIONS" })}
+							animationsEnabled={state.context.animationsEnabled}
 							{...(state.context.currentLayout && {
 								currentLayout: state.context.currentLayout,
 							})}
@@ -770,6 +781,8 @@ export function C4CanvasContainer() {
 							isSaving={state.context.isSaving}
 							lastSaved={state.context.lastSaved}
 							diagramName={state.context.diagramName}
+							onToggleAnimations={() => send({ type: "TOGGLE_ANIMATIONS" })}
+							animationsEnabled={state.context.animationsEnabled}
 							{...(state.context.currentLayout && {
 								currentLayout: state.context.currentLayout,
 							})}
@@ -804,6 +817,7 @@ export function C4CanvasContainer() {
 					}
 					viewportToApply={state.context.viewport}
 					onContextMenuAction={onContextMenuAction}
+					animationsEnabled={state.context.animationsEnabled}
 				/>
 				{!isSidebarOpen && (
 					<ToggleButton

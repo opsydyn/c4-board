@@ -60,6 +60,7 @@ export type CanvasEvent =
 	// === Canvas Events ===
 	| { type: "SELECT_NODE"; nodeId: string }
 	| { type: "DESELECT_NODE" }
+	| { type: "TOGGLE_ANIMATIONS" }
 	| { type: "AUTO_LAYOUT"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
 	| { type: "AUTO_LAYOUT_SELECTED"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
 	| {
@@ -120,6 +121,9 @@ export interface CanvasContext {
 	selectedNodeId: string | null;
 	nodeCounter: number;
 	currentDomain: DiagramDomain; // Current diagram domain (C4 or DDD)
+
+	// UI preferences
+	animationsEnabled: boolean; // Global toggle for edge animations
 
 	// Diagram metadata
 	currentDiagramId: string | null;
@@ -511,6 +515,9 @@ const canvasMachineDefinition = setup({
 				if (event.type !== "SET_DOMAIN") return "c4";
 				return event.domain;
 			},
+		}),
+		toggleAnimations: assign({
+			animationsEnabled: ({ context }) => !context.animationsEnabled,
 		}),
 
 		updateNode: assign({
@@ -1103,6 +1110,9 @@ const canvasMachineDefinition = setup({
 		nodeCounter: 0,
 		currentDomain: "c4" as DiagramDomain, // Default to C4
 
+		// UI preferences
+		animationsEnabled: true, // Animations enabled by default
+
 		// Diagram metadata
 		currentDiagramId: null,
 		diagramName: "DIAGRAM::UNTITLED",
@@ -1131,6 +1141,9 @@ const canvasMachineDefinition = setup({
 			on: {
 				SET_DOMAIN: {
 					actions: "setDomain",
+				},
+				TOGGLE_ANIMATIONS: {
+					actions: "toggleAnimations",
 				},
 				ADD_PERSON: {
 					actions: "addPerson",
