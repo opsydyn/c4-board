@@ -744,6 +744,24 @@ const mudPulse = keyframes({
 	"100%": { transform: "scale(0.98)", strokeOpacity: 0.2 },
 });
 
+const criticalGlow = (percentage: number) =>
+	`color-mix(in srgb, ${theme.color.status.critical} ${percentage}%, transparent)`;
+
+const criticalPulse = keyframes({
+	"0%": {
+		backgroundColor: criticalGlow(15),
+		boxShadow: `0 0 8px ${criticalGlow(35)}`,
+	},
+	"50%": {
+		backgroundColor: criticalGlow(30),
+		boxShadow: `0 0 16px ${criticalGlow(60)}`,
+	},
+	"100%": {
+		backgroundColor: criticalGlow(15),
+		boxShadow: `0 0 8px ${criticalGlow(35)}`,
+	},
+});
+
 export const mudChartCard = style({
 	boxSizing: "border-box",
 	display: "flex",
@@ -844,6 +862,87 @@ export const mudChartEmptyState = style({
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.sm,
 });
+
+export const mudChartCriticalWarning = style({
+	width: "100%",
+	clipPath: theme.clipPath.base,
+	display: "flex",
+	// flexWrap: "wrap",
+	alignItems: "flex-end",
+	justifyContent: "space-between",
+	gap: theme.spacing["2"],
+	rowGap: theme.spacing["2"],
+	padding: theme.spacing["3"],
+	textAlign: "left",
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.status.critical,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	fontWeight: theme.typography.weight.bold,
+	border: `${theme.border.width.base} solid ${theme.color.status.critical}`,
+	animation: `${criticalPulse} 2s ease-in-out infinite`,
+});
+
+
+export const mudChartCriticalWarningSvg = style({
+    width: "55%",
+	height: "33%",
+	display: "flex",
+	alignItems: "flex-end",
+	justifyContent: "flex-end",
+	// animation: `${criticalPulse} 2s ease-in-out infinite`,
+});
+
+export const mudChartCriticalAnimationPaused = style({
+	animationPlayState: "paused",
+});
+
+export const mudChartCriticalControls = style({
+	width: "100%",
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "stretch",
+	marginTop: theme.spacing["2"],
+});
+
+export const mudChartCriticalToggle = style({
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: theme.spacing["1"],
+	boxShadow: theme.effect.glow.sm,
+	clipPath: theme.clipPath.base,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(12, 21, 16, 0.95)",
+	color: theme.color.foreground.primary,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	cursor: "pointer",
+	whiteSpace: "nowrap",
+	flexShrink: 0,
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.border.primary,
+			color: theme.color.interactive.primary,
+		},
+		"&:focus-visible": {
+			outline: `${theme.border.width.base} solid ${theme.color.interactive.focus}`,
+			outlineOffset: "2px",
+		},
+	},
+});
+
+export const mudChartCriticalTogglePaused = style({
+	borderColor: theme.color.status.ready,
+	color: theme.color.status.ready,
+});
+
 
 export const mudChartSummaryGrid = style({
 	boxSizing: "border-box",
@@ -1011,7 +1110,6 @@ export const evolutionLegendItem = style({
 
 export const evolutionLegendSwatch = style({
 	display: "inline-block",
-	borderRadius: "999px",
 	width: "10px",
 	height: "10px",
 });

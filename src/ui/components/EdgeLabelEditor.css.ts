@@ -19,9 +19,9 @@ export const edgeEditorOverlay = style({
 export const edgeEditorDialog = style({
 	"@layer": {
 		[componentsLayer]: {
+			clipPath: theme.clipPath.lg,
 			backgroundColor: theme.color.background.base,
 			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-			borderRadius: theme.border.radius.lg,
 			padding: theme.spacing["6"],
 			boxShadow: theme.effect.glow.lg,
 			minWidth: "400px",
@@ -73,7 +73,7 @@ export const edgeEditorInput = style({
 		[componentsLayer]: {
 			width: "100%",
 			height: "40px",
-			borderRadius: theme.border.radius.base,
+			clipPath: theme.clipPath.sm,
 			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 			backgroundColor: theme.color.background.input,
 			color: theme.color.foreground.primary,
@@ -107,7 +107,7 @@ export const edgeEditorError = style({
 	"@layer": {
 		[componentsLayer]: {
 			padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-			borderRadius: theme.border.radius.base,
+			clipPath: theme.clipPath.sm,
 			backgroundColor: "rgba(220, 38, 38, 0.1)",
 			border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
 			color: theme.color.status.critical,
@@ -131,7 +131,7 @@ export const edgeEditorButton = style({
 	"@layer": {
 		[componentsLayer]: {
 			height: "40px",
-			borderRadius: theme.border.radius.base,
+			clipPath: theme.clipPath.base,
 			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 			backgroundColor: "transparent",
 			color: theme.color.foreground.primary,

@@ -22,8 +22,8 @@ export const inlineEditorContentEditable = style({
 	"@layer": {
 		[componentsLayer]: {
 			outline: "none",
+			clipPath: theme.clipPath.sm,
 			border: `${theme.border.width.thin} solid ${theme.color.border.focus}`,
-			borderRadius: theme.border.radius.sm,
 			padding: theme.spacing["2"],
 			backgroundColor: theme.color.background.surface,
 			color: theme.color.foreground.primary,
@@ -66,7 +66,7 @@ export const inlineEditorError = style({
 			marginTop: theme.spacing["1"],
 			padding: theme.spacing["1"],
 			backgroundColor: `${theme.color.status.critical}15`,
-			borderRadius: theme.border.radius.sm,
+			clipPath: theme.clipPath.sm,
 		},
 	},
 });

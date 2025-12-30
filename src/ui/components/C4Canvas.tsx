@@ -57,6 +57,7 @@ import { SagaNode } from "./nodes/SagaNode";
 import { CustomAnimatedEdge } from "./CustomAnimatedEdge";
 import * as styles from "./styles.css";
 import { theme } from "../../styles/theme.css";
+import { flex } from "../../styles/sprinkles.css";
 import { DownloadButton } from "./DownloadButton";
 import { ImportButton } from "./ImportButton";
 import { ToggleButton } from "react-aria-components";
@@ -382,8 +383,8 @@ function C4CanvasInner(
 					<div className={styles.commandBarSearch}>
 						<SearchBox nodes={nodes} onSelectNode={onSelectNode} />
 					</div>
-					<div className={styles.commandBarRow}>
-						<div className={styles.commandBarLeft}>
+					<div className={flex({ direction: "row", justify: "between", align: "center", wrap: "wrap", gap: "2" })}>
+						<div className={flex({ direction: "row", align: "center", wrap: "wrap", gap: "2" })}>
 							<DownloadButton variant="inline" className={styles.commandBarButton} />
 							{onExportPlantUML && (
 								<button
@@ -412,17 +413,15 @@ function C4CanvasInner(
 								/>
 							)}
 						</div>
-						<div className={styles.commandBarRight}>
-							<ToggleButton
-								isSelected={isCommandBarOpen}
-								onChange={onToggleCommandBar}
-								className={styles.commandBarToggle}
-								aria-label="Collapse command bar"
-							>
-								<CaretUpIcon size={14} weight="bold" />
-								ESC
-							</ToggleButton>
-						</div>
+						<ToggleButton
+							isSelected={isCommandBarOpen}
+							onChange={onToggleCommandBar}
+							className={styles.commandBarToggle}
+							aria-label="Collapse command bar"
+						>
+							<CaretUpIcon size={14} weight="bold" />
+							ESC
+						</ToggleButton>
 					</div>
 				</div>
 			) : (

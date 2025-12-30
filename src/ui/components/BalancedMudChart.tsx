@@ -11,6 +11,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import {
 	Cube,
 	Warning,
+	WarningOctagonIcon,
 	Scales,
 	GitBranch,
 	CircleDashed,
@@ -34,6 +35,8 @@ import {
 	mudChartPulse,
 	mudChartLegendGroup,
 	mudChartTooltip,
+	mudChartCriticalWarning,
+	mudChartCriticalWarningSvg
 } from "./styles.css";
 import {
 	type BalancedCouplingModel,
@@ -385,58 +388,71 @@ export function BalancedMudChart({
 	const riskLabel = topRisk ? `${topRisk.label} · ${topRisk.systemicRisk.toFixed(1)}` : "Stable";
 
 	return (
-		<div className={mudChartCard}>
-			<div className={mudChartHeader}>
-				<h3 className={mudChartTitle}>Complexity Field</h3>
-				<p className={mudChartMeta}>
-					High risk nexus: {riskLabel}
-				</p>
-			</div>
+		<>
+			<div className={mudChartCard}>
+				<div className={mudChartHeader}>
+					<h3 className={mudChartTitle}>Complexity Field</h3>
+					<p className={mudChartMeta}>
+						High risk nexus: {riskLabel}
+					</p>
+				</div>
 
-			<div className={mudChartCanvas}>
-				<ParentSize debounceTime={300} ignoreDimensions={["left", "top"]}>
-					{({ width, height }) => (
-						<MudChartViz
-							width={width}
-							height={height}
-							model={model}
-							onHoverModule={handleHover}
-							onLeaveModule={hideTooltip}
-							onSelectModule={onSelectModule}
-							selectedModuleId={selectedModuleId}
-						/>
-					)}
-				</ParentSize>
+				<div className={mudChartCanvas}>
+					<ParentSize debounceTime={300} ignoreDimensions={["left", "top"]}>
+						{({ width, height }) => (
+							<MudChartViz
+								width={width}
+								height={height}
+								model={model}
+								onHoverModule={handleHover}
+								onLeaveModule={hideTooltip}
+								onSelectModule={onSelectModule}
+								selectedModuleId={selectedModuleId}
+							/>
+						)}
+					</ParentSize>
 
-			<div className={mudChartTooltip}>
-				{tooltipOpen && tooltipData ? (
-					<>
-						<div style={{ fontWeight: "bold", fontSize: "11px" }}>
-							{tooltipData.label}
-							{tooltipData.technology && <> [{tooltipData.technology}]</>}
-						</div>
-						{tooltipData.description && (
-							<div style={{ fontSize: "9px", opacity: 0.8, lineHeight: "1.3" }}>
-								{tooltipData.description}
+					<div className={mudChartTooltip}>
+						{tooltipOpen && tooltipData ? (
+							<>
+								<div style={{ fontWeight: "bold", fontSize: "11px" }}>
+									{tooltipData.label}
+									{tooltipData.technology && <> [{tooltipData.technology}]</>}
+								</div>
+								{tooltipData.description && (
+									<div style={{ fontSize: "9px", opacity: 0.8, lineHeight: "1.3" }}>
+										{tooltipData.description}
+									</div>
+								)}
+								<div style={{ fontSize: "9px", opacity: 0.75, display: "flex", gap: "12px" }}>
+									<span>{tooltipData.subdomainType.toUpperCase()}</span>
+									<span>•</span>
+									<span>{tooltipData.integrationType.toUpperCase()}</span>
+									<span>•</span>
+									<span>Risk {tooltipData.systemicRisk.toFixed(1)}</span>
+								</div>
+							</>
+						) : (
+							<div style={{ opacity: 0.5, fontSize: "9px", letterSpacing: "0.5px" }}>
+								[████] ENGINEERING SYSTEM STANDBY
 							</div>
 						)}
-						<div style={{ fontSize: "9px", opacity: 0.75, display: "flex", gap: "12px" }}>
-							<span>{tooltipData.subdomainType.toUpperCase()}</span>
-							<span>•</span>
-							<span>{tooltipData.integrationType.toUpperCase()}</span>
-							<span>•</span>
-							<span>Risk {tooltipData.systemicRisk.toFixed(1)}</span>
-						</div>
-					</>
-				) : (
-					<div style={{ opacity: 0.5, fontSize: "9px", letterSpacing: "0.5px" }}>
-						[████] ENGINEERING SYSTEM STANDBY
 					</div>
-				)}
-			</div>
-		</div>
 
-		<div className={mudChartSummaryGrid}>
+					{/* Big Ball of Mud Warning - Shows when average risk >= 8.0 */}
+					{model.aggregate.averageRisk >= 8.0 && (
+						<div className={mudChartCriticalWarning}>
+							<span className={mudChartCriticalWarningSvg}>
+								<WarningOctagonIcon size={16} weight="fill" />
+							</span>
+			
+							<p>[CRITICAL] BIG BALL OF MUD DETECTED</p>
+						</div>
+					)}
+				</div>
+			</div>
+
+			<div className={mudChartSummaryGrid}>
 				<div className={mudChartSummaryItem}>
 					<span className={mudChartSummaryLabel}>
 					<Cube size={14} weight="duotone" /> Modules
@@ -517,6 +533,6 @@ export function BalancedMudChart({
 					</LegendOrdinal>
 				</div>
 			</div>
-		</div>
+		</>
 	);
 }

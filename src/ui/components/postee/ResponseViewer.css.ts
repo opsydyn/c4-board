@@ -10,7 +10,7 @@ export const responseViewerContainer = style({
 			gap: theme.spacing["3"],
 			backgroundColor: theme.color.background.surface,
 			border: `1px solid ${theme.color.border.secondary}`,
-			borderRadius: theme.border.radius.md,
+			clipPath: theme.clipPath.base,
 			padding: theme.spacing["4"],
 		},
 	},

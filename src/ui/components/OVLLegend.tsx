@@ -6,12 +6,15 @@
  * - Communication styles (synchronous, asynchronous, optional)
  * - Animation speeds (none, slow, medium, fast, auto)
  * - Request volume visualization
+ *
+ * Supports expanded and compact views for space efficiency
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Group } from "@visx/group";
 import { scaleOrdinal } from "@visx/scale";
 import { LegendOrdinal } from "@visx/legend";
+import { ArrowsInIcon, ArrowsOutIcon } from "@phosphor-icons/react";
 import { theme } from "../../styles/theme.css";
 import {
 	PROTOCOL_COLOR_MAP,
@@ -23,6 +26,8 @@ import {
 import {
 	ovlLegendCard,
 	ovlLegendHeader,
+	ovlLegendHeaderText,
+	ovlLegendToggleButton,
 	ovlLegendTitle,
 	ovlLegendSubtitle,
 	ovlLegendCanvas,
@@ -31,9 +36,11 @@ import {
 	ovlLegendGrid,
 	ovlLegendItem,
 	ovlLegendLabel,
-	// ovlLegendBadge,
 	ovlLegendRow,
 	ovlLegendGroup,
+	ovlLegendCompact,
+	ovlLegendCompactRow,
+	ovlLegendCompactLabel,
 } from "./OVLLegend.css";
 
 interface EdgeSampleProps {
@@ -100,6 +107,8 @@ const EdgeSample = ({
 };
 
 export function OVLLegend() {
+	const [isCompact, setIsCompact] = useState(true); // Default to compact view
+
 	// Protocol colors scale
 	const protocolScale = useMemo(() => {
 		const protocols: EdgeProtocol[] = ["grpc", "https", "mcp", "graphql", "kafka", "websocket"];
@@ -149,15 +158,116 @@ export function OVLLegend() {
 	return (
 		<div className={ovlLegendCard}>
 			<div className={ovlLegendHeader}>
-				<h3 className={ovlLegendTitle}>OPSYDYN Visual Language</h3>
-				<p className={ovlLegendSubtitle}>
-					Edge metadata visual encoding system for C4 and DDD diagrams
-				</p>
+				<div className={ovlLegendHeaderText}>
+					<h3 className={ovlLegendTitle}>OPSYDYN Visual Language</h3>
+					<p className={ovlLegendSubtitle}>
+						Edge metadata visual encoding system for C4 and DDD diagrams
+					</p>
+				</div>
+				<button
+					type="button"
+					className={ovlLegendToggleButton}
+					onClick={() => setIsCompact(!isCompact)}
+					title={isCompact ? "Expand legend" : "Compact legend"}
+				>
+					{isCompact ? (
+						<>
+							<ArrowsOutIcon size={14} weight="duotone" />
+							EXPAND
+						</>
+					) : (
+						<>
+							<ArrowsInIcon size={14} weight="duotone" />
+							COMPACT
+						</>
+					)}
+				</button>
 			</div>
 
-			<div className={ovlLegendCanvas}>
-				{/* Protocol Colors Section */}
-				<div className={ovlLegendSection}>
+			{isCompact ? (
+				// Compact View - Dense VIS-X visualization
+				<div className={ovlLegendCompact}>
+					{/* Protocols - Inline color dots */}
+					<div className={ovlLegendCompactRow}>
+						<span className={ovlLegendCompactLabel}>PROTOCOLS:</span>
+						<LegendOrdinal scale={protocolScale} direction="row" itemMargin="0 12px 0 0">
+							{(legend) => (
+								<div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+									{legend.map((item, i) => (
+										<span
+											key={`protocol-${item.datum}-${i}`}
+											style={{
+												color: item.value,
+												fontFamily: theme.typography.family.mono,
+												fontSize: "10px",
+												fontWeight: 600,
+											}}
+										>
+											● {item.datum}
+										</span>
+									))}
+								</div>
+							)}
+						</LegendOrdinal>
+					</div>
+
+					{/* Communication Styles - Inline patterns */}
+					<div className={ovlLegendCompactRow}>
+						<span className={ovlLegendCompactLabel}>STYLES:</span>
+						{communicationStyles.map((style) => (
+							<svg key={style.type} width={60} height={20} style={{ overflow: "visible" }}>
+								<Group top={10} left={5}>
+									<line
+										x1={0}
+										y1={0}
+										x2={40}
+										y2={0}
+										stroke={theme.color.foreground.primary}
+										strokeWidth={2}
+										strokeDasharray={EDGE_STYLE_MAP[style.type]}
+									/>
+									<polygon points="40,0 34,-3 34,3" fill={theme.color.foreground.primary} />
+								</Group>
+							</svg>
+						))}
+					</div>
+
+					{/* Volume - Inline thickness bars */}
+					<div className={ovlLegendCompactRow}>
+						<span className={ovlLegendCompactLabel}>VOLUME:</span>
+						<svg width={120} height={20}>
+							<Group top={10} left={5}>
+								<line x1={0} y1={0} x2={30} y2={0} stroke={PROTOCOL_COLOR_MAP.grpc} strokeWidth={1} />
+								<line x1={40} y1={0} x2={70} y2={0} stroke={PROTOCOL_COLOR_MAP.grpc} strokeWidth={2} />
+								<line x1={80} y1={0} x2={110} y2={0} stroke={PROTOCOL_COLOR_MAP.grpc} strokeWidth={4} />
+							</Group>
+						</svg>
+						<span className={ovlLegendCompactLabel} style={{ minWidth: "auto", fontSize: "9px" }}>
+							LOW → MED → HIGH
+						</span>
+					</div>
+
+					{/* Animation - Inline indicator */}
+					<div className={ovlLegendCompactRow}>
+						<span className={ovlLegendCompactLabel}>ANIMATION:</span>
+						<svg width={80} height={20}>
+							<Group top={10} left={5}>
+								<line x1={0} y1={0} x2={60} y2={0} stroke={PROTOCOL_COLOR_MAP.mcp} strokeWidth={2} />
+								<circle r={2} fill={PROTOCOL_COLOR_MAP.mcp} opacity={0.8}>
+									<animateMotion dur="1500ms" repeatCount="indefinite" path="M 0,0 L 60,0" />
+								</circle>
+							</Group>
+						</svg>
+						<span className={ovlLegendCompactLabel} style={{ minWidth: "auto", fontSize: "9px" }}>
+							TRAFFIC FLOW
+						</span>
+					</div>
+				</div>
+			) : (
+				// Expanded View - Original detailed sections
+				<div className={ovlLegendCanvas}>
+					{/* Protocol Colors Section */}
+					<div className={ovlLegendSection}>
 					<h4 className={ovlLegendSectionTitle}>Protocol → Color</h4>
 					<div className={ovlLegendRow}>
 						<LegendOrdinal scale={protocolScale} direction="row" itemMargin="0 20px 8px 0">
@@ -290,6 +400,7 @@ export function OVLLegend() {
 					</div>
 				</div>
 			</div>
+			)}
 		</div>
 	);
 }

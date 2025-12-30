@@ -21,7 +21,7 @@ export const searchInputWrapper = style({
 			gap: theme.spacing["2"],
 			backgroundColor: theme.color.background.surface,
 			border: `${theme.border.width.thin} ${theme.border.style.solid} ${theme.color.border.secondary}`,
-			borderRadius: theme.border.radius.md,
+			clipPath: theme.clipPath.base,
 			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 			transition: theme.transition.base,
 			":focus-within": {
@@ -72,7 +72,7 @@ export const resultsDropdown = style({
 			overflowY: "auto",
 			backgroundColor: theme.color.surface.overlay,
 			border: `${theme.border.width.thin} ${theme.border.style.solid} ${theme.color.semantic.person}`,
-			borderRadius: theme.border.radius.md,
+			clipPath: theme.clipPath.base,
 			boxShadow: theme.effect.glow.md,
 			zIndex: theme.zIndex.dropdown,
 		},
@@ -110,7 +110,7 @@ export const lineNumber = style({
 			fontSize: theme.typography.size.xs,
 			fontFamily: theme.typography.family.mono,
 			fontWeight: theme.typography.weight.bold,
-			borderRadius: theme.border.radius.sm,
+			clipPath: theme.clipPath.sm,
 			textAlign: "center",
 			flexShrink: 0,
 		},
@@ -147,7 +147,7 @@ globalStyle(`${resultText} mark`, {
 	color: theme.color.background.base,
 	fontWeight: theme.typography.weight.bold,
 	padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 });
 
 export const emptyState = style({
@@ -170,7 +170,7 @@ export const kbd = style({
 			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 			backgroundColor: theme.color.surface.elevated,
 			border: `${theme.border.width.thin} ${theme.border.style.solid} ${theme.color.border.primary}`,
-			borderRadius: theme.border.radius.sm,
+			clipPath: theme.clipPath.sm,
 			fontSize: theme.typography.size.xs,
 			fontFamily: theme.typography.family.mono,
 			color: theme.color.foreground.secondary,

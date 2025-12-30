@@ -51,7 +51,7 @@ export const actionButton = style({
 			color: theme.color.semantic.person,
 			backgroundColor: "transparent",
 			border: `${theme.border.width.thin} ${theme.border.style.solid} ${theme.color.semantic.person}`,
-			borderRadius: theme.border.radius.sm,
+			clipPath: theme.clipPath.sm,
 			cursor: "pointer",
 			transition: theme.transition.base,
 			":hover": {

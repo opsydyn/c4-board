@@ -58,7 +58,7 @@ export const PROTOCOL_COLOR_MAP: Record<EdgeProtocol, string> = {
 	graphql: "#E91E63",
 	websocket: "#9C27B0",
 	mcp: "#7C3AED", // Purple for MCP (Model Context Protocol)
-	kafka: "#000000",
+	kafka: "#00BCD4", // Cyan for streaming platform (high visibility)
 	rabbitmq: "#FF6600",
 	redis: "#DC382D",
 	rest: "#4CAF50",

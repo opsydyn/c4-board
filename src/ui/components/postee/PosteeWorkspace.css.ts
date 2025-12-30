@@ -47,7 +47,7 @@ export const selectionToolbar = style({
 	gap: theme.spacing["2"],
 	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 	backgroundColor: "rgba(12, 20, 16, 0.8)",
 	boxShadow: theme.effect.glow.sm,
 	fontSize: theme.typography.size.sm,
@@ -61,7 +61,7 @@ export const selectionToolbarButton = style({
 	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 	backgroundColor: "transparent",
 	border: `${theme.border.width.thin} dashed ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 	color: theme.color.foreground.secondary,
 	textTransform: theme.typography.textTransform.uppercase,
 	letterSpacing: theme.typography.letterSpacing.wide,
@@ -226,7 +226,7 @@ export const treeMethodBadge = style({
 	letterSpacing: theme.typography.letterSpacing.wide,
 	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 });
 
 export const treeRequestName = style({
@@ -600,7 +600,7 @@ export const loadTestStatus = style({
 	textTransform: "uppercase",
 	letterSpacing: theme.typography.letterSpacing.wide,
 	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 	backgroundColor: "rgba(28, 46, 38, 0.8)",
 });
 
@@ -625,7 +625,7 @@ export const metricCard = style({
 	gap: theme.spacing["1"],
 	padding: `${theme.spacing["3"]} ${theme.spacing["3"]}`,
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 	backgroundColor: "rgba(14, 24, 19, 0.85)",
 });
 
@@ -647,7 +647,7 @@ export const chartWrapper = style({
 	height: "180px",
 	backgroundColor: "rgba(12, 20, 16, 0.9)",
 	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 	padding: theme.spacing["3"],
 });
 
@@ -763,6 +763,6 @@ export const latencyLegendItem = style({
 export const latencyLegendSwatch = style({
 	width: 12,
 	height: 12,
-	borderRadius: theme.border.radius.sm,
+	clipPath: theme.clipPath.sm,
 	display: "inline-block",
 });

@@ -23,24 +23,41 @@
     "allowUnusedLabels": false,
     "jsx": "react-jsx",
     "jsxImportSource": "react",
+    "incremental": true,
+    "composite": true,
+    "moduleDetection": "force",
+    "rewriteRelativeImportExtensions": true,
+    "declarationMap": true,
+    "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@/ui/*": ["src/ui/*"],
-      "@/core/*": ["src/core/*"],
-      "@/schema/*": ["src/core/schema/*"],
-      "@ui/*": ["src/ui/*"],
-      "@core/*": ["src/core/*"],
-      "@schema/*": ["src/core/schema/*"]
+      "@/ui/*": [
+        "src/ui/*"
+      ],
+      "@/core/*": [
+        "src/core/*"
+      ],
+      "@/schema/*": [
+        "src/core/schema/*"
+      ],
+      "@ui/*": [
+        "src/ui/*"
+      ],
+      "@core/*": [
+        "src/core/*"
+      ],
+      "@schema/*": [
+        "src/core/schema/*"
+      ]
     },
     "downlevelIteration": true,
     "skipLibCheck": true,
-        "plugins": [
-    {
-      "name": "@effect/language-service"
-    }
-  ],
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ],
   },
-
   "include": [
     ".astro/types.d.ts",
     "src",

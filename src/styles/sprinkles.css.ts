@@ -33,6 +33,7 @@ export const sprinkles = createSprinkles(layoutProperties);
 export type Sprinkles = Parameters<typeof sprinkles>[0];
 
 const spacingTokens = ["0", "1", "2", "3", "4", "5", "6", "8", "10", "12", "16"] as const;
+
 type SpacingToken = (typeof spacingTokens)[number];
 
 const createSpacingVariants = (property: "gap" | "columnGap" | "rowGap") =>

@@ -222,12 +222,7 @@ export const themeContract = createThemeContract({
 	// Border styles
 	border: {
 		radius: {
-			none: null,  // 0
-			sm: null,    // 2px
-			base: null,  // 4px
-			md: null,    // 6px
-			lg: null,    // 8px
-			full: null,  // 9999px
+			none: null,  // 0 - use clipPath for terminal aesthetic instead of rounded corners
 		},
 		width: {
 			none: null,  // 0
