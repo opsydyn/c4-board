@@ -18,8 +18,8 @@
     "prepare": "effect-language-service patch"
   },
   "dependencies": {
-    "@astrojs/check": "0.9.5",
-    "@astrojs/react": "^4.4.0",
+    "@astrojs/check": "0.9.6",
+    "@astrojs/react": "4.4.2",
     "@effect-atom/atom-react": "^0.4.0",
     "@effect/typeclass": "^0.38.0",
     "@lexical/react": "^0.38.2",
@@ -44,6 +44,7 @@
     "@vanilla-extract/vite-plugin": "^5.1.1",
     "@visx/annotation": "^3.12.0",
     "@visx/event": "^3.12.0",
+    "@visx/glyph": "^3.12.0",
     "@visx/gradient": "^3.12.0",
     "@visx/group": "^3.12.0",
     "@visx/legend": "^3.12.0",
@@ -58,7 +59,7 @@
     "@xyflow/react": "^12.9.3",
     "ag-grid-community": "^34.3.0",
     "ag-grid-react": "^34.3.0",
-    "astro": "5.15.6",
+    "astro": "5.16.6",
     "dagre": "^0.8.5",
     "date-fns": "^4.1.0",
     "effect": "^3.19.2",

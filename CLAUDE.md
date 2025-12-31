@@ -11,12 +11,12 @@ This is a **Tauri v2 + Astro** desktop application template that combines:
 
 ## Development Commands
 
+**Package Manager**: This project uses **Bun** as the primary package manager. All commands should use `bun` instead of `npm` or `pnpm`.
+
 ### Running the Application
 ```bash
 # Development mode (starts both Astro dev server and Tauri)
-npm run tauri dev
-# or
-pnpm tauri dev
+bun run tauri dev
 
 # The dev server runs on http://localhost:4321/
 # Tauri automatically loads this URL via tauri.conf.json
@@ -25,21 +25,19 @@ pnpm tauri dev
 ### Building
 ```bash
 # Build for production (runs type checking, Astro build, then Tauri build)
-npm run tauri build
-# or
-pnpm tauri build
+bun run tauri build
 
 # Frontend-only build with type checking
-npm run build
+bun run build
 
 # Type checking only
-npm run astro check
+bun run astro check
 ```
 
 ### Linting
 ```bash
 # Run ESLint
-npx eslint .
+bunx eslint .
 
 # ESLint is configured in eslint.config.ts with:
 # - TypeScript support
@@ -50,30 +48,30 @@ npx eslint .
 ### Astro Commands
 ```bash
 # Preview production build
-npm run preview
+bun run preview
 
 # Run Astro CLI directly
-npm run astro [command]
+bun run astro [command]
 ```
 
 ### Testing
 ```bash
 # Run tests once (CI mode)
-npm run test:run
+bun test:run
 
 # Run tests in watch mode (development)
-npm run test:watch
+bun test:watch
 # or
-npm test
+bun test
 
 # Run tests with UI
-npm run test:ui
+bun test:ui
 
 # Run tests with coverage report
-npm run test:coverage
+bun test:coverage
 
 # Run specific test file
-npx vitest run src/ui/machines/canvas.machine.test.ts
+bunx vitest run src/ui/machines/canvas.machine.test.ts
 ```
 
 **Test Philosophy:**
@@ -81,6 +79,179 @@ npx vitest run src/ui/machines/canvas.machine.test.ts
 - XState machines are tested via integration tests
 - 100% type-safe tests using TypeScript
 - Use Vitest for fast, modern testing
+
+## Development Workflow: Red-Green-Blue (TDD)
+
+**MANDATORY**: All new features and changes MUST follow the Red-Green-Blue cycle.
+
+This is Test-Driven Development (TDD) with an architectural twist:
+
+### The Three-Phase Cycle
+
+#### 🔴 **RED: Write a Failing Test**
+
+Write a test for the next small piece of functionality. The test should fail because the feature doesn't exist yet.
+
+```typescript
+// test/core/effects/postee/status-derivation.test.ts
+describe("deriveRequestStatuses", () => {
+  it("should mark request as error when response status >= 400", async () => {
+    const history: PosteeHistoryEntry[] = [{
+      id: "hist-1",
+      request_id: "req-1",
+      response_status: 404,
+      error_message: null,
+      executed_at: Date.now()
+    }];
+
+    // This will FAIL because deriveRequestStatuses doesn't exist yet
+    const result = await Effect.runPromise(deriveRequestStatuses(history));
+    expect(result.get("req-1")).toBe("error");
+  });
+});
+```
+
+**Run the test**: `bun test` → Should see RED (failing test)
+
+#### 🟢 **GREEN: Make it Pass (Minimal Implementation)**
+
+Write the simplest code that makes the test pass. Don't worry about perfection yet.
+
+```typescript
+// src/core/effects/postee/status-derivation.ts
+export const deriveRequestStatuses = (
+  history: PosteeHistoryEntry[]
+): Effect<Map<string, RequestStatus>, never> =>
+  Effect.sync(() => {
+    const map = new Map<string, RequestStatus>();
+    for (const entry of history) {
+      if (!entry.request_id) continue;
+
+      // Simple logic to make test pass
+      const status: RequestStatus =
+        entry.response_status && entry.response_status >= 400
+          ? "error"
+          : "success";
+
+      map.set(entry.request_id, status);
+    }
+    return map;
+  });
+```
+
+**Run the test**: `bun test` → Should see GREEN (passing test)
+
+#### 🔵 **BLUE: Refactor (Improve Design)**
+
+Now that the test is passing, refactor the code to follow our architectural principles:
+
+- Apply **Functional Core, Imperative Shell** pattern
+- Extract pure functions
+- Improve type safety
+- Add documentation
+- Optimize performance (if needed)
+
+```typescript
+// src/core/effects/postee/status-derivation.ts
+/**
+ * Pure function: Determines execution status from history entry
+ * NO side effects, 100% testable
+ */
+const statusFromEntry = (entry: PosteeHistoryEntry): RequestStatus => {
+  if (entry.error_message) return "error";
+  if (entry.response_status === null) return "unknown";
+  return entry.response_status >= 400 ? "error" : "success";
+};
+
+/**
+ * Effect service: Derives request status map from execution history
+ * Returns most recent status for each request
+ */
+export const deriveRequestStatuses = (
+  history: PosteeHistoryEntry[]
+): Effect<Map<string, RequestStatus>, never> =>
+  Effect.sync(() => {
+    const latestStatuses = new Map<string, { status: RequestStatus; executedAt: number }>();
+
+    for (const entry of history) {
+      if (!entry.request_id) continue;
+
+      const status = statusFromEntry(entry);
+      const previous = latestStatuses.get(entry.request_id);
+
+      if (!previous || entry.executed_at > previous.executedAt) {
+        latestStatuses.set(entry.request_id, {
+          status,
+          executedAt: entry.executed_at
+        });
+      }
+    }
+
+    return new Map(
+      Array.from(latestStatuses.entries()).map(([id, { status }]) => [id, status])
+    );
+  });
+```
+
+**Run the test again**: `bun test` → Should still be GREEN
+
+**Run all tests**: `bun test` → Ensure refactoring didn't break anything
+
+### Critical Rules
+
+1. **Never skip BLUE**: Skipping refactoring accumulates technical debt
+2. **Small steps**: Each RED-GREEN-BLUE cycle should take 5-15 minutes
+3. **Test first, always**: No production code without a failing test first
+4. **Commit at GREEN**: Each passing test is a valid checkpoint
+5. **Refactor fearlessly**: Tests give you confidence to improve design
+
+### Workflow Integration
+
+#### For New Features
+
+1. **Plan**: List all test cases upfront (add to todo list)
+2. **Pick one test**: Start with the simplest or most foundational
+3. **RED-GREEN-BLUE**: Complete the cycle
+4. **Repeat**: Move to next test case
+
+#### For Bug Fixes
+
+1. **RED**: Write a test that reproduces the bug (should fail)
+2. **GREEN**: Fix the bug (test passes)
+3. **BLUE**: Refactor to prevent similar bugs
+
+#### For Refactoring
+
+1. **Ensure GREEN**: All tests pass before refactoring
+2. **BLUE**: Make architectural improvements
+3. **Stay GREEN**: Tests should still pass after each change
+
+### Examples from This Codebase
+
+**Good**: [layout.ts](src/core/effects/layout.ts) was built with TDD:
+
+- Pure function with clear inputs/outputs
+- Easy to test without mocking
+- Refactored to optimal design
+
+**Needs Work**: [PosteeWorkspace.tsx](src/ui/components/postee/PosteeWorkspace.tsx):
+
+- Logic in React hooks (hard to test)
+- No tests written first
+- Refactor needed (see [ADR-001](docs/adr/001-postee-workspace-refactor.md))
+
+### Benefits
+
+1. **Self-Testing Code**: Every feature has a test
+2. **Interface-First Design**: Tests force you to think about API before implementation
+3. **Refactoring Safety**: Tests catch regressions immediately
+4. **Living Documentation**: Tests show how code should be used
+5. **Architectural Alignment**: BLUE phase ensures Functional Core pattern
+
+### References
+
+- [Martin Fowler: Test-Driven Development](https://martinfowler.com/bliki/TestDrivenDevelopment.html)
+- [Kent Beck: Test-Driven Development by Example](https://www.amazon.com/Test-Driven-Development-Kent-Beck/dp/0321146530)
 
 ## Architecture
 
@@ -330,6 +501,54 @@ This template uses **React** exclusively for simplicity (KISS principle):
 1. Define the Rust function in [src-tauri/src/lib.rs](src-tauri/src/lib.rs) with `#[tauri::command]`
 2. Add it to the `invoke_handler!` macro in the builder
 3. Call from frontend using `invoke("command_name", { args })`
+
+## Architecture Decision Records (ADRs)
+
+**IMPORTANT**: All significant architectural decisions MUST be documented in an ADR.
+
+### When to Create an ADR
+
+Create an ADR when making decisions about:
+
+- **Architectural patterns**: Changes to Functional Core, Imperative Shell, or component structure
+- **State management**: XState machine design, Effect service patterns, context structure
+- **Major refactors**: Component splits, service extractions, directory restructuring
+- **Technology choices**: Adding/removing libraries, changing build tools
+- **Cross-cutting concerns**: Testing strategy, error handling, logging patterns
+- **Performance optimizations**: Caching strategies, lazy loading, derived state
+
+### ADR Process
+
+1. **Before coding**: Write a draft ADR with Status: "Proposed"
+2. **Gather feedback**: Share with team for review
+3. **Implement**: Build the solution according to the ADR
+4. **Update**: Mark as Status: "Accepted" when complete
+5. **Reference**: Link ADR in code comments and PR descriptions
+
+### ADR Location
+
+All ADRs live in [`docs/adr/`](docs/adr/) with:
+
+- **Naming**: `NNN-title-in-kebab-case.md` (sequential numbering)
+- **Index**: [`docs/adr/README.md`](docs/adr/README.md) contains the full index
+- **Template**: See [`docs/adr/001-postee-workspace-refactor.md`](docs/adr/001-postee-workspace-refactor.md) for format
+
+### ADR Sections
+
+Each ADR includes:
+
+- **Status**: Proposed | Accepted | Superseded | Deprecated
+- **Date**: YYYY-MM-DD
+- **Context**: Problem statement and background
+- **Decision**: What is being changed and why
+- **Consequences**: Positive, negative, and neutral outcomes
+- **Alternatives Considered**: What was rejected and why
+
+### Example ADRs
+
+- [ADR-001: PosteeWorkspace Refactor](docs/adr/001-postee-workspace-refactor.md) - Migrating component to Functional Core pattern
+
+**Rule**: If a change requires more than 3 files or touches architectural boundaries, write an ADR first.
 
 ## Testing
 

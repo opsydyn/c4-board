@@ -110,7 +110,7 @@ export function PosteeWorkspace() {
 	const [isResponseOpen, setResponseOpen] = useState(true);
 	const [isEnvironmentOpen, setEnvironmentOpen] = useState(false);
 	const [isCompactLayout, setCompactLayout] = useState(false);
-	const [activeResponseTab, setActiveResponseTab] = useState<"Execution" | "LoadTest">("Execution");
+	const [activeResponseTab, setActiveResponseTab] = useState<"Execution" | "LoadTest" | "History">("Execution");
 	const [expandedKeys, setExpandedKeys] = useState<Set<Key> | "all">(
 		() => new Set<Key>(),
 	);
@@ -308,6 +308,14 @@ export function PosteeWorkspace() {
 		setSelectedTreeKeys(new Set<Key>());
 		setRenamingCollectionId(null);
 	}, [canDeleteCollections, selectionCount, selectedCollectionIds, send]);
+
+	const handleLoadTestToggle = useCallback(
+		(selected: boolean) => {
+			setResponseOpen(true);
+			setActiveResponseTab(selected ? "LoadTest" : "Execution");
+		},
+		[],
+	);
 
 	const handleCreateRequest = useCallback(
 		(event: FormEvent<HTMLFormElement>) => {
@@ -703,14 +711,15 @@ useEffect(() => {
 					Hide
 				</ToggleButton>
 			</div>
-			<TabBar
-				tabs={[
-					{ id: "Execution", label: "Execution" },
-					{ id: "LoadTest", label: "Load Test" },
-				]}
-				activeTab={activeResponseTab}
-				onTabChange={(tab) => setActiveResponseTab(tab as "Execution" | "LoadTest")}
-			>
+				<TabBar
+					tabs={[
+						{ id: "Execution", label: "Execution" },
+						{ id: "LoadTest", label: "Load Test" },
+						{ id: "History", label: "History" },
+					]}
+					activeTab={activeResponseTab}
+					onTabChange={(tab) => setActiveResponseTab(tab as "Execution" | "LoadTest" | "History")}
+				>
 				<TabPanel id="Execution" className={styles.responseTabContent}>
 					<h2 className={styles.sectionTitle}>Execution</h2>
 					{isRunning && (
@@ -746,6 +755,21 @@ useEffect(() => {
 						</div>
 					)}
 
+				</TabPanel>
+				<TabPanel id="LoadTest" className={styles.responseTabContent}>
+					{selectedRequest && (
+						<LoadTestPanel
+							request={{
+								id: selectedRequest.id,
+								name: selectedRequest.name,
+								method: selectedRequest.method,
+								url: selectedRequest.url,
+							}}
+						/>
+					)}
+				</TabPanel>
+				<TabPanel id="History" className={styles.responseTabContent}>
+					<h2 className={styles.sectionTitle}>Execution History</h2>
 					<PosteeHistoryTable history={history} onInspectEntry={handleInspectHistoryEntry} />
 
 					{inspectedHistoryResponse && (
@@ -780,18 +804,6 @@ useEffect(() => {
 								defaultExpanded
 							/>
 						</div>
-					)}
-				</TabPanel>
-				<TabPanel id="LoadTest" className={styles.responseTabContent}>
-					{selectedRequest && (
-						<LoadTestPanel
-							request={{
-								id: selectedRequest.id,
-								name: selectedRequest.name,
-								method: selectedRequest.method,
-								url: selectedRequest.url,
-							}}
-						/>
 					)}
 				</TabPanel>
 			</TabBar>
@@ -1051,6 +1063,15 @@ useEffect(() => {
 						>
 							<CaretRightIcon size={16} weight="bold" />
 							Response
+						</ToggleButton>
+						<ToggleButton
+							isSelected={activeResponseTab === "LoadTest"}
+							onChange={handleLoadTestToggle}
+							disabled={!selectedRequest}
+							aria-label="Open load test panel"
+						>
+							<CaretRightIcon size={16} weight="bold" />
+							Load Test
 						</ToggleButton>
 						<ToggleButton
 							isSelected={isEnvironmentOpen}

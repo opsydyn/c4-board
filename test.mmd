@@ -1,0 +1,178 @@
+flowchart TB
+    %% People (Top Left)
+    dev(["Developer"])
+    %% @pos(50,50,200,100)
+    chatgpt_user(["ChatGPT User"])
+    %% @pos(50,800,200,100)
+
+    %% External Systems Layer
+    github[["GitHub"]]
+    %% @pos(400,50,250,150)
+    chatgpt_sandbox[["ChatGPT Sandbox<br/><em>web-sandbox.oaiusercontent.com</em><br/><small>Proxy Layer</small>"]]
+    %% @pos(400,800,250,150)
+    azure[["Azure Infrastructure"]]
+    %% @pos(1500,50,300,150)
+
+    %% GitHub Container (Groups PR, Main, Actions, Secrets)
+    github_container["GitHub Platform<br/><em>Container</em>"]
+    %% @pos(700,50,400,500)
+    pr["Pull Request"]
+    %% @pos(750,100,150,80)
+    main["Main Branch"]
+    %% @pos(750,220,150,80)
+    gha["GitHub Actions"]
+    %% @pos(750,340,150,80)
+    ghsecrets["GitHub Secrets"]
+    %% @pos(750,460,150,80)
+
+    %% GitHub Actions Workflows Container
+    workflows_container["CI/CD Workflows<br/><em>Container</em>"]
+    %% @pos(700,600,400,350)
+    preview_wf["preview-deploy.yml<br/><em>GitHub Actions Workflow</em>"]
+    %% @pos(750,650,300,80)
+    prod_wf["production-deploy.yml<br/><em>GitHub Actions Workflow</em>"]
+    %% @pos(750,760,300,80)
+    cleanup_wf["cleanup.yml<br/><em>GitHub Actions Workflow</em>"]
+    %% @pos(750,870,300,80)
+
+    %% Docker Build Container
+    docker_container["Docker Build Pipeline<br/><em>Container</em>"]
+    %% @pos(1200,600,350,300)
+    docker_build["Docker Build<br/><em>with NEXT_PUBLIC_BASE_URL</em>"]
+    %% @pos(1250,650,250,100)
+    dockerfile["Dockerfile<br/><em>ARG/ENV setup</em>"]
+    %% @pos(1250,780,250,100)
+
+    %% Azure Container Registry Container
+    acr_container["Container Registry<br/><em>Container</em>"]
+    %% @pos(1600,600,350,300)
+    acr[("Azure Container Registry<br/><em>ACR</em>")]
+    %% @pos(1650,650,250,100)
+    images[("Container Images<br/><em>next-app:main, next-app:pr-6, next-app:pr-7</em>")]
+    %% @pos(1650,780,250,100)
+
+    %% Azure Infrastructure Container
+    azure_infra_container["Azure Resource Group<br/><em>Container</em>"]
+    %% @pos(2000,50,600,900)
+    rg["Resource Group"]
+    %% @pos(2050,100,200,80)
+
+    %% Container Apps Environment (nested container)
+    cae["Container Apps Environment<br/><em>whitebay-7b070974</em>"]
+    %% @pos(2050,220,500,500)
+    prod_app["Production App<br/><em>next-prod</em>"]
+    %% @pos(2100,270,180,100)
+    preview1["Preview App<br/><em>next-pr-6</em>"]
+    %% @pos(2320,270,180,100)
+    preview2["Preview App<br/><em>next-pr-7</em>"]
+    %% @pos(2100,400,180,100)
+
+    logs[("Log Analytics Workspace")]
+    %% @pos(2050,760,200,100)
+
+    %% URLs/Endpoints (right side)
+    prod_url{{"Production URL<br/><em>next-prod.whitebay-7b070974.westeurope.azurecontainerapps.io</em>"}}
+    %% @pos(2700,270,300,100)
+    preview_url1{{"Preview URL<br/><em>next-pr-6.whitebay-7b070974.westeurope.azurecontainerapps.io</em>"}}
+    %% @pos(2700,400,300,100)
+    preview_url2{{"Preview URL<br/><em>next-pr-7.whitebay-7b070974.westeurope.azurecontainerapps.io</em>"}}
+    %% @pos(2700,530,300,100)
+
+    %% Next.js Application Container
+    nextjs_container["Next.js Application<br/><em>Container</em>"]
+    %% @pos(1200,1000,800,400)
+    nextconfig["next.config.ts<br/><em>assetPrefix + headers</em>"]
+    %% @pos(1250,1050,200,80)
+    middleware["middleware.ts<br/><em>CORS + CSP</em>"]
+    %% @pos(1250,1160,200,80)
+    mcp_server["app/mcp/route.ts<br/><em>MCP Protocol</em>"]
+    %% @pos(1250,1270,200,80)
+    layout["app/layout.tsx<br/><em>NextChatSDKBootstrap</em>"]
+    %% @pos(1500,1050,200,80)
+    homepage["app/HomePage.tsx<br/><em>UI Components</em>"]
+    %% @pos(1500,1160,200,80)
+    widget["Widget HTML<br/><em>with absolute asset URLs</em>"]
+    %% @pos(1750,1050,200,80)
+
+    %% Developer Workflow
+    dev -->|"Opens PR"| pr
+    dev -->|"Merges to"| main
+    dev -->|"Closes PR"| pr
+
+    %% GitHub Actions Triggers
+    pr -->|"on: opened/synchronize"| preview_wf
+    main -->|"on: push"| prod_wf
+    pr -->|"on: closed"| cleanup_wf
+
+    %% Preview Deployment Flow
+    preview_wf -->|"1. Calculate preview URL"| docker_build
+    preview_wf -->|"2. Read secrets"| ghsecrets
+    preview_wf -->|"3. Build with args"| dockerfile
+    docker_build -->|"NEXT_PUBLIC_BASE_URL"| dockerfile
+    dockerfile -->|"4. Push image"| acr
+    acr -->|"5. Store"| images
+    preview_wf -->|"6. az containerapp create/update"| preview1
+    preview1 -->|"7. Pull image"| acr
+    preview1 -->|"8. Expose FQDN"| preview_url1
+    preview_wf -->|"9. Comment PR"| pr
+
+    %% Production Deployment Flow
+    prod_wf -->|"1. Build Docker"| docker_build
+    docker_build -->|"2. Push"| acr
+    prod_wf -->|"3. az containerapp update"| prod_app
+    prod_app -->|"4. Pull image"| acr
+    prod_app -->|"5. Expose FQDN"| prod_url
+
+    %% Cleanup Flow
+    cleanup_wf -->|"az containerapp delete"| preview1
+    cleanup_wf -->|"Comment PR"| pr
+
+    %% ChatGPT User Flow
+    chatgpt_user -->|"1. Opens widget"| chatgpt_sandbox
+    chatgpt_sandbox -->|"2. Proxies request"| preview_url1
+    preview_url1 -->|"3. Routes to"| mcp_server
+    mcp_server -->|"4. Returns HTML"| widget
+    widget -->|"5. Includes assets with absolute URLs"| nextconfig
+    chatgpt_sandbox -->|"6. Fetches CSS/JS from absolute URLs"| preview_url1
+
+    %% Next.js Internal Flow
+    nextconfig -->|"Configures"| layout
+    middleware -->|"Sets headers"| mcp_server
+    layout -->|"Renders"| homepage
+    layout -->|"Patches fetch/history"| chatgpt_sandbox
+
+    %% Monitoring
+    prod_app -->|"Logs"| logs
+    preview1 -->|"Logs"| logs
+    preview2 -->|"Logs"| logs
+
+    %% Container Relationships
+    github_container -->|"Contains"| pr
+    github_container -->|"Contains"| main
+    github_container -->|"Contains"| gha
+    github_container -->|"Contains"| ghsecrets
+
+    workflows_container -->|"Contains"| preview_wf
+    workflows_container -->|"Contains"| prod_wf
+    workflows_container -->|"Contains"| cleanup_wf
+
+    docker_container -->|"Contains"| docker_build
+    docker_container -->|"Contains"| dockerfile
+
+    acr_container -->|"Contains"| acr
+    acr_container -->|"Contains"| images
+
+    azure_infra_container -->|"Contains"| rg
+    azure_infra_container -->|"Contains"| cae
+    azure_infra_container -->|"Contains"| logs
+
+    cae -->|"Hosts"| prod_app
+    cae -->|"Hosts"| preview1
+    cae -->|"Hosts"| preview2
+
+    nextjs_container -->|"Contains"| nextconfig
+    nextjs_container -->|"Contains"| middleware
+    nextjs_container -->|"Contains"| mcp_server
+    nextjs_container -->|"Contains"| layout
+    nextjs_container -->|"Contains"| homepage
+    nextjs_container -->|"Contains"| widget

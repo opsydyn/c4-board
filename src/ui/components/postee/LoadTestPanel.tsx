@@ -6,6 +6,7 @@ import {
 	useState,
 } from "react";
 import { LinePath, Bar, AreaClosed } from "@visx/shape";
+import { GlyphCircle } from "@visx/glyph";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import type { LoadTestProgress } from "@/core/effects/postee";
@@ -59,6 +60,7 @@ interface LoadTestPanelProps {
 
 const viewWidth = 600;
 const viewHeight = 160;
+const scatterHeight = 180;
 
 const formatNumber = (value: number, digits = 0) =>
 	new Intl.NumberFormat(undefined, {
@@ -428,6 +430,172 @@ const LatencyBandsChart = ({ samples }: { samples: LoadTestProgress[] }) => {
 	);
 };
 
+const ThroughputLatencyScatter = ({ samples }: { samples: LoadTestProgress[] }) => {
+	const points = useMemo(() => {
+		return samples
+			.map((sample) => {
+				const total = sample.requests_success + sample.requests_failed;
+				const errorRate = total > 0 ? sample.requests_failed / total : 0;
+				return {
+					time: sample.elapsed_ms,
+					rps: typeof sample.rps === "number" ? sample.rps : 0,
+					latency: typeof sample.p95_latency_ms === "number" ? sample.p95_latency_ms : 0,
+					errorRate,
+				};
+			})
+			.filter((p) => Number.isFinite(p.rps) && Number.isFinite(p.latency));
+	}, [samples]);
+
+	const hasData = points.length >= 2;
+
+	const xScale = useMemo(
+		() =>
+			scaleLinear({
+				domain: [0, Math.max(...points.map((p) => p.rps), 1)],
+				range: [0, viewWidth],
+				nice: true,
+			}),
+		[points],
+	);
+
+	const yScale = useMemo(
+		() =>
+			scaleLinear({
+				domain: [0, Math.max(...points.map((p) => p.latency), 1)],
+				range: [scatterHeight, 0],
+				nice: true,
+			}),
+		[points],
+	);
+
+	const colorForErrorRate = (rate: number) => {
+		if (rate > 0.2) return "#F97066"; // red-ish
+		if (rate > 0.05) return "#F5A524"; // amber
+		return "#4CC38A"; // green
+	};
+
+	return (
+		<div className={chartSection}>
+			<div className={chartHeader}>
+				<span>Throughput vs Latency (P95)</span>
+				<span className={miniBarValue}>Color shows error rate</span>
+			</div>
+			{!hasData ? (
+				<div style={{ fontSize: "0.9rem", opacity: 0.7 }}>
+					Run a test to see the scatter.
+				</div>
+			) : (
+				<svg width="100%" height={scatterHeight + 20} viewBox={`0 0 ${viewWidth} ${scatterHeight + 20}`}>
+					<Group top={10} left={0}>
+						{points.map((point, index) => (
+							<GlyphCircle
+								key={`${point.time}-${index}`}
+								left={xScale(point.rps) ?? 0}
+								top={yScale(point.latency) ?? 0}
+								r={6}
+								fill={colorForErrorRate(point.errorRate)}
+								stroke="rgba(0,0,0,0.35)"
+								strokeWidth={1}
+							/>
+						))}
+					</Group>
+				</svg>
+			)}
+		</div>
+	);
+};
+
+const SuccessFailureStacked = ({ samples }: { samples: LoadTestProgress[] }) => {
+	const buckets = useMemo(() => {
+		let prevSuccess = 0;
+		let prevFail = 0;
+		return samples.map((sample) => {
+			const successDelta = Math.max(sample.requests_success - prevSuccess, 0);
+			const failDelta = Math.max(sample.requests_failed - prevFail, 0);
+			prevSuccess = sample.requests_success;
+			prevFail = sample.requests_failed;
+			return {
+				time: sample.elapsed_ms,
+				success: successDelta,
+				fail: failDelta,
+			};
+		});
+	}, [samples]);
+
+	const hasData = buckets.length >= 1;
+
+	const maxTotal = useMemo(
+		() =>
+			Math.max(
+				1,
+				...buckets.map((b) => b.success + b.fail),
+			),
+		[buckets],
+	);
+
+	const yScale = useMemo(
+		() =>
+			scaleLinear({
+				domain: [0, maxTotal],
+				range: [scatterHeight, 0],
+				nice: true,
+			}),
+		[maxTotal],
+	);
+
+	const barWidth = useMemo(() => {
+		const count = Math.max(buckets.length, 1);
+		return Math.max((viewWidth - 20) / count, 4);
+	}, [buckets.length]);
+
+	return (
+		<div className={chartSection}>
+			<div className={chartHeader}>
+				<span>Success vs Failure per Tick</span>
+				<span className={miniBarValue}>Stacked per sample</span>
+			</div>
+			{!hasData ? (
+				<div style={{ fontSize: "0.9rem", opacity: 0.7 }}>
+					Run a test to populate counts.
+				</div>
+			) : (
+				<svg width="100%" height={scatterHeight + 30} viewBox={`0 0 ${viewWidth} ${scatterHeight + 30}`}>
+					<Group top={10} left={10}>
+						{buckets.map((bucket, index) => {
+							const x = index * barWidth;
+							const baseY = yScale(0);
+							const successY = yScale(bucket.success);
+							const successHeight = baseY - successY;
+							const failTop = yScale(bucket.success + bucket.fail);
+							const failHeight = successY - failTop;
+							return (
+								<Group key={`${bucket.time}-${index}`} left={x}>
+									<Bar
+										x={0}
+										y={successY}
+										width={barWidth - 2}
+										height={successHeight}
+										fill="#4CC38A"
+										rx={3}
+									/>
+									<Bar
+										x={0}
+										y={failTop}
+										width={barWidth - 2}
+										height={failHeight}
+										fill="#F97066"
+										rx={3}
+									/>
+								</Group>
+							);
+						})}
+					</Group>
+				</svg>
+			)}
+		</div>
+	);
+};
+
 export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	const {
 		status,
@@ -693,6 +861,8 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 					units="ms"
 					samples={samples}
 				/>
+				<ThroughputLatencyScatter samples={samples} />
+				<SuccessFailureStacked samples={samples} />
 			</div>
 			<LatencyBandsChart samples={samples} />
 		</section>
