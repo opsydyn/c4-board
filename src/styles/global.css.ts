@@ -58,3 +58,8 @@ globalStyle("html, body", {
 	MozOsxFontSmoothing: "grayscale",
 	WebkitTextSizeAdjust: "100%",
 });
+
+// Reset border-radius on all interactive elements to ensure tactical clip-path styling
+globalStyle("button, input, select, textarea", {
+	borderRadius: 0,
+});

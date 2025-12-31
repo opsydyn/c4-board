@@ -22,23 +22,28 @@ export const selectButton = style({
 			width: "100%",
 			height: "36px",
 			clipPath: theme.clipPath.sm,
-			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-			backgroundColor: theme.color.background.input,
+			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+			backgroundColor: theme.color.background.surface,
 			color: theme.color.foreground.primary,
-			padding: `0 ${theme.spacing["2"]}`,
+			padding: `0 ${theme.spacing["4"]}`,
 			fontFamily: theme.typography.family.mono,
 			fontSize: theme.typography.size.sm,
+			textTransform: theme.typography.textTransform.uppercase,
+			letterSpacing: theme.typography.letterSpacing.wide,
+			fontWeight: theme.typography.weight.semibold,
 			cursor: "pointer",
 			transition: theme.transition.base,
 
 			":hover": {
-				borderColor: theme.color.border.primary,
+				borderColor: theme.color.status.selected,
+				boxShadow: `0 0 12px ${theme.color.status.selected}44`,
+				backgroundColor: theme.color.background.raised,
 			},
 
 			":focus": {
 				outline: "none",
-				borderColor: theme.color.border.focus,
-				boxShadow: theme.effect.glow.sm,
+				borderColor: theme.color.status.selected,
+				boxShadow: `0 0 12px ${theme.color.status.selected}55`,
 			},
 
 			":disabled": {
@@ -49,7 +54,8 @@ export const selectButton = style({
 	},
 	selectors: {
 		'&[aria-expanded="true"]': {
-			borderColor: theme.color.border.focus,
+			borderColor: theme.color.status.selected,
+			boxShadow: `0 0 12px ${theme.color.status.selected}55`,
 		},
 	},
 });
@@ -61,16 +67,21 @@ export const selectMenu = style({
 			top: "calc(100% + 4px)",
 			left: 0,
 			right: 0,
-			zIndex: 1000,
-			clipPath: theme.clipPath.base,
-			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+			zIndex: theme.zIndex.tooltip,
+			clipPath: theme.clipPath.md,
+			border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
 			backgroundColor: theme.color.background.surface,
-			boxShadow: theme.effect.glow.base,
+			boxShadow: `0 0 30px ${theme.color.background.base}dd, 0 0 60px ${theme.color.status.selected}22`,
+			backgroundImage: `
+				linear-gradient(${theme.color.grid} 1px, transparent 1px),
+				linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+			`,
+			backgroundSize: "20px 20px",
 			maxHeight: "240px",
 			overflowY: "auto",
 			listStyle: "none",
 			margin: 0,
-			padding: theme.spacing["1"],
+			padding: theme.spacing["2"],
 		},
 	},
 });
@@ -80,23 +91,31 @@ export const selectOption = style({
 		[componentsLayer]: {
 			display: "flex",
 			alignItems: "center",
-			padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+			padding: `${theme.spacing["2"]} ${theme.spacing["4"]}`,
 			clipPath: theme.clipPath.sm,
+			border: `${theme.border.width.thin} solid transparent`,
 			color: theme.color.foreground.primary,
 			fontFamily: theme.typography.family.mono,
 			fontSize: theme.typography.size.sm,
+			textTransform: theme.typography.textTransform.uppercase,
+			letterSpacing: theme.typography.letterSpacing.wide,
 			cursor: "pointer",
-			transition: theme.transition.fast,
+			transition: theme.transition.base,
 			margin: `${theme.spacing["1"]} 0`,
+			backgroundColor: "transparent",
 
 			":hover": {
-				backgroundColor: theme.color.background.hover,
+				transform: "translateX(4px)",
+				borderColor: theme.color.status.selected,
+				boxShadow: `0 0 8px ${theme.color.status.selected}33`,
+				backgroundColor: theme.color.background.raised,
 			},
 
 			":focus": {
 				outline: "none",
-				backgroundColor: theme.color.background.hover,
-				boxShadow: `inset 0 0 0 1px ${theme.color.border.focus}`,
+				borderColor: theme.color.status.selected,
+				boxShadow: `0 0 12px ${theme.color.status.selected}55`,
+				backgroundColor: theme.color.background.raised,
 			},
 		},
 	},
@@ -105,9 +124,11 @@ export const selectOption = style({
 export const selectOptionActive = style({
 	"@layer": {
 		[componentsLayer]: {
-			backgroundColor: theme.color.background.selected,
+			borderColor: theme.color.status.selected,
+			backgroundColor: theme.color.background.raised,
 			color: theme.color.foreground.primary,
-			fontWeight: theme.typography.weight.medium,
+			fontWeight: theme.typography.weight.bold,
+			boxShadow: `0 0 8px ${theme.color.status.selected}33`,
 		},
 	},
 });

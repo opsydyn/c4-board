@@ -18,9 +18,11 @@ Each ADR follows this structure:
 
 ## Index
 
-| ADR | Title | Status | Date |
-|-----|-------|--------|------|
-| [ADR-001](./001-postee-workspace-refactor.md) | PosteeWorkspace Component Refactor to Functional Core Pattern | Proposed | 2025-12-30 |
+| ADR                                              | Title                                                             | Status   | Date       |
+| ------------------------------------------------ | ----------------------------------------------------------------- | -------- | ---------- |
+| [ADR-001](./001-postee-workspace-refactor.md)    | PosteeWorkspace Component Refactor to Functional Core Pattern    | Proposed | 2025-12-30 |
+| [ADR-002](./002-postee-actor-model-refactor.md)  | Postee Actor Model Refactor (XState 5 Best Practices)            | Proposed | 2025-12-30 |
+| [ADR-003](./003-mcp-integration-architecture.md) | MCP Integration Architecture (Model Context Protocol Support)    | Proposed | 2025-12-31 |
 
 ## Contributing
 

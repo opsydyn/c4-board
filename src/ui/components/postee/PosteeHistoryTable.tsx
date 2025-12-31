@@ -7,6 +7,7 @@ import {
 	type GridReadyEvent,
 	type GetRowIdParams,
 	type RowDoubleClickedEvent,
+	type ICellRendererParams,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import type { PosteeHistoryEntry } from "@/core/effects/database.postee";
@@ -17,11 +18,58 @@ import {
 	quickFilter,
 	quickFilterInput,
 	gridWrapper,
+	viewButton,
 } from "./PosteeHistoryTable.css";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
+
+interface ViewButtonCellProps extends ICellRendererParams {
+	data?: HistoryRow;
+	onViewClick: (id: string) => void;
+	compareMode: boolean;
+	isSelected: boolean;
+	onSelectForCompare?: (id: string) => void;
+}
+
+function ViewButtonCell({
+	data,
+	onViewClick,
+	compareMode,
+	isSelected,
+	onSelectForCompare,
+}: ViewButtonCellProps) {
+	if (!data) return null;
+
+	if (compareMode && onSelectForCompare) {
+		return (
+			<button
+				type="button"
+				className={viewButton}
+				onClick={() => onSelectForCompare(data.id)}
+				style={{
+					backgroundColor: isSelected ? "#00BCD4" : undefined,
+					borderColor: isSelected ? "#00BCD4" : undefined,
+					color: isSelected ? "#0A0E27" : undefined,
+					fontWeight: isSelected ? "bold" : undefined,
+				}}
+			>
+				{isSelected ? "✓ Selected" : "Select"}
+			</button>
+		);
+	}
+
+	return (
+		<button
+			type="button"
+			className={viewButton}
+			onClick={() => onViewClick(data.id)}
+		>
+			View
+		</button>
+	);
+}
 
 interface HistoryRow {
 	id: string;
@@ -95,9 +143,18 @@ const formatSize = (value: number | null): string => {
 interface PosteeHistoryTableProps {
 	history: PosteeHistoryEntry[];
 	onInspectEntry?: (entry: PosteeHistoryEntry) => void;
+	compareMode?: boolean;
+	selectedForCompare?: string[];
+	onSelectForCompare?: (entryId: string) => void;
 }
 
-export function PosteeHistoryTable({ history, onInspectEntry }: PosteeHistoryTableProps) {
+export function PosteeHistoryTable({
+	history,
+	onInspectEntry,
+	compareMode = false,
+	selectedForCompare = [],
+	onSelectForCompare,
+}: PosteeHistoryTableProps) {
 	const [rows, setRows] = useState<HistoryRow[]>([]);
 	const [entryMap, setEntryMap] = useState<Record<string, PosteeHistoryEntry>>({});
 	const [quickFilterText, setQuickFilterText] = useState("");
@@ -150,8 +207,31 @@ export function PosteeHistoryTable({ history, onInspectEntry }: PosteeHistoryTab
 		gridApiRef.current.setGridOption("quickFilterText", quickFilterText);
 	}, [quickFilterText]);
 
+	const handleViewClick = useCallback(
+		(id: string) => {
+			const entry = entryMap[id];
+			if (entry && onInspectEntry) {
+				onInspectEntry(entry);
+			}
+		},
+		[entryMap, onInspectEntry],
+	);
+
 	const columnDefs = useMemo<ColDef<HistoryRow>[]>(
 		() => [
+			{
+				headerName: "Actions",
+				field: "id",
+				maxWidth: 100,
+				pinned: "left",
+				cellRenderer: ViewButtonCell,
+				cellRendererParams: (params: { data?: HistoryRow }) => ({
+					onViewClick: handleViewClick,
+					compareMode,
+					isSelected: params.data ? selectedForCompare.includes(params.data.id) : false,
+					onSelectForCompare,
+				}),
+			},
 			{
 				headerName: "Method",
 				field: "method",
@@ -207,7 +287,7 @@ export function PosteeHistoryTable({ history, onInspectEntry }: PosteeHistoryTab
 				valueFormatter: ({ value }) => value ?? "-",
 			},
 		],
-		[],
+		[handleViewClick, compareMode, selectedForCompare, onSelectForCompare],
 	);
 
 	const defaultColDef = useMemo<ColDef>(() => ({

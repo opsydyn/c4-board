@@ -123,3 +123,28 @@ globalStyle(`.${gridWrapper}.ag-theme-quartz .ag-virtual-list-viewport`, {
 	backgroundColor: theme.color.surface.overlay,
 });
 
+export const viewButton = style({
+	padding: `${theme.spacing["1"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	clipPath: theme.clipPath.sm,
+	backgroundColor: theme.color.background.raised,
+	color: theme.color.foreground.primary,
+	cursor: "pointer",
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	transition: theme.transition.base,
+	boxShadow: theme.effect.glow.sm,
+
+	":hover": {
+		backgroundColor: theme.color.surface.overlay,
+		borderColor: theme.color.status.selected,
+		boxShadow: `0 0 12px ${theme.color.status.selected}44`,
+	},
+
+	":active": {
+		transform: "translateY(1px)",
+	},
+});
+

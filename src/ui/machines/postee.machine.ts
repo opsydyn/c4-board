@@ -42,6 +42,19 @@ import {
 } from "../../core/effects/postee/types";
 import { DatabaseService } from "../../core/effects/database.base";
 import { DatabaseServiceLive } from "../../core/effects/database.runtime";
+import {
+	deriveRequestStatuses,
+	type RequestStatus,
+} from "../../core/effects/postee/status-derivation";
+import {
+	deriveUIState,
+	type DerivedUIState,
+	type UIStateInput,
+} from "../../core/effects/postee/ui-state";
+import {
+	deriveWorkspaceState,
+	type DerivedWorkspaceState,
+} from "../../core/effects/postee/workspace-state";
 
 type WorkspaceEnv = DatabaseService | HttpClient;
 type WorkspaceLayer = Layer.Layer<WorkspaceEnv, never, never>;
@@ -71,6 +84,16 @@ export interface PosteeContext {
 	runner: RunnerState;
 	history: PosteeHistoryEntry[];
 	layer: WorkspaceLayer;
+
+	// State flags for derived state
+	isInitialising: boolean;
+	isFailure: boolean;
+
+	// Phase 2: Derived state from Effect services
+	requestStatuses: Map<string, RequestStatus>; // Derived from history
+	uiState: DerivedUIState; // Derived from UI flags
+	uiFlags: UIStateInput; // Input flags for UI state derivation
+	workspaceState: DerivedWorkspaceState; // Derived from workspace context
 }
 
 export type PosteeEvent =
@@ -137,7 +160,13 @@ export type PosteeEvent =
 				environmentId: EnvironmentId;
 				variables: PosteeEnvironmentVariable[];
 			};
-	  };
+	  }
+	// Phase 2: UI state events
+	| { type: "UI_TOGGLE_SIDEBAR" }
+	| { type: "UI_TOGGLE_RESPONSE" }
+	| { type: "UI_TOGGLE_ENVIRONMENT" }
+	| { type: "UI_SET_COMPACT_LAYOUT"; compact: boolean }
+	| { type: "UI_TOGGLE_DIFF" };
 
 export interface LoadWorkspaceResult {
 	collections: PosteeCollection[];
@@ -859,6 +888,93 @@ const posteeWorkspaceSetup = setup({
 				};
 			},
 		}),
+		recordErrorHistory: assign({
+			history: ({ context, event }) => {
+				if (event.type !== "xstate.error.actor.runRequest") {
+					return context.history;
+				}
+
+				const requestId = context.activeRequestId;
+				if (!requestId) {
+					return context.history;
+				}
+
+				// Get the error text (same logic as updateRunnerOnError)
+				const rawError = event.error ?? null;
+				const errorText = (() => {
+					if (!rawError) {
+						return "Request failed";
+					}
+					if (typeof rawError === "string") {
+						return rawError;
+					}
+					if (rawError instanceof Error) {
+						const base = rawError.stack ?? rawError.message;
+						const cause = rawError.cause;
+						const causeText = cause
+							? `\nCause: ${JSON.stringify(cause, null, 2)}`
+							: "";
+						return `${base}${causeText}`;
+					}
+					try {
+						return JSON.stringify(rawError, null, 2);
+					} catch {
+						return String(rawError);
+					}
+				})();
+
+				// Find the request details
+				const request = Object.values(context.requestsByCollection)
+					.flat()
+					.find((r) => r.id === requestId);
+
+				if (!request) {
+					return context.history;
+				}
+
+				// Get current environment variables
+				const environmentId = context.activeEnvironmentId;
+				const variables = environmentId
+					? context.variablesByEnvironment[environmentId as unknown as string] ?? []
+					: [];
+
+				// Calculate duration if we have a start time
+				const durationMs = context.runner.startedAt
+					? Date.now() - context.runner.startedAt
+					: null;
+
+				// Create history entry for the error
+				const historyEntry: PosteeHistoryEntry = {
+					id: nanoid(),
+					request_id: request.id,
+					request_snapshot: JSON.stringify(
+						{
+							request,
+							environmentId,
+							variables,
+						},
+						null,
+						2,
+					),
+					response_status: null, // No status code on error
+					response_time_ms: durationMs,
+					response_size_bytes: null,
+					response_body: null, // No response body on error
+					response_headers: null, // No headers on error
+					error_message: errorText,
+					executed_at: Date.now(),
+				};
+
+				// Run the effect to save to database (fire and forget)
+				runLayeredEffect(
+					context.layer,
+					PosteeHistory.record(historyEntry),
+				);
+
+				// Add to history array (same as updateHistoryOnSuccess)
+				return [historyEntry, ...context.history].slice(0, 50);
+			},
+		}),
 		abortInFlight: ({ context }) => {
 			const requestId = context.activeRequestId;
 			if (!requestId) {
@@ -874,21 +990,122 @@ const posteeWorkspaceSetup = setup({
 				// Ignore abort errors
 			});
 		},
+
+		// Phase 2: UI state actions
+		toggleSidebar: assign(({ context }) => {
+			const newFlags = {
+				...context.uiFlags,
+				isSidebarOpen: !context.uiFlags.isSidebarOpen,
+			};
+			return {
+				uiFlags: newFlags,
+				uiState: Effect.runSync(deriveUIState(newFlags)),
+			};
+		}),
+
+		toggleResponse: assign(({ context }) => {
+			console.log("[Machine] toggleResponse action called");
+			console.log("[Machine] current isResponseOpen:", context.uiFlags.isResponseOpen);
+
+			const newFlags = {
+				...context.uiFlags,
+				isResponseOpen: !context.uiFlags.isResponseOpen,
+			};
+
+			console.log("[Machine] new isResponseOpen:", newFlags.isResponseOpen);
+
+			return {
+				uiFlags: newFlags,
+				uiState: Effect.runSync(deriveUIState(newFlags)),
+			};
+		}),
+
+		toggleEnvironment: assign(({ context }) => {
+			const newFlags = {
+				...context.uiFlags,
+				isEnvironmentOpen: !context.uiFlags.isEnvironmentOpen,
+			};
+			return {
+				uiFlags: newFlags,
+				uiState: Effect.runSync(deriveUIState(newFlags)),
+			};
+		}),
+
+		toggleDiff: assign(({ context }) => {
+			const newFlags = {
+				...context.uiFlags,
+				showDiff: !context.uiFlags.showDiff,
+			};
+			return {
+				uiFlags: newFlags,
+				uiState: Effect.runSync(deriveUIState(newFlags)),
+			};
+		}),
+
+		setCompactLayout: assign(({ context, event }) => {
+			if (!event || event.type !== "UI_SET_COMPACT_LAYOUT") {
+				return {};
+			}
+			const newFlags = {
+				...context.uiFlags,
+				isCompactLayout: event.compact,
+			};
+			return {
+				uiFlags: newFlags,
+				uiState: Effect.runSync(deriveUIState(newFlags)),
+			};
+		}),
+
+		// Derive request statuses from history
+		deriveRequestStatuses: assign(({ context }) => {
+			const statusMap = Effect.runSync(deriveRequestStatuses(context.history));
+
+			return {
+				...context,
+				requestStatuses: statusMap,
+			};
+		}),
+
+		// Derive workspace state from context
+		deriveWorkspaceState: assign(({ context }) => {
+			const input = {
+				isInitialising: context.isInitialising,
+				isRunning: context.runner.status === "running",
+				isFailure: context.isFailure,
+				runner: context.runner,
+				activeCollectionId: context.activeCollectionId,
+				activeRequestId: context.activeRequestId,
+				requestsByCollection: context.requestsByCollection,
+			};
+
+			const newWorkspaceState = Effect.runSync(deriveWorkspaceState(input));
+
+			return {
+				...context,
+				workspaceState: newWorkspaceState,
+			};
+		}),
+
+		// Set state flags
+		markInitialising: assign({ isInitialising: true, isFailure: false }),
+		markReady: assign({ isInitialising: false, isFailure: false }),
+		markFailure: assign({ isInitialising: false, isFailure: true }),
 	},
 });
 
 const initialisingState = posteeWorkspaceSetup.createStateConfig({
-	entry: "markRunnerIdle",
+	entry: ["markRunnerIdle", "markInitialising", "deriveWorkspaceState"],
 	invoke: {
 		id: "loadWorkspace",
 		src: "loadWorkspace",
 		input: ({ context }) => ({ layer: context.layer }),
 		onDone: {
 			target: "ready",
-			actions: "assignWorkspace",
+			actions: ["assignWorkspace", "deriveRequestStatuses", "markReady", "deriveWorkspaceState"],
 		},
 		onError: {
 			target: "failure",
+			actions: ["markFailure", "deriveWorkspaceState"],
 		},
 	},
 });
@@ -908,20 +1125,20 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 					actions: "deleteCollections",
 				},
 				CREATE_REQUEST: {
-					actions: "createRequest",
+					actions: ["createRequest", "deriveWorkspaceState"],
 				},
 				UPDATE_REQUEST_METADATA: {
-					actions: "updateRequestMetadata",
+					actions: ["updateRequestMetadata", "deriveWorkspaceState"],
 				},
 				RUN_REQUEST: {
 					target: "running",
 					guard: "hasActiveRequest",
 				},
 				SELECT_COLLECTION: {
-					actions: "selectCollection",
+					actions: ["selectCollection", "deriveWorkspaceState"],
 				},
 				SELECT_REQUEST: {
-					actions: "selectRequest",
+					actions: ["selectRequest", "deriveWorkspaceState"],
 				},
 				SELECT_ENVIRONMENT: {
 					actions: "selectEnvironment",
@@ -938,11 +1155,15 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 				CLEAR_BASELINE_RESPONSE: {
 					actions: "clearBaselineResponse",
 				},
+				// Derive request statuses when history is refreshed
+				REFRESH_HISTORY: {
+					actions: "deriveRequestStatuses",
+				},
 			},
 		},
 		running: {
-			entry: "markRunnerRunning",
-			exit: "markRunnerIdle",
+			entry: ["markRunnerRunning", "deriveWorkspaceState"],
+			exit: ["markRunnerIdle", "deriveWorkspaceState"],
 			invoke: {
 				id: "runRequest",
 				src: "runRequest",
@@ -952,11 +1173,11 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 				}),
 				onDone: {
 					target: "success",
-					actions: ["updateRunnerOnSuccess", "updateHistoryOnSuccess"],
+					actions: ["updateRunnerOnSuccess", "updateHistoryOnSuccess", "deriveWorkspaceState"],
 				},
 				onError: {
 					target: "error",
-					actions: "updateRunnerOnError",
+					actions: ["updateRunnerOnError", "recordErrorHistory", "deriveWorkspaceState"],
 				},
 			},
 			on: {
@@ -1006,9 +1227,28 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
 			},
 		},
 	},
+	// UI state events at ready state level (accessible from all substates)
+	on: {
+		UI_TOGGLE_SIDEBAR: {
+			actions: "toggleSidebar",
+		},
+		UI_TOGGLE_RESPONSE: {
+			actions: "toggleResponse",
+		},
+		UI_TOGGLE_ENVIRONMENT: {
+			actions: "toggleEnvironment",
+		},
+		UI_SET_COMPACT_LAYOUT: {
+			actions: "setCompactLayout",
+		},
+		UI_TOGGLE_DIFF: {
+			actions: "toggleDiff",
+		},
+	},
 });
 
 const failureState = posteeWorkspaceSetup.createStateConfig({
+	entry: ["markFailure", "deriveWorkspaceState"],
 	on: {
 		REFRESH: "initialising",
 	},
@@ -1030,6 +1270,33 @@ export const createPosteeWorkspaceMachine = (options?: {
 			history: [],
 			runner: initialRunner(),
 			layer: options?.layer ?? Layer.merge(DatabaseServiceLive, HttpClientLive),
+
+			// State flags
+			isInitialising: true,
+			isFailure: false,
+
+			// Phase 2: Derived state
+			requestStatuses: new Map(),
+			uiFlags: {
+				isSidebarOpen: true,
+				isResponseOpen: false,
+				isCompactLayout: false,
+				isEnvironmentOpen: false,
+				showDiff: false,
+			},
+			uiState: {
+				gridTemplateColumns: "minmax(260px, 320px) 1fr",
+				gridTemplateRows: "minmax(0, 1fr)",
+				isResponseDocked: false,
+			},
+			workspaceState: {
+				statusLabel: "Idle",
+				activeCollectionKey: null,
+				requestsForActiveCollection: [],
+				selectedRequest: null,
+				canRunRequest: false,
+				lastError: null,
+			},
 		},
 		initial: "initialising",
 		states: {

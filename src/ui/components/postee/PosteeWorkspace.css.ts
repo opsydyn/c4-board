@@ -1,9 +1,9 @@
-import { style, globalStyle } from "@vanilla-extract/css";
+import { style, globalStyle, keyframes } from "@vanilla-extract/css";
 import { theme } from "../../../styles/theme.css";
 
 export const workspace = style({
 	display: "grid",
-	gridTemplateColumns: "minmax(260px, 320px) 1fr minmax(300px, 360px)",
+	gridTemplateColumns: "minmax(260px, 320px) 1fr",
 	gridTemplateRows: "1fr",
 	minHeight: "100vh",
 	backgroundColor: theme.color.background.base,
@@ -172,13 +172,14 @@ export const treeChevronButton = style({
 	display: "inline-flex",
 	alignItems: "center",
 	justifyContent: "center",
-	width: "28px",
-	height: "28px",
+	width: "20px",
+	height: "20px",
+	padding: 0,
 	border: "none",
 	background: "transparent",
 	color: theme.color.foreground.secondary,
 	cursor: "pointer",
-	transition: "transform 0.2s ease",
+	flexShrink: 0,
 
 	selectors: {
 		"&:hover": {
@@ -360,6 +361,114 @@ export const panel = style({
 	minHeight: "200px",
 });
 
+/**
+ * Unified Request Bar - Postman-style always-visible request interface
+ */
+export const requestBar = style({
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	// No clipPath to prevent clipping dropdown menus
+	padding: `${theme.spacing["4"]} ${theme.spacing["5"]}`,
+	backgroundColor: "rgba(10, 18, 14, 0.94)",
+	boxShadow: theme.effect.glow.sm,
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["3"],
+});
+
+export const requestBarRow = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	flexWrap: "wrap",
+});
+
+export const urlInputWrapper = style({
+	position: "relative",
+	flex: 1,
+	minWidth: "300px",
+	display: "flex",
+	alignItems: "center",
+});
+
+export const requestUrlInput = style({
+	flex: 1,
+	width: "100%",
+	height: "36px",
+	clipPath: theme.clipPath.sm,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: theme.color.background.input,
+	color: theme.color.foreground.primary,
+	padding: `0 ${theme.spacing["8"]} 0 ${theme.spacing["3"]}`,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:focus": {
+			outline: "none",
+			borderColor: theme.color.border.focus,
+			boxShadow: theme.effect.glow.sm,
+		},
+		"&:disabled": {
+			opacity: theme.opacity.disabled,
+			cursor: "not-allowed",
+		},
+		"&[data-validation='valid']:not(:disabled)": {
+			borderColor: theme.color.status.ready,
+		},
+		"&[data-validation='invalid']:not(:disabled)": {
+			borderColor: theme.color.status.critical,
+		},
+	},
+});
+
+export const urlValidIcon = style({
+	position: "absolute",
+	right: theme.spacing["3"],
+	color: theme.color.status.ready,
+	pointerEvents: "none",
+});
+
+export const urlInvalidIcon = style({
+	position: "absolute",
+	right: theme.spacing["3"],
+	color: theme.color.status.critical,
+	pointerEvents: "none",
+});
+
+export const validationError = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	backgroundColor: "rgba(255, 107, 107, 0.1)",
+	border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
+	clipPath: theme.clipPath.sm,
+	color: theme.color.status.critical,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	marginTop: theme.spacing["2"],
+});
+
+export const suggestionButton = style({
+	marginLeft: "auto",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	backgroundColor: "rgba(255, 107, 107, 0.2)",
+	border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
+	clipPath: theme.clipPath.sm,
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	cursor: "pointer",
+	transition: theme.transition.fast,
+
+	selectors: {
+		"&:hover": {
+			backgroundColor: "rgba(255, 107, 107, 0.3)",
+		},
+	},
+});
+
 export const responseColumn = style({
 	display: "flex",
 	flexDirection: "column",
@@ -469,16 +578,91 @@ export const submitButton = style({
 	},
 });
 
+export const saveButton = style([
+	submitButton,
+	{
+		backgroundColor: theme.color.status.ready,
+		color: theme.color.background.base,
+	},
+]);
+
 export const actionRow = style({
 	display: "flex",
 	alignItems: "center",
-	gap: theme.spacing["2"],
+	gap: theme.spacing["3"],
 	marginTop: theme.spacing["3"],
+});
+
+export const statusBadge = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	clipPath: theme.clipPath.sm,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	backgroundColor: "rgba(14, 24, 19, 0.85)",
+	transition: theme.transition.base,
+});
+
+export const statusCode = style({
+	fontWeight: theme.typography.weight.bold,
+	fontSize: theme.typography.size.base,
+});
+
+export const statusText = style({
+	color: theme.color.foreground.secondary,
+});
+
+export const statusDivider = style({
+	color: theme.color.foreground.tertiary,
+	opacity: 0.5,
+});
+
+export const statusDuration = style({
+	color: theme.color.foreground.secondary,
+});
+
+globalStyle(`${statusBadge}[data-status-type="success"]`, {
+	borderColor: theme.color.status.ready,
+});
+
+globalStyle(`${statusBadge}[data-status-type="success"] ${statusCode}`, {
+	color: theme.color.status.ready,
+});
+
+globalStyle(`${statusBadge}[data-status-type="redirect"]`, {
+	borderColor: theme.color.status.selected,
+});
+
+globalStyle(`${statusBadge}[data-status-type="redirect"] ${statusCode}`, {
+	color: theme.color.status.selected,
+});
+
+globalStyle(`${statusBadge}[data-status-type="client-error"]`, {
+	borderColor: theme.color.status.caution,
+});
+
+globalStyle(`${statusBadge}[data-status-type="client-error"] ${statusCode}`, {
+	color: theme.color.status.caution,
+});
+
+globalStyle(`${statusBadge}[data-status-type="server-error"]`, {
+	borderColor: theme.color.status.critical,
+});
+
+globalStyle(`${statusBadge}[data-status-type="server-error"] ${statusCode}`, {
+	color: theme.color.status.critical,
 });
 
 export const runButton = style([
 	submitButton,
 	{
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "center",
+		gap: theme.spacing["2"],
 		backgroundColor: theme.color.interactive.primary,
 		color: theme.color.background.base,
 	},
@@ -487,6 +671,10 @@ export const runButton = style([
 export const cancelButton = style([
 	submitButton,
 	{
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "center",
+		gap: theme.spacing["2"],
 		backgroundColor: theme.color.status.critical,
 		color: theme.color.background.base,
 		opacity: 0.85,
@@ -499,6 +687,23 @@ export const cancelButton = style([
 		},
 	},
 ]);
+
+const spinAnimation = keyframes({
+	from: {
+		transform: "rotate(0deg)",
+	},
+	to: {
+		transform: "rotate(360deg)",
+	},
+});
+
+export const spinner = style({
+	"@media": {
+		"(prefers-reduced-motion: no-preference)": {
+			animation: `${spinAnimation} 1s linear infinite`,
+		},
+	},
+});
 
 export const responseBody = style({
 	backgroundColor: theme.color.background.surface,
@@ -765,4 +970,138 @@ export const latencyLegendSwatch = style({
 	height: 12,
 	clipPath: theme.clipPath.sm,
 	display: "inline-block",
+});
+
+/**
+ * Response Panel Empty States
+ */
+export const responseEmptyState = style({
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: theme.spacing["4"],
+	padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
+	color: theme.color.foreground.secondary,
+	textAlign: "center",
+	minHeight: "300px",
+	backgroundImage: `
+		linear-gradient(${theme.color.grid} 1px, transparent 1px),
+		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+	`,
+	backgroundSize: "20px 20px",
+
+	selectors: {
+		"& h3": {
+			fontSize: theme.typography.size.lg,
+			fontFamily: theme.typography.family.mono,
+			textTransform: theme.typography.textTransform.uppercase,
+			letterSpacing: theme.typography.letterSpacing.wide,
+			color: theme.color.foreground.primary,
+			margin: 0,
+		},
+		"& p": {
+			fontSize: theme.typography.size.sm,
+			fontFamily: theme.typography.family.mono,
+			maxWidth: "400px",
+			margin: 0,
+		},
+		"& kbd": {
+			display: "inline-block",
+			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+			backgroundColor: theme.color.background.raised,
+			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+			clipPath: theme.clipPath.sm,
+			fontFamily: theme.typography.family.mono,
+			fontSize: theme.typography.size.xs,
+			fontWeight: theme.typography.weight.bold,
+			color: theme.color.foreground.primary,
+		},
+		"& svg": {
+			color: theme.color.status.selected,
+			opacity: 0.6,
+		},
+	},
+});
+
+export const responseLoadingState = style({
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: theme.spacing["4"],
+	padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
+	color: theme.color.foreground.secondary,
+	textAlign: "center",
+	minHeight: "300px",
+	backgroundImage: `
+		linear-gradient(${theme.color.grid} 1px, transparent 1px),
+		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+	`,
+	backgroundSize: "20px 20px",
+
+	selectors: {
+		"& h3": {
+			fontSize: theme.typography.size.lg,
+			fontFamily: theme.typography.family.mono,
+			textTransform: theme.typography.textTransform.uppercase,
+			letterSpacing: theme.typography.letterSpacing.wide,
+			color: theme.color.foreground.primary,
+			margin: 0,
+		},
+		"& p": {
+			fontSize: theme.typography.size.sm,
+			fontFamily: theme.typography.family.mono,
+			maxWidth: "400px",
+			margin: 0,
+		},
+		"& svg": {
+			color: theme.color.status.selected,
+		},
+	},
+});
+
+export const responseErrorState = style({
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: theme.spacing["4"],
+	padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
+	color: theme.color.foreground.secondary,
+	textAlign: "center",
+	minHeight: "300px",
+	backgroundImage: `
+		linear-gradient(${theme.color.grid} 1px, transparent 1px),
+		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+	`,
+	backgroundSize: "20px 20px",
+
+	selectors: {
+		"& h3": {
+			fontSize: theme.typography.size.lg,
+			fontFamily: theme.typography.family.mono,
+			textTransform: theme.typography.textTransform.uppercase,
+			letterSpacing: theme.typography.letterSpacing.wide,
+			color: theme.color.status.critical,
+			margin: 0,
+		},
+		"& svg": {
+			color: theme.color.status.critical,
+		},
+	},
+});
+
+export const responseErrorMessage = style({
+	fontSize: theme.typography.size.sm,
+	fontFamily: theme.typography.family.mono,
+	maxWidth: "600px",
+	margin: 0,
+	padding: theme.spacing["4"],
+	backgroundColor: theme.color.background.raised,
+	border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
+	clipPath: theme.clipPath.md,
+	textAlign: "left",
+	color: theme.color.foreground.primary,
+	overflowX: "auto",
 });

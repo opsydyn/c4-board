@@ -61,3 +61,69 @@ export const toggleButton = style({
 		},
 	},
 });
+
+export const baselineButton = style({
+	"@layer": {
+		[componentsLayer]: {
+			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+			fontSize: theme.typography.size.xs,
+			background: "transparent",
+			color: "#88C0D0",
+			border: "1px solid #88C0D0",
+			clipPath: theme.clipPath.sm,
+			cursor: "pointer",
+			fontFamily: theme.typography.family.mono,
+			textTransform: theme.typography.textTransform.uppercase,
+			transition: theme.transition.fast,
+
+			":hover": {
+				backgroundColor: "rgba(136, 192, 208, 0.1)",
+				boxShadow: theme.effect.glow.sm,
+			},
+		},
+	},
+});
+
+export const baselineButtonActive = style({
+	"@layer": {
+		[componentsLayer]: {
+			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+			fontSize: theme.typography.size.xs,
+			background: "#88C0D0",
+			color: "#0a0a0a",
+			border: "1px solid #88C0D0",
+			clipPath: theme.clipPath.sm,
+			cursor: "pointer",
+			fontFamily: theme.typography.family.mono,
+			textTransform: theme.typography.textTransform.uppercase,
+			transition: theme.transition.fast,
+
+			":hover": {
+				backgroundColor: "#9fd8e8",
+				boxShadow: theme.effect.glow.sm,
+			},
+		},
+	},
+});
+
+export const clearButton = style({
+	"@layer": {
+		[componentsLayer]: {
+			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+			fontSize: theme.typography.size.xs,
+			background: "transparent",
+			color: theme.color.status.critical,
+			border: `1px solid ${theme.color.status.critical}`,
+			clipPath: theme.clipPath.sm,
+			cursor: "pointer",
+			fontFamily: theme.typography.family.mono,
+			textTransform: theme.typography.textTransform.uppercase,
+			transition: theme.transition.fast,
+
+			":hover": {
+				backgroundColor: "rgba(255, 107, 107, 0.1)",
+				boxShadow: theme.effect.glow.sm,
+			},
+		},
+	},
+});

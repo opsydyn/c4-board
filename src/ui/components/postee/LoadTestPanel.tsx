@@ -12,6 +12,7 @@ import { scaleLinear } from "@visx/scale";
 import type { LoadTestProgress } from "@/core/effects/postee";
 import { useLoadTest } from "./useLoadTest";
 import { WarningOctagonIcon } from "@phosphor-icons/react";
+import { Select } from "./Select";
 import {
 	loadTestPanel,
 	loadTestControls,
@@ -202,13 +203,13 @@ const MiniBar = ({ value, maxValue, color }: MiniBarProps) => {
 				<rect
 					width={width - horizontalPadding * 2}
 					height={barHeight}
-					rx={barHeight / 2}
+					rx={0}
 					fill="rgba(44, 70, 60, 0.45)"
 				/>
 				<Bar
 					width={Math.min(scaledValue, width - horizontalPadding * 2)}
 					height={barHeight}
-					rx={barHeight / 2}
+					rx={0}
 					fill={color}
 				/>
 			</Group>
@@ -576,7 +577,7 @@ const SuccessFailureStacked = ({ samples }: { samples: LoadTestProgress[] }) => 
 										width={barWidth - 2}
 										height={successHeight}
 										fill="#4CC38A"
-										rx={3}
+										rx={0}
 									/>
 									<Bar
 										x={0}
@@ -584,7 +585,7 @@ const SuccessFailureStacked = ({ samples }: { samples: LoadTestProgress[] }) => 
 										width={barWidth - 2}
 										height={failHeight}
 										fill="#F97066"
-										rx={3}
+										rx={0}
 									/>
 								</Group>
 							);
@@ -720,17 +721,11 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 				<div className={loadTestControls}>
 					<label style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
 						<span className={metricLabel}>HTTP Method</span>
-						<select
+						<Select
 							value={targetMethod}
-							onChange={(event) => setTargetMethod(event.target.value)}
-							className={textInput}
-						>
-							{methodOptions.map((method) => (
-								<option key={method} value={method}>
-									{method}
-								</option>
-							))}
-						</select>
+							options={methodOptions}
+							onChange={setTargetMethod}
+						/>
 					</label>
 					<label style={{ gridColumn: "span 2", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
 						<span className={metricLabel}>Target URL</span>

@@ -410,6 +410,444 @@ test('should layout nodes vertically', () => {
 });
 ```
 
+### Effect-TS Idioms and Anti-Patterns
+
+**CRITICAL**: Always use idiomatic Effect-TS patterns. Avoid imperative anti-patterns.
+
+#### ✅ DO: Use Option for Nullable Values
+
+**Anti-pattern** (Boolean Blindness):
+```typescript
+// ❌ BAD: Boolean blindness - loses semantic information
+const isValidURL = (url: string): boolean => {
+  try {
+    new URL(url);
+    return true;  // What does true mean? Valid? Parsed? Success?
+  } catch {
+    return false; // What does false mean? Invalid? Error? Missing?
+  }
+};
+
+// Usage requires re-parsing
+if (isValidURL(input)) {
+  const url = new URL(input); // Parsing twice!
+}
+```
+
+**Idiomatic Effect-TS** (Option):
+```typescript
+// ✅ GOOD: Option preserves the parsed value
+const parseURL = Option.liftThrowable((urlString: string) =>
+  new URL(urlString.trim())
+);
+
+// Usage: Pattern match on Option
+pipe(
+  parseURL(input),
+  Option.match({
+    onNone: () => "Invalid URL",
+    onSome: (url) => `Valid: ${url.hostname}` // Has the URL object!
+  })
+);
+
+// Or use in Schema validation
+Schema.filter((s) => Option.isSome(parseURL(s)), {
+  message: () => "URL must be valid"
+})
+```
+
+**Why Option is better:**
+
+- ✅ **No boolean blindness**: `Some(URL)` vs `None` is self-documenting
+- ✅ **No double parsing**: The parsed value is preserved in `Some`
+- ✅ **Composable**: Can chain with `map`, `flatMap`, `filter`, etc.
+- ✅ **Type-safe**: Compiler enforces handling both cases
+
+#### ✅ DO: Use Data.TaggedEnum for Discriminated Unions
+
+**Anti-pattern** (String Unions):
+```typescript
+// ❌ BAD: String literals lose type safety
+type Status = "success" | "error" | "unknown";
+
+const status: Status = "success";
+
+// No structural typing, just string comparison
+if (status === "success") { /* ... */ }
+```
+
+**Idiomatic Effect-TS** (Data.TaggedEnum):
+```typescript
+// ✅ GOOD: Tagged enum with payload support
+export const RequestStatus = Data.taggedEnum<{
+  Success: { readonly _: void };
+  Error: { readonly message: string };
+  Unknown: { readonly _: void };
+}>();
+
+// Type-safe construction
+const status = RequestStatus.Error({ message: "Network timeout" });
+
+// Pattern matching
+pipe(
+  status,
+  RequestStatus.$match({
+    Success: () => console.log("Success!"),
+    Error: ({ message }) => console.error(message),
+    Unknown: () => console.log("Unknown")
+  })
+);
+```
+
+#### ✅ DO: Use Effect.gen for Sequential Composition
+
+**Anti-pattern** (Nested Promises):
+```typescript
+// ❌ BAD: Promise hell, hard to read
+const process = async (input: string) => {
+  const validated = await validate(input)
+    .catch(e => { throw new Error("Validation failed") });
+
+  const parsed = await parse(validated)
+    .catch(e => { throw new Error("Parse failed") });
+
+  return await save(parsed)
+    .catch(e => { throw new Error("Save failed") });
+};
+```
+
+**Idiomatic Effect-TS** (Effect.gen):
+```typescript
+// ✅ GOOD: Linear, readable, type-safe error channel
+const process = (input: string): Effect.Effect<Result, ProcessError> =>
+  Effect.gen(function* () {
+    const validated = yield* validate(input);
+    const parsed = yield* parse(validated);
+    const saved = yield* save(parsed);
+    return saved;
+  });
+```
+
+#### ✅ DO: Use Schema for Runtime Validation
+
+**Anti-pattern** (Manual Validation):
+```typescript
+// ❌ BAD: Manual checks, no type inference
+const validateForm = (data: any): ValidatedForm => {
+  if (!data.name || data.name.trim() === "") {
+    throw new Error("Name required");
+  }
+  if (!data.url) {
+    throw new Error("URL required");
+  }
+  // ... more manual checks
+  return data as ValidatedForm; // Unsafe cast!
+};
+```
+
+**Idiomatic Effect-TS** (Schema):
+```typescript
+// ✅ GOOD: Declarative validation with automatic type inference
+const FormSchema = Schema.Struct({
+  name: pipe(
+    Schema.String,
+    Schema.filter(s => s.trim().length > 0, {
+      message: () => "Name cannot be empty"
+    })
+  ),
+  url: pipe(
+    Schema.String,
+    Schema.filter(s => Option.isSome(parseURL(s)), {
+      message: () => "URL must be valid"
+    })
+  )
+});
+
+// Type automatically inferred: { name: string, url: string }
+type ValidatedForm = Schema.Schema.Type<typeof FormSchema>;
+```
+
+#### ✅ DO: Use Data.TaggedError for Type-Safe Errors
+
+**Anti-pattern** (Throwing Errors):
+```typescript
+// ❌ BAD: Untyped errors, can't know what might be thrown
+const fetchUser = async (id: string): Promise<User> => {
+  if (!id) throw new Error("ID required");
+  const response = await fetch(`/api/users/${id}`);
+  if (!response.ok) throw new Error("Fetch failed");
+  return response.json();
+};
+```
+
+**Idiomatic Effect-TS** (TaggedError):
+
+```typescript
+// ✅ GOOD: Typed error channel, exhaustive handling
+class ValidationError extends Data.TaggedError("ValidationError")<{
+  readonly field: string;
+}> {}
+
+class NetworkError extends Data.TaggedError("NetworkError")<{
+  readonly status: number;
+}> {}
+
+const fetchUser = (id: string): Effect.Effect<User, ValidationError | NetworkError> =>
+  Effect.gen(function* () {
+    if (!id) {
+      return yield* Effect.fail(new ValidationError({ field: "id" }));
+    }
+    // ... fetch logic with NetworkError on failure
+  });
+```
+
+#### Summary of Idioms
+
+| Anti-Pattern | Idiomatic Effect-TS | Why Better |
+| ------------ | ------------------- | ---------- |
+| `try/catch` returning `boolean` | `Option.liftThrowable` | Preserves parsed value, composable |
+| String unions (`"success" \| "error"`) | `Data.taggedEnum` | Type-safe, supports payloads, pattern matching |
+| `async/await` with nested `.catch()` | `Effect.gen` with `yield*` | Linear flow, typed error channel |
+| Manual validation with `throw` | `Schema` with filters | Declarative, automatic type inference |
+| Generic `Error` throws | `Data.TaggedError` | Type-safe error channel, exhaustive handling |
+| Imperative loops with mutations | `Effect.forEach`, `Effect.filter` | Immutable, composable |
+
+**Rule**: If you're writing `try/catch`, `throw`, or returning `boolean`, ask: "Can I use Option, Either, or Effect instead?"
+
+### XState Idioms and Anti-Patterns
+
+**CRITICAL**: Follow XState 5 best practices for state-driven design.
+
+#### ❌ ANTI-PATTERN: Boolean Flags in Context
+
+**Problem**: Using booleans in context to represent states
+
+```typescript
+// ❌ BAD: Boolean blindness in XState context
+const machine = setup({
+  types: {} as {
+    context: {
+      isSidebarOpen: boolean;
+      isResponseOpen: boolean;
+      isCompactLayout: boolean;
+    };
+  }
+}).createMachine({
+  context: {
+    isSidebarOpen: true,
+    isResponseOpen: false,
+    isCompactLayout: false
+  },
+  on: {
+    TOGGLE_SIDEBAR: {
+      actions: assign({
+        isSidebarOpen: ({ context }) => !context.isSidebarOpen
+      })
+    }
+  }
+});
+```
+
+**Why this is wrong:**
+
+- ❌ **Boolean blindness**: `isSidebarOpen: true` loses semantic meaning (opening? open? closing?)
+- ❌ **Not state-driven**: Flags don't leverage XState's core strength (explicit states)
+- ❌ **Combinatorial explosion**: 3 booleans = 8 possible combinations, many invalid
+- ❌ **Hard to visualize**: Can't generate meaningful state charts
+- ❌ **No state guards**: Can't prevent invalid transitions
+
+**XState principle**: "Use states to model states, context for data"
+
+#### ✅ CORRECT: State-Driven Design with Parallel States
+
+```typescript
+// ✅ GOOD: Explicit states, no boolean flags
+const machine = setup({
+  types: {} as {
+    context: {
+      // Only data, no booleans representing states
+      gridConfig: GridConfig;
+    };
+    events:
+      | { type: "TOGGLE_SIDEBAR" }
+      | { type: "TOGGLE_RESPONSE" }
+      | { type: "SET_LAYOUT"; layout: "normal" | "compact" };
+  }
+}).createMachine({
+  id: "ui",
+  type: "parallel", // Multiple orthogonal concerns
+  states: {
+    // Sidebar state machine
+    sidebar: {
+      initial: "open",
+      states: {
+        open: {
+          on: { TOGGLE_SIDEBAR: "closed" }
+        },
+        closed: {
+          on: { TOGGLE_SIDEBAR: "open" }
+        }
+      }
+    },
+    // Response panel state machine
+    response: {
+      initial: "closed",
+      states: {
+        closed: {
+          on: { TOGGLE_RESPONSE: "docked" }
+        },
+        docked: {
+          on: {
+            TOGGLE_RESPONSE: "closed",
+            // State guard: compact layout forces floating
+            "layout.SWITCH_COMPACT": "floating"
+          }
+        },
+        floating: {
+          on: {
+            TOGGLE_RESPONSE: "closed",
+            "layout.SWITCH_NORMAL": "docked"
+          }
+        }
+      }
+    },
+    // Layout state machine
+    layout: {
+      initial: "normal",
+      states: {
+        normal: {
+          on: {
+            SET_LAYOUT: {
+              target: "compact",
+              guard: ({ event }) => event.layout === "compact"
+            }
+          },
+          entry: "broadcastLayoutChange" // Notify sibling states
+        },
+        compact: {
+          on: {
+            SET_LAYOUT: {
+              target: "normal",
+              guard: ({ event }) => event.layout === "normal"
+            }
+          },
+          entry: "broadcastLayoutChange"
+        }
+      }
+    }
+  }
+});
+```
+
+**Why state-driven is better:**
+
+- ✅ **Explicit states**: `sidebar.open` vs `sidebar.closed` is self-documenting
+- ✅ **No invalid states**: Impossible to have contradictory boolean combinations
+- ✅ **State guards**: Layout changes can force response panel transitions
+- ✅ **Visualizable**: Can generate state charts from machine definition
+- ✅ **Parallel states**: Sidebar, response, and layout are orthogonal concerns
+- ✅ **Type-safe**: TypeScript knows exactly which states exist
+
+#### ❌ ANTI-PATTERN: Monolithic Machines (> 500 Lines)
+
+**Problem**: Single machine handling too many concerns
+
+```typescript
+// ❌ BAD: 1040-line machine handling everything
+const workspaceMachine = setup({...}).createMachine({
+  // Collections logic (200 lines)
+  // Requests logic (200 lines)
+  // Environments logic (200 lines)
+  // Runner logic (200 lines)
+  // UI logic (200 lines)
+  // History logic (40 lines)
+});
+```
+
+**Why this is wrong:**
+
+- ❌ **Hard to test**: Too many concerns in one machine
+- ❌ **Hard to reason about**: 1040 lines is too much cognitive load
+- ❌ **Poor separation of concerns**: Everything coupled together
+- ❌ **Can't scale**: Adding features makes it worse
+
+#### ✅ CORRECT: Actor Model with Spawned Child Machines
+
+```typescript
+// ✅ GOOD: Parent orchestrates child actors (< 200 lines)
+const workspaceMachine = setup({
+  types: {} as {
+    context: {
+      uiActor: ActorRefFrom<typeof uiMachine>;
+      collectionsActor: ActorRefFrom<typeof collectionsMachine>;
+      runnerActor: ActorRefFrom<typeof runnerMachine> | null;
+    };
+  },
+  actors: {
+    uiMachine,
+    collectionsMachine,
+    runnerMachine
+  }
+}).createMachine({
+  context: ({ spawn }) => ({
+    // Spawn persistent child actors
+    uiActor: spawn("uiMachine"),
+    collectionsActor: spawn("collectionsMachine"),
+    runnerActor: null // Invoked on-demand
+  }),
+  on: {
+    RUN_REQUEST: {
+      actions: assign({
+        // Invoke runner actor dynamically
+        runnerActor: ({ spawn, context }) => spawn("runnerMachine", {
+          input: { requestId: context.activeRequestId }
+        })
+      })
+    }
+  }
+});
+
+// Each child machine: < 200 lines, single concern
+const uiMachine = setup({...}).createMachine({ /* UI logic only */ });
+const collectionsMachine = setup({...}).createMachine({ /* Collections only */ });
+const runnerMachine = setup({...}).createMachine({ /* Request execution only */ });
+```
+
+**Why actor model is better:**
+
+- ✅ **Separation of concerns**: Each actor has single responsibility
+- ✅ **Testability**: Small actors (< 200 lines) easy to test in isolation
+- ✅ **Maintainability**: Easy to reason about individual actors
+- ✅ **Concurrency**: Can spawn multiple runner actors for parallel requests
+- ✅ **Reusability**: Actors can be reused in different parent contexts
+
+#### When to Use Spawned Actors vs Invoked Actors
+
+**Spawned Actors** (`spawn` in context):
+
+- Use for **dynamic** or **unknown** number of actors
+- Actors are **persistent** across state transitions
+- Example: Multiple request runners, collection items, environment tabs
+
+**Invoked Actors** (`invoke` in state):
+
+- Use for **finite/known** number of actors
+- Actors are **tied to state lifecycle** (stopped when state exits)
+- Example: Database initialization, HTTP request execution
+
+#### Summary of XState Idioms
+
+| Anti-Pattern | Idiomatic XState 5 | Why Better |
+| ------------ | ------------------ | ---------- |
+| Boolean flags in context (`isSidebarOpen`) | Explicit states (`sidebar.open`, `sidebar.closed`) | Self-documenting, no invalid states, visualizable |
+| Monolithic machine (> 500 lines) | Actor model with spawned child machines | Separation of concerns, testability, maintainability |
+| Nested if/else on event type | State-driven event handlers (`on: { EVENT: ... }`) | Events scoped to states, impossible to handle wrong event |
+| Mutating context directly | `assign()` with immutable updates | Predictable state updates, time-travel debugging |
+
+**Rule**: If your machine is > 500 lines or has boolean flags in context, refactor to the actor model with state-driven design.
+
+**See**: [ADR-002: Postee Actor Model Refactor](docs/adr/002-postee-actor-model-refactor.md) for detailed migration plan.
+
 ### Frontend-Backend Communication
 
 The application uses **Tauri Commands** for IPC (Inter-Process Communication):

@@ -18,6 +18,9 @@ import {
 	responseViewerHeader,
 	responseViewerContent,
 	toggleButton,
+	baselineButton,
+	baselineButtonActive,
+	clearButton,
 } from "./ResponseViewer.css";
 import {
 	searchJsonContent,
@@ -74,9 +77,11 @@ export function ResponseViewer({
 	const [searchResults, setSearchResults] = useState<JsonSearchResult[]>([]);
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+	const [containerWidth, setContainerWidth] = useState(0);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 	const searchContainerRef = useRef<HTMLDivElement>(null);
 	const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
 
 	// Try to detect if body is JSON
 	const isJson = (() => {
@@ -217,6 +222,20 @@ export function ResponseViewer({
 		editorRef.current = editor;
 	}, []);
 
+	// Track container width for responsive diff view
+	useEffect(() => {
+		if (!containerRef.current) return;
+
+		const resizeObserver = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				setContainerWidth(entry.contentRect.width);
+			}
+		});
+
+		resizeObserver.observe(containerRef.current);
+		return () => resizeObserver.disconnect();
+	}, []);
+
 	const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
 		setSearchQuery(event.target.value);
 	};
@@ -231,8 +250,12 @@ export function ResponseViewer({
 		jumpToLine(lineNumber);
 	};
 
+	// Determine if we should use inline diff mode (when width is constrained)
+	// Threshold: < 900px use inline, >= 900px use side-by-side
+	const useInlineDiff = containerWidth > 0 && containerWidth < 900;
+
 	return (
-		<div className={responseViewerContainer}>
+		<div ref={containerRef} className={responseViewerContainer}>
 			{/* Response metadata */}
 			<div className={responseViewerHeader}>
 				{status !== undefined && (
@@ -269,34 +292,14 @@ export function ResponseViewer({
 									<button
 										type="button"
 										onClick={onToggleDiff}
-										style={{
-											padding: "4px 8px",
-											fontSize: "11px",
-											background: showDiff ? "#88C0D0" : "transparent",
-											color: showDiff ? "#0a0a0a" : "#88C0D0",
-											border: "1px solid #88C0D0",
-											borderRadius: "4px",
-											cursor: "pointer",
-											fontFamily: "monospace",
-											textTransform: "uppercase",
-										}}
+										className={showDiff ? baselineButtonActive : baselineButton}
 									>
 										{showDiff ? "■ DIFF" : "□ DIFF"}
 									</button>
 									<button
 										type="button"
 										onClick={onClearBaseline}
-										style={{
-											padding: "4px 8px",
-											fontSize: "11px",
-											background: "transparent",
-											color: "#ff6b6b",
-											border: "1px solid #ff6b6b",
-											borderRadius: "4px",
-											cursor: "pointer",
-											fontFamily: "monospace",
-											textTransform: "uppercase",
-										}}
+										className={clearButton}
 									>
 										✕ CLEAR
 									</button>
@@ -305,17 +308,7 @@ export function ResponseViewer({
 								<button
 									type="button"
 									onClick={onSetBaseline}
-									style={{
-										padding: "4px 8px",
-										fontSize: "11px",
-										background: "transparent",
-										color: "#88C0D0",
-										border: "1px solid #88C0D0",
-										borderRadius: "4px",
-										cursor: "pointer",
-										fontFamily: "monospace",
-										textTransform: "uppercase",
-									}}
+									className={baselineButton}
 								>
 									☆ SET BASELINE
 								</button>
@@ -395,15 +388,17 @@ export function ResponseViewer({
 
 						{showDiff && baselineBody ? (
 							<DiffEditor
-								height="300px"
+								height={useInlineDiff ? "500px" : "400px"}
 								language={isJson ? "json" : "plaintext"}
 								original={formattedBaselineBody}
 								modified={formattedBody}
+								originalModelPath="response-diff-original"
+								modifiedModelPath="response-diff-modified"
 								theme="hc-black"
 								options={{
 									...editorOptions,
 									readOnly: true,
-									renderSideBySide: true,
+									renderSideBySide: !useInlineDiff,
 								}}
 							/>
 						) : (

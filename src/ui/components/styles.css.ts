@@ -428,30 +428,32 @@ export const collapseToggle = style({
 });
 
 export const collapseHandleLeft = style({
-	position: "absolute",
+	position: "fixed",
 	zIndex: theme.zIndex.overlay,
 	top: "50%",
-	left: theme.spacing["4"],
+	left: theme.spacing["3"],
 	display: "inline-flex",
 	alignItems: "center",
 	gap: theme.spacing["1"],
-	transform: "translate(-50%, -50%)",
+	transform: "translateY(-50%)",
 	transition: theme.transition.base,
 	clipPath: theme.clipPath.base,
 	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
 	backgroundColor: "rgba(13, 23, 18, 0.95)",
 	cursor: "pointer",
-	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
 	textTransform: theme.typography.textTransform.uppercase,
 	letterSpacing: theme.typography.letterSpacing.wide,
 	color: theme.color.interactive.primary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
+	boxShadow: theme.effect.glow.md,
 
 	selectors: {
 		"&:hover": {
-			boxShadow: theme.effect.glow.sm,
+			boxShadow: theme.effect.glow.lg,
 			backgroundColor: "rgba(16, 28, 22, 0.98)",
+			borderColor: theme.color.status.selected,
 		},
 	},
 });
