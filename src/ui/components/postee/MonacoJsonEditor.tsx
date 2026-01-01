@@ -12,6 +12,12 @@
 import { useRef, useCallback } from "react";
 import Editor, { type Monaco, loader } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
+import {
+	TextAlignLeftIcon,
+	CopySimpleIcon,
+	CaretDownIcon,
+	CaretRightIcon
+} from "@phosphor-icons/react";
 import { monacoEditorContainer, monacoEditorWrapper, actionBar, actionButton } from "./MonacoJsonEditor.css";
 
 const baseUrl = (import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
@@ -326,7 +332,8 @@ export function MonacoJsonEditor({
 						onClick={handleFormat}
 						title="Format Document (Shift+Alt+F)"
 					>
-						⚡ FORMAT
+						<TextAlignLeftIcon size={14} weight="bold" />
+						FORMAT
 					</button>
 					<button
 						type="button"
@@ -334,7 +341,8 @@ export function MonacoJsonEditor({
 						onClick={handleCopyJsonPath}
 						title="Copy JSON Path (Cmd+Shift+C)"
 					>
-						📋 COPY PATH
+						<CopySimpleIcon size={14} weight="bold" />
+						COPY PATH
 					</button>
 					<button
 						type="button"
@@ -342,7 +350,8 @@ export function MonacoJsonEditor({
 						onClick={handleExpandAll}
 						title="Expand All (Cmd+Shift+E)"
 					>
-						▼ EXPAND
+						<CaretDownIcon size={14} weight="bold" />
+						EXPAND
 					</button>
 					<button
 						type="button"
@@ -350,7 +359,8 @@ export function MonacoJsonEditor({
 						onClick={handleCollapseAll}
 						title="Collapse All (Cmd+Shift+L)"
 					>
-						▶ COLLAPSE
+						<CaretRightIcon size={14} weight="bold" />
+						COLLAPSE
 					</button>
 				</div>
 			)}

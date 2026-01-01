@@ -32,8 +32,8 @@ export const actionBar = style({
 	"@layer": {
 		[componentsLayer]: {
 			display: "flex",
-			gap: theme.spacing["2"],
-			marginBottom: theme.spacing["2"],
+			gap: theme.spacing["3"],
+			marginBottom: theme.spacing["4"],
 			flexWrap: "wrap",
 		},
 	},
@@ -42,8 +42,11 @@ export const actionBar = style({
 export const actionButton = style({
 	"@layer": {
 		[componentsLayer]: {
-			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
-			fontSize: theme.typography.size.xs,
+			display: "flex",
+			alignItems: "center",
+			gap: theme.spacing["3"],
+			padding: `${theme.spacing["4"]} ${theme.spacing["6"]}`,
+			fontSize: theme.typography.size.sm,
 			fontFamily: theme.typography.family.mono,
 			fontWeight: theme.typography.weight.medium,
 			textTransform: theme.typography.textTransform.uppercase,

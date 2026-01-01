@@ -6,7 +6,7 @@ export const tabBar = style({
 	"@layer": {
 		[componentsLayer]: {
 			display: "flex",
-			gap: theme.spacing["1"],
+			gap: theme.spacing["3"],
 			borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
 			marginBottom: theme.spacing["4"],
 		},
@@ -16,7 +16,7 @@ export const tabBar = style({
 export const tab = style({
 	"@layer": {
 		[componentsLayer]: {
-			padding: `${theme.spacing["2"]} ${theme.spacing["4"]}`,
+			padding: `${theme.spacing["3"]} ${theme.spacing["5"]}`,
 			border: "none",
 			background: "transparent",
 			color: theme.color.foreground.secondary,

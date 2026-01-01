@@ -1,15 +1,14 @@
 /**
  * PosteeResponsePanel Component
  *
- * Displays HTTP response results with three tabs:
+ * Displays HTTP response results with three views:
  * - Execution: Last response from single request execution
  * - Load Test: Load testing panel for performance testing
  * - History: Execution history table with response inspection
  */
 
 import { useState, useCallback, useMemo } from "react";
-import { TabBar } from "./TabBar";
-import { TabPanel, ToggleButton } from "react-aria-components";
+import { ToggleButton } from "react-aria-components";
 import { ResponseViewer } from "./ResponseViewer";
 import { LoadTestPanel } from "./LoadTestPanel";
 import { PosteeHistoryTable } from "./PosteeHistoryTable";
@@ -28,7 +27,6 @@ export interface PosteeResponsePanelProps {
 
 	// Tab state
 	activeTab: "Execution" | "LoadTest" | "History";
-	onTabChange: (tab: "Execution" | "LoadTest" | "History") => void;
 
 	// Request state
 	selectedRequest: PosteeRequest | null;
@@ -54,7 +52,6 @@ export function PosteeResponsePanel({
 	isOpen,
 	onToggleOpen,
 	activeTab,
-	onTabChange,
 	selectedRequest,
 	isRunning,
 	lastResponse,
@@ -184,16 +181,9 @@ export function PosteeResponsePanel({
 					Hide
 				</ToggleButton>
 			</div>
-			<TabBar
-				tabs={[
-					{ id: "Execution", label: "Execution" },
-					{ id: "LoadTest", label: "Load Test" },
-					{ id: "History", label: "History" },
-				]}
-				activeTab={activeTab}
-				onTabChange={(tab) => onTabChange(tab as "Execution" | "LoadTest" | "History")}
-			>
-				<TabPanel id="Execution" className={styles.responseTabContent}>
+
+			{activeTab === "Execution" && (
+				<div className={styles.responseTabContent}>
 					<h2 className={styles.sectionTitle}>Execution</h2>
 
 					{/* Empty state: No response yet */}
@@ -244,8 +234,11 @@ export function PosteeResponsePanel({
 							onToggleDiff={onToggleDiff}
 						/>
 					)}
-				</TabPanel>
-				<TabPanel id="LoadTest" className={styles.responseTabContent}>
+				</div>
+			)}
+
+			{activeTab === "LoadTest" && (
+				<div className={styles.responseTabContent}>
 					{selectedRequest && (
 						<LoadTestPanel
 							request={{
@@ -256,8 +249,11 @@ export function PosteeResponsePanel({
 							}}
 						/>
 					)}
-				</TabPanel>
-				<TabPanel id="History" className={styles.responseTabContent}>
+				</div>
+			)}
+
+			{activeTab === "History" && (
+				<div className={styles.responseTabContent}>
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
 						<h2 className={styles.sectionTitle}>Execution History</h2>
 						<button
@@ -354,8 +350,8 @@ export function PosteeResponsePanel({
 							/>
 						</div>
 					)}
-				</TabPanel>
-			</TabBar>
+				</div>
+			)}
 		</>
 	);
 }

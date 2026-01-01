@@ -64,7 +64,7 @@ export const gridWrapper = style({
 	padding: theme.spacing["2"],
 	width: "100%",
 	minWidth: 0,
-	minHeight: "420px",
+	height: "600px",
 });
 
 globalStyle(`.${gridWrapper}.ag-theme-quartz`, {

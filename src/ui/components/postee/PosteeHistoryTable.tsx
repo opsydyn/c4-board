@@ -343,13 +343,16 @@ export function PosteeHistoryTable({
 				rowData={rows}
 				columnDefs={columnDefs}
 				defaultColDef={defaultColDef}
-				domLayout="autoHeight"
+				domLayout="normal"
 				animateRows
 				suppressMovableColumns
 				headerHeight={44}
 				getRowId={getRowId}
 				onGridReady={onGridReady}
 				onRowDoubleClicked={handleRowDoubleClicked}
+				pagination={true}
+				paginationPageSize={20}
+				paginationPageSizeSelector={[10, 20, 50, 100]}
 			/>
 		</div>
 	</div>

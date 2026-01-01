@@ -120,6 +120,16 @@ export function PosteeWorkspace() {
 		[isResponsePanelOpen],
 	);
 
+	const handleHistoryToggle = useCallback(
+		(selected: boolean) => {
+			if (!isResponsePanelOpen) {
+				setIsResponsePanelOpen(true);
+			}
+			setActiveResponseTab(selected ? "History" : "Execution");
+		},
+		[isResponsePanelOpen],
+	);
+
 	// Sidebar handlers
 	const handleCreateCollection = useCallback(
 		(name: string) => {
@@ -293,7 +303,6 @@ export function PosteeWorkspace() {
 			isOpen={isResponsePanelOpen}
 			onToggleOpen={handleToggleResponse}
 			activeTab={activeResponseTab}
-			onTabChange={setActiveResponseTab}
 			selectedRequest={selectedRequest}
 			isRunning={isRunning}
 			lastResponse={lastResponse}
@@ -372,6 +381,17 @@ export function PosteeWorkspace() {
 							>
 								<CaretRightIcon size={16} weight="bold" />
 								Load Test
+							</ToggleButton>
+						</Tooltip>
+						<Tooltip content="View execution history">
+							<ToggleButton
+								isSelected={activeResponseTab === "History"}
+								onChange={handleHistoryToggle}
+								className={layoutStyles.collapseToggle}
+								aria-label="Open history panel"
+							>
+								<CaretRightIcon size={16} weight="bold" />
+								History
 							</ToggleButton>
 						</Tooltip>
 					</div>
