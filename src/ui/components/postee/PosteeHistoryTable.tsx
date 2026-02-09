@@ -19,8 +19,10 @@ import {
 	quickFilterInput,
 	gridWrapper,
 	viewButton,
+	toolbarActions,
+	actionButton,
 } from "./PosteeHistoryTable.css";
-import { MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { MagnifyingGlassIcon, DownloadSimpleIcon, ArrowsOutSimpleIcon } from "@phosphor-icons/react";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -303,6 +305,8 @@ export function PosteeHistoryTable({
 		if (quickFilterText) {
 			event.api.setGridOption("quickFilterText", quickFilterText);
 		}
+		// Auto-size all columns on initial load (skip header)
+		event.api.autoSizeAllColumns(false);
 	}, [quickFilterText]);
 
 	const getRowId = useCallback((params: GetRowIdParams<HistoryRow>) => params.data.id, []);
@@ -324,19 +328,51 @@ export function PosteeHistoryTable({
 		[onInspectEntry, entryMap],
 	);
 
+	const handleExportCSV = useCallback(() => {
+		if (!gridApiRef.current) return;
+		gridApiRef.current.exportDataAsCsv({
+			fileName: `postee-history-${new Date().toISOString().split('T')[0]}.csv`,
+		});
+	}, []);
+
+	const handleAutoSizeColumns = useCallback(() => {
+		if (!gridApiRef.current) return;
+		gridApiRef.current.autoSizeAllColumns(false);
+	}, []);
+
 	return (
 		<div className={historyPanel}>
 			<div className={historyHeader}>
 				<h3 className={historyTitle}>Execution History</h3>
-				<label className={quickFilter}>
-					<MagnifyingGlassIcon size={16} />
-					<input
-						className={quickFilterInput}
-						placeholder="Filter history..."
-						value={quickFilterText}
-						onChange={(event) => setQuickFilterText(event.target.value)}
-					/>
-				</label>
+				<div className={toolbarActions}>
+					<label className={quickFilter}>
+						<MagnifyingGlassIcon size={16} />
+						<input
+							className={quickFilterInput}
+							placeholder="Filter history..."
+							value={quickFilterText}
+							onChange={(event) => setQuickFilterText(event.target.value)}
+						/>
+					</label>
+					<button
+						type="button"
+						className={actionButton}
+						onClick={handleAutoSizeColumns}
+						title="Auto-size all columns to fit content"
+					>
+						<ArrowsOutSimpleIcon size={14} weight="bold" />
+						Auto-Size
+					</button>
+					<button
+						type="button"
+						className={actionButton}
+						onClick={handleExportCSV}
+						title="Export to CSV"
+					>
+						<DownloadSimpleIcon size={14} weight="bold" />
+						Export CSV
+					</button>
+				</div>
 			</div>
 			<div className={`${gridWrapper} ag-theme-quartz`}>
 			<AgGridReact<HistoryRow>
@@ -353,6 +389,8 @@ export function PosteeHistoryTable({
 				pagination={true}
 				paginationPageSize={20}
 				paginationPageSizeSelector={[10, 20, 50, 100]}
+				rowSelection="multiple"
+				enableCellTextSelection
 			/>
 		</div>
 	</div>

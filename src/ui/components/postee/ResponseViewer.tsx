@@ -117,7 +117,14 @@ export function ResponseViewer({
 
 	const editorOptions: editor.IStandaloneEditorConstructionOptions = {
 		readOnly: true,
-		minimap: { enabled: false },
+		minimap: {
+			enabled: true,
+			side: "right",
+			showSlider: "mouseover",
+			renderCharacters: false,
+			maxColumn: 80,
+			scale: 1,
+		},
 		scrollBeyondLastLine: false,
 		fontSize: 13,
 		lineNumbers: "on", // Enable line numbers for search navigation
@@ -127,16 +134,41 @@ export function ResponseViewer({
 		wrappingIndent: "indent",
 		folding: true,
 		bracketPairColorization: { enabled: true },
+		// Enable Code Lens (inline hints showing object/array counts)
+		codeLens: true,
+		// Enable Sticky Scroll (keep parent keys visible when scrolling)
+		stickyScroll: {
+			enabled: true,
+			maxLineCount: 5,
+		},
 		padding: { top: 8, bottom: 8 },
 		scrollbar: {
 			verticalScrollbarSize: 8,
 			horizontalScrollbarSize: 8,
 		},
-		contextmenu: false,
+		contextmenu: true, // Enable context menu for custom actions
 		lineDecorationsWidth: 0,
 		lineNumbersMinChars: 3,
 		glyphMargin: false,
-		overviewRulerLanes: 0,
+		overviewRulerLanes: 3,
+		// Enable Find widget (read-only, so no replace)
+		find: {
+			seedSearchStringFromSelection: "selection",
+			autoFindInSelection: "never",
+			addExtraSpaceOnTop: true,
+			loop: true,
+		},
+		// Enable Command Palette (Cmd+Shift+P / F1)
+		quickSuggestionsDelay: 10,
+		// Enable Breadcrumbs (shows JSON path at top)
+		breadcrumbs: {
+			enabled: true,
+			showKeys: true,
+			showArrays: true,
+			showObjects: true,
+			showFunctions: false,
+			showVariables: true,
+		},
 	};
 
 	// Search JSON content when query changes
@@ -218,8 +250,212 @@ export function ResponseViewer({
 	}, []);
 
 	// Handle editor mount
-	const handleEditorDidMount = useCallback((editor: editor.IStandaloneCodeEditor) => {
+	const handleEditorDidMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: typeof import("monaco-editor")) => {
 		editorRef.current = editor;
+
+		// Register Code Lens provider for JSON
+		monaco.languages.registerCodeLensProvider("json", {
+			provideCodeLenses: (model) => {
+				const lenses: {
+					range: {
+						startLineNumber: number;
+						startColumn: number;
+						endLineNumber: number;
+						endColumn: number;
+					};
+					command?: {
+						id: string;
+						title: string;
+					};
+				}[] = [];
+				try {
+					const content = model.getValue();
+					const parsed = JSON.parse(content);
+
+					// Count top-level keys
+					if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+						const keyCount = Object.keys(parsed).length;
+						lenses.push({
+							range: {
+								startLineNumber: 1,
+								startColumn: 1,
+								endLineNumber: 1,
+								endColumn: 1,
+							},
+							command: {
+								id: "postee.showKeyCount",
+								title: `${keyCount} ${keyCount === 1 ? "property" : "properties"}`,
+							},
+						});
+					}
+
+					// Find arrays and objects, show their sizes
+					const lines = content.split('\n');
+					for (let i = 0; i < lines.length; i++) {
+						const line = lines[i];
+						const trimmed = line?.trim() ?? "";
+
+						// Array start
+						if (trimmed.includes('[')) {
+							const keyMatch = line?.match(/"([^"]+)"\s*:\s*\[/) ?? null;
+							if (keyMatch) {
+								try {
+									const key = keyMatch[1];
+									const obj = parsed as Record<string, unknown>;
+									if (key && Array.isArray(obj[key])) {
+										const count = obj[key].length;
+										lenses.push({
+											range: {
+												startLineNumber: i + 1,
+												startColumn: 1,
+												endLineNumber: i + 1,
+												endColumn: 1,
+											},
+											command: {
+												id: "postee.showArrayCount",
+												title: `${count} ${count === 1 ? "item" : "items"}`,
+											},
+										});
+									}
+								} catch {
+									// Ignore
+								}
+							}
+						}
+
+						// Object start
+						if (trimmed.match(/"[^"]+"\s*:\s*\{/)) {
+							const keyMatch = line?.match(/"([^"]+)"\s*:\s*\{/) ?? null;
+							if (keyMatch) {
+								try {
+									const key = keyMatch[1];
+									const obj = parsed as Record<string, unknown>;
+									if (key && typeof obj[key] === "object" && obj[key] !== null) {
+										const count = Object.keys(obj[key] as object).length;
+										lenses.push({
+											range: {
+												startLineNumber: i + 1,
+												startColumn: 1,
+												endLineNumber: i + 1,
+												endColumn: 1,
+											},
+											command: {
+												id: "postee.showObjectCount",
+												title: `${count} ${count === 1 ? "property" : "properties"}`,
+											},
+										});
+									}
+								} catch {
+									// Ignore
+								}
+							}
+						}
+					}
+				} catch {
+					// Invalid JSON
+				}
+
+				return { lenses, dispose: () => {} };
+			},
+		});
+
+		// Register enhanced token provider for semantic highlighting
+		monaco.languages.setMonarchTokensProvider("json", {
+			tokenizer: {
+				root: [
+					// JSON keys (before colon)
+					[/"([^"\\]|\\.)*"\s*(?=:)/, "key"],
+					// JSON string values (after colon or in arrays)
+					[/"([^"\\]|\\.)*"/, "string.value"],
+					// Numbers
+					[/-?\d+\.?\d*([eE][+-]?\d+)?/, "number"],
+					// Keywords
+					[/\btrue\b/, "keyword.true"],
+					[/\bfalse\b/, "keyword.false"],
+					[/\bnull\b/, "keyword.null"],
+					// Structural tokens
+					[/[{}]/, "delimiter.curly"],
+					[/[[\]]/, "delimiter.square"],
+					[/[:,]/, "delimiter"],
+				],
+			},
+		});
+
+		// Define enhanced theme with semantic colors
+		monaco.editor.defineTheme("postee-response-dark", {
+			base: "hc-black",
+			inherit: true,
+			rules: [
+				// JSON keys - cyan (bold for emphasis)
+				{ token: "key", foreground: "88C0D0", fontStyle: "bold" },
+				// String values - green
+				{ token: "string.value", foreground: "A3BE8C" },
+				// Numbers - orange
+				{ token: "number", foreground: "D08770" },
+				// Boolean true - green
+				{ token: "keyword.true", foreground: "A3BE8C", fontStyle: "bold" },
+				// Boolean false - red
+				{ token: "keyword.false", foreground: "BF616A", fontStyle: "bold" },
+				// Null - purple
+				{ token: "keyword.null", foreground: "B48EAD", fontStyle: "italic" },
+			],
+			colors: {},
+		});
+
+		// Apply custom theme
+		monaco.editor.setTheme("postee-response-dark");
+
+		// Add custom context menu items
+		editor.addAction({
+			id: 'postee.copyAsJson',
+			label: 'Copy as JSON',
+			contextMenuGroupId: '9_cutcopypaste',
+			contextMenuOrder: 1,
+			run: (ed) => {
+				const model = ed.getModel();
+				if (!model) return;
+				navigator.clipboard.writeText(model.getValue());
+			},
+		});
+
+		editor.addAction({
+			id: 'postee.copyValue',
+			label: 'Copy Selected Value',
+			contextMenuGroupId: '9_cutcopypaste',
+			contextMenuOrder: 2,
+			run: (ed) => {
+				const selection = ed.getSelection();
+				if (!selection) return;
+
+				const model = ed.getModel();
+				if (!model) return;
+
+				const selectedText = model.getValueInRange(selection);
+				navigator.clipboard.writeText(selectedText);
+			},
+		});
+
+		editor.addAction({
+			id: 'postee.expandAll',
+			label: 'Expand All',
+			contextMenuGroupId: 'navigation',
+			contextMenuOrder: 1,
+			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyE],
+			run: (ed) => {
+				ed.getAction('editor.unfoldAll')?.run();
+			},
+		});
+
+		editor.addAction({
+			id: 'postee.collapseAll',
+			label: 'Collapse All',
+			contextMenuGroupId: 'navigation',
+			contextMenuOrder: 2,
+			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyL],
+			run: (ed) => {
+				ed.getAction('editor.foldAll')?.run();
+			},
+		});
 	}, []);
 
 	// Track container width for responsive diff view
@@ -394,7 +630,7 @@ export function ResponseViewer({
 								modified={formattedBody}
 								originalModelPath="response-diff-original"
 								modifiedModelPath="response-diff-modified"
-								theme="hc-black"
+								theme="postee-response-dark"
 								options={{
 									...editorOptions,
 									readOnly: true,
@@ -406,7 +642,7 @@ export function ResponseViewer({
 								height="300px"
 								defaultLanguage={isJson ? "json" : "plaintext"}
 								value={formattedBody}
-								theme="hc-black"
+								theme="postee-response-dark"
 								options={editorOptions}
 								onMount={handleEditorDidMount}
 							/>
@@ -431,7 +667,7 @@ export function ResponseViewer({
 							height="150px"
 							defaultLanguage="json"
 							value={JSON.stringify(parsedHeaders, null, 2)}
-							theme="hc-black"
+							theme="postee-response-dark"
 							options={editorOptions}
 						/>
 					)}

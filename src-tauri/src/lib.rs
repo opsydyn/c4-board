@@ -1,8 +1,12 @@
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::{Column, Executor, Row, SqlitePool, TypeInfo, ValueRef};
 use std::{fs, io::Write, path::Path, time::Duration};
 use tauri::async_runtime::spawn;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{Emitter, Listener, Manager};
+use tauri::{Emitter, Listener, Manager, State};
 use tauri_plugin_sql::{Migration, MigrationKind};
 use tokio::time::sleep;
 
@@ -263,6 +267,96 @@ async fn start_load_test(app: tauri::AppHandle, config: LoadTestConfig) -> Resul
 }
 
 // ============================================================================
+// SQLite Pool (properly configured, bypasses plugin's multi-connection pool)
+// ============================================================================
+
+/// Managed state holding a single-connection SQLite pool with busy_timeout,
+/// WAL, foreign_keys configured on every connection at creation time.
+struct AppDb(SqlitePool);
+
+/// Bind JSON values to a sqlx query, matching the plugin's binding strategy.
+fn bind_values<'a>(
+    mut query: sqlx::query::Query<'a, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'a>>,
+    values: Vec<JsonValue>,
+) -> sqlx::query::Query<'a, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'a>> {
+    for value in values {
+        if value.is_null() {
+            query = query.bind(None::<JsonValue>);
+        } else if value.is_string() {
+            query = query.bind(value.as_str().unwrap().to_owned());
+        } else if let Some(number) = value.as_number() {
+            query = query.bind(number.as_f64().unwrap_or_default());
+        } else {
+            query = query.bind(value);
+        }
+    }
+    query
+}
+
+/// Convert a SQLite row to a JSON-compatible IndexMap, matching the plugin's
+/// decode strategy (TEXT→String, INTEGER→i64, REAL→f64, BOOLEAN→bool, NULL→null).
+fn row_to_json(row: &sqlx::sqlite::SqliteRow) -> Result<IndexMap<String, JsonValue>, String> {
+    let mut map = IndexMap::new();
+    for (i, column) in row.columns().iter().enumerate() {
+        let raw = row.try_get_raw(i).map_err(|e| e.to_string())?;
+        let value = if raw.is_null() {
+            JsonValue::Null
+        } else {
+            match raw.type_info().name() {
+                "INTEGER" | "NUMERIC" => {
+                    let v: i64 = row.try_get(i).map_err(|e| e.to_string())?;
+                    JsonValue::Number(v.into())
+                }
+                "REAL" => {
+                    let v: f64 = row.try_get(i).map_err(|e| e.to_string())?;
+                    serde_json::Number::from_f64(v)
+                        .map(JsonValue::Number)
+                        .unwrap_or(JsonValue::Null)
+                }
+                "BOOLEAN" => {
+                    let v: bool = row.try_get(i).map_err(|e| e.to_string())?;
+                    JsonValue::Bool(v)
+                }
+                _ => {
+                    // TEXT, DATE, TIME, DATETIME, and anything else → String
+                    let v: String = row.try_get(i).map_err(|e| e.to_string())?;
+                    JsonValue::String(v)
+                }
+            }
+        };
+        map.insert(column.name().to_string(), value);
+    }
+    Ok(map)
+}
+
+#[tauri::command]
+async fn sql_execute(
+    state: State<'_, AppDb>,
+    sql: String,
+    values: Vec<JsonValue>,
+) -> Result<(u64, i64), String> {
+    let query = sqlx::query(&sql);
+    let query = bind_values(query, values);
+    let result = state.0.execute(query).await.map_err(|e| e.to_string())?;
+    Ok((
+        result.rows_affected(),
+        result.last_insert_rowid(),
+    ))
+}
+
+#[tauri::command]
+async fn sql_query(
+    state: State<'_, AppDb>,
+    sql: String,
+    values: Vec<JsonValue>,
+) -> Result<Vec<IndexMap<String, JsonValue>>, String> {
+    let query = sqlx::query(&sql);
+    let query = bind_values(query, values);
+    let rows = state.0.fetch_all(query).await.map_err(|e| e.to_string())?;
+    rows.iter().map(row_to_json).collect()
+}
+
+// ============================================================================
 // Menu Builder
 // Creates native window menu with keyboard shortcuts
 // ============================================================================
@@ -449,6 +543,24 @@ pub fn run() {
             sql: include_str!("../migrations/012_add_edge_metadata.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 13,
+            description: "create_request_spans",
+            sql: include_str!("../migrations/013_create_request_spans.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 14,
+            description: "enhance_request_spans",
+            sql: include_str!("../migrations/014_enhance_request_spans.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 15,
+            description: "rollback_request_spans",
+            sql: include_str!("../migrations/015_rollback_request_spans.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -464,9 +576,37 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             save_custom_icon,
-            start_load_test
+            start_load_test,
+            sql_execute,
+            sql_query
         ])
         .setup(|app| {
+            // Create a properly configured SQLite pool (single connection, busy_timeout, WAL)
+            // The plugin's pool is only used for migrations; this pool handles all runtime queries.
+            let db_dir = app
+                .path()
+                .app_config_dir()
+                .expect("No app config dir");
+            fs::create_dir_all(&db_dir).expect("Couldn't create app config dir");
+            let db_path = db_dir.join("c4board.db");
+
+            let conn_opts = SqliteConnectOptions::new()
+                .filename(&db_path)
+                .create_if_missing(true)
+                .busy_timeout(Duration::from_secs(5))
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Normal)
+                .foreign_keys(true);
+
+            let pool = tauri::async_runtime::block_on(
+                SqlitePoolOptions::new()
+                    .max_connections(1)
+                    .connect_with(conn_opts),
+            )
+            .expect("Failed to create SQLite pool");
+
+            app.manage(AppDb(pool));
+
             // Build and set the native menu
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;

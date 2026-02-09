@@ -5,11 +5,19 @@ import { GlobalMenuListener } from "../components/GlobalMenuListener.tsx";
 ---
 
 <!DOCTYPE html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width" />
-	</head>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8" />
+			<meta name="viewport" content="width=device-width" />
+			<style>
+				html,
+				body {
+					margin: 0;
+					background: #050806;
+					color: #c7f5c3;
+				}
+			</style>
+		</head>
 	<body class={defaultTheme}>
 		<GlobalMenuListener client:only="react" />
 		<slot />

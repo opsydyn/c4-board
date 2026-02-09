@@ -49,6 +49,36 @@ export const VariableId = Brand.nominal<VariableId>();
 export type HeaderId = string & Brand.Brand<"HeaderId">;
 export const HeaderId = Brand.nominal<HeaderId>();
 
+/**
+ * Span ID - uniquely identifies a request span (timing trace)
+ */
+export type SpanId = string & Brand.Brand<"SpanId">;
+export const SpanId = Brand.nominal<SpanId>();
+
+/**
+ * Request UID - stable identifier for a request template (not execution)
+ */
+export type RequestUid = string & Brand.Brand<"RequestUid">;
+export const RequestUid = Brand.nominal<RequestUid>();
+
+/**
+ * Endpoint UID - stable identifier for an API endpoint
+ */
+export type EndpointUid = string & Brand.Brand<"EndpointUid">;
+export const EndpointUid = Brand.nominal<EndpointUid>();
+
+/**
+ * Service UID - stable identifier for a service
+ */
+export type ServiceUid = string & Brand.Brand<"ServiceUid">;
+export const ServiceUid = Brand.nominal<ServiceUid>();
+
+/**
+ * Plan Hash - hash of execution plan for caching/comparison
+ */
+export type PlanHash = string & Brand.Brand<"PlanHash">;
+export const PlanHash = Brand.nominal<PlanHash>();
+
 // =============================================================================
 // HTTP Method (Schema-based validation)
 // =============================================================================
@@ -442,9 +472,51 @@ export const BrandedTypes = {
 	HistoryEntryId,
 	VariableId,
 	HeaderId,
+	SpanId,
+	RequestUid,
+	EndpointUid,
+	ServiceUid,
+	PlanHash,
 	HttpUrl,
 	HeaderName,
 	StatusCode,
 	Bytes,
 	Timestamp, // Legacy - use DateTime instead
 } as const;
+
+// =============================================================================
+// Request Span (Timing Trace)
+// =============================================================================
+
+/**
+ * Timing phase within a request span
+ */
+export interface TimingPhase {
+	readonly start_ms: number | null;
+	readonly end_ms: number | null;
+	readonly duration_ms: number | null;
+}
+
+/**
+ * Request Span - detailed timing breakdown for HTTP request execution
+ * Captures DNS, connect, TLS, request write, TTFB, and body read timings
+ */
+export interface RequestSpan {
+	readonly id: SpanId;
+	readonly history_id: HistoryEntryId;
+	readonly request_uid: RequestUid;
+	readonly endpoint_uid: EndpointUid | null;
+	readonly service_uid: ServiceUid | null;
+	readonly plan_hash: PlanHash | null;
+
+	// Timing phases
+	readonly dns: TimingPhase;
+	readonly connect: TimingPhase;
+	readonly tls: TimingPhase;
+	readonly request_write: TimingPhase;
+	readonly ttfb_ms: number | null; // Time To First Byte from request_start
+	readonly body_read: TimingPhase;
+
+	readonly total_duration_ms: number;
+	readonly created_at: number;
+}

@@ -19,6 +19,13 @@ export const historyHeader = style({
 	gap: theme.spacing["3"],
 });
 
+export const toolbarActions = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["3"],
+	flexWrap: "wrap",
+});
+
 export const historyTitle = style({
 	margin: 0,
 	textTransform: theme.typography.textTransform.uppercase,
@@ -141,6 +148,34 @@ export const viewButton = style({
 		backgroundColor: theme.color.surface.overlay,
 		borderColor: theme.color.status.selected,
 		boxShadow: `0 0 12px ${theme.color.status.selected}44`,
+	},
+
+	":active": {
+		transform: "translateY(1px)",
+	},
+});
+
+export const actionButton = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	clipPath: theme.clipPath.sm,
+	backgroundColor: theme.color.background.raised,
+	color: theme.color.foreground.primary,
+	cursor: "pointer",
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	transition: theme.transition.base,
+	boxShadow: theme.effect.glow.sm,
+
+	":hover": {
+		backgroundColor: theme.color.surface.overlay,
+		borderColor: theme.color.interactive.primary,
+		boxShadow: `0 0 12px ${theme.color.interactive.primary}44`,
 	},
 
 	":active": {

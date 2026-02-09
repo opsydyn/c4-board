@@ -1,4 +1,4 @@
-import { style } from "@vanilla-extract/css";
+import { style, globalStyle } from "@vanilla-extract/css";
 import { theme } from "../../../styles/theme.css";
 import { componentsLayer } from "../../../styles/layers.css";
 
@@ -67,4 +67,20 @@ export const actionButton = style({
 			},
 		},
 	},
+});
+
+// Monaco editor decorations for {{variables}}
+globalStyle(".postee-variable-decoration", {
+	backgroundColor: "rgba(165, 214, 167, 0.15)",
+	borderRadius: "3px",
+	border: "1px solid rgba(165, 214, 167, 0.3)",
+	padding: "0 2px",
+});
+
+globalStyle(".postee-variable-icon::before", {
+	content: '"$"',
+	color: "#A5D6A7",
+	fontWeight: "bold",
+	marginRight: "2px",
+	opacity: 0.7,
 });

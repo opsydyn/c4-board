@@ -799,7 +799,23 @@ export const loadTestButtonRow = style({
 	},
 });
 
+const blastDoorAlertBlink = keyframes({
+	"0%, 100%": {
+		opacity: 1,
+		backgroundColor: theme.color.status.critical,
+		boxShadow: `0 0 10px ${theme.color.status.critical}`,
+	},
+	"50%": {
+		opacity: 0.35,
+		backgroundColor: "rgba(0, 0, 0, 0)",
+		boxShadow: "0 0 0 rgba(0, 0, 0, 0)",
+	},
+});
+
 export const loadTestStatus = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
 	textTransform: "uppercase",
@@ -807,6 +823,27 @@ export const loadTestStatus = style({
 	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
 	clipPath: theme.clipPath.sm,
 	backgroundColor: "rgba(28, 46, 38, 0.8)",
+});
+
+export const loadTestStatusIndicator = style({
+	display: "inline-block",
+	width: "0.65rem",
+	height: "0.65rem",
+	flexShrink: 0,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(28, 46, 38, 0.92)",
+});
+
+export const loadTestStatusIndicatorActive = style({
+	borderColor: theme.color.status.critical,
+	backgroundColor: theme.color.status.critical,
+	boxShadow: `0 0 10px ${theme.color.status.critical}`,
+
+	"@media": {
+		"(prefers-reduced-motion: no-preference)": {
+			animation: `${blastDoorAlertBlink} 1s steps(2, end) infinite`,
+		},
+	},
 });
 
 export const loadTestMetrics = style({
@@ -990,38 +1027,39 @@ export const responseEmptyState = style({
 		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
 	`,
 	backgroundSize: "20px 20px",
+});
 
-	selectors: {
-		"& h3": {
-			fontSize: theme.typography.size.lg,
-			fontFamily: theme.typography.family.mono,
-			textTransform: theme.typography.textTransform.uppercase,
-			letterSpacing: theme.typography.letterSpacing.wide,
-			color: theme.color.foreground.primary,
-			margin: 0,
-		},
-		"& p": {
-			fontSize: theme.typography.size.sm,
-			fontFamily: theme.typography.family.mono,
-			maxWidth: "400px",
-			margin: 0,
-		},
-		"& kbd": {
-			display: "inline-block",
-			padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
-			backgroundColor: theme.color.background.raised,
-			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-			clipPath: theme.clipPath.sm,
-			fontFamily: theme.typography.family.mono,
-			fontSize: theme.typography.size.xs,
-			fontWeight: theme.typography.weight.bold,
-			color: theme.color.foreground.primary,
-		},
-		"& svg": {
-			color: theme.color.status.selected,
-			opacity: 0.6,
-		},
-	},
+globalStyle(`${responseEmptyState} h3`, {
+	fontSize: theme.typography.size.lg,
+	fontFamily: theme.typography.family.mono,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.primary,
+	margin: 0,
+});
+
+globalStyle(`${responseEmptyState} p`, {
+	fontSize: theme.typography.size.sm,
+	fontFamily: theme.typography.family.mono,
+	maxWidth: "400px",
+	margin: 0,
+});
+
+globalStyle(`${responseEmptyState} kbd`, {
+	display: "inline-block",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	backgroundColor: theme.color.background.raised,
+	border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+	clipPath: theme.clipPath.sm,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	fontWeight: theme.typography.weight.bold,
+	color: theme.color.foreground.primary,
+});
+
+globalStyle(`${responseEmptyState} svg`, {
+	color: theme.color.status.selected,
+	opacity: 0.6,
 });
 
 export const responseLoadingState = style({
@@ -1039,26 +1077,26 @@ export const responseLoadingState = style({
 		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
 	`,
 	backgroundSize: "20px 20px",
+});
 
-	selectors: {
-		"& h3": {
-			fontSize: theme.typography.size.lg,
-			fontFamily: theme.typography.family.mono,
-			textTransform: theme.typography.textTransform.uppercase,
-			letterSpacing: theme.typography.letterSpacing.wide,
-			color: theme.color.foreground.primary,
-			margin: 0,
-		},
-		"& p": {
-			fontSize: theme.typography.size.sm,
-			fontFamily: theme.typography.family.mono,
-			maxWidth: "400px",
-			margin: 0,
-		},
-		"& svg": {
-			color: theme.color.status.selected,
-		},
-	},
+globalStyle(`${responseLoadingState} h3`, {
+	fontSize: theme.typography.size.lg,
+	fontFamily: theme.typography.family.mono,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.primary,
+	margin: 0,
+});
+
+globalStyle(`${responseLoadingState} p`, {
+	fontSize: theme.typography.size.sm,
+	fontFamily: theme.typography.family.mono,
+	maxWidth: "400px",
+	margin: 0,
+});
+
+globalStyle(`${responseLoadingState} svg`, {
+	color: theme.color.status.selected,
 });
 
 export const responseErrorState = style({
@@ -1076,20 +1114,19 @@ export const responseErrorState = style({
 		linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
 	`,
 	backgroundSize: "20px 20px",
+});
 
-	selectors: {
-		"& h3": {
-			fontSize: theme.typography.size.lg,
-			fontFamily: theme.typography.family.mono,
-			textTransform: theme.typography.textTransform.uppercase,
-			letterSpacing: theme.typography.letterSpacing.wide,
-			color: theme.color.status.critical,
-			margin: 0,
-		},
-		"& svg": {
-			color: theme.color.status.critical,
-		},
-	},
+globalStyle(`${responseErrorState} h3`, {
+	fontSize: theme.typography.size.lg,
+	fontFamily: theme.typography.family.mono,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.status.critical,
+	margin: 0,
+});
+
+globalStyle(`${responseErrorState} svg`, {
+	color: theme.color.status.critical,
 });
 
 export const responseErrorMessage = style({

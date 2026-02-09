@@ -8,7 +8,6 @@
 import { useEffect, useState } from "react";
 import { useDatabase } from "../core/effects/useDatabase";
 import {
-	initDatabase,
 	createDiagram,
 	listDiagrams,
 	createNode,
@@ -24,10 +23,13 @@ export function DatabaseTest() {
 	const [status, setStatus] = useState<string>("Idle");
 	const [error, setError] = useState<string | null>(null);
 
-	// Initialize database on mount
+	// Load diagrams on mount (database auto-initializes on first query)
 	useEffect(() => {
-		runEffect(initDatabase)
-			.then(() => setStatus("Database initialized"))
+		runEffect(listDiagrams())
+			.then((allDiagrams) => {
+				setDiagrams(allDiagrams);
+				setStatus("Database ready");
+			})
 			.catch((err) => setError(String(err)));
 	}, [runEffect]);
 

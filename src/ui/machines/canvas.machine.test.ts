@@ -397,6 +397,23 @@ describe("Canvas Machine", () => {
 			expect(snapshot.context.lastSaved).toBeGreaterThan(0);
 		});
 
+		test("should accept save success while already idle", () => {
+			// Arrange
+			const actor = createActor(canvasMachine);
+			actor.start();
+			actor.send({ type: "SAVE_ERROR", error: "Save timeout" });
+
+			// Act
+			actor.send({ type: "SAVE_SUCCESS" });
+
+			// Assert
+			const snapshot = actor.getSnapshot();
+			expect(snapshot.value).toBe("idle");
+			expect(snapshot.context.isSaving).toBe(false);
+			expect(snapshot.context.lastSaved).toBeGreaterThan(0);
+			expect(snapshot.context.saveError).toBeNull();
+		});
+
 		test("should return to idle after save error", () => {
 			// Arrange
 			const actor = createActor(canvasMachine);

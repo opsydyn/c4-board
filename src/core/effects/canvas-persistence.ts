@@ -275,6 +275,38 @@ function reactFlowEdgeToDb(
 	};
 }
 
+const toNullableString = (value: string | undefined): string | null =>
+	value ?? null;
+
+const toNullableNumber = (value: number | undefined): number | null =>
+	value ?? null;
+
+const toNullableExtent = (
+	value: "parent" | undefined,
+): "parent" | null => value ?? null;
+
+const toExpandParentInt = (value: boolean | undefined): number =>
+	value ? 1 : 0;
+
+const hasNodeChanges = (
+	existing: DbNode,
+	next: CreateNodeInput,
+): boolean => {
+	return (
+		existing.label !== next.label ||
+		existing.technology !== toNullableString(next.technology) ||
+		existing.description !== toNullableString(next.description) ||
+		existing.position_x !== next.position_x ||
+		existing.position_y !== next.position_y ||
+		existing.width !== toNullableNumber(next.width) ||
+		existing.height !== toNullableNumber(next.height) ||
+		existing.parent_id !== toNullableString(next.parent_id) ||
+		existing.extent !== toNullableExtent(next.extent) ||
+		existing.expand_parent !== toExpandParentInt(next.expand_parent) ||
+		existing.icon_id !== toNullableString(next.icon_id)
+	);
+};
+
 // ============================================================================
 // Effect Services (Functional Core)
 // ============================================================================
@@ -294,135 +326,139 @@ export const saveDiagram = (
 	DatabaseService
 > => {
 	const effect = Effect.gen(function* () {
-		// 1. Check if diagram exists, create or update
-		interface DiagramUpsertPayload {
-			id: string;
-			name: string;
-			description?: string;
-		}
+		const service = yield* DatabaseService;
 
-		const diagramPayload: DiagramUpsertPayload = {
-			id: input.id,
-			name: input.name,
-			...(input.description !== undefined
-				? { description: input.description }
-				: {}),
-		};
+		return yield* service.transaction(
+			Effect.gen(function* () {
+				// 1. Check if diagram exists, create or update if metadata changed
+				const existingDiagram = yield* getDiagram(input.id).pipe(
+					Effect.catchTag("NotFoundError", () => Effect.succeed(null)),
+				);
 
-		yield* getDiagram(input.id).pipe(
-			Effect.catchTag("NotFoundError", () => {
-				// Create new diagram
-				const createPayload: CreateDiagramInput = diagramPayload;
-				return createDiagram(createPayload);
-			}),
-		);
-
-		// Update diagram if it already exists
-		yield* updateDiagram(input.id, {
-			name: input.name,
-			...(input.description !== undefined
-				? { description: input.description }
-				: {}),
-		}).pipe(
-			Effect.catchTag("NotFoundError", () => Effect.succeed(undefined)),
-		);
-
-		// 2. Get existing nodes and edges to determine what to delete
-		const existingNodes = yield* getNodesByDiagram(input.id);
-		const existingEdges = yield* getEdgesByDiagram(input.id);
-
-		const currentNodeIds = new Set(input.nodes.map((n) => n.id));
-		const currentEdgeIds = new Set(input.edges.map((e) => e.id));
-
-		// 3. Delete nodes that no longer exist using Effect.forEach
-		const nodesToDelete = existingNodes.filter((n) => !currentNodeIds.has(n.id));
-		yield* Effect.forEach(nodesToDelete, (node) => deleteNode(node.id), {
-			concurrency: "unbounded",
-		});
-
-		// 4. Delete edges that no longer exist using Effect.forEach
-		const edgesToDelete = existingEdges.filter((e) => !currentEdgeIds.has(e.id));
-		yield* Effect.forEach(edgesToDelete, (edge) => deleteEdge(edge.id), {
-			concurrency: "unbounded",
-		});
-
-		// 5. Upsert all current nodes using Effect.forEach
-		yield* Effect.forEach(
-			input.nodes,
-			(node) => {
-				const dbNodeInput = reactFlowNodeToDb(node, input.id);
-				const nodeExists = existingNodes.some((n) => n.id === node.id);
-
-				if (nodeExists) {
-					// Update existing node
-					const updateNodePayload: UpdateNodeInput = {
-						label: dbNodeInput.label,
-						position_x: dbNodeInput.position_x,
-						position_y: dbNodeInput.position_y,
-						...(dbNodeInput.technology !== undefined
-							? { technology: dbNodeInput.technology }
+				if (!existingDiagram) {
+					const createPayload: CreateDiagramInput = {
+						id: input.id,
+						name: input.name,
+						...(input.description !== undefined
+							? { description: input.description }
 							: {}),
-						...(dbNodeInput.description !== undefined
-							? { description: dbNodeInput.description }
-							: {}),
-						...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
-						...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
-						...(dbNodeInput.parent_id !== undefined
-							? { parent_id: dbNodeInput.parent_id }
-							: {}),
-						...(dbNodeInput.extent !== undefined ? { extent: dbNodeInput.extent } : {}),
-						...(dbNodeInput.expand_parent !== undefined
-							? { expand_parent: dbNodeInput.expand_parent }
-							: {}),
-						...(dbNodeInput.icon_id !== undefined ? { icon_id: dbNodeInput.icon_id } : {}),
 					};
-					return updateNode(node.id, updateNodePayload);
+					yield* createDiagram(createPayload);
+				} else {
+					// Always update diagram to touch updated_at on every save,
+					// not just when metadata changes. This keeps the DB timestamp
+					// current so the UI shows an accurate "last saved" time on load.
+					yield* updateDiagram(input.id, {
+						name: input.name,
+						...(input.description !== undefined
+							? { description: input.description }
+							: {}),
+					});
 				}
-				// Create new node
-				return createNode(dbNodeInput);
-			},
-			{ concurrency: "unbounded" },
-		);
 
-		// 6. Upsert all current edges using Effect.forEach
-		yield* Effect.forEach(
-			input.edges,
-			(edge) => {
-				const dbEdgeInput = reactFlowEdgeToDb(edge, input.id);
-				const existingEdge = existingEdges.find((e) => e.id === edge.id);
+				// 2. Get existing nodes and edges to determine what to delete/update
+				const existingNodes = yield* getNodesByDiagram(input.id);
+				const existingEdges = yield* getEdgesByDiagram(input.id);
+				const existingNodeById = new Map(existingNodes.map((node) => [node.id, node]));
+				const existingEdgeById = new Map(existingEdges.map((edge) => [edge.id, edge]));
 
-				if (existingEdge) {
-					// Update existing edge if label or metadata has changed
-					const newLabel = dbEdgeInput.label ?? "uses";
-					const currentLabel = existingEdge.label ?? "uses";
-					const newMetadata = dbEdgeInput.metadata ?? null;
-					const currentMetadata = existingEdge.metadata ?? null;
+				const currentNodeIds = new Set(input.nodes.map((n) => n.id));
+				const currentEdgeIds = new Set(input.edges.map((e) => e.id));
 
-					const hasChanges = newLabel !== currentLabel || newMetadata !== currentMetadata;
+				// 3. Delete nodes that no longer exist
+				const nodesToDelete = existingNodes.filter((n) => !currentNodeIds.has(n.id));
+				yield* Effect.forEach(nodesToDelete, (node) => deleteNode(node.id));
 
-					if (hasChanges) {
+				// 4. Delete edges that no longer exist
+				const edgesToDelete = existingEdges.filter((e) => !currentEdgeIds.has(e.id));
+				yield* Effect.forEach(edgesToDelete, (edge) => deleteEdge(edge.id));
+
+				// 5. Upsert current nodes
+				yield* Effect.forEach(input.nodes, (node) => {
+					const dbNodeInput = reactFlowNodeToDb(node, input.id);
+					const existingNode = existingNodeById.get(node.id);
+
+					if (existingNode) {
+						// If immutable identity fields changed, recreate the row.
+						if (
+							existingNode.type !== dbNodeInput.type ||
+							existingNode.domain !== dbNodeInput.domain
+						) {
+							return Effect.flatMap(deleteNode(existingNode.id), () =>
+								createNode(dbNodeInput),
+							);
+						}
+
+						if (!hasNodeChanges(existingNode, dbNodeInput)) {
+							return Effect.succeed(undefined);
+						}
+
+						const updateNodePayload: UpdateNodeInput = {
+							label: dbNodeInput.label,
+							position_x: dbNodeInput.position_x,
+							position_y: dbNodeInput.position_y,
+							...(dbNodeInput.technology !== undefined
+								? { technology: dbNodeInput.technology }
+								: {}),
+							...(dbNodeInput.description !== undefined
+								? { description: dbNodeInput.description }
+								: {}),
+							...(dbNodeInput.width !== undefined ? { width: dbNodeInput.width } : {}),
+							...(dbNodeInput.height !== undefined ? { height: dbNodeInput.height } : {}),
+							...(dbNodeInput.parent_id !== undefined
+								? { parent_id: dbNodeInput.parent_id }
+								: {}),
+							...(dbNodeInput.extent !== undefined ? { extent: dbNodeInput.extent } : {}),
+							...(dbNodeInput.expand_parent !== undefined
+								? { expand_parent: dbNodeInput.expand_parent }
+								: {}),
+							...(dbNodeInput.icon_id !== undefined
+								? { icon_id: dbNodeInput.icon_id }
+								: {}),
+						};
+						return updateNode(node.id, updateNodePayload);
+					}
+
+					return createNode(dbNodeInput);
+				});
+
+				// 6. Upsert current edges
+				yield* Effect.forEach(input.edges, (edge) => {
+					const dbEdgeInput = reactFlowEdgeToDb(edge, input.id);
+					const existingEdge = existingEdgeById.get(edge.id);
+
+					if (existingEdge) {
+						const newLabel = dbEdgeInput.label ?? "uses";
+						const currentLabel = existingEdge.label ?? "uses";
+						const newMetadata = dbEdgeInput.metadata ?? null;
+						const currentMetadata = existingEdge.metadata ?? null;
+						const hasChanges =
+							newLabel !== currentLabel || newMetadata !== currentMetadata;
+
+						if (!hasChanges) {
+							return Effect.succeed(undefined);
+						}
+
 						const updateInput: UpdateEdgeInput = {};
 						if (newLabel !== currentLabel) {
 							updateInput.label = newLabel;
 						}
 						if (newMetadata !== currentMetadata) {
-							updateInput.metadata = newMetadata !== null ? newMetadata : undefined;
+							updateInput.metadata =
+								newMetadata !== null ? newMetadata : undefined;
 						}
 						return updateEdge(edge.id, updateInput);
 					}
 
-					return Effect.succeed(undefined);
-				}
-				// Create new edge
-				return createEdge(dbEdgeInput);
-			},
-			{ concurrency: "unbounded" },
-		);
+					return createEdge(dbEdgeInput);
+				});
 
-		return {
-			diagramId: input.id,
-			savedAt: Date.now(),
-		};
+				return {
+					diagramId: input.id,
+					savedAt: Date.now(),
+				};
+			}),
+		);
 	});
 
 	// Return the effect with explicit type annotation to satisfy exactOptionalPropertyTypes

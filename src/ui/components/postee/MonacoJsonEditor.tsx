@@ -137,6 +137,113 @@ export function MonacoJsonEditor({
 	) => {
 		editorRef.current = editor;
 
+		// Register Code Lens provider for JSON
+		monaco.languages.registerCodeLensProvider("json", {
+			provideCodeLenses: (model) => {
+				const lenses: {
+					range: {
+						startLineNumber: number;
+						startColumn: number;
+						endLineNumber: number;
+						endColumn: number;
+					};
+					command?: {
+						id: string;
+						title: string;
+					};
+				}[] = [];
+				try {
+					const content = model.getValue();
+					const parsed = JSON.parse(content.replace(/\{\{[^}]+\}\}/g, '""'));
+
+					// Count top-level keys
+					if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+						const keyCount = Object.keys(parsed).length;
+						lenses.push({
+							range: {
+								startLineNumber: 1,
+								startColumn: 1,
+								endLineNumber: 1,
+								endColumn: 1,
+							},
+							command: {
+								id: "postee.showKeyCount",
+								title: `${keyCount} ${keyCount === 1 ? "property" : "properties"}`,
+							},
+						});
+					}
+
+					// Find arrays and objects, show their sizes
+					const lines = content.split('\n');
+					for (let i = 0; i < lines.length; i++) {
+						const line = lines[i];
+						const trimmed = line?.trim() ?? "";
+
+						// Array start
+						if (trimmed.includes('[')) {
+							const keyMatch = line?.match(/"([^"]+)"\s*:\s*\[/) ?? null;
+							if (keyMatch) {
+								try {
+									// Try to count array items
+									const key = keyMatch[1];
+									const obj = parsed as Record<string, unknown>;
+									if (key && Array.isArray(obj[key])) {
+										const count = obj[key].length;
+										lenses.push({
+											range: {
+												startLineNumber: i + 1,
+												startColumn: 1,
+												endLineNumber: i + 1,
+												endColumn: 1,
+											},
+											command: {
+												id: "postee.showArrayCount",
+												title: `${count} ${count === 1 ? "item" : "items"}`,
+											},
+										});
+									}
+								} catch {
+									// Ignore parse errors
+								}
+							}
+						}
+
+						// Object start
+						if (trimmed.match(/"[^"]+"\s*:\s*\{/)) {
+							const keyMatch = line?.match(/"([^"]+)"\s*:\s*\{/) ?? null;
+							if (keyMatch) {
+								try {
+									const key = keyMatch[1];
+									const obj = parsed as Record<string, unknown>;
+									if (key && typeof obj[key] === "object" && obj[key] !== null) {
+										const count = Object.keys(obj[key] as object).length;
+										lenses.push({
+											range: {
+												startLineNumber: i + 1,
+												startColumn: 1,
+												endLineNumber: i + 1,
+												endColumn: 1,
+											},
+											command: {
+												id: "postee.showObjectCount",
+												title: `${count} ${count === 1 ? "property" : "properties"}`,
+											},
+										});
+									}
+								} catch {
+									// Ignore parse errors
+								}
+							}
+						}
+					}
+				} catch {
+					// Invalid JSON, no code lenses
+				}
+
+				return { lenses, dispose: () => {} };
+			},
+		});
+
 		// Configure JSON validation with IntelliSense and common schemas
 		monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
 			validate: true,
@@ -232,32 +339,118 @@ export function MonacoJsonEditor({
 			selectionRanges: true,
 		});
 
-		// Register custom token provider for highlighting {{variables}}
+		// Register enhanced token provider for semantic highlighting
 		monaco.languages.setMonarchTokensProvider("json", {
 			tokenizer: {
 				root: [
 					// Template variables: {{varName}}
 					[/\{\{[^}]+\}\}/, "variable"],
-					// Standard JSON tokens
-					[/"[^"\\]*(?:\\.[^"\\]*)*"/, "string"],
-					[/\d+/, "number"],
-					[/true|false|null/, "keyword"],
+					// JSON keys (before colon)
+					[/"([^"\\]|\\.)*"\s*(?=:)/, "key"],
+					// JSON string values (after colon or in arrays)
+					[/"([^"\\]|\\.)*"/, "string.value"],
+					// Numbers
+					[/-?\d+\.?\d*([eE][+-]?\d+)?/, "number"],
+					// Keywords
+					[/\btrue\b/, "keyword.true"],
+					[/\bfalse\b/, "keyword.false"],
+					[/\bnull\b/, "keyword.null"],
+					// Structural tokens
+					[/[{}]/, "delimiter.curly"],
+					[/[[\]]/, "delimiter.square"],
+					[/[:,]/, "delimiter"],
 				],
 			},
 		});
 
-		// Define custom color for variables
+		// Define enhanced theme with semantic colors
 		monaco.editor.defineTheme("postee-dark", {
 			base: "vs-dark",
 			inherit: true,
 			rules: [
-				{ token: "variable", foreground: "A5D6A7", fontStyle: "italic" }, // Light green for variables
+				// Template variables - bright green, italic
+				{ token: "variable", foreground: "A5D6A7", fontStyle: "italic" },
+				// JSON keys - cyan (matches theme)
+				{ token: "key", foreground: "88C0D0", fontStyle: "bold" },
+				// String values - lighter color
+				{ token: "string.value", foreground: "A3BE8C" },
+				// Numbers - orange
+				{ token: "number", foreground: "D08770" },
+				// Boolean true - green
+				{ token: "keyword.true", foreground: "A3BE8C", fontStyle: "bold" },
+				// Boolean false - red
+				{ token: "keyword.false", foreground: "BF616A", fontStyle: "bold" },
+				// Null - purple
+				{ token: "keyword.null", foreground: "B48EAD", fontStyle: "italic" },
 			],
 			colors: {},
 		});
 
 		// Apply custom theme
 		monaco.editor.setTheme("postee-dark");
+
+		// Add decorations for {{variables}}
+		const updateVariableDecorations = () => {
+			const model = editor.getModel();
+			if (!model) return [];
+
+			const content = model.getValue();
+			const decorations: {
+				range: {
+					startLineNumber: number;
+					startColumn: number;
+					endLineNumber: number;
+					endColumn: number;
+				};
+				options: {
+					inlineClassName?: string;
+					beforeContentClassName?: string;
+					afterContentClassName?: string;
+					isWholeLine?: boolean;
+					className?: string;
+				};
+			}[] = [];
+
+			// Find all {{variable}} patterns
+			const lines = content.split('\n');
+			const variableRegex = /\{\{([^}]+)\}\}/g;
+
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (!line) continue;
+
+				let match;
+				variableRegex.lastIndex = 0; // Reset regex
+				while ((match = variableRegex.exec(line)) !== null) {
+					const startColumn = match.index + 1;
+					const endColumn = match.index + match[0].length + 1;
+
+					decorations.push({
+						range: {
+							startLineNumber: i + 1,
+							startColumn,
+							endLineNumber: i + 1,
+							endColumn,
+						},
+						options: {
+							inlineClassName: 'postee-variable-decoration',
+							beforeContentClassName: 'postee-variable-icon',
+						},
+					});
+				}
+			}
+
+			return decorations;
+		};
+
+		// Initial decoration
+		let decorationsCollection = editor.createDecorationsCollection(updateVariableDecorations());
+
+		// Update decorations on content change
+		editor.onDidChangeModelContent(() => {
+			decorationsCollection.clear();
+			decorationsCollection = editor.createDecorationsCollection(updateVariableDecorations());
+		});
 
 		// Auto-format on mount if value is valid JSON (ignoring variables)
 		try {
@@ -273,6 +466,82 @@ export function MonacoJsonEditor({
 
 		// Register custom actions
 		registerCustomActions(editor, monaco);
+
+		// Add custom context menu items
+		editor.addAction({
+			id: 'postee.minifyJson',
+			label: 'Minify JSON',
+			contextMenuGroupId: 'modification',
+			contextMenuOrder: 1,
+			run: (ed) => {
+				const model = ed.getModel();
+				if (!model) return;
+
+				try {
+					const content = model.getValue();
+					const withoutVars = content.replace(/\{\{[^}]+\}\}/g, '""');
+					const parsed = JSON.parse(withoutVars);
+					const minified = JSON.stringify(parsed);
+					// Restore variables
+					const originalMatches = content.match(/\{\{[^}]+\}\}/g) || [];
+					let varIndex = 0;
+					const restored = minified.replace(/""/g, () => {
+						return originalMatches[varIndex++] || '""';
+					});
+					model.setValue(restored);
+				} catch {
+					// Invalid JSON, ignore
+				}
+			},
+		});
+
+		editor.addAction({
+			id: 'postee.formatJson',
+			label: 'Format JSON (Pretty Print)',
+			contextMenuGroupId: 'modification',
+			contextMenuOrder: 2,
+			keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF],
+			run: (ed) => {
+				ed.getAction('editor.action.formatDocument')?.run();
+			},
+		});
+
+		editor.addAction({
+			id: 'postee.copyValue',
+			label: 'Copy Selected Value',
+			contextMenuGroupId: '9_cutcopypaste',
+			contextMenuOrder: 3,
+			run: (ed) => {
+				const selection = ed.getSelection();
+				if (!selection) return;
+
+				const model = ed.getModel();
+				if (!model) return;
+
+				const selectedText = model.getValueInRange(selection);
+				navigator.clipboard.writeText(selectedText);
+			},
+		});
+
+		editor.addAction({
+			id: 'postee.validateJson',
+			label: 'Validate JSON',
+			contextMenuGroupId: 'modification',
+			contextMenuOrder: 4,
+			run: (ed) => {
+				const model = ed.getModel();
+				if (!model) return;
+
+				try {
+					const content = model.getValue();
+					const withoutVars = content.replace(/\{\{[^}]+\}\}/g, '""');
+					JSON.parse(withoutVars);
+					alert('✓ Valid JSON');
+				} catch (error) {
+					alert(`✗ Invalid JSON: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				}
+			},
+		});
 	};
 
 	const handleChange = (newValue: string | undefined) => {
@@ -372,10 +641,17 @@ export function MonacoJsonEditor({
 					value={value || placeholder}
 					onChange={handleChange}
 					onMount={handleEditorDidMount}
-					theme="vs-dark"
+					theme="postee-dark"
 					options={{
 						readOnly,
-						minimap: { enabled: false },
+						minimap: {
+							enabled: true,
+							side: "right",
+							showSlider: "mouseover",
+							renderCharacters: false,
+							maxColumn: 80,
+							scale: 1,
+						},
 						scrollBeyondLastLine: false,
 						fontSize: 13,
 						lineNumbers: "on",
@@ -391,6 +667,13 @@ export function MonacoJsonEditor({
 						bracketPairColorization: {
 							enabled: true,
 						},
+						// Enable Code Lens (inline hints showing object/array counts)
+						codeLens: true,
+						// Enable Sticky Scroll (keep parent keys visible when scrolling)
+						stickyScroll: {
+							enabled: true,
+							maxLineCount: 5,
+						},
 						padding: {
 							top: 8,
 							bottom: 8,
@@ -398,6 +681,24 @@ export function MonacoJsonEditor({
 						scrollbar: {
 							verticalScrollbarSize: 8,
 							horizontalScrollbarSize: 8,
+						},
+						// Enable Find & Replace widget
+						find: {
+							seedSearchStringFromSelection: "selection",
+							autoFindInSelection: "never",
+							addExtraSpaceOnTop: true,
+							loop: true,
+						},
+						// Enable Command Palette (Cmd+Shift+P / F1)
+						quickSuggestionsDelay: 10,
+						// Enable Breadcrumbs (shows JSON path at top)
+						breadcrumbs: {
+							enabled: true,
+							showKeys: true,
+							showArrays: true,
+							showObjects: true,
+							showFunctions: false,
+							showVariables: true,
 						},
 						// IntelliSense configuration
 						quickSuggestions: {

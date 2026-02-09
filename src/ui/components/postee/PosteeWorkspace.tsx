@@ -36,6 +36,8 @@ import type {
 import * as styles from "./PosteeWorkspace.css";
 import * as layoutStyles from "../styles.css";
 
+const NAVIGATION_OVERLAY_MIN_DURATION_MS = 220;
+
 export function PosteeWorkspace() {
 	const machine = useMemo(() => createPosteeWorkspaceMachine(), []);
 	const [state, send] = useMachine(machine);
@@ -88,6 +90,7 @@ export function PosteeWorkspace() {
 
 	// Local state for response panel toggle (replaces machine's isResponseOpen)
 	const [isResponsePanelOpen, setIsResponsePanelOpen] = useState(true);
+	const [navigationTarget, setNavigationTarget] = useState<string | null>(null);
 
 	// Auto-open response panel when request completes
 	useEffect(() => {
@@ -293,6 +296,31 @@ export function PosteeWorkspace() {
 		[currentEnvironmentId, send],
 	);
 
+	const handleNavigateToBoard = useCallback(() => {
+		const navigate = async () => {
+			if (navigationTarget) {
+				return;
+			}
+
+			setNavigationTarget("/");
+
+			// Ensure the transition overlay renders before navigating away.
+			await new Promise<void>((resolve) => {
+				requestAnimationFrame(() => {
+					requestAnimationFrame(() => resolve());
+				});
+			});
+
+			await new Promise<void>((resolve) => {
+				setTimeout(resolve, NAVIGATION_OVERLAY_MIN_DURATION_MS);
+			});
+
+			window.location.assign("/");
+		};
+
+		void navigate();
+	}, [navigationTarget]);
+
 	// Layout calculations
 	const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
 	const templateColumns = `${leftTrack} 1fr`;
@@ -325,8 +353,8 @@ export function PosteeWorkspace() {
 				gridTemplateRows: templateRows,
 			}}
 		>
-			{isSidebarOpen && (
-				<PosteeSidebar
+				{isSidebarOpen && (
+					<PosteeSidebar
 					collections={collections as PosteeCollection[]}
 					requestsByCollection={requestsByCollection as Record<string, PosteeRequest[]>}
 					requestStatuses={requestStatuses}
@@ -335,11 +363,12 @@ export function PosteeWorkspace() {
 					onCreateCollection={handleCreateCollection}
 					onSelectCollection={handleSelectCollection}
 					onSelectRequest={handleSelectRequest}
-					onDeleteCollections={handleDeleteCollections}
-					onRenameCollection={handleRenameCollection}
-					onToggleSidebar={handleToggleSidebar}
-				/>
-			)}
+						onDeleteCollections={handleDeleteCollections}
+						onRenameCollection={handleRenameCollection}
+						onToggleSidebar={handleToggleSidebar}
+						onNavigateToBoard={handleNavigateToBoard}
+					/>
+				)}
 
 			<main className={styles.mainColumn} aria-label="Request builder">
 				<header className={styles.mainHeader}>
@@ -422,7 +451,22 @@ export function PosteeWorkspace() {
 						{responsePanelContent}
 					</section>
 				)}
-			</main>
-		</div>
-	);
-}
+				</main>
+				{navigationTarget && (
+					<div className={layoutStyles.navigationOverlay} role="status" aria-live="polite">
+						<div className={layoutStyles.navigationOverlayCard}>
+							<div
+								className={layoutStyles.navigationOverlayScanline}
+								aria-hidden="true"
+							/>
+							<h1 className={layoutStyles.navigationOverlayTitle}>
+								OPSYDYN // PRECISION TOOLS
+							</h1>
+							<p className={layoutStyles.navigationOverlayStep}>SYNCING WORKSPACE STATE</p>
+							<p className={layoutStyles.navigationOverlayTarget}>LOADING C4 BOARD</p>
+						</div>
+					</div>
+				)}
+			</div>
+		);
+	}

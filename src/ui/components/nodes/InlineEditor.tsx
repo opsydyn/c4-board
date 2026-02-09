@@ -9,7 +9,7 @@
  * - Simple validation
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
@@ -176,19 +176,23 @@ export function InlineEditor({
 	onCancel,
 	autoFocus = true,
 }: InlineEditorProps) {
-	const [currentText, setCurrentText] = useState(value);
+	const currentTextRef = useRef(value);
 	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		currentTextRef.current = value;
+	}, [value]);
 
 	const handleChange = useCallback((editorState: EditorState) => {
 		editorState.read(() => {
 			const root = $getRoot();
 			const textContent = root.getTextContent();
-			setCurrentText(textContent);
+			currentTextRef.current = textContent;
 		});
 	}, []);
 
 	const handleSave = useCallback(() => {
-		const trimmed = currentText.trim();
+		const trimmed = currentTextRef.current.trim();
 
 		// Validate
 		const validationError = validateText(trimmed, maxLength);
@@ -198,7 +202,7 @@ export function InlineEditor({
 		}
 
 		onSave(trimmed);
-	}, [currentText, maxLength, onSave]);
+	}, [maxLength, onSave]);
 
 	const initialConfig = {
 		namespace: "InlineEditor",

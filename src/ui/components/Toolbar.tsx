@@ -17,6 +17,8 @@ import {
 	PlayIcon,
 	PauseIcon,
 } from "@phosphor-icons/react";
+import { useState, useEffect } from "react";
+import { Duration } from "effect";
 import {
 	toolbar,
 	toolbarButton,
@@ -27,6 +29,10 @@ import {
 import { LayoutMenu } from "./LayoutMenu";
 import type { LayoutPresetName } from "../../core/effects/layout";
 import {Button} from 'react-aria-components';
+
+const ONE_MINUTE = Duration.minutes(1);
+const ONE_HOUR = Duration.hours(1);
+const TICK_INTERVAL = Duration.seconds(10);
 
 interface ToolbarProps {
 	onAddPerson: () => void;
@@ -41,30 +47,47 @@ interface ToolbarProps {
 	onDiagramNameChange: (name: string) => void;
 	onSessionNameChange: (name: string) => void;
 	onToggleAnimations: () => void;
+	onOpenSavedDiagrams?: () => void;
 	sessionName: string;
 	isSaving?: boolean;
 	lastSaved?: number | null;
+	saveError?: string | null;
 	diagramName?: string;
 	currentLayout?: LayoutPresetName;
 	animationsEnabled?: boolean;
 }
 
-function formatSaveTime(timestamp: number): string {
-	const now = Date.now();
-	const diff = now - timestamp;
+function formatSaveTime(timestamp: number, now: number): string {
+	const elapsed = Duration.millis(now - timestamp);
 
-	if (diff < 60000) {
-		// Less than 1 minute
+	if (Duration.lessThan(elapsed, ONE_MINUTE)) {
 		return "STATE::SYNCED @ NOW";
 	}
-	if (diff < 3600000) {
-		// Less than 1 hour
-		const minutes = Math.floor(diff / 60000);
+	if (Duration.lessThan(elapsed, ONE_HOUR)) {
+		const minutes = Math.floor(Duration.toMinutes(elapsed));
 		return `${minutes}m ago`;
 	}
-	// Show time
 	const date = new Date(timestamp);
 	return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function useLiveSaveTime(timestamp: number | null): string | null {
+	const [now, setNow] = useState(Date.now);
+
+	useEffect(() => {
+		if (timestamp === null) return;
+
+		setNow(Date.now());
+
+		const interval = setInterval(() => {
+			setNow(Date.now());
+		}, Duration.toMillis(TICK_INTERVAL));
+
+		return () => clearInterval(interval);
+	}, [timestamp]);
+
+	if (timestamp === null) return null;
+	return formatSaveTime(timestamp, now);
 }
 
 export function Toolbar({
@@ -80,13 +103,17 @@ export function Toolbar({
 	onDiagramNameChange,
 	onSessionNameChange,
 	onToggleAnimations,
+	onOpenSavedDiagrams,
 	sessionName,
 	isSaving = false,
 	lastSaved = null,
+	saveError = null,
 	diagramName = "Untitled",
 	currentLayout,
 	animationsEnabled = true,
 }: ToolbarProps) {
+	const saveTimeLabel = useLiveSaveTime(lastSaved);
+
 	return (
 		<div className={toolbar}>
 			{/* Board name editor and save status */}
@@ -98,21 +125,27 @@ export function Toolbar({
 					className={boardNameInput}
 					placeholder="Board name"
 				/>
-				<div>
-					{isSaving && (
-						<>
-							<FloppyDiskIcon size={14} weight="fill" />
-							<span>WRITE::…</span>
-						</>
-					)}
-					{!isSaving && lastSaved && (
-						<>
-							<CheckCircleIcon size={14} weight="fill" />
-							<span>SAVED {formatSaveTime(lastSaved)}</span>
-						</>
-					)}
+					<div>
+						{isSaving && (
+							<>
+								<FloppyDiskIcon size={14} weight="fill" />
+								<span>WRITE::…</span>
+							</>
+						)}
+						{!isSaving && !saveError && saveTimeLabel && (
+							<>
+								<CheckCircleIcon size={14} weight="fill" />
+								<span>SAVED {saveTimeLabel}</span>
+							</>
+						)}
+						{!isSaving && saveError && (
+							<>
+								<CloudIcon size={14} weight="duotone" />
+								<span title={saveError}>SAVE::ERROR</span>
+							</>
+						)}
+					</div>
 				</div>
-			</div>
 
 			{/* New Board button */}
 			<button type="button" className={toolbarButton} onClick={onNewBoard}>
@@ -139,27 +172,31 @@ export function Toolbar({
 			>
 				<FloppyDiskIcon size={20} weight="duotone" />
 				SAVE::STATE
-			</button>
+				</button>
 
-			{/* Animation toggle button */}
-			<Button
-				type="button"
-				className={toolbarButton}
-				onPress={onToggleAnimations}
-				aria-label={animationsEnabled ? "Disable edge animations" : "Enable edge animations"}
-			>
-				{animationsEnabled ? (
-					<>
-						<PauseIcon size={20} weight="duotone" />
-						ANIM::ON
-					</>
-				) : (
-					<>
-						<PlayIcon size={20} weight="duotone" />
-						ANIM::OFF
-					</>
-				)}
-			</Button>
+				{/* Animation toggle button */}
+				<Button
+					type="button"
+					className={toolbarButton}
+					onPress={onToggleAnimations}
+					aria-label={
+						animationsEnabled
+							? "Disable animation and save sounds"
+							: "Enable animation and save sounds"
+					}
+				>
+					{animationsEnabled ? (
+						<>
+							<PauseIcon size={20} weight="duotone" />
+							ANIM::ON
+						</>
+					) : (
+						<>
+							<PlayIcon size={20} weight="duotone" />
+							ANIM::OFF
+						</>
+					)}
+				</Button>
 
 			{/* Auto-layout menus */}
 			<LayoutMenu
@@ -212,11 +249,22 @@ export function Toolbar({
 				ADD::COMPONENT
 			</button>
 
-			{/* Saved diagrams link */}
-			<a href="/saved-diagrams" className={toolbarLink}>
-				<ListBulletsIcon size={20} weight="duotone" />
-				LIST::SAVED
-			</a>
-		</div>
-	);
-}
+				{/* Saved diagrams link */}
+				{onOpenSavedDiagrams ? (
+					<button
+						type="button"
+						className={toolbarLink}
+						onClick={onOpenSavedDiagrams}
+					>
+						<ListBulletsIcon size={20} weight="duotone" />
+						LIST::SAVED
+					</button>
+				) : (
+					<a href="/saved-diagrams" className={toolbarLink}>
+						<ListBulletsIcon size={20} weight="duotone" />
+						LIST::SAVED
+					</a>
+				)}
+			</div>
+		);
+	}

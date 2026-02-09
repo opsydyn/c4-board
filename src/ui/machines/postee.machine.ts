@@ -353,8 +353,10 @@ const posteeWorkspaceSetup = setup({
 				const client = yield* HttpClient;
 				const response = yield* client.send(prepared);
 
+				const historyId = nanoid();
+
 				const historyEntry: PosteeHistoryEntry = {
-					id: nanoid(),
+					id: historyId,
 					request_id: request.id,
 					request_snapshot: JSON.stringify(
 						{

@@ -123,7 +123,7 @@ export interface CanvasContext {
 	currentDomain: DiagramDomain; // Current diagram domain (C4 or DDD)
 
 	// UI preferences
-	animationsEnabled: boolean; // Global toggle for edge animations
+	animationsEnabled: boolean; // Global toggle for visual + audio effects
 
 	// Diagram metadata
 	currentDiagramId: string | null;
@@ -1278,36 +1278,43 @@ const canvasMachineDefinition = setup({
 				IMPORT_DIAGRAM: {
 					actions: "importDiagram",
 				},
-				// Persistence events
-				CREATE_NEW_DIAGRAM: {
-					target: "creatingDiagram",
-				},
-				CREATE_NEW_BOARD: {
-					target: "creatingDiagram",
-				},
-				SWITCH_BOARD: {
-					target: "loadingDiagram",
-				},
-				LOAD_DIAGRAM: {
-					target: "loadingDiagram",
-				},
-				LOAD_DIAGRAM_SUCCESS: {
-					actions: "loadDiagramSuccess",
-				},
-				SAVE_DIAGRAM: {
-					target: "saving",
-				},
-				AUTO_SAVE: {
-					target: "saving",
+					// Persistence events
+					CREATE_NEW_DIAGRAM: {
+						target: "creatingDiagram",
+					},
+					CREATE_NEW_BOARD: {
+						target: "creatingDiagram",
+					},
+					SWITCH_BOARD: {
+						target: "loadingDiagram",
+					},
+					LOAD_DIAGRAM: {
+						target: "loadingDiagram",
+					},
+					LOAD_DIAGRAM_SUCCESS: {
+						actions: "loadDiagramSuccess",
+					},
+					SAVE_DIAGRAM: {
+						target: "saving",
+					},
+					AUTO_SAVE: {
+						target: "saving",
+					},
+					// Handle late save completion events even after timeout transition.
+					SAVE_SUCCESS: {
+						actions: "setSaveSuccess",
+					},
+					SAVE_ERROR: {
+						actions: "setSaveError",
+					},
 				},
 			},
-		},
-		creatingDiagram: {
-			// This state is managed by the container component
-			// It will invoke the createDiagramActor and transition back to idle
-			always: "idle",
-		},
-		loadingDiagram: {
+			creatingDiagram: {
+				// This state is managed by the container component
+				// It will invoke the createDiagramActor and transition back to idle
+				always: "idle",
+			},
+			loadingDiagram: {
 			// This state is managed by the container component
 			// It will invoke the loadDiagramActor and transition back to idle
 			always: "idle",

@@ -72,6 +72,7 @@
     "react-dom": "^19.2.0",
     "react-spring": "^10.0.3",
     "test": "^3.3.0",
+    "tone": "^15.1.22",
     "xstate": "^5.23.0"
   },
   "devDependencies": {

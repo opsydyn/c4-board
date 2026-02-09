@@ -24,6 +24,9 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2.4.2"
 tokio = { version = "1.48.0", features = ["full"] }
 tauri-plugin-http = "2"
+# Direct sqlx access for properly configured SQLite pool (plugin pool lacks busy_timeout)
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+indexmap = { version = "2", features = ["serde"] }
 # Load testing dependencies
 reqwest = { version = "0.12", features = ["json", "stream"] }
 hdrhistogram = "7.5"

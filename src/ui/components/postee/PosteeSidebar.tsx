@@ -33,9 +33,16 @@ import type { RequestStatus } from "@/core/effects/postee/status-derivation";
 import type { CollectionId, RequestId } from "@/core/effects/postee/types";
 import { InlineEditor } from "../nodes/InlineEditor";
 import { PosteeSearchBox } from "./PosteeSearchBox";
+import { flex } from "../../../styles/sprinkles.css";
 
 import * as styles from "./PosteeWorkspace.css";
 import * as layoutStyles from "../styles.css";
+
+const sidebarBrandMetaClass = flex({
+	direction: "column",
+	align: "start",
+	gap: "1",
+});
 
 export interface PosteeSidebarProps {
 	collections: PosteeCollection[];
@@ -49,6 +56,7 @@ export interface PosteeSidebarProps {
 	onDeleteCollections: (collectionIds: string[]) => void;
 	onRenameCollection: (collectionId: string, newName: string) => void;
 	onToggleSidebar: () => void;
+	onNavigateToBoard?: () => void;
 }
 
 export function PosteeSidebar({
@@ -62,6 +70,7 @@ export function PosteeSidebar({
 	onDeleteCollections,
 	onRenameCollection,
 	onToggleSidebar,
+	onNavigateToBoard,
 }: PosteeSidebarProps) {
 	const [newCollectionName, setNewCollectionName] = useState("");
 	const [expandedKeys, setExpandedKeys] = useState<Set<Key> | "all">(
@@ -204,6 +213,38 @@ export function PosteeSidebar({
 
 	return (
 		<aside className={styles.sidebar} aria-label="Collections panel">
+			<div className={layoutStyles.sidebarBrand}>
+				<img
+					src="/app-icon.png"
+					alt="OPSYDYN logo"
+					className={layoutStyles.sidebarBrandIcon}
+					width={50}
+					height={50}
+				/>
+				<span className={sidebarBrandMetaClass}>
+					<span>OPSYDYN HUD::9000</span>
+					<span>V1.0.0</span>
+				</span>
+			</div>
+			<p className={layoutStyles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
+			<nav className={layoutStyles.sidebarQuickActions} aria-label="Workspace shortcuts">
+				{onNavigateToBoard ? (
+					<a
+						className={layoutStyles.sidebarQuickActionLink}
+						href="/"
+						onClick={(event) => {
+							event.preventDefault();
+							onNavigateToBoard();
+						}}
+					>
+						C4:BOARD
+					</a>
+				) : (
+					<a className={layoutStyles.sidebarQuickActionLink} href="/">
+						C4:BOARD
+					</a>
+				)}
+			</nav>
 			<div className={layoutStyles.panelHeader}>
 				<ToggleButton
 					isSelected={true}
@@ -217,9 +258,6 @@ export function PosteeSidebar({
 			</div>
 			<header className={styles.branding}>
 				<span>Postee Collections</span>
-				<span>
-					<a href="/">C4:BOARD</a>
-				</span>
 				<span>{collections.length}</span>
 			</header>
 

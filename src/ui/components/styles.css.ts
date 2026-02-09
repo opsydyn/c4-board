@@ -55,6 +55,23 @@ export const sidebarBrand = style({
 	fontSize: theme.typography.size.xs,
 });
 
+export const sidebarTagline = style({
+	margin: `0 0 ${theme.spacing["2"]}`,
+	color: theme.color.foreground.tertiary,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+});
+
+export const sidebarQuickActions = style({
+	display: "flex",
+	alignItems: "stretch",
+	gap: theme.spacing["2"],
+	marginBottom: theme.spacing["2"],
+	width: "100%",
+});
+
 export const sidebarBrandIcon = style({
 	display: "block",
 	flexShrink: 0,
@@ -317,6 +334,16 @@ export const toolbarLink = style([
 				color: theme.color.foreground.primary,
 			},
 		},
+	},
+]);
+
+export const sidebarQuickActionLink = style([
+	toolbarLink,
+	{
+		flex: 1,
+		justifyContent: "center",
+		padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
+		fontSize: theme.typography.size.xs,
 	},
 ]);
 
@@ -593,6 +620,113 @@ export const bottomHandle = style([
 		transform: "translate(-50%, 0)",
 	},
 ]);
+
+const navigationScan = keyframes({
+	"0%": {
+		transform: "translateY(-110%)",
+	},
+	"100%": {
+		transform: "translateY(110%)",
+	},
+});
+
+const navigationPulse = keyframes({
+	"0%, 100%": {
+		boxShadow:
+			"0 0 18px rgba(58, 224, 173, 0.28), inset 0 0 20px rgba(58, 224, 173, 0.14)",
+	},
+	"50%": {
+		boxShadow:
+			"0 0 30px rgba(58, 224, 173, 0.42), inset 0 0 28px rgba(58, 224, 173, 0.22)",
+	},
+});
+
+export const navigationOverlay = style({
+	position: "fixed",
+	zIndex: theme.zIndex.modal,
+	inset: 0,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: theme.spacing["6"],
+	background:
+		"radial-gradient(130% 130% at 50% 24%, rgba(22, 33, 31, 0.95) 0%, rgba(5, 8, 6, 0.98) 65%, rgba(1, 3, 2, 1) 100%)",
+});
+
+export const navigationOverlayCard = style({
+	position: "relative",
+	width: "min(520px, 92vw)",
+	overflow: "hidden",
+	border: `${theme.border.width.base} solid rgba(58, 224, 173, 0.44)`,
+	backgroundColor: "rgba(8, 18, 16, 0.93)",
+	padding: `${theme.spacing["6"]} ${theme.spacing["5"]}`,
+	clipPath: theme.clipPath.md,
+	animation: `${navigationPulse} 1.6s ease-in-out infinite`,
+});
+
+globalStyle(`${navigationOverlayCard}::after`, {
+	content: '""',
+	position: "absolute",
+	inset: 0,
+	pointerEvents: "none",
+	backgroundImage:
+		"linear-gradient(transparent 0, rgba(0, 0, 0, 0.08) 50%, transparent 100%)",
+	backgroundSize: "100% 3px",
+	opacity: "0.4",
+});
+
+export const navigationOverlayScanline = style({
+	position: "absolute",
+	top: 0,
+	left: 0,
+	width: "100%",
+	height: "100%",
+	pointerEvents: "none",
+	mixBlendMode: "screen",
+	opacity: 0.35,
+	background:
+		"linear-gradient(0deg, transparent 0%, rgba(58, 224, 173, 0.24) 45%, rgba(58, 224, 173, 0.34) 50%, rgba(58, 224, 173, 0.24) 55%, transparent 100%)",
+
+	"@media": {
+		"(prefers-reduced-motion: no-preference)": {
+			animation: `${navigationScan} 3s linear infinite`,
+		},
+	},
+});
+
+export const navigationOverlayTitle = style({
+	position: "relative",
+	zIndex: 1,
+	margin: 0,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.md,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wider,
+	color: "#5ce0c4",
+	textShadow: "0 0 8px rgba(92, 224, 196, 0.55)",
+});
+
+export const navigationOverlayStep = style({
+	position: "relative",
+	zIndex: 1,
+	margin: `${theme.spacing["4"]} 0 ${theme.spacing["2"]}`,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: theme.color.foreground.secondary,
+});
+
+export const navigationOverlayTarget = style({
+	position: "relative",
+	zIndex: 1,
+	margin: 0,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	color: "#b6ffc8",
+});
 
 export const historyPlaceholder = style({
 	display: "flex",

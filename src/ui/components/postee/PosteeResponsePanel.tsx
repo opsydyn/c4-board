@@ -232,6 +232,7 @@ export function PosteeResponsePanel({
 							onSetBaseline={onSetBaseline}
 							onClearBaseline={onClearBaseline}
 							onToggleDiff={onToggleDiff}
+							timing={lastResponse.timing}
 						/>
 					)}
 				</div>

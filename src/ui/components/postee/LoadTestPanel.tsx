@@ -3,12 +3,14 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { LinePath, Bar, AreaClosed } from "@visx/shape";
 import { GlyphCircle } from "@visx/glyph";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
+import * as Tone from "tone";
 import type { LoadTestProgress } from "@/core/effects/postee";
 import { useLoadTest } from "./useLoadTest";
 import { WarningOctagonIcon } from "@phosphor-icons/react";
@@ -18,6 +20,8 @@ import {
 	loadTestControls,
 	loadTestButtonRow,
 	loadTestStatus,
+	loadTestStatusIndicator,
+	loadTestStatusIndicatorActive,
 	loadTestMetrics,
 	metricCard,
 	metricLabel,
@@ -617,6 +621,85 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	const [concurrency, setConcurrency] = useState<string>("10");
 	const [rpsLimit, setRpsLimit] = useState<string>("");
 	const [timeoutMs, setTimeoutMs] = useState<string>("30000");
+	const [isSirenEnabled, setSirenEnabled] = useState(true);
+	const sirenSynthRef = useRef<Tone.MonoSynth | null>(null);
+	const sirenTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const sirenStepRef = useRef(0);
+	const audioReadyRef = useRef(false);
+
+	const primeSirenAudio = useCallback(async (): Promise<boolean> => {
+		try {
+			await Tone.start();
+			audioReadyRef.current = true;
+			return true;
+		} catch {
+			return false;
+		}
+	}, []);
+
+	const getSirenSynth = useCallback((): Tone.MonoSynth => {
+		if (!sirenSynthRef.current) {
+			sirenSynthRef.current = new Tone.MonoSynth({
+				volume: -14,
+				oscillator: { type: "sawtooth6" },
+				filter: {
+					type: "lowpass",
+					Q: 1,
+					frequency: 850,
+				},
+				envelope: {
+					attack: 0.04,
+					decay: 0.12,
+					sustain: 0.15,
+					release: 0.08,
+				},
+			}).toDestination();
+		}
+
+		return sirenSynthRef.current;
+	}, []);
+
+	const stopSiren = useCallback(() => {
+		if (sirenTimerRef.current !== null) {
+			clearInterval(sirenTimerRef.current);
+			sirenTimerRef.current = null;
+		}
+	}, []);
+
+	const startSiren = useCallback(async (): Promise<void> => {
+		if (sirenTimerRef.current !== null) {
+			return;
+		}
+
+		if (!audioReadyRef.current) {
+			const isReady = await primeSirenAudio();
+			if (!isReady) {
+				return;
+			}
+		}
+
+		const synth = getSirenSynth();
+		sirenStepRef.current = 0;
+
+		const pulse = () => {
+			const step = sirenStepRef.current;
+			sirenStepRef.current += 1;
+			const cycle = step % 8;
+			const note =
+				cycle < 2
+					? "A3"
+					: cycle < 4
+						? "C4"
+						: cycle < 6
+							? "E4"
+							: "C4";
+			const duration = cycle % 2 === 0 ? "16n" : "8n";
+			synth.triggerAttackRelease(note, duration, Tone.now(), 0.45);
+		};
+
+		pulse();
+		sirenTimerRef.current = setInterval(pulse, 220);
+	}, [getSirenSynth, primeSirenAudio]);
 
 	useEffect(() => {
 		if (request) {
@@ -633,6 +716,8 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 			if (!targetUrl.trim()) {
 				return;
 			}
+
+			await primeSirenAudio();
 
 			const parsedDuration = Number(durationSecs);
 			const parsedConcurrency = Number(concurrency);
@@ -666,8 +751,26 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 			targetMethod,
 			targetUrl,
 			timeoutMs,
+			primeSirenAudio,
 		],
 	);
+
+	useEffect(() => {
+		if (status === "running" && isSirenEnabled) {
+			void startSiren();
+			return;
+		}
+
+		stopSiren();
+	}, [isSirenEnabled, startSiren, status, stopSiren]);
+
+	useEffect(() => {
+		return () => {
+			stopSiren();
+			sirenSynthRef.current?.dispose();
+			sirenSynthRef.current = null;
+		};
+	}, [stopSiren]);
 
 	const statusText = useMemo(() => {
 		switch (status) {
@@ -683,6 +786,8 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 				return status;
 		}
 	}, [status]);
+
+	const isBlastDoorAlertActive = status === "running" && isSirenEnabled;
 
 	return (
 		<section className={loadTestPanel}>
@@ -802,7 +907,35 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 					>
 						Purge Telemetry
 					</button>
-					<span className={loadTestStatus}>Blast Door Status: {statusText}</span>
+					<button
+						type="button"
+						className={submitButton}
+						style={{
+							backgroundColor: isSirenEnabled
+								? "rgba(249, 112, 102, 0.18)"
+								: "transparent",
+							color: "inherit",
+							borderColor: isSirenEnabled
+								? "rgba(249, 112, 102, 0.8)"
+								: "rgba(60, 92, 80, 0.6)",
+						}}
+						onClick={() => {
+							setSirenEnabled((prev) => !prev);
+						}}
+					>
+						{isSirenEnabled ? "SIREN::ON" : "SIREN::OFF"}
+					</button>
+					<span className={loadTestStatus}>
+						<span
+							className={
+								isBlastDoorAlertActive
+									? `${loadTestStatusIndicator} ${loadTestStatusIndicatorActive}`
+									: loadTestStatusIndicator
+							}
+							aria-hidden="true"
+						/>
+						<span>Blast Door Status: {statusText}</span>
+					</span>
 				</div>
 			</form>
 
