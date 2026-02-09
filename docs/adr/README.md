@@ -24,6 +24,7 @@ Each ADR follows this structure:
 | [ADR-002](./002-postee-actor-model-refactor.md)  | Postee Actor Model Refactor (XState 5 Best Practices)            | Proposed | 2025-12-30 |
 | [ADR-003](./003-mcp-integration-architecture.md) | MCP Integration Architecture (Model Context Protocol Support)    | Proposed | 2025-12-31 |
 | [ADR-004](./004-sqlite-pool-architecture.md)     | SQLite Pool Architecture — Bypassing Plugin for Runtime Queries  | Accepted | 2026-02-07 |
+| [ADR-005](./005-global-settings-wiring-plan.md)  | Global Settings Architecture and Wiring Plan                     | Proposed | 2026-02-09 |
 
 ## Contributing
 

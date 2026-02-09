@@ -468,6 +468,12 @@ pub fn run() {
             sql: include_str!("../migrations/015_rollback_request_spans.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 16,
+            description: "create_app_settings",
+            sql: include_str!("../migrations/016_create_app_settings.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
