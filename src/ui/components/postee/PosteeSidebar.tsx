@@ -24,6 +24,7 @@ import {
 	TrashSimpleIcon,
 	PencilLineIcon,
 	CaretRightIcon,
+	GearSixIcon,
 } from "@phosphor-icons/react";
 import type {
 	PosteeCollection,
@@ -57,6 +58,7 @@ export interface PosteeSidebarProps {
 	onRenameCollection: (collectionId: string, newName: string) => void;
 	onToggleSidebar: () => void;
 	onNavigateToBoard?: () => void;
+	onNavigateToSettings?: () => void;
 }
 
 export function PosteeSidebar({
@@ -71,6 +73,7 @@ export function PosteeSidebar({
 	onRenameCollection,
 	onToggleSidebar,
 	onNavigateToBoard,
+	onNavigateToSettings,
 }: PosteeSidebarProps) {
 	const [newCollectionName, setNewCollectionName] = useState("");
 	const [expandedKeys, setExpandedKeys] = useState<Set<Key> | "all">(
@@ -214,17 +217,42 @@ export function PosteeSidebar({
 	return (
 		<aside className={styles.sidebar} aria-label="Collections panel">
 			<div className={layoutStyles.sidebarBrand}>
-				<img
-					src="/app-icon.png"
-					alt="OPSYDYN logo"
-					className={layoutStyles.sidebarBrandIcon}
-					width={50}
-					height={50}
-				/>
-				<span className={sidebarBrandMetaClass}>
-					<span>OPSYDYN HUD::9000</span>
-					<span>V1.0.0</span>
+				<span className={layoutStyles.sidebarBrandIdentity}>
+					<img
+						src="/app-icon.png"
+						alt="OPSYDYN logo"
+						className={layoutStyles.sidebarBrandIcon}
+						width={50}
+						height={50}
+					/>
+					<span className={sidebarBrandMetaClass}>
+						<span>OPSYDYN HUD::9000</span>
+						<span>V1.0.0</span>
+					</span>
 				</span>
+				{onNavigateToSettings ? (
+					<a
+						className={layoutStyles.sidebarBrandAction}
+						href="/settings"
+						aria-label="Open global settings"
+						title="Open global settings"
+						onClick={(event) => {
+							event.preventDefault();
+							onNavigateToSettings();
+						}}
+					>
+						<GearSixIcon size={16} weight="duotone" />
+					</a>
+				) : (
+					<a
+						className={layoutStyles.sidebarBrandAction}
+						href="/settings"
+						aria-label="Open global settings"
+						title="Open global settings"
+					>
+						<GearSixIcon size={16} weight="duotone" />
+					</a>
+				)}
 			</div>
 			<p className={layoutStyles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
 			<nav className={layoutStyles.sidebarQuickActions} aria-label="Workspace shortcuts">

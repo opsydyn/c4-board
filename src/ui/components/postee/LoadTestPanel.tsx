@@ -622,9 +622,8 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	const [rpsLimit, setRpsLimit] = useState<string>("");
 	const [timeoutMs, setTimeoutMs] = useState<string>("30000");
 	const [isSirenEnabled, setSirenEnabled] = useState(true);
-	const sirenSynthRef = useRef<Tone.MonoSynth | null>(null);
-	const sirenTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-	const sirenStepRef = useRef(0);
+	const sirenOscRef = useRef<Tone.Oscillator | null>(null);
+	const sirenLfoRef = useRef<Tone.LFO | null>(null);
 	const audioReadyRef = useRef(false);
 
 	const primeSirenAudio = useCallback(async (): Promise<boolean> => {
@@ -637,40 +636,48 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 		}
 	}, []);
 
-	const getSirenSynth = useCallback((): Tone.MonoSynth => {
-		if (!sirenSynthRef.current) {
-			sirenSynthRef.current = new Tone.MonoSynth({
-				volume: -14,
-				oscillator: { type: "sawtooth6" },
-				filter: {
-					type: "lowpass",
-					Q: 1,
-					frequency: 850,
-				},
-				envelope: {
-					attack: 0.04,
-					decay: 0.12,
-					sustain: 0.15,
-					release: 0.08,
-				},
+	const getSirenOscillator = useCallback((): Tone.Oscillator => {
+		if (!sirenOscRef.current) {
+			sirenOscRef.current = new Tone.Oscillator({
+				type: "sawtooth",
+				frequency: 440,
+				volume: -12,
 			}).toDestination();
 		}
 
-		return sirenSynthRef.current;
+		return sirenOscRef.current;
 	}, []);
 
+	const getSirenLfo = useCallback(
+		(oscillator: Tone.Oscillator): Tone.LFO => {
+			if (!sirenLfoRef.current) {
+				sirenLfoRef.current = new Tone.LFO({
+					type: "triangle",
+					min: 300,
+					max: 980,
+					frequency: 0.25,
+				});
+				sirenLfoRef.current.connect(oscillator.frequency);
+			}
+
+			return sirenLfoRef.current;
+		},
+		[],
+	);
+
 	const stopSiren = useCallback(() => {
-		if (sirenTimerRef.current !== null) {
-			clearInterval(sirenTimerRef.current);
-			sirenTimerRef.current = null;
+		const lfo = sirenLfoRef.current;
+		if (lfo && lfo.state === "started") {
+			lfo.stop();
+		}
+
+		const oscillator = sirenOscRef.current;
+		if (oscillator && oscillator.state === "started") {
+			oscillator.stop();
 		}
 	}, []);
 
 	const startSiren = useCallback(async (): Promise<void> => {
-		if (sirenTimerRef.current !== null) {
-			return;
-		}
-
 		if (!audioReadyRef.current) {
 			const isReady = await primeSirenAudio();
 			if (!isReady) {
@@ -678,28 +685,16 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 			}
 		}
 
-		const synth = getSirenSynth();
-		sirenStepRef.current = 0;
+		const oscillator = getSirenOscillator();
+		const lfo = getSirenLfo(oscillator);
 
-		const pulse = () => {
-			const step = sirenStepRef.current;
-			sirenStepRef.current += 1;
-			const cycle = step % 8;
-			const note =
-				cycle < 2
-					? "A3"
-					: cycle < 4
-						? "C4"
-						: cycle < 6
-							? "E4"
-							: "C4";
-			const duration = cycle % 2 === 0 ? "16n" : "8n";
-			synth.triggerAttackRelease(note, duration, Tone.now(), 0.45);
-		};
-
-		pulse();
-		sirenTimerRef.current = setInterval(pulse, 220);
-	}, [getSirenSynth, primeSirenAudio]);
+		if (lfo.state !== "started") {
+			lfo.start();
+		}
+		if (oscillator.state !== "started") {
+			oscillator.start();
+		}
+	}, [getSirenLfo, getSirenOscillator, primeSirenAudio]);
 
 	useEffect(() => {
 		if (request) {
@@ -767,8 +762,10 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	useEffect(() => {
 		return () => {
 			stopSiren();
-			sirenSynthRef.current?.dispose();
-			sirenSynthRef.current = null;
+			sirenLfoRef.current?.dispose();
+			sirenLfoRef.current = null;
+			sirenOscRef.current?.dispose();
+			sirenOscRef.current = null;
 		};
 	}, [stopSiren]);
 

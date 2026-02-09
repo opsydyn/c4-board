@@ -48,7 +48,12 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { NodeData } from "../../core/effects/node-operations";
 import { ToggleButton } from "react-aria-components";
-import { CaretLeftIcon, CaretRightIcon, CaretUpIcon } from "@phosphor-icons/react";
+import {
+	CaretLeftIcon,
+	CaretRightIcon,
+	CaretUpIcon,
+	GearSixIcon,
+} from "@phosphor-icons/react";
 import type { ContextMenuAction } from "../utils/contextMenu";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import { flex } from "../../styles/sprinkles.css";
@@ -1157,6 +1162,8 @@ export function C4CanvasContainer() {
 				return "LOADING POSTEE WORKSPACE";
 			case "/saved-diagrams":
 				return "LOADING SAVED DIAGRAMS";
+			case "/settings":
+				return "LOADING GLOBAL SETTINGS";
 			case "/splashscreen":
 				return "LOADING OPSYDYN SPLASHSCREEN";
 			default:
@@ -1175,18 +1182,30 @@ export function C4CanvasContainer() {
 			{isSidebarOpen && (
 				<aside className={styles.sidebarColumn} aria-label="Toolbar panel">
 					<div className={styles.sidebarBrand}>
-						<img
-							src="/app-icon.png"
-							alt="C4 Canvas"
-							className={styles.sidebarBrandIcon}
-							width={50}
-							height={50}
-						/>
-						<span className={sidebarBrandMetaClass}>
-						<span>OPSYDYN HUD::9000</span>
-						<span>V1.0.0</span>
+						<span className={styles.sidebarBrandIdentity}>
+							<img
+								src="/app-icon.png"
+								alt="C4 Canvas"
+								className={styles.sidebarBrandIcon}
+								width={50}
+								height={50}
+							/>
+							<span className={sidebarBrandMetaClass}>
+								<span>OPSYDYN HUD::9000</span>
+								<span>V1.0.0</span>
+							</span>
 						</span>
-
+						<a
+							className={styles.sidebarBrandAction}
+							href="/settings"
+							aria-label="Open global settings"
+							title="Open global settings"
+							onClick={(event) => {
+								void handleNavigateWithSave(event, "/settings");
+							}}
+						>
+							<GearSixIcon size={16} weight="duotone" />
+						</a>
 					</div>
 					<p className={styles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
 					<nav className={styles.sidebarQuickActions} aria-label="Workspace shortcuts">

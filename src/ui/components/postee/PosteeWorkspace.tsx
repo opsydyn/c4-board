@@ -296,13 +296,13 @@ export function PosteeWorkspace() {
 		[currentEnvironmentId, send],
 	);
 
-	const handleNavigateToBoard = useCallback(() => {
+	const navigateWithOverlay = useCallback((targetPath: string) => {
 		const navigate = async () => {
 			if (navigationTarget) {
 				return;
 			}
 
-			setNavigationTarget("/");
+			setNavigationTarget(targetPath);
 
 			// Ensure the transition overlay renders before navigating away.
 			await new Promise<void>((resolve) => {
@@ -315,10 +315,29 @@ export function PosteeWorkspace() {
 				setTimeout(resolve, NAVIGATION_OVERLAY_MIN_DURATION_MS);
 			});
 
-			window.location.assign("/");
+			window.location.assign(targetPath);
 		};
 
 		void navigate();
+	}, [navigationTarget]);
+
+	const handleNavigateToBoard = useCallback(() => {
+		navigateWithOverlay("/");
+	}, [navigateWithOverlay]);
+
+	const handleNavigateToSettings = useCallback(() => {
+		navigateWithOverlay("/settings");
+	}, [navigateWithOverlay]);
+
+	const navigationLabel = useMemo(() => {
+		switch (navigationTarget) {
+			case "/":
+				return "LOADING C4 BOARD";
+			case "/settings":
+				return "LOADING GLOBAL SETTINGS";
+			default:
+				return "LOADING NEXT WORKSPACE";
+		}
 	}, [navigationTarget]);
 
 	// Layout calculations
@@ -367,6 +386,7 @@ export function PosteeWorkspace() {
 						onRenameCollection={handleRenameCollection}
 						onToggleSidebar={handleToggleSidebar}
 						onNavigateToBoard={handleNavigateToBoard}
+						onNavigateToSettings={handleNavigateToSettings}
 					/>
 				)}
 
@@ -463,7 +483,7 @@ export function PosteeWorkspace() {
 								OPSYDYN // PRECISION TOOLS
 							</h1>
 							<p className={layoutStyles.navigationOverlayStep}>SYNCING WORKSPACE STATE</p>
-							<p className={layoutStyles.navigationOverlayTarget}>LOADING C4 BOARD</p>
+							<p className={layoutStyles.navigationOverlayTarget}>{navigationLabel}</p>
 						</div>
 					</div>
 				)}

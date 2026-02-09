@@ -23,6 +23,7 @@ Each ADR follows this structure:
 | [ADR-001](./001-postee-workspace-refactor.md)    | PosteeWorkspace Component Refactor to Functional Core Pattern    | Proposed | 2025-12-30 |
 | [ADR-002](./002-postee-actor-model-refactor.md)  | Postee Actor Model Refactor (XState 5 Best Practices)            | Proposed | 2025-12-30 |
 | [ADR-003](./003-mcp-integration-architecture.md) | MCP Integration Architecture (Model Context Protocol Support)    | Proposed | 2025-12-31 |
+| [ADR-004](./004-sqlite-pool-architecture.md)     | SQLite Pool Architecture — Bypassing Plugin for Runtime Queries  | Accepted | 2026-02-07 |
 
 ## Contributing
 
