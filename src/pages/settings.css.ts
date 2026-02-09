@@ -269,3 +269,212 @@ export const settingsRowValue = style({
 	textTransform: theme.typography.textTransform.uppercase,
 	letterSpacing: theme.typography.letterSpacing.wide,
 });
+
+export const settingsStatusBar = style({
+	display: "flex",
+	alignItems: "center",
+	flexWrap: "wrap",
+	gap: theme.spacing["2"],
+});
+
+export const settingsStatusBadge = style({
+	display: "inline-flex",
+	alignItems: "center",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.9)",
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const settingsStatusLoading = style({
+	borderColor: theme.color.border.secondary,
+	color: theme.color.foreground.tertiary,
+});
+
+export const settingsStatusSaving = style({
+	borderColor: theme.color.status.caution,
+	color: theme.color.status.caution,
+	boxShadow: `0 0 10px ${theme.color.status.caution}33`,
+});
+
+export const settingsStatusSaved = style({
+	borderColor: theme.color.status.ready,
+	color: theme.color.status.ready,
+	boxShadow: `0 0 10px ${theme.color.status.ready}33`,
+});
+
+export const settingsStatusError = style({
+	borderColor: theme.color.status.critical,
+	color: theme.color.status.critical,
+	boxShadow: `0 0 10px ${theme.color.status.critical}33`,
+});
+
+export const settingsErrorText = style({
+	margin: 0,
+	color: theme.color.status.critical,
+	fontFamily: theme.typography.family.sans,
+	fontSize: theme.typography.size.sm,
+});
+
+export const settingsLoadingState = style({
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	minHeight: "240px",
+	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+	clipPath: theme.clipPath.md,
+	backgroundColor: "rgba(10, 18, 14, 0.95)",
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const settingsControlGroup = style({
+	display: "inline-flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+});
+
+export const settingsToggleControl = style({
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	minWidth: "4.75rem",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	fontWeight: theme.typography.weight.bold,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	cursor: "pointer",
+	transition: theme.transition.base,
+
+	selectors: {
+		"&[data-active='true']": {
+			borderColor: theme.color.interactive.primary,
+			color: theme.color.foreground.primary,
+			boxShadow: theme.effect.glow.sm,
+			backgroundColor: "rgba(16, 30, 22, 0.95)",
+		},
+		"&:hover": {
+			borderColor: theme.color.interactive.primary,
+			color: theme.color.foreground.primary,
+		},
+		"&:disabled": {
+			opacity: 0.5,
+			cursor: "not-allowed",
+		},
+	},
+});
+
+const textFieldBase = {
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	minHeight: "2rem",
+	transition: theme.transition.base,
+};
+
+export const settingsSelectControl = style({
+	...textFieldBase,
+	minWidth: "8rem",
+
+	selectors: {
+		"&:focus-visible": {
+			outline: "none",
+			borderColor: theme.color.interactive.primary,
+			boxShadow: theme.effect.glow.sm,
+		},
+	},
+});
+
+export const settingsNumberControl = style({
+	...textFieldBase,
+	width: "6.5rem",
+
+	selectors: {
+		"&:focus-visible": {
+			outline: "none",
+			borderColor: theme.color.interactive.primary,
+			boxShadow: theme.effect.glow.sm,
+		},
+	},
+});
+
+export const settingsRangeControl = style({
+	width: "8rem",
+	accentColor: theme.color.interactive.primary,
+	cursor: "pointer",
+});
+
+export const settingsRangeValue = style({
+	minWidth: "3rem",
+	textAlign: "right",
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const settingsInlineActions = style({
+	display: "inline-flex",
+	alignItems: "center",
+	flexWrap: "wrap",
+	gap: theme.spacing["2"],
+});
+
+export const settingsActionButton = style({
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+	cursor: "pointer",
+	transition: theme.transition.base,
+
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.interactive.primary,
+			color: theme.color.foreground.primary,
+			boxShadow: theme.effect.glow.sm,
+		},
+		"&:disabled": {
+			opacity: 0.45,
+			cursor: "not-allowed",
+			boxShadow: "none",
+		},
+	},
+});
+
+export const settingsActionButtonDanger = style({
+	borderColor: theme.color.status.critical,
+	color: theme.color.status.critical,
+	backgroundColor: "rgba(40, 14, 16, 0.72)",
+});
+
+export const settingsNotice = style({
+	margin: 0,
+	color: theme.color.foreground.tertiary,
+	fontFamily: theme.typography.family.sans,
+	fontSize: theme.typography.size.sm,
+});

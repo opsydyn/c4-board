@@ -2,6 +2,7 @@
 import "../styles/global.css.ts";
 import { defaultTheme } from "../styles/theme.css";
 import { GlobalMenuListener } from "../components/GlobalMenuListener.tsx";
+import { RuntimeBootstrap } from "../components/RuntimeBootstrap.tsx";
 ---
 
 <!DOCTYPE html>
@@ -20,6 +21,7 @@ import { GlobalMenuListener } from "../components/GlobalMenuListener.tsx";
 		</head>
 	<body class={defaultTheme}>
 		<GlobalMenuListener client:only="react" />
+		<RuntimeBootstrap client:only="react" />
 		<slot />
 	</body>
 </html>
