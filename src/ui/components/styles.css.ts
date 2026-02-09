@@ -46,13 +46,22 @@ export const sidebarColumn = style({
 export const sidebarBrand = style({
 	display: "flex",
 	alignItems: "center",
+	justifyContent: "space-between",
 	gap: theme.spacing["2"],
+	width: "100%",
 	marginBottom: theme.spacing["3"],
 	textTransform: theme.typography.textTransform.uppercase,
 	letterSpacing: theme.typography.letterSpacing.wide,
 	color: theme.color.foreground.secondary,
 	fontFamily: theme.typography.family.mono,
 	fontSize: theme.typography.size.xs,
+});
+
+export const sidebarBrandIdentity = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	minWidth: 0,
 });
 
 export const sidebarTagline = style({
@@ -79,6 +88,30 @@ export const sidebarBrandIcon = style({
 	boxShadow: theme.effect.glow.sm,
 	// width: "50px",
 	// height: "50px",
+});
+
+export const sidebarBrandAction = style({
+	display: "inline-flex",
+	alignItems: "center",
+	justifyContent: "center",
+	width: "2rem",
+	height: "2rem",
+	flexShrink: 0,
+	transition: theme.transition.base,
+	clipPath: theme.clipPath.sm,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(13, 23, 18, 0.8)",
+	color: theme.color.foreground.secondary,
+	textDecoration: "none",
+
+	selectors: {
+		"&:hover": {
+			borderColor: theme.color.interactive.primary,
+			color: theme.color.foreground.primary,
+			boxShadow: theme.effect.glow.sm,
+			backgroundColor: "rgba(16, 28, 22, 0.98)",
+		},
+	},
 });
 
 export const canvasStack = style({

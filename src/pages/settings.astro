@@ -1,0 +1,251 @@
+---
+import Layout from "../layouts/Layout.astro";
+import {
+	pageShell,
+	sidebar,
+	sidebarBrand,
+	sidebarBrandIdentity,
+	sidebarBrandIcon,
+	sidebarBrandMeta,
+	sidebarBrandAction,
+	sidebarTagline,
+	sidebarQuickActions,
+	sidebarQuickLink,
+	sidebarSectionNav,
+	sidebarSectionLink,
+	main,
+	mainHeader,
+	mainTitle,
+	mainSubtitle,
+	settingsGrid,
+	settingsCard,
+	settingsCardDanger,
+	settingsCardTitle,
+	settingsCardDescription,
+	settingsRow,
+	settingsRowLabel,
+	settingsRowHint,
+	settingsRowValue,
+} from "./settings.css";
+---
+
+<Layout>
+	<main class={pageShell}>
+		<aside class={sidebar} aria-label="Settings navigation">
+			<div class={sidebarBrand}>
+				<span class={sidebarBrandIdentity}>
+					<img
+						src="/app-icon.png"
+						alt="OPSYDYN logo"
+						class={sidebarBrandIcon}
+						width={50}
+						height={50}
+					/>
+					<span class={sidebarBrandMeta}>
+						<span>OPSYDYN HUD::9000</span>
+						<span>V1.0.0</span>
+					</span>
+				</span>
+				<span class={sidebarBrandAction}>SETTINGS</span>
+			</div>
+
+			<p class={sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
+
+			<nav class={sidebarQuickActions} aria-label="Workspace shortcuts">
+				<a href="/" class={sidebarQuickLink}>C4 BOARD</a>
+				<a href="/postee" class={sidebarQuickLink}>POSTEE</a>
+				<a href="/saved-diagrams" class={sidebarQuickLink}>SAVED</a>
+			</nav>
+
+			<nav class={sidebarSectionNav} aria-label="Settings sections">
+				<a class={sidebarSectionLink} href="#experience">Experience</a>
+				<a class={sidebarSectionLink} href="#audio">Audio</a>
+				<a class={sidebarSectionLink} href="#save-sync">Save & Sync</a>
+				<a class={sidebarSectionLink} href="#data-control">Data Control</a>
+				<a class={sidebarSectionLink} href="#privacy-security">Privacy & Security</a>
+				<a class={sidebarSectionLink} href="#system-status">System Status</a>
+				<a class={sidebarSectionLink} href="#about">About</a>
+				<a class={sidebarSectionLink} href="#danger-zone">Danger Zone</a>
+			</nav>
+		</aside>
+
+		<section class={main}>
+			<header class={mainHeader}>
+				<h1 class={mainTitle}>Global Settings</h1>
+				<p class={mainSubtitle}>
+					Presentation scaffold only. Controls shown here are non-functional placeholders.
+				</p>
+			</header>
+
+			<div class={settingsGrid}>
+				<article id="experience" class={settingsCard}>
+					<h2 class={settingsCardTitle}>Experience</h2>
+					<p class={settingsCardDescription}>
+						Visual defaults for transitions, chart motion, and global UI mode.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Animations</span>
+							<span class={settingsRowHint}>Global default</span>
+						</div>
+						<span class={settingsRowValue}>ON</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Transition Intensity</span>
+							<span class={settingsRowHint}>Low / Normal / High</span>
+						</div>
+						<span class={settingsRowValue}>NORMAL</span>
+					</div>
+				</article>
+
+				<article id="audio" class={settingsCard}>
+					<h2 class={settingsCardTitle}>Audio</h2>
+					<p class={settingsCardDescription}>
+						Default behavior for save chimes, sirens, and global master volume.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Master Audio</span>
+							<span class={settingsRowHint}>Applies across all workspaces</span>
+						</div>
+						<span class={settingsRowValue}>ON</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Load Test Siren Default</span>
+							<span class={settingsRowHint}>Postee load chamber</span>
+						</div>
+						<span class={settingsRowValue}>ON</span>
+					</div>
+				</article>
+
+				<article id="save-sync" class={settingsCard}>
+					<h2 class={settingsCardTitle}>Save & Sync</h2>
+					<p class={settingsCardDescription}>
+						Defaults for autosave cadence, navigation-save behavior, and sync diagnostics.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Autosave</span>
+							<span class={settingsRowHint}>C4 board persistence</span>
+						</div>
+						<span class={settingsRowValue}>ENABLED</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Autosave Interval</span>
+							<span class={settingsRowHint}>Debounce window</span>
+						</div>
+						<span class={settingsRowValue}>1500 MS</span>
+					</div>
+				</article>
+
+				<article id="data-control" class={settingsCard}>
+					<h2 class={settingsCardTitle}>Data Control</h2>
+					<p class={settingsCardDescription}>
+						Export/import actions, telemetry retention, and workspace cleanup operations.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Backup Bundle</span>
+							<span class={settingsRowHint}>C4 + Postee data package</span>
+						</div>
+						<span class={settingsRowValue}>READY</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>History Retention</span>
+							<span class={settingsRowHint}>Postee execution traces</span>
+						</div>
+						<span class={settingsRowValue}>LOCAL</span>
+					</div>
+				</article>
+
+				<article id="privacy-security" class={settingsCard}>
+					<h2 class={settingsCardTitle}>Privacy & Security</h2>
+					<p class={settingsCardDescription}>
+						Telemetry and logging policies with default redaction rules for sensitive data.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Diagnostics Sharing</span>
+							<span class={settingsRowHint}>Error and crash reporting</span>
+						</div>
+						<span class={settingsRowValue}>OFF</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Secret Redaction</span>
+							<span class={settingsRowHint}>Headers/body masking</span>
+						</div>
+						<span class={settingsRowValue}>STRICT</span>
+					</div>
+				</article>
+
+				<article id="system-status" class={settingsCard}>
+					<h2 class={settingsCardTitle}>System Status</h2>
+					<p class={settingsCardDescription}>
+						Runtime diagnostics for storage, migrations, lock contention, and save health.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Database Runtime</span>
+							<span class={settingsRowHint}>Connection + migration health</span>
+						</div>
+						<span class={settingsRowValue}>NOMINAL</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Save Queue</span>
+							<span class={settingsRowHint}>Current in-flight writes</span>
+						</div>
+						<span class={settingsRowValue}>0</span>
+					</div>
+				</article>
+
+				<article id="about" class={settingsCard}>
+					<h2 class={settingsCardTitle}>About</h2>
+					<p class={settingsCardDescription}>
+						Product identity, version metadata, and build information for support workflows.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Software Version</span>
+							<span class={settingsRowHint}>Current runtime channel</span>
+						</div>
+						<span class={settingsRowValue}>V1.0.0</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Release Channel</span>
+							<span class={settingsRowHint}>Distribution track</span>
+						</div>
+						<span class={settingsRowValue}>STABLE</span>
+					</div>
+				</article>
+
+				<article id="danger-zone" class={`${settingsCard} ${settingsCardDanger}`}>
+					<h2 class={settingsCardTitle}>Danger Zone</h2>
+					<p class={settingsCardDescription}>
+						Destructive operations for deleting data and resetting settings.
+					</p>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Delete All Diagrams</span>
+							<span class={settingsRowHint}>Irreversible operation</span>
+						</div>
+						<span class={settingsRowValue}>LOCKED</span>
+					</div>
+					<div class={settingsRow}>
+						<div class={settingsRowLabel}>
+							<span>Factory Reset</span>
+							<span class={settingsRowHint}>Clears settings + local data</span>
+						</div>
+						<span class={settingsRowValue}>LOCKED</span>
+					</div>
+				</article>
+			</div>
+		</section>
+	</main>
+</Layout>
