@@ -1,4 +1,4 @@
-import { style } from "@vanilla-extract/css";
+import { globalStyle, style } from "@vanilla-extract/css";
 import { theme } from "../styles/theme.css";
 
 export const pageShell = style({
@@ -416,7 +416,59 @@ export const settingsNumberControl = style({
 
 export const settingsRangeControl = style({
 	width: "8rem",
-	accentColor: theme.color.interactive.primary,
+	minWidth: "8rem",
+	height: "1.25rem",
+	padding: 0,
+	border: "none",
+	backgroundColor: "transparent",
+	appearance: "none",
+	WebkitAppearance: "none",
+	cursor: "pointer",
+
+	selectors: {
+		"&:focus-visible": {
+			outline: "none",
+		},
+	},
+});
+
+globalStyle(`${settingsRangeControl}::-webkit-slider-runnable-track`, {
+	height: "0.375rem",
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	boxShadow: `inset 0 0 0 1px ${theme.color.grid}`,
+});
+
+globalStyle(`${settingsRangeControl}::-webkit-slider-thumb`, {
+	WebkitAppearance: "none",
+	width: "0.9rem",
+	height: "0.9rem",
+	marginTop: "-0.3rem",
+	border: `${theme.border.width.thin} solid ${theme.color.status.selected}`,
+	backgroundColor: theme.color.status.selected,
+	boxShadow: `0 0 8px ${theme.color.status.selected}66`,
+	cursor: "pointer",
+});
+
+globalStyle(`${settingsRangeControl}::-moz-range-track`, {
+	height: "0.375rem",
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(9, 16, 13, 0.92)",
+	boxShadow: `inset 0 0 0 1px ${theme.color.grid}`,
+});
+
+globalStyle(`${settingsRangeControl}::-moz-range-progress`, {
+	height: "0.375rem",
+	backgroundColor: theme.color.status.selected,
+	boxShadow: `0 0 8px ${theme.color.status.selected}44`,
+});
+
+globalStyle(`${settingsRangeControl}::-moz-range-thumb`, {
+	width: "0.9rem",
+	height: "0.9rem",
+	border: `${theme.border.width.thin} solid ${theme.color.status.selected}`,
+	backgroundColor: theme.color.status.selected,
+	boxShadow: `0 0 8px ${theme.color.status.selected}66`,
 	cursor: "pointer",
 });
 

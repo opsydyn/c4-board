@@ -108,14 +108,16 @@ describe("settings.runtime", () => {
       patchSettings({
         autosaveIntervalMs: 2_500,
         saveOnNavigate: false,
+        bigBallOfMudAlertThreshold: 7.6,
       }),
       db.service,
     );
 
     expect(patched.autosaveIntervalMs).toBe(2_500);
     expect(patched.saveOnNavigate).toBe(false);
+    expect(patched.bigBallOfMudAlertThreshold).toBe(7.6);
     expect(patched.masterAudioEnabled).toBe(DEFAULT_APP_SETTINGS.masterAudioEnabled);
-    expect(db.state.executeCount - executeBefore).toBe(2);
+    expect(db.state.executeCount - executeBefore).toBe(3);
   });
 
   it("no-ops when patch does not change values", async () => {

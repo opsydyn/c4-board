@@ -48,6 +48,7 @@ interface BalancedMudChartProps {
   selectedModuleId?: string | null;
   onSelectModule?: (moduleId: string) => void;
   domain: DiagramDomain;
+  mudAlertThreshold?: number;
 }
 
 const subdomainPalette: Record<ModuleCouplingSnapshot["subdomainType"], string> = {
@@ -301,6 +302,7 @@ export function BalancedMudChart({
   onSelectModule,
   selectedModuleId,
   domain,
+  mudAlertThreshold = 8.0,
 }: BalancedMudChartProps) {
   const model = useBalancedCouplingModel(nodes, edges, domain);
   const {
@@ -425,6 +427,8 @@ export function BalancedMudChart({
                     <span>•</span>
                     <span>{tooltipData.integrationType.toUpperCase()}</span>
                     <span>•</span>
+                    <span>MODE {tooltipData.scoreMode.toUpperCase()}</span>
+                    <span>•</span>
                     <span>Risk {tooltipData.systemicRisk.toFixed(1)}</span>
                   </div>
                 </>
@@ -436,14 +440,15 @@ export function BalancedMudChart({
               )}
           </div>
 
-          {/* Big Ball of Mud Warning - Shows when average risk >= 8.0 */}
-          {model.aggregate.averageRisk >= 8.0 && (
+          {model.aggregate.averageRisk >= mudAlertThreshold && (
             <div className={mudChartCriticalWarning}>
               <span className={mudChartCriticalWarningSvg}>
                 <WarningOctagonIcon size={16} weight="fill" />
               </span>
 
-              <p>[CRITICAL] BIG BALL OF MUD DETECTED</p>
+              <p>
+                [CRITICAL] BIG BALL OF MUD DETECTED (THRESHOLD {mudAlertThreshold.toFixed(1)})
+              </p>
             </div>
           )}
         </div>

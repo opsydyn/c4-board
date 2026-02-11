@@ -52,10 +52,20 @@ export type SubdomainType = "core" | "generic" | "supporting";
 
 export type IntegrationType = "intrusive" | "contract" | "functional";
 
+export type CouplingScoreMode = "auto" | "hybrid" | "manual";
+
 export interface CouplingProfile {
 	strength: number;
 	distance: number;
 	volatility: number;
+}
+
+export interface CouplingOverrides {
+	strength?: number;
+	distance?: number;
+	volatility?: number;
+	integrationType?: IntegrationType;
+	subdomainType?: SubdomainType;
 }
 
 /**
@@ -94,6 +104,8 @@ export interface NodeData extends Record<string, unknown> {
 	subdomainType?: SubdomainType;
 	integrationType?: IntegrationType;
 	couplingProfile?: CouplingProfile;
+	couplingScoreMode?: CouplingScoreMode;
+	couplingOverrides?: CouplingOverrides;
 	iconId?: NodeIconId;
 
 	// DDD-specific fields
@@ -644,6 +656,7 @@ export const createNode = (options: CreateNodeOptions): Effect.Effect<Node> => {
 			subdomainType,
 			integrationType,
 			couplingProfile,
+			couplingScoreMode: "auto",
 			...(isC4 && {
 				c4Type: type as C4Type,
 			}),

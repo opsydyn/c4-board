@@ -10,19 +10,18 @@
  *   Every connection inherits these settings — no JS-side PRAGMA management needed.
  * - The tauri-plugin-sql is kept for migrations only; runtime queries bypass it
  *   via custom sql_execute/sql_query Tauri commands.
- * - Write serialization uses a module-level Effect semaphore to guarantee one
- *   write critical section at a time across all runtime callers.
+ * - Write serialization uses a module-level Effect semaphore (verified to work
+ *   across separate Effect.runPromise calls). A defensive ROLLBACK before
+ *   BEGIN IMMEDIATE guards against stale connection state from HMR reloads.
  * - Startup uses a latch gate. All queries/writes wait until settings defaults
  *   are bootstrapped, preventing early unsynced reads.
  */
 
-import { Duration, Effect, FiberRef, Layer, Schedule } from "effect";
 import { invoke } from "@tauri-apps/api/core";
-import { DatabaseService, DatabaseError } from "./database.base";
-import {
-	APP_SETTING_KEYS,
-	DEFAULT_APP_SETTINGS,
-} from "./settings.types";
+import { Duration, Effect, FiberRef, Layer, Schedule } from "effect";
+import { DatabaseError, DatabaseService } from "./database.base";
+import { APP_SETTING_KEYS, DEFAULT_APP_SETTINGS } from "./settings.types";
+import { classifySqliteError, isRetryable } from "./sqlite-error-class";
 
 const writeSemaphore = Effect.runSync(Effect.makeSemaphore(1));
 const writeLockDepthRef = FiberRef.unsafeMake(0);
@@ -33,170 +32,89 @@ let settingsBootstrapError: DatabaseError | null = null;
 const SQLITE_BUSY_MAX_ATTEMPTS = 8;
 const SQLITE_BUSY_BASE_DELAY = Duration.millis(40);
 const SQLITE_BUSY_RETRY_SCHEDULE = Schedule.intersect(
-	Schedule.exponential(SQLITE_BUSY_BASE_DELAY),
-	Schedule.recurs(SQLITE_BUSY_MAX_ATTEMPTS - 1),
+  Schedule.exponential(SQLITE_BUSY_BASE_DELAY),
+  Schedule.recurs(SQLITE_BUSY_MAX_ATTEMPTS - 1),
 ).pipe(Schedule.jittered);
 
-const toError = (error: unknown): Error =>
-	error instanceof Error ? error : new Error(String(error));
-
-const collectErrorMessages = (error: unknown): string[] => {
-	const messages: string[] = [];
-	const visited = new Set<unknown>();
-	let cursor: unknown = error;
-
-	while (
-		cursor !== null &&
-		cursor !== undefined &&
-		(typeof cursor === "object" || typeof cursor === "function") &&
-		!visited.has(cursor)
-	) {
-		visited.add(cursor);
-
-		if ("message" in cursor && typeof cursor.message === "string") {
-			messages.push(cursor.message.toLowerCase());
-		}
-
-		if ("cause" in cursor) {
-			cursor = cursor.cause;
-			continue;
-		}
-
-		break;
-	}
-
-	if (messages.length === 0 && typeof error === "string") {
-		messages.push(error.toLowerCase());
-	}
-
-	return messages;
-};
-
-type SqliteRetryClass =
-	| "locked"
-	| "busy"
-	| "transaction-state"
-	| "non-retryable";
-
-const classifySqliteRetryError = (error: unknown): SqliteRetryClass => {
-	const messages = collectErrorMessages(error);
-
-	const hasLocked = messages.some(
-		(message) =>
-			message.includes("database is locked") ||
-			message.includes("database schema is locked") ||
-			message.includes("sqlite_locked"),
-	);
-	if (hasLocked) {
-		return "locked";
-	}
-
-	const hasBusy = messages.some(
-		(message) =>
-			message.includes("database is busy") ||
-			message.includes("sqlite busy") ||
-			message.includes("sqlite_busy") ||
-			message.includes("code: 5"),
-	);
-	if (hasBusy) {
-		return "busy";
-	}
-
-	const hasTransactionStateError = messages.some(
-		(message) =>
-			message.includes("cannot start a transaction within a transaction") ||
-			message.includes("cannot commit - no transaction is active") ||
-			message.includes("cannot rollback - no transaction is active"),
-	);
-	if (hasTransactionStateError) {
-		return "transaction-state";
-	}
-
-	return "non-retryable";
-};
-
-const isRetryableSqliteError = (error: unknown): boolean => {
-	const classification = classifySqliteRetryError(error);
-	return classification === "busy" || classification === "locked";
-};
+const toError = (error: unknown): Error => error instanceof Error ? error : new Error(String(error));
 
 // ============================================================================
 // Raw database operations (via custom Tauri commands)
 // ============================================================================
 
 const executeRaw = (
-	sql: string,
-	bindValues?: unknown[],
+  sql: string,
+  bindValues?: unknown[],
 ): Effect.Effect<void, Error> =>
-	Effect.tryPromise({
-		try: () => invoke("sql_execute", { sql, values: bindValues ?? [] }),
-		catch: toError,
-	}).pipe(
-		Effect.retry({
-			while: (error) => isRetryableSqliteError(error),
-			schedule: SQLITE_BUSY_RETRY_SCHEDULE,
-		}),
-	);
+  Effect.tryPromise({
+    try: () => invoke("sql_execute", { sql, values: bindValues ?? [] }),
+    catch: toError,
+  }).pipe(
+    Effect.retry({
+      while: (error) => isRetryable(classifySqliteError(error)),
+      schedule: SQLITE_BUSY_RETRY_SCHEDULE,
+    }),
+  );
 
 const queryRaw = <T>(
-	sql: string,
-	bindValues?: unknown[],
+  sql: string,
+  bindValues?: unknown[],
 ): Effect.Effect<T[], Error> =>
-	Effect.tryPromise({
-		try: () => invoke<T[]>("sql_query", { sql, values: bindValues ?? [] }),
-		catch: toError,
-	}).pipe(
-		Effect.retry({
-			while: (error) => isRetryableSqliteError(error),
-			schedule: SQLITE_BUSY_RETRY_SCHEDULE,
-		}),
-	);
+  Effect.tryPromise({
+    try: () => invoke<T[]>("sql_query", { sql, values: bindValues ?? [] }),
+    catch: toError,
+  }).pipe(
+    Effect.retry({
+      while: (error) => isRetryable(classifySqliteError(error)),
+      schedule: SQLITE_BUSY_RETRY_SCHEDULE,
+    }),
+  );
 
 // ============================================================================
 // Write serialization (Semaphore)
 // ============================================================================
 
 const withWritePermit = <A, E, R>(
-	effect: Effect.Effect<A, E, R>,
+  effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
-	Effect.gen(function* () {
-		const lockDepth = yield* FiberRef.get(writeLockDepthRef);
+  Effect.gen(function*() {
+    const lockDepth = yield* FiberRef.get(writeLockDepthRef);
 
-		if (lockDepth > 0) {
-			return yield* effect;
-		}
+    if (lockDepth > 0) {
+      return yield* effect;
+    }
 
-		return yield* writeSemaphore.withPermits(1)(
-			Effect.locally(writeLockDepthRef, 1)(effect),
-		);
-	}) as Effect.Effect<A, E, R>;
+    return yield* writeSemaphore.withPermits(1)(
+      Effect.locally(writeLockDepthRef, 1)(effect),
+    );
+  }) as Effect.Effect<A, E, R>;
 
 // ============================================================================
 // Error wrapping helpers
 // ============================================================================
 
 const wrapExecuteError = (
-	effect: Effect.Effect<void, Error>,
+  effect: Effect.Effect<void, Error>,
 ): Effect.Effect<void, DatabaseError> =>
-	effect.pipe(
-		Effect.mapError(
-			(error) => new DatabaseError({ message: "Execute failed", cause: error }),
-		),
-	);
+  effect.pipe(
+    Effect.mapError(
+      (error) => new DatabaseError({ message: "Execute failed", cause: error }),
+    ),
+  );
 
 const wrapQueryError = <T>(
-	effect: Effect.Effect<T[], Error>,
+  effect: Effect.Effect<T[], Error>,
 ): Effect.Effect<T[], DatabaseError> =>
-	effect.pipe(
-		Effect.mapError(
-			(error) => new DatabaseError({ message: "Query failed", cause: error }),
-		),
-	);
+  effect.pipe(
+    Effect.mapError(
+      (error) => new DatabaseError({ message: "Query failed", cause: error }),
+    ),
+  );
 
 const toDatabaseError = (error: unknown): DatabaseError =>
-	error instanceof DatabaseError
-		? error
-		: new DatabaseError({ message: "Database operation failed", cause: error });
+  error instanceof DatabaseError
+    ? error
+    : new DatabaseError({ message: "Database operation failed", cause: error });
 
 // ============================================================================
 // Settings bootstrap gate (latch)
@@ -211,74 +129,73 @@ const UPSERT_BOOTSTRAP_SETTING_SQL = `
 `;
 
 interface ExistingSettingRow {
-	key: string;
+  key: string;
 }
 
 const bootstrapDefaultSettings = (): Effect.Effect<void, DatabaseError> =>
-	Effect.gen(function* () {
-		const rows = yield* wrapQueryError(
-			queryRaw<ExistingSettingRow>(`SELECT key FROM app_settings`),
-		).pipe(Effect.mapError(toDatabaseError));
+  Effect.gen(function*() {
+    const rows = yield* wrapQueryError(
+      queryRaw<ExistingSettingRow>(`SELECT key FROM app_settings`),
+    ).pipe(Effect.mapError(toDatabaseError));
 
-		const existingKeys = new Set(rows.map((row) => row.key));
-		const missingKeys = APP_SETTING_KEYS.filter((key) => !existingKeys.has(key));
+    const existingKeys = new Set(rows.map((row) => row.key));
+    const missingKeys = APP_SETTING_KEYS.filter((key) => !existingKeys.has(key));
 
-		if (missingKeys.length === 0) {
-			return;
-		}
+    if (missingKeys.length === 0) {
+      return;
+    }
 
-		const now = Date.now();
-		yield* withWritePermit(
-			Effect.gen(function* () {
-				for (const key of missingKeys) {
-					yield* wrapExecuteError(
-						executeRaw(UPSERT_BOOTSTRAP_SETTING_SQL, [
-							key,
-							JSON.stringify(DEFAULT_APP_SETTINGS[key]),
-							now,
-						]),
-					);
-				}
-			}),
-		).pipe(Effect.mapError(toDatabaseError));
-	});
+    const now = Date.now();
+    yield* withWritePermit(
+      Effect.gen(function*() {
+        for (const key of missingKeys) {
+          yield* wrapExecuteError(
+            executeRaw(UPSERT_BOOTSTRAP_SETTING_SQL, [
+              key,
+              JSON.stringify(DEFAULT_APP_SETTINGS[key]),
+              now,
+            ]),
+          );
+        }
+      }),
+    ).pipe(Effect.mapError(toDatabaseError));
+  });
 
 const ensureSettingsBootstrapped = (): Effect.Effect<void, DatabaseError> =>
-	Effect.gen(function* () {
-		const shouldBootstrap = yield* Effect.sync(() => {
-			if (settingsBootstrapStarted) {
-				return false;
-			}
-			settingsBootstrapStarted = true;
-			return true;
-		});
+  Effect.gen(function*() {
+    const shouldBootstrap = yield* Effect.sync(() => {
+      if (settingsBootstrapStarted) {
+        return false;
+      }
+      settingsBootstrapStarted = true;
+      return true;
+    });
 
-		if (shouldBootstrap) {
-			yield* Effect.uninterruptible(
-				bootstrapDefaultSettings().pipe(
-					Effect.catchAll((error) =>
-						Effect.sync(() => {
-							settingsBootstrapError = error;
-						}),
-					),
-					Effect.ensuring(settingsBootstrapLatch.open),
-				),
-			);
-		} else {
-			yield* settingsBootstrapLatch.await;
-		}
+    if (shouldBootstrap) {
+      yield* Effect.uninterruptible(
+        bootstrapDefaultSettings().pipe(
+          Effect.catchAll((error) =>
+            Effect.sync(() => {
+              settingsBootstrapError = error;
+            })
+          ),
+          Effect.ensuring(settingsBootstrapLatch.open),
+        ),
+      );
+    } else {
+      yield* settingsBootstrapLatch.await;
+    }
 
-		const bootstrapError = yield* Effect.sync(() => settingsBootstrapError);
-		if (bootstrapError) {
-			return yield* Effect.fail(bootstrapError);
-		}
-	});
+    const bootstrapError = yield* Effect.sync(() => settingsBootstrapError);
+    if (bootstrapError) {
+      return yield* Effect.fail(bootstrapError);
+    }
+  });
 
 /**
  * Public boot gate for callers that want to explicitly wait for DB/settings readiness.
  */
-export const ensureDatabaseRuntimeReady = (): Effect.Effect<void, DatabaseError> =>
-	ensureSettingsBootstrapped();
+export const ensureDatabaseRuntimeReady = (): Effect.Effect<void, DatabaseError> => ensureSettingsBootstrapped();
 
 // ============================================================================
 // Public service operations
@@ -288,27 +205,25 @@ export const ensureDatabaseRuntimeReady = (): Effect.Effect<void, DatabaseError>
  * Execute a SQL query that returns results.
  */
 const query = <T>(
-	sql: string,
-	bindValues?: unknown[],
+  sql: string,
+  bindValues?: unknown[],
 ): Effect.Effect<T[], DatabaseError> =>
-	ensureSettingsBootstrapped().pipe(
-		Effect.flatMap(() => wrapQueryError(queryRaw<T>(sql, bindValues))),
-		Effect.mapError(toDatabaseError),
-	);
+  ensureSettingsBootstrapped().pipe(
+    Effect.flatMap(() => wrapQueryError(queryRaw<T>(sql, bindValues))),
+    Effect.mapError(toDatabaseError),
+  );
 
 /**
  * Execute a SQL command that doesn't return results.
  */
 const execute = (
-	sql: string,
-	bindValues?: unknown[],
+  sql: string,
+  bindValues?: unknown[],
 ): Effect.Effect<void, DatabaseError> =>
-	ensureSettingsBootstrapped().pipe(
-		Effect.flatMap(() =>
-			withWritePermit(wrapExecuteError(executeRaw(sql, bindValues))),
-		),
-		Effect.mapError(toDatabaseError),
-	);
+  ensureSettingsBootstrapped().pipe(
+    Effect.flatMap(() => withWritePermit(wrapExecuteError(executeRaw(sql, bindValues)))),
+    Effect.mapError(toDatabaseError),
+  );
 
 /**
  * Execute an effect in a SQL transaction.
@@ -316,53 +231,61 @@ const execute = (
  * avoiding lock escalation churn under frequent saves.
  */
 const transaction = <A, E, R>(
-	effect: Effect.Effect<A, E, R>,
+  effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E | DatabaseError, R> =>
-	ensureSettingsBootstrapped().pipe(
-		Effect.flatMap(() =>
-			withWritePermit(
-				Effect.uninterruptibleMask((restore) =>
-					Effect.gen(function* () {
-						yield* wrapExecuteError(executeRaw("BEGIN IMMEDIATE"));
+  ensureSettingsBootstrapped().pipe(
+    Effect.flatMap(() =>
+      withWritePermit(
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function*() {
+            // Defensive ROLLBACK: clear any stale transaction left on the
+            // connection (e.g. after a Vite HMR reload that recreated the
+            // semaphore while a transaction was in-flight).
+            yield* Effect.catchAll(
+              executeRaw("ROLLBACK"),
+              () => Effect.succeed(undefined),
+            );
 
-						const operationExit = yield* Effect.exit(restore(effect));
+            yield* wrapExecuteError(executeRaw("BEGIN IMMEDIATE"));
 
-						if (operationExit._tag === "Success") {
-							const commitExit = yield* Effect.exit(
-								wrapExecuteError(executeRaw("COMMIT")),
-							);
+            const operationExit = yield* Effect.exit(restore(effect));
 
-							if (commitExit._tag === "Success") {
-								return operationExit.value;
-							}
+            if (operationExit._tag === "Success") {
+              const commitExit = yield* Effect.exit(
+                wrapExecuteError(executeRaw("COMMIT")),
+              );
 
-							yield* Effect.catchAll(
-								wrapExecuteError(executeRaw("ROLLBACK")),
-								() => Effect.succeed(undefined),
-							);
+              if (commitExit._tag === "Success") {
+                return operationExit.value;
+              }
 
-							return yield* Effect.failCause(commitExit.cause);
-						}
+              yield* Effect.catchAll(
+                wrapExecuteError(executeRaw("ROLLBACK")),
+                () => Effect.succeed(undefined),
+              );
 
-						yield* Effect.catchAll(
-							wrapExecuteError(executeRaw("ROLLBACK")),
-							() => Effect.succeed(undefined),
-						);
+              return yield* Effect.failCause(commitExit.cause);
+            }
 
-						return yield* Effect.failCause(operationExit.cause);
-					}),
-				),
-			),
-		),
-		Effect.mapError(toDatabaseError),
-	);
+            yield* Effect.catchAll(
+              wrapExecuteError(executeRaw("ROLLBACK")),
+              () => Effect.succeed(undefined),
+            );
+
+            return yield* Effect.failCause(operationExit.cause);
+          })
+        ),
+      )
+    ),
+    Effect.mapError(toDatabaseError),
+  );
 
 /**
  * Live DatabaseService Layer
  * Provides the actual implementation for the DatabaseService tag
  */
 export const DatabaseServiceLive = Layer.succeed(DatabaseService, {
-	query,
-	execute,
-	transaction,
+  query,
+  execute,
+  transaction,
 });

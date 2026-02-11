@@ -3,138 +3,180 @@
  */
 
 import { style } from "@vanilla-extract/css";
+import { componentsLayer } from "../../styles/layers.css";
 import { theme } from "../../styles/theme.css";
+import { toolbarButton } from "./styles.css";
 
 export const exportModalOverlay = style({
-	position: "fixed",
-	top: 0,
-	left: 0,
-	right: 0,
-	bottom: 0,
-	backgroundColor: "rgba(0, 0, 0, 0.75)",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	zIndex: 1000,
-	backdropFilter: "blur(4px)",
+  "@layer": {
+    [componentsLayer]: {
+      boxSizing: "border-box",
+      position: "fixed",
+      zIndex: 1000,
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0, 0, 0, 0.72)",
+      padding: theme.spacing["6"],
+    },
+  },
 });
 
 export const exportModalContainer = style({
-	backgroundColor: theme.color.background.base,
-	border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-	borderRadius: theme.border.radius.none, // ANGULAR - no rounding
-	clipPath: theme.clipPath.lg, // Angled corners - tactical aesthetic
-	boxShadow: `0 20px 60px rgba(0, 0, 0, 0.5), 0 0 20px ${theme.color.border.primary}33`,
-	width: "90%",
-	maxWidth: "800px",
-	maxHeight: "90vh",
-	display: "flex",
-	flexDirection: "column",
-	overflow: "hidden",
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      clipPath: theme.clipPath.lg,
+      border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+      boxShadow: theme.effect.glow.lg,
+      backgroundColor: theme.color.background.base,
+      width: "min(980px, 100%)",
+      maxHeight: "calc(100vh - 3rem)",
+      overflow: "hidden",
+    },
+  },
+});
+
+export const exportModalInner = style({
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing["4"],
+      padding: theme.spacing["6"],
+      overflowY: "auto",
+    },
+  },
 });
 
 export const exportModalHeader = style({
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	padding: theme.spacing["6"],
-	borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing["3"],
+    },
+  },
 });
 
 export const exportModalTitle = style({
-	margin: 0,
-	fontSize: theme.typography.size["2xl"],
-	fontWeight: theme.typography.weight.bold,
-	color: theme.color.foreground.primary,
-	textShadow: theme.effect.textGlow.base,
+  "@layer": {
+    [componentsLayer]: {
+      margin: 0,
+      textTransform: theme.typography.textTransform.uppercase,
+      letterSpacing: theme.typography.letterSpacing.wide,
+      color: theme.color.foreground.primary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.lg,
+      fontWeight: theme.typography.weight.bold,
+    },
+  },
 });
 
 export const exportModalCloseButton = style({
-	background: "none",
-	border: "none",
-	color: theme.color.foreground.tertiary,
-	cursor: "pointer",
-	padding: theme.spacing["2"],
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	borderRadius: theme.border.radius.none, // ANGULAR
-	clipPath: theme.clipPath.sm, // Angled corners
-	transition: theme.transition.base,
+  "@layer": {
+    [componentsLayer]: {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: theme.transition.base,
+      clipPath: theme.clipPath.sm,
+      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      backgroundColor: "rgba(13, 23, 18, 0.95)",
+      cursor: "pointer",
+      padding: theme.spacing["2"],
+      color: theme.color.foreground.secondary,
 
-	":hover": {
-		color: theme.color.foreground.primary,
-		backgroundColor: theme.color.background.raised,
-	},
+      selectors: {
+        "&:hover": {
+          borderColor: theme.color.border.primary,
+          boxShadow: theme.effect.glow.base,
+          color: theme.color.foreground.primary,
+        },
+      },
+    },
+  },
 });
 
 export const exportModalContent = style({
-	flex: 1,
-	overflow: "auto",
-	padding: theme.spacing["6"],
+  "@layer": {
+    [componentsLayer]: {
+      flex: 1,
+      overflow: "auto",
+    },
+  },
 });
 
 export const exportModalCodeBlock = style({
-	margin: 0,
-	padding: theme.spacing["4"],
-	backgroundColor: theme.color.background.surface,
-	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.none, // ANGULAR
-	clipPath: theme.clipPath.base, // Angled corners
-	fontSize: theme.typography.size.sm,
-	fontFamily: theme.typography.family.mono,
-	lineHeight: theme.typography.lineHeight.relaxed,
-	color: theme.color.foreground.secondary,
-	overflow: "auto",
-	whiteSpace: "pre",
-	tabSize: 2,
+  "@layer": {
+    [componentsLayer]: {
+      clipPath: theme.clipPath.base,
+      margin: 0,
+      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      backgroundColor: theme.color.background.surface,
+      backgroundImage: `
+				linear-gradient(${theme.color.grid} 1px, transparent 1px),
+				linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+			`,
+      backgroundSize: "20px 20px",
+      padding: theme.spacing["4"],
+      maxHeight: "52vh",
+      overflow: "auto",
+      tabSize: 2,
+      lineHeight: theme.typography.lineHeight.relaxed,
+      whiteSpace: "pre",
+      color: theme.color.foreground.secondary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.sm,
+    },
+  },
 });
 
 export const exportModalActions = style({
-	display: "flex",
-	gap: theme.spacing["3"],
-	padding: theme.spacing["6"],
-	borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-	justifyContent: "flex-end",
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      justifyContent: "flex-end",
+      gap: theme.spacing["2"],
+      marginTop: theme.spacing["2"],
+      borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      paddingTop: theme.spacing["3"],
+    },
+  },
 });
 
-export const exportModalButton = style({
-	display: "flex",
-	alignItems: "center",
-	gap: theme.spacing["2"],
-	padding: `${theme.spacing["3"]} ${theme.spacing["5"]}`,
-	backgroundColor: theme.color.background.raised,
-	border: `${theme.border.width.base} solid ${theme.color.border.secondary}`,
-	borderRadius: theme.border.radius.none, // ANGULAR
-	clipPath: theme.clipPath.base, // Angled corners
-	color: theme.color.foreground.primary,
-	fontSize: theme.typography.size.base,
-	fontWeight: theme.typography.weight.medium,
-	cursor: "pointer",
-	transition: theme.transition.base,
-
-	":hover": {
-		backgroundColor: theme.color.background.surface,
-		borderColor: theme.color.interactive.hover,
-		color: theme.color.interactive.hover,
-	},
-
-	":active": {
-		transform: "scale(0.98)",
-	},
-});
+export const exportModalButton = style([
+  toolbarButton,
+  {
+    "@layer": {
+      [componentsLayer]: {
+        justifyContent: "center",
+        borderColor: theme.color.border.secondary,
+        minWidth: "11rem",
+        color: theme.color.foreground.primary,
+      },
+    },
+  },
+]);
 
 export const exportModalButtonPrimary = style([
-	exportModalButton,
-	{
-		backgroundColor: theme.color.interactive.primary,
-		borderColor: theme.color.interactive.primary,
-		color: theme.color.background.base,
+  exportModalButton,
+  {
+    "@layer": {
+      [componentsLayer]: {
+        borderColor: theme.color.interactive.primary,
+        boxShadow: `inset 0 0 0 1px ${theme.color.interactive.primary}55`,
+        color: theme.color.interactive.primary,
 
-		":hover": {
-			backgroundColor: theme.color.interactive.hover,
-			borderColor: theme.color.interactive.hover,
-			color: theme.color.background.base,
-		},
-	},
+        selectors: {
+          "&:hover": {
+            boxShadow: theme.effect.glow.base,
+          },
+        },
+      },
+    },
+  },
 ]);

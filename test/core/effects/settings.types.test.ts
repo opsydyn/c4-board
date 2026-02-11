@@ -33,6 +33,15 @@ describe("settings.types", () => {
     ).toThrow();
   });
 
+  it("rejects out-of-range mud alert threshold", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        bigBallOfMudAlertThreshold: 4.9,
+      })
+    ).toThrow();
+  });
+
   it("exports stable setting keys and key guard", () => {
     expect(APP_SETTING_KEYS.length).toBeGreaterThan(0);
     expect(isAppSettingKey("autosaveEnabled")).toBe(true);

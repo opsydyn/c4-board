@@ -1,180 +1,183 @@
 import { style } from "@vanilla-extract/css";
-import { theme } from "../../styles/theme.css";
 import { componentsLayer } from "../../styles/layers.css";
+import { theme } from "../../styles/theme.css";
+import { toolbarButton } from "./styles.css";
 
 export const edgeEditorOverlay = style({
-	"@layer": {
-		[componentsLayer]: {
-			position: "fixed",
-			inset: 0,
-			backgroundColor: "rgba(0, 0, 0, 0.5)",
-			display: "flex",
-			alignItems: "center",
-			justifyContent: "center",
-			zIndex: 1000,
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      boxSizing: "border-box",
+      position: "fixed",
+      zIndex: 1000,
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      padding: theme.spacing["6"],
+    },
+  },
 });
 
 export const edgeEditorDialog = style({
-	"@layer": {
-		[componentsLayer]: {
-			clipPath: theme.clipPath.lg,
-			backgroundColor: theme.color.background.base,
-			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-			padding: theme.spacing["6"],
-			boxShadow: theme.effect.glow.lg,
-			minWidth: "400px",
-			maxWidth: "500px",
-			display: "flex",
-			flexDirection: "column",
-			gap: theme.spacing["4"],
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      clipPath: theme.clipPath.lg,
+      border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+      boxShadow: theme.effect.glow.lg,
+      backgroundColor: theme.color.background.base,
+      width: "min(680px, 100%)",
+      maxHeight: "calc(100vh - 3rem)",
+      overflow: "hidden",
+    },
+  },
+});
+
+export const edgeEditorContent = style({
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing["5"],
+      padding: theme.spacing["6"],
+      overflowY: "auto",
+    },
+  },
 });
 
 export const edgeEditorTitle = style({
-	"@layer": {
-		[componentsLayer]: {
-			fontFamily: theme.typography.family.mono,
-			fontSize: theme.typography.size.lg,
-			textTransform: theme.typography.textTransform.uppercase,
-			letterSpacing: theme.typography.letterSpacing.wide,
-			color: theme.color.foreground.primary,
-			margin: 0,
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      margin: 0,
+      textTransform: theme.typography.textTransform.uppercase,
+      letterSpacing: theme.typography.letterSpacing.wide,
+      color: theme.color.foreground.primary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.lg,
+    },
+  },
 });
 
 export const edgeEditorField = style({
-	"@layer": {
-		[componentsLayer]: {
-			display: "flex",
-			flexDirection: "column",
-			gap: theme.spacing["2"],
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing["2"],
+    },
+  },
 });
 
 export const edgeEditorLabel = style({
-	"@layer": {
-		[componentsLayer]: {
-			fontFamily: theme.typography.family.mono,
-			fontSize: theme.typography.size.xs,
-			textTransform: theme.typography.textTransform.uppercase,
-			letterSpacing: theme.typography.letterSpacing.wide,
-			color: theme.color.foreground.secondary,
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      textTransform: theme.typography.textTransform.uppercase,
+      letterSpacing: theme.typography.letterSpacing.wide,
+      color: theme.color.foreground.secondary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.xs,
+    },
+  },
 });
 
 export const edgeEditorInput = style({
-	"@layer": {
-		[componentsLayer]: {
-			width: "100%",
-			height: "40px",
-			clipPath: theme.clipPath.sm,
-			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-			backgroundColor: theme.color.background.input,
-			color: theme.color.foreground.primary,
-			padding: `0 ${theme.spacing["3"]}`,
-			fontFamily: theme.typography.family.sans,
-			fontSize: theme.typography.size.base,
-			transition: theme.transition.base,
+  "@layer": {
+    [componentsLayer]: {
+      transition: theme.transition.base,
+      clipPath: theme.clipPath.sm,
+      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      backgroundColor: theme.color.background.input,
+      padding: `0 ${theme.spacing["3"]}`,
+      width: "100%",
+      height: "40px",
+      color: theme.color.foreground.primary,
+      fontFamily: theme.typography.family.sans,
+      fontSize: theme.typography.size.base,
 
-			selectors: {
-				"&:focus": {
-					outline: "none",
-					borderColor: theme.color.border.primary,
-					boxShadow: theme.effect.glow.sm,
-				},
-			},
-		},
-	},
+      selectors: {
+        "&:focus": {
+          outline: "none",
+          borderColor: theme.color.border.primary,
+          boxShadow: theme.effect.glow.sm,
+        },
+      },
+    },
+  },
 });
 
 export const edgeEditorHint = style({
-	"@layer": {
-		[componentsLayer]: {
-			fontSize: theme.typography.size.sm,
-			color: theme.color.foreground.tertiary,
-			fontStyle: "italic",
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      color: theme.color.foreground.tertiary,
+      fontSize: theme.typography.size.sm,
+      fontStyle: "italic",
+    },
+  },
 });
 
 export const edgeEditorError = style({
-	"@layer": {
-		[componentsLayer]: {
-			padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-			clipPath: theme.clipPath.sm,
-			backgroundColor: "rgba(220, 38, 38, 0.1)",
-			border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
-			color: theme.color.status.critical,
-			fontSize: theme.typography.size.sm,
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      clipPath: theme.clipPath.sm,
+      border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
+      backgroundColor: "rgba(220, 38, 38, 0.1)",
+      padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+      color: theme.color.status.critical,
+      fontSize: theme.typography.size.sm,
+    },
+  },
 });
 
 export const edgeEditorButtons = style({
-	"@layer": {
-		[componentsLayer]: {
-			display: "flex",
-			gap: theme.spacing["2"],
-			justifyContent: "flex-end",
-			marginTop: theme.spacing["2"],
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      justifyContent: "flex-end",
+      gap: theme.spacing["2"],
+      marginTop: theme.spacing["4"],
+      borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      paddingTop: theme.spacing["3"],
+    },
+  },
 });
 
-export const edgeEditorButton = style({
-	"@layer": {
-		[componentsLayer]: {
-			height: "40px",
-			clipPath: theme.clipPath.base,
-			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-			backgroundColor: "transparent",
-			color: theme.color.foreground.primary,
-			fontFamily: theme.typography.family.mono,
-			fontSize: theme.typography.size.sm,
-			textTransform: theme.typography.textTransform.uppercase,
-			letterSpacing: theme.typography.letterSpacing.wide,
-			padding: `0 ${theme.spacing["4"]}`,
-			cursor: "pointer",
-			transition: theme.transition.base,
-
-			selectors: {
-				"&:hover": {
-					borderColor: theme.color.border.primary,
-					backgroundColor: "rgba(20, 32, 26, 0.5)",
-				},
-			},
-		},
-	},
-});
+export const edgeEditorButton = style([
+  toolbarButton,
+  {
+    "@layer": {
+      [componentsLayer]: {
+        justifyContent: "center",
+        minWidth: "6.75rem",
+      },
+    },
+  },
+]);
 
 export const edgeEditorPrimaryButton = style([
-	edgeEditorButton,
-	{
-		"@layer": {
-			[componentsLayer]: {
-				backgroundColor: theme.color.interactive.primary,
-				borderColor: theme.color.interactive.primary,
-				color: theme.color.background.base,
+  edgeEditorButton,
+  {
+    "@layer": {
+      [componentsLayer]: {
+        borderColor: theme.color.interactive.primary,
+        boxShadow: `inset 0 0 0 1px ${theme.color.interactive.primary}55`,
+        backgroundColor: "rgba(13, 23, 18, 0.95)",
+        color: theme.color.interactive.primary,
 
-				selectors: {
-					"&:disabled": {
-						backgroundColor: theme.color.foreground.tertiary,
-						borderColor: theme.color.foreground.tertiary,
-						color: theme.color.background.surface,
-						opacity: theme.opacity.disabled,
-						cursor: "not-allowed",
-					},
-					"&:not(:disabled):hover": {
-						boxShadow: theme.effect.glow.sm,
-					},
-				},
-			},
-		},
-	},
+        selectors: {
+          "&:disabled": {
+            opacity: theme.opacity.disabled,
+            borderColor: theme.color.foreground.tertiary,
+            backgroundColor: theme.color.foreground.tertiary,
+            cursor: "not-allowed",
+            color: theme.color.background.surface,
+          },
+          "&:not(:disabled):hover": {
+            boxShadow: theme.effect.glow.base,
+          },
+        },
+      },
+    },
+  },
 ]);

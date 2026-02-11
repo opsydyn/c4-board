@@ -474,6 +474,12 @@ pub fn run() {
             sql: include_str!("../migrations/016_create_app_settings.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 17,
+            description: "add_node_coupling_state",
+            sql: include_str!("../migrations/017_add_node_coupling_state.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

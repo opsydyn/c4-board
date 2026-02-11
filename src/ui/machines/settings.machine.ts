@@ -16,12 +16,14 @@ interface SettingsDrafts {
   autosaveIntervalDraft: string;
   historyRetentionDraft: string;
   masterVolumeDraft: number;
+  mudAlertThresholdDraft: string;
 }
 
 const toDrafts = (settings: AppSettings): SettingsDrafts => ({
   autosaveIntervalDraft: String(settings.autosaveIntervalMs),
   historyRetentionDraft: String(settings.historyRetentionDays),
   masterVolumeDraft: Math.round(settings.masterVolume * 100),
+  mudAlertThresholdDraft: settings.bigBallOfMudAlertThreshold.toFixed(1),
 });
 
 type RunEffectFn = <A, E>(
@@ -127,6 +129,7 @@ export interface SettingsMachineContext {
   autosaveIntervalDraft: string;
   historyRetentionDraft: string;
   masterVolumeDraft: number;
+  mudAlertThresholdDraft: string;
 }
 
 export type SettingsMachineEvent =
@@ -136,7 +139,8 @@ export type SettingsMachineEvent =
   | { type: "SET_NOTICE"; value: string | null }
   | { type: "SET_AUTOSAVE_DRAFT"; value: string }
   | { type: "SET_HISTORY_DRAFT"; value: string }
-  | { type: "SET_MASTER_VOLUME_DRAFT"; value: number };
+  | { type: "SET_MASTER_VOLUME_DRAFT"; value: number }
+  | { type: "SET_MUD_THRESHOLD_DRAFT"; value: string };
 
 type LoadSettingsDoneEvent = DoneActorEvent<LoadSettingsResult, "loadSettings">;
 type LoadSettingsErrorEvent = ErrorActorEvent<unknown, "loadSettings">;
@@ -372,6 +376,11 @@ const settingsMachineSetup = setup({
     setMasterVolumeDraft: assign(({ event }) =>
       event.type === "SET_MASTER_VOLUME_DRAFT"
         ? { masterVolumeDraft: clamp(Math.round(event.value), 0, 100) }
+        : {}
+    ),
+    setMudThresholdDraft: assign(({ event }) =>
+      event.type === "SET_MUD_THRESHOLD_DRAFT"
+        ? { mudAlertThresholdDraft: event.value }
         : {}
     ),
     emitLoadSuccessTelemetry: ({ event }) => {
@@ -615,6 +624,9 @@ export const createSettingsMachine = (input: SettingsMachineInput) =>
       },
       SET_MASTER_VOLUME_DRAFT: {
         actions: "setMasterVolumeDraft",
+      },
+      SET_MUD_THRESHOLD_DRAFT: {
+        actions: "setMudThresholdDraft",
       },
     },
     states: {

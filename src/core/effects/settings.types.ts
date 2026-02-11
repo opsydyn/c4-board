@@ -37,6 +37,17 @@ const HistoryRetentionDaysSchema = pipe(
 	),
 );
 
+const BigBallOfMudAlertThresholdSchema = pipe(
+	Schema.Number,
+	Schema.filter(
+		(value) => Number.isFinite(value) && value >= 5 && value <= 9.5,
+		{
+			message: () =>
+				"bigBallOfMudAlertThreshold must be between 5.0 and 9.5",
+		},
+	),
+);
+
 export const AppSettingsSchema = Schema.Struct({
 	animationsEnabled: Schema.Boolean,
 	transitionIntensity: TransitionIntensitySchema,
@@ -47,6 +58,7 @@ export const AppSettingsSchema = Schema.Struct({
 	autosaveEnabled: Schema.Boolean,
 	autosaveIntervalMs: AutosaveIntervalMsSchema,
 	saveOnNavigate: Schema.Boolean,
+	bigBallOfMudAlertThreshold: BigBallOfMudAlertThresholdSchema,
 	telemetryEnabled: Schema.Boolean,
 	redactionMode: RedactionModeSchema,
 	historyRetentionDays: HistoryRetentionDaysSchema,
@@ -66,6 +78,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	autosaveEnabled: true,
 	autosaveIntervalMs: 1_500,
 	saveOnNavigate: true,
+	bigBallOfMudAlertThreshold: 8.0,
 	telemetryEnabled: false,
 	redactionMode: "strict",
 	historyRetentionDays: 30,

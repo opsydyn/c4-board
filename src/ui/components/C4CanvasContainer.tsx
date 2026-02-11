@@ -1440,6 +1440,7 @@ export function C4CanvasContainer() {
 						selectedModuleId={selectedNode?.id ?? null}
 						onSelectModule={handleSelectNode}
 						domain={state.context.currentDomain}
+						mudAlertThreshold={appSettings.bigBallOfMudAlertThreshold}
 					/>
 					<PropertiesPanel
 						selectedNode={selectedNode}

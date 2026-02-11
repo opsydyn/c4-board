@@ -9,6 +9,7 @@ import { useDatabase } from "../../../core/effects/useDatabase";
 import { getSettingsV1Flag } from "../../../core/effects/feature-flags";
 import { createSettingsMachine } from "../../machines/settings.machine";
 import * as styles from "../../../pages/settings.css";
+import { TacticalSelect } from "../TacticalSelect";
 
 type SaveState = "disabled" | "loading" | "saving" | "saved" | "error";
 
@@ -20,6 +21,18 @@ const isTransitionIntensity = (value: string): value is TransitionIntensity =>
 
 const isRedactionMode = (value: string): value is RedactionMode =>
 	value === "off" || value === "standard" || value === "strict";
+
+const transitionIntensityOptions = [
+	{ value: "low", label: "LOW" },
+	{ value: "normal", label: "NORMAL" },
+	{ value: "high", label: "HIGH" },
+] as const;
+
+const redactionModeOptions = [
+	{ value: "off", label: "OFF" },
+	{ value: "standard", label: "STANDARD" },
+	{ value: "strict", label: "STRICT" },
+] as const;
 
 export function SettingsPanel() {
 	const { runEffect } = useDatabase();
@@ -42,6 +55,7 @@ export function SettingsPanel() {
 	const autosaveIntervalDraft = state.context.autosaveIntervalDraft;
 	const historyRetentionDraft = state.context.historyRetentionDraft;
 	const masterVolumeDraft = state.context.masterVolumeDraft;
+	const mudAlertThresholdDraft = state.context.mudAlertThresholdDraft;
 	const isBooting = state.matches("booting");
 	const saveState: SaveState = useMemo(() => {
 		if (state.matches("disabled")) {
@@ -164,6 +178,29 @@ export function SettingsPanel() {
 		[applyPatch, send],
 	);
 
+	const commitMudAlertThreshold = useCallback(() => {
+		const parsed = Number(mudAlertThresholdDraft);
+		if (!Number.isFinite(parsed)) {
+			send({
+				type: "SET_MUD_THRESHOLD_DRAFT",
+				value: settings.bigBallOfMudAlertThreshold.toFixed(1),
+			});
+			return;
+		}
+
+		const normalized = Math.round(clamp(parsed, 5, 9.5) * 10) / 10;
+		send({
+			type: "SET_MUD_THRESHOLD_DRAFT",
+			value: normalized.toFixed(1),
+		});
+		applyPatch({ bigBallOfMudAlertThreshold: normalized });
+	}, [
+		applyPatch,
+		mudAlertThresholdDraft,
+		send,
+		settings.bigBallOfMudAlertThreshold,
+	]);
+
 	return (
 		<>
 			<header className={styles.mainHeader}>
@@ -241,20 +278,16 @@ export function SettingsPanel() {
 								<span className={styles.settingsRowHint}>Low / Normal / High</span>
 							</div>
 							<div className={styles.settingsControlGroup}>
-								<select
-									className={styles.settingsSelectControl}
+								<TacticalSelect
+									ariaLabel="Transition intensity"
 									value={settings.transitionIntensity}
-									onChange={(event) => {
-										const value = event.currentTarget.value;
-										if (isTransitionIntensity(value)) {
-											applyPatch({ transitionIntensity: value });
+									options={transitionIntensityOptions}
+									onChange={(nextValue) => {
+										if (isTransitionIntensity(nextValue)) {
+											applyPatch({ transitionIntensity: nextValue });
 										}
 									}}
-								>
-									<option value="low">LOW</option>
-									<option value="normal">NORMAL</option>
-									<option value="high">HIGH</option>
-								</select>
+								/>
 							</div>
 						</div>
 					</article>
@@ -414,6 +447,34 @@ export function SettingsPanel() {
 								{settings.saveOnNavigate ? "ON" : "OFF"}
 							</button>
 						</div>
+						<div className={styles.settingsRow}>
+							<div className={styles.settingsRowLabel}>
+								<span>Big Ball Of Mud Alert Threshold</span>
+								<span className={styles.settingsRowHint}>5.0 - 9.5</span>
+							</div>
+							<div className={styles.settingsControlGroup}>
+								<input
+									type="number"
+									min={5}
+									max={9.5}
+									step={0.1}
+									value={mudAlertThresholdDraft}
+									className={styles.settingsNumberControl}
+									onChange={(event) =>
+										send({
+											type: "SET_MUD_THRESHOLD_DRAFT",
+											value: event.currentTarget.value,
+										})
+									}
+									onBlur={commitMudAlertThreshold}
+									onKeyDown={(event) => {
+										if (event.key === "Enter") {
+											commitMudAlertThreshold();
+										}
+									}}
+								/>
+							</div>
+						</div>
 					</article>
 
 					<article id="data-control" className={styles.settingsCard}>
@@ -514,20 +575,16 @@ export function SettingsPanel() {
 								<span>Secret Redaction</span>
 								<span className={styles.settingsRowHint}>Request data masking</span>
 							</div>
-							<select
-								className={styles.settingsSelectControl}
+							<TacticalSelect
+								ariaLabel="Secret redaction mode"
 								value={settings.redactionMode}
-								onChange={(event) => {
-									const value = event.currentTarget.value;
-									if (isRedactionMode(value)) {
-										applyPatch({ redactionMode: value });
+								options={redactionModeOptions}
+								onChange={(nextValue) => {
+									if (isRedactionMode(nextValue)) {
+										applyPatch({ redactionMode: nextValue });
 									}
 								}}
-							>
-								<option value="off">OFF</option>
-								<option value="standard">STANDARD</option>
-								<option value="strict">STRICT</option>
-							</select>
+							/>
 						</div>
 					</article>
 
