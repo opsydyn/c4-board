@@ -1,6 +1,6 @@
 # ADR-005: Global Settings Architecture and Wiring Plan
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-02-09
 **Deciders**: Alan
 **Technical Story**: Wire the new global Settings UI scaffold to reliable runtime behavior without regressing save performance, state sync, or navigation UX.
@@ -102,6 +102,23 @@ Use migration-backed creation and idempotent upsert semantics.
 3. Add stress tests for rapid edits + autosave with lock contention simulation.
 4. Roll out behind `settings_v1` feature flag with failure/latency telemetry.
 
+### Phase 6: Flag Sunsetting and Cleanup
+
+1. Exit criteria for sunsetting:
+   - `settings_v1` enabled in all target environments for at least one stable release window.
+   - No P1/P2 incidents attributed to settings runtime, save sync, or settings-driven navigation behavior during that window.
+   - Settings load/write telemetry remains within acceptable failure and latency thresholds.
+2. Remove rollout branching:
+   - Delete `feature-flags.ts` and all `settingsV1Enabled` conditional branches.
+   - Make settings runtime always-on in `useAppSettings`, settings machine wiring, and telemetry emission paths.
+3. Remove operational flag surface:
+   - Remove `PUBLIC_SETTINGS_V1`, `VITE_SETTINGS_V1`, and `SETTINGS_V1` from environment docs and runtime usage.
+   - Remove disabled-state UI copy that references `settings_v1` rollout mode.
+4. Verification gate before merge:
+   - Full test suite green.
+   - Manual C4/Postee/settings walkthrough confirms parity with pre-sunset behavior.
+   - ADR updated with completion date and links to cleanup PRs.
+
 ## Consequences
 
 ### Positive
@@ -143,3 +160,14 @@ Rejected due to observed unsynced timestamp/state behavior during startup and na
 - No regressions to save success rate under rapid edit/autosave load.
 - Save timestamp/status reflects committed DB state, not local optimistic time.
 - Audio/animation toggles are globally respected and user-controllable.
+
+## Implementation Notes (2026-02-09)
+
+- `settings_v1` rollout gate added with env-based control (`PUBLIC_SETTINGS_V1`, `VITE_SETTINGS_V1`, `SETTINGS_V1`).
+- Settings telemetry events now emit load/write success and failure metrics (latency + error context) when diagnostics sharing is enabled.
+- Phase 5 tests added:
+  - Schema/unit coverage for `AppSettings` contract.
+  - Repository coverage for `get/patch/reset` and validation behavior.
+  - Runtime contention coverage for retry (`SQLITE_BUSY`) and semaphore serialization.
+- Settings page orchestration moved from `useEffect` coordination to `settings.machine.ts` (XState), including boot/loading, queued writes, optimistic updates, and recovery reload paths.
+- Machine transitions are modularized with `createStateConfig` slices (Stately modular state pattern), and actor outputs/errors are schema-decoded via Effect `Schema` before state updates.

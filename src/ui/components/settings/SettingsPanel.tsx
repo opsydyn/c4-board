@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getSettings, patchSettings, resetSettings } from "../../../core/effects/database";
+import { useCallback, useMemo } from "react";
+import { useMachine } from "@xstate/react";
 import type {
-	AppSettings,
 	AppSettingsPatch,
 	RedactionMode,
 	TransitionIntensity,
 } from "../../../core/effects/settings.types";
 import { useDatabase } from "../../../core/effects/useDatabase";
+import { getSettingsV1Flag } from "../../../core/effects/feature-flags";
+import { createSettingsMachine } from "../../machines/settings.machine";
 import * as styles from "../../../pages/settings.css";
 
-type SaveState = "loading" | "saving" | "saved" | "error";
+type SaveState = "disabled" | "loading" | "saving" | "saved" | "error";
 
 const clamp = (value: number, min: number, max: number): number =>
 	Math.min(max, Math.max(min, value));
@@ -20,172 +21,78 @@ const isTransitionIntensity = (value: string): value is TransitionIntensity =>
 const isRedactionMode = (value: string): value is RedactionMode =>
 	value === "off" || value === "standard" || value === "strict";
 
-const extractErrorMessage = (error: unknown): string => {
-	if (error instanceof Error) {
-		return error.message;
-	}
-
-	if (typeof error === "string") {
-		return error;
-	}
-
-	return "Unknown settings error";
-};
-
 export function SettingsPanel() {
 	const { runEffect } = useDatabase();
-	const [settings, setSettings] = useState<AppSettings | null>(null);
-	const [saveState, setSaveState] = useState<SaveState>("loading");
-	const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
-	const [pendingWrites, setPendingWrites] = useState(0);
-	const [errorMessage, setErrorMessage] = useState<string | null>(null);
-	const [dataControlNotice, setDataControlNotice] = useState<string | null>(null);
-	const [autosaveIntervalDraft, setAutosaveIntervalDraft] = useState("1500");
-	const [historyRetentionDraft, setHistoryRetentionDraft] = useState("30");
-	const [masterVolumeDraft, setMasterVolumeDraft] = useState(80);
-
-	const mountedRef = useRef(true);
-	const pendingWritesRef = useRef(0);
-	const hasMutationErrorRef = useRef(false);
-
-	useEffect(() => {
-		mountedRef.current = true;
-		return () => {
-			mountedRef.current = false;
-		};
-	}, []);
-
-	const loadSettings = useCallback(() => {
-		setSaveState("loading");
-		setErrorMessage(null);
-
-		void runEffect(getSettings())
-			.then((loadedSettings) => {
-				if (!mountedRef.current) {
-					return;
-				}
-				setSettings(loadedSettings);
-				setSaveState("saved");
-				hasMutationErrorRef.current = false;
-			})
-			.catch((error) => {
-				if (!mountedRef.current) {
-					return;
-				}
-				setSaveState("error");
-				setErrorMessage(extractErrorMessage(error));
-			});
-	}, [runEffect]);
-
-	useEffect(() => {
-		loadSettings();
-	}, [loadSettings]);
-
-	useEffect(() => {
-		if (!settings) {
-			return;
-		}
-		setAutosaveIntervalDraft(String(settings.autosaveIntervalMs));
-		setHistoryRetentionDraft(String(settings.historyRetentionDays));
-		setMasterVolumeDraft(Math.round(settings.masterVolume * 100));
-	}, [settings]);
-
-	const runSettingsWrite = useCallback(
-		(run: () => Promise<AppSettings>, optimisticSettings?: AppSettings) => {
-			if (optimisticSettings) {
-				setSettings(optimisticSettings);
-			}
-			setSaveState("saving");
-			setErrorMessage(null);
-			setDataControlNotice(null);
-
-			pendingWritesRef.current += 1;
-			setPendingWrites(pendingWritesRef.current);
-
-			void run()
-				.then((committedSettings) => {
-					if (!mountedRef.current) {
-						return;
-					}
-					hasMutationErrorRef.current = false;
-					setSettings(committedSettings);
-					setLastSavedAt(Date.now());
-				})
-				.catch((error) => {
-					hasMutationErrorRef.current = true;
-					if (!mountedRef.current) {
-						return;
-					}
-					setErrorMessage(extractErrorMessage(error));
-
-					// Re-hydrate from the database to prevent stale optimistic state.
-					void runEffect(getSettings())
-						.then((latest) => {
-							if (!mountedRef.current) {
-								return;
-							}
-							setSettings(latest);
-						})
-						.catch(() => {
-							// Best-effort refresh only.
-						});
-				})
-				.finally(() => {
-					if (!mountedRef.current) {
-						return;
-					}
-					pendingWritesRef.current = Math.max(0, pendingWritesRef.current - 1);
-					setPendingWrites(pendingWritesRef.current);
-
-					if (pendingWritesRef.current === 0) {
-						setSaveState(hasMutationErrorRef.current ? "error" : "saved");
-					}
-				});
-		},
+	const settingsMachine = useMemo(
+		() =>
+			createSettingsMachine({
+				runEffect,
+				settingsV1Flag: getSettingsV1Flag(),
+			}),
 		[runEffect],
 	);
+	const [state, send] = useMachine(settingsMachine);
+	const settingsV1Flag = state.context.settingsV1Flag;
+	const settingsV1Enabled = settingsV1Flag.enabled;
+	const settings = state.context.settings;
+	const lastSavedAt = state.context.lastSavedAt;
+	const pendingWrites = state.context.pendingWrites;
+	const errorMessage = state.context.errorMessage;
+	const dataControlNotice = state.context.dataControlNotice;
+	const autosaveIntervalDraft = state.context.autosaveIntervalDraft;
+	const historyRetentionDraft = state.context.historyRetentionDraft;
+	const masterVolumeDraft = state.context.masterVolumeDraft;
+	const isBooting = state.matches("booting");
+	const saveState: SaveState = useMemo(() => {
+		if (state.matches("disabled")) {
+			return "disabled";
+		}
+		if (state.matches("booting")) {
+			return "loading";
+		}
+		if (state.matches("saving") || state.matches("recovering")) {
+			return "saving";
+		}
+		if (state.matches("error")) {
+			return "error";
+		}
+		return "saved";
+	}, [state]);
 
 	const applyPatch = useCallback(
 		(patch: AppSettingsPatch) => {
-			if (!settings) {
+			if (!settingsV1Enabled) {
 				return;
 			}
-
-			const nextSettings: AppSettings = {
-				...settings,
-				...patch,
-			};
-
-			const hasChanges = Object.entries(patch).some(([key, value]) => {
-				const typedKey = key as keyof AppSettings;
-				return !Object.is(settings[typedKey], value);
-			});
-
-			if (!hasChanges) {
-				return;
-			}
-
-			runSettingsWrite(() => runEffect(patchSettings(patch)), nextSettings);
+			send({ type: "PATCH", patch });
 		},
-		[runEffect, runSettingsWrite, settings],
+		[send, settingsV1Enabled],
 	);
 
 	const handleResetToDefaults = useCallback(() => {
+		if (!settingsV1Enabled) {
+			return;
+		}
 		if (!window.confirm("Reset all global settings to defaults?")) {
 			return;
 		}
-		runSettingsWrite(() => runEffect(resetSettings()));
-	}, [runEffect, runSettingsWrite]);
+		send({ type: "RESET" });
+	}, [send, settingsV1Enabled]);
 
 	const handlePlannedAction = useCallback((label: string, confirmation: string) => {
 		if (!window.confirm(confirmation)) {
 			return;
 		}
-		setDataControlNotice(`${label} is queued for implementation in Phase 4.`);
-	}, []);
+		send({
+			type: "SET_NOTICE",
+			value: `${label} is queued for implementation in Phase 4.`,
+		});
+	}, [send]);
 
 	const statusText = useMemo(() => {
 		switch (saveState) {
+			case "disabled":
+				return "STATE::DISABLED";
 			case "loading":
 				return "STATE::LOADING";
 			case "saving":
@@ -207,6 +114,8 @@ export function SettingsPanel() {
 
 	const statusClassName = useMemo(() => {
 		switch (saveState) {
+			case "disabled":
+				return `${styles.settingsStatusBadge} ${styles.settingsStatusLoading}`;
 			case "loading":
 				return `${styles.settingsStatusBadge} ${styles.settingsStatusLoading}`;
 			case "saving":
@@ -219,40 +128,40 @@ export function SettingsPanel() {
 	}, [saveState]);
 
 	const commitAutosaveInterval = useCallback(() => {
-		if (!settings) {
-			return;
-		}
 		const parsed = Number(autosaveIntervalDraft);
 		if (!Number.isFinite(parsed)) {
-			setAutosaveIntervalDraft(String(settings.autosaveIntervalMs));
+			send({
+				type: "SET_AUTOSAVE_DRAFT",
+				value: String(settings.autosaveIntervalMs),
+			});
 			return;
 		}
 		const normalized = clamp(Math.round(parsed), 250, 60_000);
-		setAutosaveIntervalDraft(String(normalized));
+		send({ type: "SET_AUTOSAVE_DRAFT", value: String(normalized) });
 		applyPatch({ autosaveIntervalMs: normalized });
-	}, [applyPatch, autosaveIntervalDraft, settings]);
+	}, [applyPatch, autosaveIntervalDraft, send, settings.autosaveIntervalMs]);
 
 	const commitHistoryRetentionDays = useCallback(() => {
-		if (!settings) {
-			return;
-		}
 		const parsed = Number(historyRetentionDraft);
 		if (!Number.isFinite(parsed)) {
-			setHistoryRetentionDraft(String(settings.historyRetentionDays));
+			send({
+				type: "SET_HISTORY_DRAFT",
+				value: String(settings.historyRetentionDays),
+			});
 			return;
 		}
 		const normalized = clamp(Math.round(parsed), 1, 3_650);
-		setHistoryRetentionDraft(String(normalized));
+		send({ type: "SET_HISTORY_DRAFT", value: String(normalized) });
 		applyPatch({ historyRetentionDays: normalized });
-	}, [applyPatch, historyRetentionDraft, settings]);
+	}, [applyPatch, historyRetentionDraft, send, settings.historyRetentionDays]);
 
 	const commitMasterVolume = useCallback(
 		(nextPercent: number) => {
 			const normalizedPercent = clamp(Math.round(nextPercent), 0, 100);
-			setMasterVolumeDraft(normalizedPercent);
+			send({ type: "SET_MASTER_VOLUME_DRAFT", value: normalizedPercent });
 			applyPatch({ masterVolume: normalizedPercent / 100 });
 		},
-		[applyPatch],
+		[applyPatch, send],
 	);
 
 	return (
@@ -273,7 +182,33 @@ export function SettingsPanel() {
 				</p>
 			</header>
 
-			{settings ? (
+			{isBooting ? (
+				<div className={styles.settingsLoadingState}>
+					INITIALIZING SETTINGS RUNTIME
+				</div>
+			) : !settingsV1Enabled ? (
+				<div className={styles.settingsGrid}>
+					<article className={styles.settingsCard}>
+						<h2 className={styles.settingsCardTitle}>Settings V1 Disabled</h2>
+						<p className={styles.settingsCardDescription}>
+							The `settings_v1` rollout flag is disabled. Runtime is using defaults only.
+						</p>
+						<div className={styles.settingsRow}>
+							<div className={styles.settingsRowLabel}>
+								<span>Flag Source</span>
+								<span className={styles.settingsRowHint}>
+									Enable `PUBLIC_SETTINGS_V1=true` to turn this on.
+								</span>
+							</div>
+							<span className={styles.settingsRowValue}>
+								{settingsV1Flag.source === "env"
+									? `${settingsV1Flag.envKey ?? "ENV"}=${settingsV1Flag.rawValue ?? ""}`
+									: "DEFAULT"}
+							</span>
+						</div>
+					</article>
+				</div>
+			) : (
 				<div className={styles.settingsGrid}>
 					<article id="experience" className={styles.settingsCard}>
 						<h2 className={styles.settingsCardTitle}>Experience</h2>
@@ -397,9 +332,10 @@ export function SettingsPanel() {
 									value={masterVolumeDraft}
 									className={styles.settingsRangeControl}
 									onChange={(event) =>
-										setMasterVolumeDraft(
-											clamp(event.currentTarget.valueAsNumber, 0, 100),
-										)
+										send({
+											type: "SET_MASTER_VOLUME_DRAFT",
+											value: clamp(event.currentTarget.valueAsNumber, 0, 100),
+										})
 									}
 									onMouseUp={() => commitMasterVolume(masterVolumeDraft)}
 									onTouchEnd={() => commitMasterVolume(masterVolumeDraft)}
@@ -448,7 +384,10 @@ export function SettingsPanel() {
 									value={autosaveIntervalDraft}
 									className={styles.settingsNumberControl}
 									onChange={(event) =>
-										setAutosaveIntervalDraft(event.currentTarget.value)
+										send({
+											type: "SET_AUTOSAVE_DRAFT",
+											value: event.currentTarget.value,
+										})
 									}
 									onBlur={commitAutosaveInterval}
 									onKeyDown={(event) => {
@@ -528,7 +467,10 @@ export function SettingsPanel() {
 									value={historyRetentionDraft}
 									className={styles.settingsNumberControl}
 									onChange={(event) =>
-										setHistoryRetentionDraft(event.currentTarget.value)
+										send({
+											type: "SET_HISTORY_DRAFT",
+											value: event.currentTarget.value,
+										})
 									}
 									onBlur={commitHistoryRetentionDays}
 									onKeyDown={(event) => {
@@ -674,10 +616,6 @@ export function SettingsPanel() {
 							</button>
 						</div>
 					</article>
-				</div>
-			) : (
-				<div className={styles.settingsLoadingState}>
-					INITIALIZING SETTINGS RUNTIME
 				</div>
 			)}
 		</>

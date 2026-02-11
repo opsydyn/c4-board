@@ -1,30 +1,23 @@
-import vanillaExtract from "@antebudimir/eslint-plugin-vanilla-extract";
 import js from "@eslint/js";
 import { defineConfig } from "eslint/config";
 import pluginReact from "eslint-plugin-react";
 import globals from "globals";
 import tseslint from "typescript-eslint";
-import * as effectEslint from "@effect/eslint-plugin"
+
+const c4OrchestrationHookMatcher =
+	"^useC4(?:Commands|Autosave|Navigation)Machine$";
 
 export default defineConfig([
-	...effectEslint.configs.dprint,
 	{
-		files: ["**/*.css.ts"],
-		ignores: ["src/**/theme-contract.css.ts"],
-		plugins: {
-			"vanilla-extract": vanillaExtract,
-		},
-		rules: {
-			// Apply all recommended rules
-			// ts-ignore because of missing types
-			...vanillaExtract.configs.recommended.rules,
-		},
+		ignores: ["dist/**", ".astro/**", "coverage/**"],
 	},
 	{
 		files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
 		plugins: { js },
 		extends: ["js/recommended"],
-		languageOptions: { globals: globals.browser },
+		languageOptions: {
+			globals: globals.browser,
+		},
 	},
 	tseslint.configs.recommended,
 	{
@@ -39,19 +32,16 @@ export default defineConfig([
 		},
 		rules: {
 			...(pluginReact.configs.flat.recommended?.rules || {}),
-			"react/react-in-jsx-scope": "off", // Not needed with React 19 JSX transform
-			"@typescript-eslint/no-explicit-any": "warn", // Allow any for now in MVP
+			"react/react-in-jsx-scope": "off",
 			"no-restricted-syntax": [
 				"error",
 				{
-					selector:
-						"CallExpression[callee.name=/^useC4(?:Commands|Autosave|Navigation)Machine$/] > ObjectExpression > Property[value.type=/^(ArrowFunctionExpression|FunctionExpression)$/]",
+					selector: `CallExpression[callee.name=/${c4OrchestrationHookMatcher}/] > ObjectExpression > Property[value.type=/^(ArrowFunctionExpression|FunctionExpression)$/]`,
 					message:
 						"Do not pass inline callbacks into C4 orchestration hooks. Use stable callbacks (useCallback or ref-backed wrappers) to avoid actor churn and render loops.",
 				},
 				{
-					selector:
-						"CallExpression[callee.name=/^useC4(?:Commands|Autosave|Navigation)Machine$/] > ObjectExpression",
+					selector: `CallExpression[callee.name=/${c4OrchestrationHookMatcher}/] > ObjectExpression`,
 					message:
 						"Do not pass inline options objects into C4 orchestration hooks. Memoize options with useMemo to keep hook inputs stable.",
 				},

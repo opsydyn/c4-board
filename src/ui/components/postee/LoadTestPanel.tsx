@@ -61,6 +61,10 @@ interface LoadTestPanelProps {
 		method: string;
 		url: string;
 	};
+	sirenEnabledDefault?: boolean;
+	masterAudioEnabled?: boolean;
+	masterVolume?: number;
+	animationsEnabled?: boolean;
 }
 
 const viewWidth = 600;
@@ -72,6 +76,9 @@ const formatNumber = (value: number, digits = 0) =>
 		minimumFractionDigits: digits,
 		maximumFractionDigits: digits,
 	}).format(value);
+
+const toSirenVolumeDb = (masterVolume: number): number =>
+	-42 + Math.max(0, Math.min(1, masterVolume)) * 36;
 
 interface ChartProps {
 	samples: LoadTestProgress[];
@@ -601,7 +608,13 @@ const SuccessFailureStacked = ({ samples }: { samples: LoadTestProgress[] }) => 
 	);
 };
 
-export function LoadTestPanel({ request }: LoadTestPanelProps) {
+export function LoadTestPanel({
+	request,
+	sirenEnabledDefault = true,
+	masterAudioEnabled = true,
+	masterVolume = 0.8,
+	animationsEnabled = true,
+}: LoadTestPanelProps) {
 	const {
 		status,
 		error,
@@ -621,12 +634,16 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	const [concurrency, setConcurrency] = useState<string>("10");
 	const [rpsLimit, setRpsLimit] = useState<string>("");
 	const [timeoutMs, setTimeoutMs] = useState<string>("30000");
-	const [isSirenEnabled, setSirenEnabled] = useState(true);
+	const [isSirenEnabled, setSirenEnabled] = useState(sirenEnabledDefault);
 	const sirenOscRef = useRef<Tone.Oscillator | null>(null);
 	const sirenLfoRef = useRef<Tone.LFO | null>(null);
 	const audioReadyRef = useRef(false);
 
 	const primeSirenAudio = useCallback(async (): Promise<boolean> => {
+		if (!masterAudioEnabled) {
+			return false;
+		}
+
 		try {
 			await Tone.start();
 			audioReadyRef.current = true;
@@ -634,19 +651,19 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 		} catch {
 			return false;
 		}
-	}, []);
+	}, [masterAudioEnabled]);
 
 	const getSirenOscillator = useCallback((): Tone.Oscillator => {
 		if (!sirenOscRef.current) {
 			sirenOscRef.current = new Tone.Oscillator({
 				type: "sawtooth",
 				frequency: 440,
-				volume: -12,
+				volume: toSirenVolumeDb(masterVolume),
 			}).toDestination();
 		}
 
 		return sirenOscRef.current;
-	}, []);
+	}, [masterVolume]);
 
 	const getSirenLfo = useCallback(
 		(oscillator: Tone.Oscillator): Tone.LFO => {
@@ -678,6 +695,10 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	}, []);
 
 	const startSiren = useCallback(async (): Promise<void> => {
+		if (!masterAudioEnabled) {
+			return;
+		}
+
 		if (!audioReadyRef.current) {
 			const isReady = await primeSirenAudio();
 			if (!isReady) {
@@ -694,7 +715,7 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 		if (oscillator.state !== "started") {
 			oscillator.start();
 		}
-	}, [getSirenLfo, getSirenOscillator, primeSirenAudio]);
+	}, [getSirenLfo, getSirenOscillator, masterAudioEnabled, primeSirenAudio]);
 
 	useEffect(() => {
 		if (request) {
@@ -751,13 +772,25 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 	);
 
 	useEffect(() => {
-		if (status === "running" && isSirenEnabled) {
+		if (status === "running" && isSirenEnabled && masterAudioEnabled) {
 			void startSiren();
 			return;
 		}
 
 		stopSiren();
-	}, [isSirenEnabled, startSiren, status, stopSiren]);
+	}, [isSirenEnabled, masterAudioEnabled, startSiren, status, stopSiren]);
+
+	useEffect(() => {
+		setSirenEnabled(sirenEnabledDefault);
+	}, [sirenEnabledDefault]);
+
+	useEffect(() => {
+		if (!sirenOscRef.current) {
+			return;
+		}
+
+		sirenOscRef.current.volume.value = toSirenVolumeDb(masterVolume);
+	}, [masterVolume]);
 
 	useEffect(() => {
 		return () => {
@@ -784,7 +817,11 @@ export function LoadTestPanel({ request }: LoadTestPanelProps) {
 		}
 	}, [status]);
 
-	const isBlastDoorAlertActive = status === "running" && isSirenEnabled;
+	const isBlastDoorAlertActive =
+		status === "running" &&
+		isSirenEnabled &&
+		masterAudioEnabled &&
+		animationsEnabled;
 
 	return (
 		<section className={loadTestPanel}>

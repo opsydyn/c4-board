@@ -46,6 +46,12 @@ export interface PosteeResponsePanelProps {
 	onSetBaseline: () => void;
 	onClearBaseline: () => void;
 	onToggleDiff: () => void;
+
+	// Global runtime settings
+	sirenEnabledDefault: boolean;
+	masterAudioEnabled: boolean;
+	masterVolume: number;
+	animationsEnabled: boolean;
 }
 
 export function PosteeResponsePanel({
@@ -63,6 +69,10 @@ export function PosteeResponsePanel({
 	onSetBaseline,
 	onClearBaseline,
 	onToggleDiff,
+	sirenEnabledDefault,
+	masterAudioEnabled,
+	masterVolume,
+	animationsEnabled,
 }: PosteeResponsePanelProps) {
 	const [inspectedHistoryEntry, setInspectedHistoryEntry] = useState<PosteeHistoryEntry | null>(null);
 	const [compareMode, setCompareMode] = useState(false);
@@ -248,6 +258,10 @@ export function PosteeResponsePanel({
 								method: selectedRequest.method,
 								url: selectedRequest.url,
 							}}
+							sirenEnabledDefault={sirenEnabledDefault}
+							masterAudioEnabled={masterAudioEnabled}
+							masterVolume={masterVolume}
+							animationsEnabled={animationsEnabled}
 						/>
 					)}
 				</div>
