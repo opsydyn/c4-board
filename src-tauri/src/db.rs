@@ -160,3 +160,47 @@ pub async fn sql_query(
     let rows = state.0.fetch_all(query).await?;
     rows.iter().map(row_to_json).collect()
 }
+
+#[derive(Debug, Serialize)]
+pub struct DbRuntimeProbe {
+    pub journal_mode: String,
+    pub foreign_keys: bool,
+    pub busy_timeout_ms: i64,
+    pub synchronous_mode: String,
+    pub max_connections: u32,
+}
+
+#[tauri::command]
+pub async fn db_runtime_probe(state: State<'_, AppDb>) -> Result<DbRuntimeProbe, DbError> {
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode;")
+        .fetch_one(&state.0)
+        .await?;
+
+    let foreign_keys_raw: i64 = sqlx::query_scalar("PRAGMA foreign_keys;")
+        .fetch_one(&state.0)
+        .await?;
+
+    let busy_timeout_ms: i64 = sqlx::query_scalar("PRAGMA busy_timeout;")
+        .fetch_one(&state.0)
+        .await?;
+
+    let synchronous_raw: i64 = sqlx::query_scalar("PRAGMA synchronous;")
+        .fetch_one(&state.0)
+        .await?;
+
+    let synchronous_mode = match synchronous_raw {
+        0 => "off",
+        1 => "normal",
+        2 => "full",
+        3 => "extra",
+        _ => "unknown",
+    };
+
+    Ok(DbRuntimeProbe {
+        journal_mode: journal_mode.to_lowercase(),
+        foreign_keys: foreign_keys_raw != 0,
+        busy_timeout_ms,
+        synchronous_mode: synchronous_mode.to_string(),
+        max_connections: 1,
+    })
+}

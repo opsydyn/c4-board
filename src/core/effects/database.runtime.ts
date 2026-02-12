@@ -20,6 +20,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Duration, Effect, FiberRef, Layer, Schedule } from "effect";
 import { DatabaseError, DatabaseService } from "./database.base";
+import {
+  beginDatabaseRuntimeOperation,
+  beginDatabaseRuntimeWriteRequest,
+  completeDatabaseRuntimeOperationSuccess,
+  completeDatabaseRuntimeWriteRequest,
+  failDatabaseRuntimeOperation,
+  markDatabaseRuntimeBootstrapFailure,
+  markDatabaseRuntimeBootstrapped,
+  markDatabaseRuntimeWriteRequestAcquired,
+  recordDatabaseRuntimeRetry,
+} from "./db-runtime-status";
 import { APP_SETTING_KEYS, DEFAULT_APP_SETTINGS } from "./settings.types";
 import { classifySqliteError, isRetryable } from "./sqlite-error-class";
 
@@ -46,29 +57,81 @@ const executeRaw = (
   sql: string,
   bindValues?: unknown[],
 ): Effect.Effect<void, Error> =>
-  Effect.tryPromise({
-    try: () => invoke("sql_execute", { sql, values: bindValues ?? [] }),
-    catch: toError,
-  }).pipe(
-    Effect.retry({
-      while: (error) => isRetryable(classifySqliteError(error)),
-      schedule: SQLITE_BUSY_RETRY_SCHEDULE,
-    }),
-  );
+  Effect.gen(function*() {
+    const operationId = yield* Effect.sync(() => beginDatabaseRuntimeOperation("execute"));
+
+    return yield* Effect.tryPromise({
+      try: () => invoke("sql_execute", { sql, values: bindValues ?? [] }),
+      catch: toError,
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          const errorClass = classifySqliteError(error);
+          if (isRetryable(errorClass)) {
+            recordDatabaseRuntimeRetry(operationId, errorClass, error);
+          }
+        })
+      ),
+      Effect.retry({
+        while: (error) => isRetryable(classifySqliteError(error)),
+        schedule: SQLITE_BUSY_RETRY_SCHEDULE,
+      }),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          completeDatabaseRuntimeOperationSuccess(operationId);
+        })
+      ),
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          failDatabaseRuntimeOperation(
+            operationId,
+            classifySqliteError(error),
+            error,
+          );
+        })
+      ),
+    );
+  });
 
 const queryRaw = <T>(
   sql: string,
   bindValues?: unknown[],
 ): Effect.Effect<T[], Error> =>
-  Effect.tryPromise({
-    try: () => invoke<T[]>("sql_query", { sql, values: bindValues ?? [] }),
-    catch: toError,
-  }).pipe(
-    Effect.retry({
-      while: (error) => isRetryable(classifySqliteError(error)),
-      schedule: SQLITE_BUSY_RETRY_SCHEDULE,
-    }),
-  );
+  Effect.gen(function*() {
+    const operationId = yield* Effect.sync(() => beginDatabaseRuntimeOperation("query"));
+
+    return yield* Effect.tryPromise({
+      try: () => invoke<T[]>("sql_query", { sql, values: bindValues ?? [] }),
+      catch: toError,
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          const errorClass = classifySqliteError(error);
+          if (isRetryable(errorClass)) {
+            recordDatabaseRuntimeRetry(operationId, errorClass, error);
+          }
+        })
+      ),
+      Effect.retry({
+        while: (error) => isRetryable(classifySqliteError(error)),
+        schedule: SQLITE_BUSY_RETRY_SCHEDULE,
+      }),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          completeDatabaseRuntimeOperationSuccess(operationId);
+        })
+      ),
+      Effect.tapError((error) =>
+        Effect.sync(() => {
+          failDatabaseRuntimeOperation(
+            operationId,
+            classifySqliteError(error),
+            error,
+          );
+        })
+      ),
+    );
+  });
 
 // ============================================================================
 // Write serialization (Semaphore)
@@ -84,8 +147,19 @@ const withWritePermit = <A, E, R>(
       return yield* effect;
     }
 
+    const requestId = yield* Effect.sync(beginDatabaseRuntimeWriteRequest);
+
     return yield* writeSemaphore.withPermits(1)(
-      Effect.locally(writeLockDepthRef, 1)(effect),
+      Effect.gen(function*() {
+        yield* Effect.sync(() => markDatabaseRuntimeWriteRequestAcquired(requestId));
+        return yield* Effect.locally(writeLockDepthRef, 1)(effect);
+      }),
+    ).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          completeDatabaseRuntimeWriteRequest(requestId);
+        }),
+      ),
     );
   }) as Effect.Effect<A, E, R>;
 
@@ -188,8 +262,15 @@ const ensureSettingsBootstrapped = (): Effect.Effect<void, DatabaseError> =>
 
     const bootstrapError = yield* Effect.sync(() => settingsBootstrapError);
     if (bootstrapError) {
+      yield* Effect.sync(() => {
+        markDatabaseRuntimeBootstrapFailure(bootstrapError);
+      });
       return yield* Effect.fail(bootstrapError);
     }
+
+    yield* Effect.sync(() => {
+      markDatabaseRuntimeBootstrapped();
+    });
   });
 
 /**

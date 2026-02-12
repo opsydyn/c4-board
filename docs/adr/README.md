@@ -26,6 +26,7 @@ Each ADR follows this structure:
 | [ADR-004](./004-sqlite-pool-architecture.md)     | SQLite Pool Architecture — Bypassing Plugin for Runtime Queries  | Accepted | 2026-02-07 |
 | [ADR-005](./005-global-settings-wiring-plan.md)  | Global Settings Architecture and Wiring Plan                     | Proposed | 2026-02-09 |
 | [ADR-006](./006-balanced-coupling-v2-and-mud-threshold-controls.md) | Balanced Coupling V2 Model and Big Ball of Mud Threshold Controls | Proposed | 2026-02-10 |
+| [ADR-007](./007-azure-graph-sync.md)             | Azure Resource Graph Sync for Dynamic C4 Infrastructure Diagrams | Proposed | 2026-02-12 |
 
 ## Contributing
 

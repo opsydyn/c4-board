@@ -307,6 +307,12 @@ export const settingsStatusSaved = style({
 	boxShadow: `0 0 10px ${theme.color.status.ready}33`,
 });
 
+export const settingsStatusDrift = style({
+	borderColor: theme.color.status.caution,
+	color: theme.color.status.caution,
+	boxShadow: `0 0 10px ${theme.color.status.caution}33`,
+});
+
 export const settingsStatusError = style({
 	borderColor: theme.color.status.critical,
 	color: theme.color.status.critical,

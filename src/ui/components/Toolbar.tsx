@@ -55,6 +55,8 @@ interface ToolbarProps {
 	diagramName?: string;
 	currentLayout?: LayoutPresetName;
 	animationsEnabled?: boolean;
+	saveChimeStatusLabel?: string;
+	saveChimeStatusHint?: string;
 }
 
 function formatSaveTime(timestamp: number, now: number): string {
@@ -111,6 +113,8 @@ export function Toolbar({
 	diagramName = "Untitled",
 	currentLayout,
 	animationsEnabled = true,
+	saveChimeStatusLabel,
+	saveChimeStatusHint,
 }: ToolbarProps) {
 	const saveTimeLabel = useLiveSaveTime(lastSaved);
 
@@ -142,6 +146,12 @@ export function Toolbar({
 							<>
 								<CloudIcon size={14} weight="duotone" />
 								<span title={saveError}>SAVE::ERROR</span>
+							</>
+						)}
+						{saveChimeStatusLabel && !isSaving && !saveError && (
+							<>
+								<CloudIcon size={14} weight="duotone" />
+								<span title={saveChimeStatusHint}>{saveChimeStatusLabel}</span>
 							</>
 						)}
 					</div>
@@ -181,8 +191,8 @@ export function Toolbar({
 					onPress={onToggleAnimations}
 					aria-label={
 						animationsEnabled
-							? "Disable animation and save sounds"
-							: "Enable animation and save sounds"
+							? "Disable animation effects"
+							: "Enable animation effects"
 					}
 				>
 					{animationsEnabled ? (

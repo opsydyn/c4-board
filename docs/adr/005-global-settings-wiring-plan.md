@@ -171,3 +171,77 @@ Rejected due to observed unsynced timestamp/state behavior during startup and na
   - Runtime contention coverage for retry (`SQLITE_BUSY`) and semaphore serialization.
 - Settings page orchestration moved from `useEffect` coordination to `settings.machine.ts` (XState), including boot/loading, queued writes, optimistic updates, and recovery reload paths.
 - Machine transitions are modularized with `createStateConfig` slices (Stately modular state pattern), and actor outputs/errors are schema-decoded via Effect `Schema` before state updates.
+
+## Rollout Resume Addendum (2026-02-12)
+
+This addendum resumes the full settings rollout and adds a dedicated DB runtime status sub-plan.
+Scope is documentation and planning only.
+
+### Current Baseline
+
+1. Settings domain contract, persistence, and runtime locking model are in place.
+2. Settings page uses XState orchestration with optimistic writes and queued persistence.
+3. Static "Database Runtime: Single connection + WAL" copy exists in Settings but is not yet a live runtime probe.
+
+### Updated Remaining Plan
+
+#### Phase R1: Stabilization and Read-Model Hardening
+
+1. Freeze current settings behavior and remove known UI ambiguity between optimistic state and committed state labels.
+2. Standardize status vocabulary for settings saves and runtime health (`LOADING`, `SAVING`, `SYNCED`, `ERROR`, `DEGRADED`).
+3. Confirm all settings controls report queue depth and failure states consistently.
+
+#### Phase R2: DB Runtime Status Sub-Plan (New)
+
+Objective: replace static runtime copy with observable, trustworthy runtime health.
+
+1. Define runtime status contract.
+   - Output model: `status`, `pendingWrites`, `lockRetries`, `lastSuccessAt`, `lastFailureAt`, `lastErrorMessage`, `journalMode`, `maxConnections`.
+   - Error model: typed Effect `Schema` validation for all runtime status payloads.
+2. Add runtime event instrumentation in database runtime boundary.
+   - Capture read/write operation start, completion, retry, and failure.
+   - Include retry classification (busy/locked/non-retryable) and operation duration.
+3. Build frontend runtime read model stream.
+   - Stream source from runtime events folded into a single diagnostics snapshot.
+   - Keep orchestration ownership in XState; keep diagnostics/read-model ownership in atom stream state.
+4. Surface runtime health in Settings.
+   - Replace static "ONLINE" with derived status chip.
+   - Show queue depth, last successful operation time, and degraded lock-pressure indication.
+5. Add backend truth probe (optional hardening path).
+   - Add command-backed snapshot for `PRAGMA journal_mode` and pool metadata.
+   - Use as bootstrap verification and recovery fallback for the frontend stream.
+6. Add operational telemetry and alert thresholds.
+   - Emit lock retry bursts and sustained degraded periods.
+   - Define warning thresholds for investigation.
+
+#### Phase R3: Cross-Workspace Final Wiring
+
+1. Ensure C4 and Postee consume the same resolved settings state and runtime diagnostics semantics.
+2. Validate save-on-navigate, autosave cadence, and audio defaults against committed settings values.
+3. Align settings-driven behavior for navigation overlays and load transitions in both directions.
+
+#### Phase R4: Verification Matrix and Rollout Gates
+
+1. Unit tests for runtime status model decode/encode and status derivation rules.
+2. Integration tests for rapid-toggle settings writes while autosave and navigation are active.
+3. Contention tests with forced lock/retry paths verifying transition to `DEGRADED` and recovery to `ONLINE`.
+4. Manual validation checklist across C4, Postee, and Settings pages with persisted restart verification.
+
+#### Phase R5: Flag Sunsetting Completion
+
+1. Remove `settings_v1` branch paths after stability window criteria are met.
+2. Remove feature-flag environment surface and disabled-state UX copy.
+3. Keep runtime status diagnostics always-on and production-safe.
+
+### Sequencing and Dependencies
+
+1. Complete R1 before R2 to avoid reworking status semantics.
+2. Complete R2 before final R3 integration so workspaces consume one runtime status model.
+3. Complete R4 before R5 to avoid sunsetting with blind spots.
+
+### Exit Criteria for Addendum
+
+1. Settings runtime card reports live DB runtime state, not static placeholders.
+2. Lock contention is visible in UI and telemetry with clear degraded/recovered transitions.
+3. Save state labels and timestamps reflect committed state only.
+4. C4/Postee/settings behaviors remain consistent across navigation and restart.

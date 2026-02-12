@@ -78,6 +78,8 @@ interface DDDToolbarProps {
 	diagramName?: string;
 	currentLayout?: LayoutPresetName;
 	animationsEnabled?: boolean;
+	saveChimeStatusLabel?: string;
+	saveChimeStatusHint?: string;
 }
 
 function formatSaveTime(timestamp: number, now: number): string {
@@ -143,6 +145,8 @@ export function DDDToolbar({
 	diagramName = "Untitled",
 	currentLayout,
 	animationsEnabled = true,
+	saveChimeStatusLabel,
+	saveChimeStatusHint,
 }: DDDToolbarProps) {
 	const saveTimeLabel = useLiveSaveTime(lastSaved);
 
@@ -174,6 +178,12 @@ export function DDDToolbar({
 							<>
 								<CloudIcon size={14} weight="duotone" />
 								<span title={saveError}>SAVE::ERROR</span>
+							</>
+						)}
+						{saveChimeStatusLabel && !isSaving && !saveError && (
+							<>
+								<CloudIcon size={14} weight="duotone" />
+								<span title={saveChimeStatusHint}>{saveChimeStatusLabel}</span>
 							</>
 						)}
 					</div>
@@ -213,8 +223,8 @@ export function DDDToolbar({
 					onClick={onToggleAnimations}
 					title={
 						animationsEnabled
-							? "Disable animation and save sounds"
-							: "Enable animation and save sounds"
+							? "Disable animation effects"
+							: "Enable animation effects"
 					}
 				>
 					{animationsEnabled ? (

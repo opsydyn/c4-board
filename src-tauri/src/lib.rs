@@ -9,7 +9,7 @@ use tokio::time::sleep;
 mod db;
 mod load_test;
 
-use db::{sql_execute, sql_query};
+use db::{db_runtime_probe, sql_execute, sql_query};
 use load_test::{LoadTestConfig, LoadTestEngine};
 
 // ============================================================================
@@ -497,7 +497,8 @@ pub fn run() {
             save_custom_icon,
             start_load_test,
             sql_execute,
-            sql_query
+            sql_query,
+            db_runtime_probe
         ])
         .setup(|app| {
             // Create a properly configured SQLite pool (single connection, busy_timeout, WAL)

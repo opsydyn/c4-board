@@ -88,7 +88,9 @@ type SaveDiagramPayload = Parameters<typeof saveDiagram>[0];
 const AUTO_SAVE_SOUND_COOLDOWN = Duration.seconds(5);
 const SAVE_REQUEST_TIMEOUT_MS = 20_000;
 const toSaveSynthVolumeDb = (masterVolume: number): number =>
-	-42 + Math.max(0, Math.min(1, masterVolume)) * 36;
+	masterVolume <= 0
+		? -60
+		: -24 + Math.max(0, Math.min(1, masterVolume)) * 20;
 
 export function C4CanvasContainer() {
 	const [state, send, canvasActor] = useMachine(
@@ -107,6 +109,7 @@ export function C4CanvasContainer() {
 	const saveSynthRef = useRef<Tone.PolySynth<Tone.Synth> | null>(null);
 	const audioReadyRef = useRef(false);
 	const lastSaveSoundAtRef = useRef(0);
+	const lastSaveChimeSkipReasonRef = useRef<string | null>(null);
 	const pageHideSaveCompletedRef = useRef(false);
 	const settingsSeededRef = useRef(false);
 	const saveRequestCounterRef = useRef(0);
@@ -132,14 +135,19 @@ export function C4CanvasContainer() {
 
 	const primeSaveAudio = useCallback(async (): Promise<boolean> => {
 		if (!appSettings.masterAudioEnabled || !appSettings.saveChimeEnabled) {
+			audioReadyRef.current = false;
 			return false;
 		}
 
 		try {
-			await Tone.start();
-			audioReadyRef.current = true;
-			return true;
+			const context = Tone.getContext();
+			if (context.state !== "running") {
+				await Tone.start();
+			}
+			audioReadyRef.current = Tone.getContext().state === "running";
+			return audioReadyRef.current;
 		} catch {
+			audioReadyRef.current = false;
 			return false;
 		}
 	}, [appSettings.masterAudioEnabled, appSettings.saveChimeEnabled]);
@@ -196,11 +204,19 @@ export function C4CanvasContainer() {
 	const playSaveChime = useCallback(
 		async (mode: C4SaveMode): Promise<void> => {
 			try {
-				if (
-					!state.context.animationsEnabled ||
-					!appSettings.masterAudioEnabled ||
-					!appSettings.saveChimeEnabled
-				) {
+				const skipReason = !appSettings.masterAudioEnabled
+					? "master-audio-disabled"
+					: !appSettings.saveChimeEnabled
+					? "save-chime-disabled"
+					: appSettings.masterVolume <= 0
+					? "master-volume-zero"
+					: null;
+
+				if (skipReason !== null) {
+					if (lastSaveChimeSkipReasonRef.current !== skipReason) {
+						console.info(`🔇 Save chime skipped: ${skipReason}`);
+						lastSaveChimeSkipReasonRef.current = skipReason;
+					}
 					return;
 				}
 
@@ -215,11 +231,13 @@ export function C4CanvasContainer() {
 					return;
 				}
 
-				if (!audioReadyRef.current) {
-					const ready = await primeSaveAudio();
-					if (!ready) {
-						return;
+				const ready = await primeSaveAudio();
+				if (!ready) {
+					if (lastSaveChimeSkipReasonRef.current !== "audio-not-ready") {
+						console.info("🔇 Save chime skipped: audio-not-ready");
+						lastSaveChimeSkipReasonRef.current = "audio-not-ready";
 					}
+					return;
 				}
 
 				const synth = getSaveSynth();
@@ -228,6 +246,7 @@ export function C4CanvasContainer() {
 				synth.triggerAttackRelease("E4", "16n", now + 0.08);
 				synth.triggerAttackRelease("G4", "8n", now + 0.16);
 				lastSaveSoundAtRef.current = nowMs;
+				lastSaveChimeSkipReasonRef.current = null;
 			} catch (error) {
 				console.warn("⚠️ Save chime failed", error);
 			}
@@ -235,9 +254,9 @@ export function C4CanvasContainer() {
 		[
 			appSettings.masterAudioEnabled,
 			appSettings.saveChimeEnabled,
+			appSettings.masterVolume,
 			getSaveSynth,
 			primeSaveAudio,
-			state.context.animationsEnabled,
 		],
 	);
 
@@ -1040,6 +1059,37 @@ export function C4CanvasContainer() {
 		settingsV1Enabled,
 		state.context.animationsEnabled,
 	]);
+	const saveChimeStatus = useMemo(() => {
+		if (!appSettings.masterAudioEnabled) {
+			return {
+				label: "CHIME::OFF (MASTER)",
+				hint: "Enable Master Audio in Settings > Audio",
+			};
+		}
+
+		if (!appSettings.saveChimeEnabled) {
+			return {
+				label: "CHIME::OFF (GLOBAL)",
+				hint: "Enable Save Chime in Settings > Audio",
+			};
+		}
+
+		if (appSettings.masterVolume <= 0) {
+			return {
+				label: "CHIME::MUTED (VOL 0)",
+				hint: "Raise Master Volume above 0% in Settings > Audio",
+			};
+		}
+
+		return {
+			label: `CHIME::ON (${Math.round(appSettings.masterVolume * 100)}%)`,
+			hint: "Chime level is controlled by Settings > Audio Master Volume",
+		};
+	}, [
+		appSettings.masterAudioEnabled,
+		appSettings.masterVolume,
+		appSettings.saveChimeEnabled,
+	]);
 
 	// Handle auto-layout action
 	const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
@@ -1313,6 +1363,8 @@ export function C4CanvasContainer() {
 								onToggleAnimations={handleToggleAnimations}
 								animationsEnabled={state.context.animationsEnabled}
 								saveError={state.context.saveError}
+								saveChimeStatusLabel={saveChimeStatus.label}
+								saveChimeStatusHint={saveChimeStatus.hint}
 								{...(state.context.currentLayout && {
 									currentLayout: state.context.currentLayout,
 								})}
@@ -1353,6 +1405,8 @@ export function C4CanvasContainer() {
 								onToggleAnimations={handleToggleAnimations}
 								animationsEnabled={state.context.animationsEnabled}
 								saveError={state.context.saveError}
+								saveChimeStatusLabel={saveChimeStatus.label}
+								saveChimeStatusHint={saveChimeStatus.hint}
 								{...(state.context.currentLayout && {
 									currentLayout: state.context.currentLayout,
 								})}
