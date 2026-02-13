@@ -4,7 +4,6 @@
  * Executes concurrent HTTP requests with rate limiting.
  * Zero Tauri dependencies - pure async Rust.
  */
-
 use super::config::LoadTestConfig;
 use super::stats::{LoadTestProgress, LoadTestStats};
 use bytes::Bytes;
@@ -165,8 +164,8 @@ impl LoadTestEngine {
                     )
                 })?;
 
-                let non_zero =
-                    NonZeroU32::new(rps_u32).ok_or_else(|| "RPS limit must be at least 1".to_string())?;
+                let non_zero = NonZeroU32::new(rps_u32)
+                    .ok_or_else(|| "RPS limit must be at least 1".to_string())?;
                 let quota = Quota::per_second(non_zero);
                 Ok(Some(Arc::new(RateLimiter::direct(quota))))
             }

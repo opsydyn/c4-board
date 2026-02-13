@@ -11,7 +11,6 @@
  * - Real-time statistics
  * - Error tracking
  */
-
 pub mod config;
 pub mod engine;
 pub mod stats;
@@ -19,4 +18,4 @@ pub mod stats;
 pub use config::LoadTestConfig;
 pub use engine::LoadTestEngine;
 #[allow(unused_imports)]
-pub use stats::{LoadTestStats, LoadTestProgress};
+pub use stats::{LoadTestProgress, LoadTestStats};

@@ -6,9 +6,11 @@ use tauri::{Emitter, Listener, Manager};
 use tauri_plugin_sql::{Migration, MigrationKind};
 use tokio::time::sleep;
 
+mod azure_sync;
 mod db;
 mod load_test;
 
+use azure_sync::{azure_graph_query, azure_graph_validate_auth};
 use db::{db_runtime_probe, sql_execute, sql_query};
 use load_test::{LoadTestConfig, LoadTestEngine};
 
@@ -498,7 +500,9 @@ pub fn run() {
             start_load_test,
             sql_execute,
             sql_query,
-            db_runtime_probe
+            db_runtime_probe,
+            azure_graph_validate_auth,
+            azure_graph_query
         ])
         .setup(|app| {
             // Create a properly configured SQLite pool (single connection, busy_timeout, WAL)

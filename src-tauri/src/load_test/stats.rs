@@ -3,7 +3,6 @@
  *
  * Collects and computes metrics using HDR histogram.
  */
-
 use hdrhistogram::Histogram;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};

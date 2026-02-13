@@ -3,7 +3,6 @@
  *
  * Pure data structures with no I/O.
  */
-
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

@@ -45,8 +45,11 @@ import { BalancedMudChart } from "./BalancedMudChart";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DataBar } from "./DataBar";
 import { ExportModal } from "./ExportModal";
+import { AzureSyncPanel } from "./AzureSyncPanel";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { useAppSettings } from "../../core/effects/useAppSettings";
+import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
+import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import {
 	saveDiagram,
 	loadDiagram,
@@ -113,6 +116,9 @@ export function C4CanvasContainer() {
 	const pageHideSaveCompletedRef = useRef(false);
 	const settingsSeededRef = useRef(false);
 	const saveRequestCounterRef = useRef(0);
+	const saveInputOverridesByRequestIdRef = useRef(
+		new Map<number, SaveDiagramPayload>(),
+	);
 	const [isSidebarOpen, setSidebarOpen] = useState(true);
 	const [isDetailsOpen, setDetailsOpen] = useState(true);
 	const [isCompactLayout, setCompactLayout] = useState(false);
@@ -358,7 +364,11 @@ export function C4CanvasContainer() {
 	const persistSingleSave = useCallback(
 		async (request: C4SaveRequest): Promise<C4SaveSuccess> => {
 			const mode = request.mode;
-			const saveInput = buildSaveInput();
+			const overriddenInput = saveInputOverridesByRequestIdRef.current.get(
+				request.id,
+			);
+			saveInputOverridesByRequestIdRef.current.delete(request.id);
+			const saveInput = overriddenInput ?? buildSaveInput();
 			if (!saveInput) {
 				if (mode === "manual") {
 					console.warn("No diagram to save");
@@ -409,8 +419,13 @@ export function C4CanvasContainer() {
 					savedAt,
 				};
 			} catch (error) {
-				const errorMessage =
-					error instanceof Error ? error.message : "Save failed";
+				// Effect's FiberFailure wraps the actual error — extract it for better diagnostics
+				const causeMessage = typeof error === "object" && error !== null && "cause" in error
+					? String((error as { cause: unknown }).cause)
+					: undefined;
+				const errorMessage = error instanceof Error
+					? (causeMessage ? `${error.message} — ${causeMessage}` : error.message)
+					: "Save failed";
 				console.error(
 					mode === "manual" ? "❌ Save failed:" : "❌ Auto-save failed:",
 					error,
@@ -446,9 +461,18 @@ export function C4CanvasContainer() {
 	);
 
 	const requestSave = useCallback(
-		async (mode: C4SaveMode): Promise<boolean> => {
+		async (
+			mode: C4SaveMode,
+			options?: { overrideInput?: SaveDiagramPayload },
+		): Promise<boolean> => {
 			const requestId = saveRequestCounterRef.current + 1;
 			saveRequestCounterRef.current = requestId;
+			if (options?.overrideInput) {
+				saveInputOverridesByRequestIdRef.current.set(
+					requestId,
+					options.overrideInput,
+				);
+			}
 
 			sendSaveEvent({
 				type: "REQUEST_SAVE",
@@ -464,19 +488,21 @@ export function C4CanvasContainer() {
 					(snapshot) => snapshot.context.lastCompletedRequestId === requestId,
 					{ timeout: SAVE_REQUEST_TIMEOUT_MS },
 				);
+				saveInputOverridesByRequestIdRef.current.delete(requestId);
 
 				return completed.context.lastCompletedOk;
 			} catch (error) {
+				saveInputOverridesByRequestIdRef.current.delete(requestId);
 				console.error("❌ Save request timed out or was interrupted", error);
 				send({
 					type: "SAVE_ERROR",
 					error: "Save request timed out before completion",
 				});
-					return false;
-				}
-			},
-			[saveActorRef, send, sendSaveEvent],
-		);
+				return false;
+			}
+		},
+		[saveActorRef, send, sendSaveEvent],
+	);
 
 	const requestManualSave = useCallback(
 		() => requestSave("manual"),
@@ -558,6 +584,7 @@ export function C4CanvasContainer() {
 					type: "SYNC_LAST_SAVED_AT",
 					savedAt: diagram.savedAt ?? null,
 				});
+				saveInputOverridesByRequestIdRef.current.clear();
 				sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
 				cancelAutosave();
 			},
@@ -762,6 +789,82 @@ export function C4CanvasContainer() {
 		}
 	}, [runEffect, seedPersistedFingerprintFromDiagram, send]);
 
+	const handleApplyAzureSync = useCallback(
+		async (dryRun: AzureSyncDryRunOutput) => {
+			const currentDiagramId = state.context.currentDiagramId;
+			if (!currentDiagramId) {
+				throw new Error("No active diagram loaded for Azure sync apply.");
+			}
+
+			await flushPendingInlineEdits();
+
+			const merged = mergeAzureMappedGraphIntoCanvas({
+				nodes: state.context.nodes,
+				edges: state.context.edges,
+				mapped: dryRun.mapped,
+				syncedAt: dryRun.snapshot.collectedAt,
+			});
+
+			const saveInput: SaveDiagramPayload = {
+				id: currentDiagramId,
+				name: state.context.diagramName,
+				nodes: merged.nodes,
+				edges: merged.edges,
+			};
+
+			if (state.context.diagramDescription) {
+				saveInput.description = state.context.diagramDescription;
+			}
+
+			const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+				type: "LOAD_DIAGRAM_SUCCESS",
+				diagram: {
+					id: currentDiagramId,
+					name: state.context.diagramName,
+					nodes: merged.nodes,
+					edges: merged.edges,
+					updatedAt:
+						saveSnapshot.context.lastSavedAt
+						?? state.context.lastSaved
+						?? Date.now(),
+					...(state.context.diagramDescription
+						? { description: state.context.diagramDescription }
+						: {}),
+				},
+			};
+			send(loadEvent);
+
+			const didSave = await requestSave("manual", {
+				overrideInput: saveInput,
+			});
+
+			if (!didSave) {
+				const saveError = saveActorRef.getSnapshot().context.errorMessage;
+				const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+				throw new Error(`Azure sync apply save failed: ${detail}`);
+			}
+
+			console.log(
+				"☁️ Azure sync applied:",
+				dryRun.result.runId,
+				`nodes +${dryRun.result.delta.nodesToCreate} ~${dryRun.result.delta.nodesToUpdate} -${dryRun.result.delta.nodesToArchive}`,
+				`edges +${dryRun.result.delta.edgesToCreate} ~${dryRun.result.delta.edgesToUpdate} -${dryRun.result.delta.edgesToArchive}`,
+			);
+		},
+		[
+			flushPendingInlineEdits,
+			requestSave,
+			saveSnapshot.context.lastSavedAt,
+			send,
+			state.context.currentDiagramId,
+			state.context.diagramDescription,
+			state.context.diagramName,
+			state.context.edges,
+			state.context.lastSaved,
+			state.context.nodes,
+		],
+	);
+
 	// Handle node position/selection changes from ReactFlow
 	const onNodesChange = useCallback(
 		(changes: NodeChange[]) => {
@@ -959,6 +1062,7 @@ export function C4CanvasContainer() {
 		if (!currentDiagramId) {
 				seededDiagramIdRef.current = null;
 				lastPersistedFingerprintRef.current = null;
+				saveInputOverridesByRequestIdRef.current.clear();
 				sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
 				sendSaveEvent({ type: "SYNC_LAST_SAVED_AT", savedAt: null });
 				cancelAutosave();
@@ -976,6 +1080,7 @@ export function C4CanvasContainer() {
 
 			lastPersistedFingerprintRef.current = createSaveFingerprint(saveInput);
 			seededDiagramIdRef.current = currentDiagramId;
+			saveInputOverridesByRequestIdRef.current.clear();
 			sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
 			cancelAutosave();
 		}, [
@@ -1288,12 +1393,12 @@ export function C4CanvasContainer() {
 						>
 							<GearSixIcon size={16} weight="duotone" />
 						</a>
-					</div>
-					<p className={styles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
-					<nav className={styles.sidebarQuickActions} aria-label="Workspace shortcuts">
-						<a
-							className={styles.sidebarQuickActionLink}
-							href="/splashscreen"
+						</div>
+						<p className={styles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
+						<nav className={styles.sidebarQuickActions} aria-label="Workspace shortcuts">
+							<a
+								className={styles.sidebarQuickActionLink}
+								href="/splashscreen"
 							onClick={(event) => {
 								void handleNavigateWithSave(event, "/splashscreen");
 							}}
@@ -1315,16 +1420,23 @@ export function C4CanvasContainer() {
 							onClick={(event) => {
 								void handleNavigateWithSave(event, "/saved-diagrams");
 							}}
-						>
-							SAVED DIAGRAMS
-						</a>
-					</nav>
+							>
+								SAVED DIAGRAMS
+							</a>
+						</nav>
+						{state.context.currentDomain === "c4" && (
+							<AzureSyncPanel
+								nodes={state.context.nodes}
+								edges={state.context.edges}
+								diagramId={state.context.currentDiagramId}
+								onApply={handleApplyAzureSync}
+							/>
+						)}
 
-							
-					<div className={styles.panelHeader}>
-						<ToggleButton
-							isSelected={isSidebarOpen}
-							onChange={setSidebarOpen}
+						<div className={styles.panelHeader}>
+							<ToggleButton
+								isSelected={isSidebarOpen}
+								onChange={setSidebarOpen}
 							className={styles.collapseToggle}
 							aria-label="Collapse left panel"
 						>
