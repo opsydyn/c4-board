@@ -7,7 +7,12 @@ import {
   planAzureSyncDryRun,
   validateAzureGraphAuth,
 } from "../../core/effects/azure-sync.runtime";
-import type { AzureAuthStatus, AzureSyncScope } from "../../core/effects/azure-sync.types";
+import {
+  type AzureAuthStatus,
+  type AzureSyncScope,
+  isAzureEdgeId,
+  isAzureNodeId,
+} from "../../core/effects/azure-sync.types";
 
 interface UseAzureSyncInput {
   readonly nodes: readonly Node[];
@@ -106,8 +111,8 @@ const toAzureEdgeSnapshot = (edge: Edge): AzureSyncEntitySnapshot => ({
   }),
 });
 
-const isAzureNode = (node: Node): boolean => node.id.startsWith("azure:");
-const isAzureEdge = (edge: Edge): boolean => edge.id.startsWith("azure-edge:");
+const isAzureNode = (node: Node): boolean => isAzureNodeId(node.id);
+const isAzureEdge = (edge: Edge): boolean => isAzureEdgeId(edge.id);
 
 export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
   const { nodes, edges, diagramId, onApply } = input;

@@ -14,6 +14,16 @@ export interface AzureSyncScope {
   query?: string;
 }
 
+export const AZURE_RESOURCE_NODE_PREFIX = "azure:";
+export const AZURE_RESOURCE_GROUP_NODE_PREFIX = "azure-rg:";
+export const AZURE_EDGE_PREFIX = "azure-edge:";
+
+export const isAzureNodeId = (id: string): boolean =>
+  id.startsWith(AZURE_RESOURCE_NODE_PREFIX)
+  || id.startsWith(AZURE_RESOURCE_GROUP_NODE_PREFIX);
+
+export const isAzureEdgeId = (id: string): boolean => id.startsWith(AZURE_EDGE_PREFIX);
+
 export interface AzureResourceSnapshot {
   resourceId: string;
   type: string;
@@ -70,9 +80,29 @@ export const normalizeAzureResourceId = (resourceId: string): string => resource
 export const toAzureNodeId = (resourceId: string, namespace?: string): string => {
   const normalized = normalizeAzureResourceId(resourceId);
   if (namespace && namespace.trim().length > 0) {
-    return `azure:${namespace}:${normalized}`;
+    return `${AZURE_RESOURCE_NODE_PREFIX}${namespace}:${normalized}`;
   }
-  return `azure:${normalized}`;
+  return `${AZURE_RESOURCE_NODE_PREFIX}${normalized}`;
+};
+
+export const toAzureResourceGroupResourceId = (
+  subscriptionId: string,
+  resourceGroup: string,
+): string =>
+  `/subscriptions/${subscriptionId.trim().toLowerCase()}/resourcegroups/${resourceGroup.trim().toLowerCase()}`;
+
+export const toAzureResourceGroupNodeId = (
+  subscriptionId: string,
+  resourceGroup: string,
+  namespace?: string,
+): string => {
+  const resourceGroupResourceId = normalizeAzureResourceId(
+    toAzureResourceGroupResourceId(subscriptionId, resourceGroup),
+  );
+  if (namespace && namespace.trim().length > 0) {
+    return `${AZURE_RESOURCE_GROUP_NODE_PREFIX}${namespace}:${resourceGroupResourceId}`;
+  }
+  return `${AZURE_RESOURCE_GROUP_NODE_PREFIX}${resourceGroupResourceId}`;
 };
 
 const hashFNV1a32 = (value: string): string => {
@@ -94,7 +124,7 @@ export const toAzureEdgeId = (
   const to = normalizeAzureResourceId(toResourceId);
   const hash = hashFNV1a32(`${from}|${to}|${relationshipType}`);
   if (namespace && namespace.trim().length > 0) {
-    return `azure-edge:${namespace}:${hash}`;
+    return `${AZURE_EDGE_PREFIX}${namespace}:${hash}`;
   }
-  return `azure-edge:${hash}`;
+  return `${AZURE_EDGE_PREFIX}${hash}`;
 };

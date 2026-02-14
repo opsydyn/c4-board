@@ -1,5 +1,11 @@
 import type { AzureGraphSnapshot, AzureRelationshipSnapshot, AzureResourceSnapshot } from "./azure-sync.types";
-import { normalizeAzureResourceId, toAzureEdgeId, toAzureNodeId } from "./azure-sync.types";
+import {
+  normalizeAzureResourceId,
+  toAzureEdgeId,
+  toAzureNodeId,
+  toAzureResourceGroupNodeId,
+  toAzureResourceGroupResourceId,
+} from "./azure-sync.types";
 
 export type AzureMappedC4Type =
   | "person"
@@ -16,6 +22,8 @@ export interface AzureMappedNode {
   description: string;
   sourceResourceId: string;
   sourceResourceType: string;
+  parentGroupId?: string;
+  isSyntheticContainer?: boolean;
   teamOwnership?: string;
 }
 
@@ -69,8 +77,62 @@ const readTeamOwnership = (tags: Readonly<Record<string, string>>): string | und
   return undefined;
 };
 
+const RESOURCE_GROUP_RESOURCE_TYPE = "microsoft.resources/subscriptions/resourcegroups";
+
+const isResourceGroupType = (azureType: string): boolean => normalizeType(azureType) === RESOURCE_GROUP_RESOURCE_TYPE;
+
+interface ResourceGroupDescriptor {
+  id: string;
+  sourceResourceId: string;
+  sourceResourceType: string;
+  subscriptionId: string;
+  resourceGroup: string;
+}
+
+const toResourceGroupKey = (
+  subscriptionId: string,
+  resourceGroup: string,
+): string => `${subscriptionId.trim().toLowerCase()}::${resourceGroup.trim().toLowerCase()}`;
+
+const toResourceGroupDescriptor = (
+  resource: AzureResourceSnapshot,
+  options?: AzureMappingOptions,
+): ResourceGroupDescriptor | null => {
+  const resourceGroup = resource.resourceGroup?.trim();
+  const subscriptionId = resource.subscriptionId.trim();
+  if (!resourceGroup || subscriptionId.length === 0) {
+    return null;
+  }
+
+  return {
+    id: toAzureResourceGroupNodeId(subscriptionId, resourceGroup, options?.namespace),
+    sourceResourceId: normalizeAzureResourceId(
+      toAzureResourceGroupResourceId(subscriptionId, resourceGroup),
+    ),
+    sourceResourceType: RESOURCE_GROUP_RESOURCE_TYPE,
+    subscriptionId,
+    resourceGroup,
+  };
+};
+
+const mapResourceGroupContainer = (
+  descriptor: ResourceGroupDescriptor,
+  teamOwnership?: string,
+): AzureMappedNode => ({
+  id: descriptor.id,
+  type: "container",
+  label: descriptor.resourceGroup,
+  technology: "azure:resource-group",
+  description: `resource group @ subscription ${descriptor.subscriptionId.toLowerCase()}`,
+  sourceResourceId: descriptor.sourceResourceId,
+  sourceResourceType: descriptor.sourceResourceType,
+  isSyntheticContainer: true,
+  ...(teamOwnership ? { teamOwnership } : {}),
+});
+
 const mapResource = (
   resource: AzureResourceSnapshot,
+  parentGroupId: string | undefined,
   options?: AzureMappingOptions,
 ): AzureMappedNode => {
   const normalizedResourceId = normalizeAzureResourceId(resource.resourceId);
@@ -88,6 +150,7 @@ const mapResource = (
       : resourceType,
     sourceResourceId: normalizedResourceId,
     sourceResourceType: resourceType,
+    ...(parentGroupId ? { parentGroupId } : {}),
     ...(teamOwnership ? { teamOwnership } : {}),
   };
 };
@@ -123,7 +186,44 @@ export const mapAzureSnapshotToC4Graph = (
   snapshot: AzureGraphSnapshot,
   options?: AzureMappingOptions,
 ): AzureMappedGraph => {
-  const nodes = snapshot.resources.map((resource) => mapResource(resource, options));
+  const resourceGroupDescriptorsByKey = new Map<string, ResourceGroupDescriptor>();
+  const resourceGroupOwnership = new Map<string, string>();
+
+  for (const resource of snapshot.resources) {
+    const descriptor = toResourceGroupDescriptor(resource, options);
+    if (!descriptor) {
+      continue;
+    }
+
+    const key = toResourceGroupKey(
+      descriptor.subscriptionId,
+      descriptor.resourceGroup,
+    );
+    if (!resourceGroupDescriptorsByKey.has(key)) {
+      resourceGroupDescriptorsByKey.set(key, descriptor);
+    }
+
+    if (!resourceGroupOwnership.has(key)) {
+      const teamOwnership = readTeamOwnership(resource.tags);
+      if (teamOwnership) {
+        resourceGroupOwnership.set(key, teamOwnership);
+      }
+    }
+  }
+
+  const groupNodes = [...resourceGroupDescriptorsByKey.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, descriptor]) => mapResourceGroupContainer(descriptor, resourceGroupOwnership.get(key)));
+
+  const resourceNodes = snapshot.resources
+    .filter((resource) => !isResourceGroupType(resource.type))
+    .map((resource) => {
+      const descriptor = toResourceGroupDescriptor(resource, options);
+      const parentGroupId = descriptor?.id;
+      return mapResource(resource, parentGroupId, options);
+    });
+
+  const nodes = [...groupNodes, ...resourceNodes];
   const validNodeIds = new Set(nodes.map((node) => node.id));
 
   const edges = snapshot.relationships

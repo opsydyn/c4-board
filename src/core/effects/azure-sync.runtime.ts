@@ -351,6 +351,8 @@ const toNodeEntitySnapshot = (
     description: node.description,
     sourceResourceId: node.sourceResourceId,
     sourceResourceType: node.sourceResourceType,
+    parentGroupId: node.parentGroupId ?? null,
+    isSyntheticContainer: node.isSyntheticContainer ?? false,
     teamOwnership: node.teamOwnership ?? null,
   }),
 });
