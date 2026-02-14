@@ -582,8 +582,6 @@ export const domainToggleActive = style({
  * Sidebar for editing selected node properties
  */
 export const propertiesPanel = style({
-  position: "sticky",
-  top: theme.spacing["5"],
   display: "flex",
   flexDirection: "column",
   gap: theme.spacing["4"],
@@ -593,8 +591,6 @@ export const propertiesPanel = style({
   backgroundColor: "rgba(10, 18, 14, 0.96)",
   padding: theme.spacing["5"],
   width: "100%",
-  maxHeight: "calc(100vh - 80px)",
-  overflowY: "auto",
 });
 
 export const panelHeader = style({
@@ -1099,6 +1095,21 @@ export const mudChartHeader = style({
   gap: theme.spacing["1"],
 });
 
+export const mudChartHeaderTitleRow = style({
+  display: "flex",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+});
+
+export const mudChartHeaderToggle = style([sidebarBrandAction, {
+  width: "1.875rem",
+  height: "1.875rem",
+}]);
+
+export const mudChartHeaderToggleActive = style([sidebarBrandActionActive, {
+  boxShadow: theme.effect.glow.sm,
+}]);
+
 export const mudChartTitle = style({
   margin: 0,
   textTransform: theme.typography.textTransform.uppercase,
@@ -1292,6 +1303,114 @@ export const mudChartSummaryValue = style({
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
   fontWeight: theme.typography.weight.bold,
+});
+
+export const mudChartExplainabilityCard = style({
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(9, 16, 13, 0.9)",
+  padding: theme.spacing["3"],
+  width: "100%",
+});
+
+export const mudChartExplainabilityHeader = style({
+  margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wider,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.bold,
+});
+
+export const mudChartExplainabilityMeta = style({
+  margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const mudChartExplainabilityGrid = style({
+  boxSizing: "border-box",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
+  gap: theme.spacing["2"],
+  width: "100%",
+});
+
+export const mudChartExplainabilityItem = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(11, 20, 16, 0.85)",
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+});
+
+export const mudChartExplainabilityLabel = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const mudChartExplainabilityValue = style({
+  color: theme.color.interactive.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.bold,
+});
+
+export const mudChartFormulaLine = style({
+  margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const mudChartContributorList = style({
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  width: "100%",
+});
+
+export const mudChartContributorRow = style({
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(10, 18, 14, 0.85)",
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+});
+
+export const mudChartContributorName = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const mudChartContributorMetrics = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
 });
 
 export const mudChartLegendRow = style({

@@ -105,6 +105,35 @@ const normalizeTeamOwnership = (value: unknown): string | null => {
   return trimmed.toLowerCase();
 };
 
+const mergeOwnershipTeams = (
+  existingTeams: readonly string[],
+  incomingTeams: Iterable<string>,
+): string[] => {
+  const byNormalized = new Map<string, string>();
+
+  for (const team of existingTeams) {
+    const normalized = normalizeTeamOwnership(team);
+    if (!normalized) {
+      continue;
+    }
+    if (!byNormalized.has(normalized)) {
+      byNormalized.set(normalized, team.trim());
+    }
+  }
+
+  for (const team of incomingTeams) {
+    const normalized = normalizeTeamOwnership(team);
+    if (!normalized) {
+      continue;
+    }
+    if (!byNormalized.has(normalized)) {
+      byNormalized.set(normalized, team.trim());
+    }
+  }
+
+  return Array.from(byNormalized.values());
+};
+
 export function C4CanvasContainer() {
   const [state, send, canvasActor] = useMachine(
     canvasMachine as unknown as UseMachineParam,
@@ -129,6 +158,7 @@ export function C4CanvasContainer() {
   const saveInputOverridesByRequestIdRef = useRef(
     new Map<number, SaveDiagramPayload>(),
   );
+  const ownershipCatalogDiagramRef = useRef<string | null>(null);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isDetailsOpen, setDetailsOpen] = useState(true);
   const [isCompactLayout, setCompactLayout] = useState(false);
@@ -136,6 +166,7 @@ export function C4CanvasContainer() {
   const [isDataBarOpen, setDataBarOpen] = useState(false);
   const [isAzurePanelOpen, setAzurePanelOpen] = useState(false);
   const [isOwnershipLensOpen, setOwnershipLensOpen] = useState(true);
+  const [ownershipTeamCatalog, setOwnershipTeamCatalog] = useState<string[]>([]);
   const [ownershipTeamFilter, setOwnershipTeamFilter] = useState<string>(
     OWNERSHIP_FILTER_ALL,
   );
@@ -1065,8 +1096,48 @@ export function C4CanvasContainer() {
     return teams;
   }, [state.context.nodes]);
 
+  useEffect(() => {
+    const currentDiagramId = state.context.currentDiagramId;
+    const discoveredTeams = Array.from(teamDisplayByNormalized.values());
+
+    if (ownershipCatalogDiagramRef.current !== currentDiagramId) {
+      ownershipCatalogDiagramRef.current = currentDiagramId;
+      setOwnershipTeamCatalog(discoveredTeams);
+      return;
+    }
+
+    setOwnershipTeamCatalog((existingCatalog) => {
+      const merged = mergeOwnershipTeams(existingCatalog, discoveredTeams);
+      return merged.length === existingCatalog.length
+          && merged.every((value, index) => value === existingCatalog[index])
+        ? existingCatalog
+        : merged;
+    });
+  }, [
+    state.context.currentDiagramId,
+    teamDisplayByNormalized,
+  ]);
+
+  const ownershipTeamDisplayByNormalized = useMemo(() => {
+    const mergedTeams = mergeOwnershipTeams(
+      ownershipTeamCatalog,
+      teamDisplayByNormalized.values(),
+    );
+    const teams = new Map<string, string>();
+    for (const team of mergedTeams) {
+      const normalized = normalizeTeamOwnership(team);
+      if (!normalized) {
+        continue;
+      }
+      if (!teams.has(normalized)) {
+        teams.set(normalized, team.trim());
+      }
+    }
+    return teams;
+  }, [ownershipTeamCatalog, teamDisplayByNormalized]);
+
   const ownershipTeamOptions = useMemo<TacticalSelectOption[]>(() => {
-    const dynamicTeams = Array.from(teamDisplayByNormalized.entries())
+    const dynamicTeams = Array.from(ownershipTeamDisplayByNormalized.entries())
       .sort(([teamA], [teamB]) => teamA.localeCompare(teamB))
       .map(([value, label]) => ({
         value,
@@ -1078,17 +1149,17 @@ export function C4CanvasContainer() {
       { value: OWNERSHIP_FILTER_UNASSIGNED, label: "UNASSIGNED" },
       ...dynamicTeams,
     ];
-  }, [teamDisplayByNormalized]);
+  }, [ownershipTeamDisplayByNormalized]);
 
   useEffect(() => {
     if (
       ownershipTeamFilter !== OWNERSHIP_FILTER_ALL
       && ownershipTeamFilter !== OWNERSHIP_FILTER_UNASSIGNED
-      && !teamDisplayByNormalized.has(ownershipTeamFilter)
+      && !ownershipTeamDisplayByNormalized.has(ownershipTeamFilter)
     ) {
       setOwnershipTeamFilter(OWNERSHIP_FILTER_ALL);
     }
-  }, [ownershipTeamFilter, teamDisplayByNormalized]);
+  }, [ownershipTeamDisplayByNormalized, ownershipTeamFilter]);
 
   const crossTeamEdgeCount = useMemo(() => {
     return state.context.edges.filter((edge) => {
@@ -1457,8 +1528,26 @@ export function C4CanvasContainer() {
     (n: { id: string }) => n.id === state.context.selectedNodeId,
   ) as Node<NodeData> | undefined) || null;
   const ownershipTeams = useMemo(
-    () => Array.from(teamDisplayByNormalized.values()),
-    [teamDisplayByNormalized],
+    () => Array.from(ownershipTeamDisplayByNormalized.values()),
+    [ownershipTeamDisplayByNormalized],
+  );
+
+  const handleRegisterOwnershipTeam = useCallback(
+    (team: string) => {
+      const trimmed = team.trim();
+      if (trimmed.length === 0) {
+        return;
+      }
+
+      setOwnershipTeamCatalog((existingCatalog) => {
+        const merged = mergeOwnershipTeams(existingCatalog, [trimmed]);
+        return merged.length === existingCatalog.length
+            && merged.every((value, index) => value === existingCatalog[index])
+          ? existingCatalog
+          : merged;
+      });
+    },
+    [],
   );
 
   const handleRemoveOwnershipTeamFromBoard = useCallback(
@@ -1467,6 +1556,12 @@ export function C4CanvasContainer() {
       if (!normalizedTarget) {
         return;
       }
+
+      setOwnershipTeamCatalog((existingCatalog) =>
+        existingCatalog.filter(
+          (entry) => normalizeTeamOwnership(entry) !== normalizedTarget,
+        )
+      );
 
       for (const node of state.context.nodes) {
         if (normalizeTeamOwnership(node.data?.teamOwnership) === normalizedTarget) {
@@ -1664,15 +1759,6 @@ export function C4CanvasContainer() {
               SAVED DIAGRAMS
             </a>
           </nav>
-          {isAzurePanelOpen && (
-            <AzureSyncPanel
-              nodes={state.context.nodes}
-              edges={state.context.edges}
-              diagramId={state.context.currentDiagramId}
-              onApply={handleApplyAzureSync}
-            />
-          )}
-
           <div className={styles.panelHeader}>
             <ToggleButton
               isSelected={isSidebarOpen}
@@ -1726,7 +1812,7 @@ export function C4CanvasContainer() {
               </div>
               <div className={styles.ownershipLensStats}>
                 <span>{`VISIBLE::${filteredCanvas.nodes.length}N / ${filteredCanvas.edges.length}E`}</span>
-                <span>{`TEAMS::${teamDisplayByNormalized.size}`}</span>
+                <span>{`TEAMS::${ownershipTeamDisplayByNormalized.size}`}</span>
                 <span>{`CROSS-TEAM::${crossTeamEdgeCount}`}</span>
                 <span>{`UNASSIGNED::${unknownOwnershipCount}`}</span>
               </div>
@@ -1739,6 +1825,14 @@ export function C4CanvasContainer() {
                 RESET LENS
               </button>
             </section>
+          )}
+          {isAzurePanelOpen && (
+            <AzureSyncPanel
+              nodes={state.context.nodes}
+              edges={state.context.edges}
+              diagramId={state.context.currentDiagramId}
+              onApply={handleApplyAzureSync}
+            />
           )}
           {state.context.currentDomain === "c4"
             ? (
@@ -1896,6 +1990,7 @@ export function C4CanvasContainer() {
           <PropertiesPanel
             selectedNode={selectedNode}
             ownershipTeams={ownershipTeams}
+            onRegisterOwnershipTeam={handleRegisterOwnershipTeam}
             onRemoveOwnershipTeamFromBoard={handleRemoveOwnershipTeamFromBoard}
             onUpdateNode={(nodeId, updates) => send({ type: "UPDATE_NODE", nodeId, updates })}
           />

@@ -30,6 +30,7 @@ const normalizeTeamKey = (value: string): string => value.trim().toLowerCase();
 interface PropertiesPanelProps {
   selectedNode: Node<NodeData> | null;
   ownershipTeams: readonly string[];
+  onRegisterOwnershipTeam: (team: string) => void;
   onRemoveOwnershipTeamFromBoard: (team: string) => void;
   onUpdateNode: (nodeId: string, updates: Partial<NodeData>) => void;
 }
@@ -61,6 +62,7 @@ const subdomainOverrideOptions = [
 export function PropertiesPanel({
   selectedNode,
   ownershipTeams,
+  onRegisterOwnershipTeam,
   onRemoveOwnershipTeamFromBoard,
   onUpdateNode,
 }: PropertiesPanelProps) {
@@ -155,6 +157,7 @@ export function PropertiesPanel({
 
     const normalized = normalizeTeamKey(trimmed);
     const canonical = normalizedTeamMap.get(normalized) ?? trimmed;
+    onRegisterOwnershipTeam(canonical);
     onUpdateNode(selectedNode.id, { teamOwnership: canonical });
     setDraftTeamName("");
   };

@@ -34,6 +34,38 @@ export interface CouplingFormulaExplanation {
   systemicRisk: number;
 }
 
+export interface CouplingScoreContributor {
+  id:
+    | "profile"
+    | "nodeType"
+    | "integration"
+    | "subdomain"
+    | "topology"
+    | "operational"
+    | "organizational"
+    | "hybridOverrides"
+    | "manualOverrides";
+  label: string;
+  strength: number;
+  distance: number;
+  volatility: number;
+  impact: number;
+  note?: string;
+}
+
+export interface CouplingScoreProvenance {
+  mode: CouplingScoreMode;
+  modelVersion: BalancedCouplingModelVersion;
+  strategy: "legacy-v1" | "auto-derived" | "hybrid-override" | "manual-curated";
+  overrideKeys: string[];
+  taxonomyOverrides: Array<"integrationType" | "subdomainType">;
+  signals: {
+    topology: boolean;
+    operational: boolean;
+    organizational: boolean;
+  };
+}
+
 export interface ModuleCouplingSnapshot {
   id: string;
   label: string;
@@ -53,6 +85,8 @@ export interface ModuleCouplingSnapshot {
   technology?: string | undefined;
   description?: string | undefined;
   formulaExplanation?: CouplingFormulaExplanation;
+  contributors?: CouplingScoreContributor[];
+  provenance?: CouplingScoreProvenance;
 }
 
 export interface CouplingAggregateMetrics {
@@ -502,6 +536,86 @@ const toManualDimensions = ({
     volatility: overrides.volatility ?? profile.volatility,
   });
 
+const toContributor = (
+  id: CouplingScoreContributor["id"],
+  label: string,
+  dimensions: CouplingDimensions,
+  note?: string,
+): CouplingScoreContributor => {
+  const strength = round1(dimensions.strength);
+  const distance = round1(dimensions.distance);
+  const volatility = round1(dimensions.volatility);
+  const impact = round1(
+    Math.abs(strength)
+      + Math.abs(distance)
+      + Math.abs(volatility),
+  );
+
+  return {
+    id,
+    label,
+    strength,
+    distance,
+    volatility,
+    impact,
+    ...(note ? { note } : {}),
+  };
+};
+
+const toContributorDelta = (
+  from: CouplingDimensions,
+  to: CouplingDimensions,
+): CouplingDimensions => ({
+  strength: round1(to.strength - from.strength),
+  distance: round1(to.distance - from.distance),
+  volatility: round1(to.volatility - from.volatility),
+});
+
+const isNonZeroContributor = (contributor: CouplingScoreContributor): boolean => contributor.impact > 0;
+
+const sortContributors = (
+  contributors: CouplingScoreContributor[],
+): CouplingScoreContributor[] => [...contributors].sort((left, right) => right.impact - left.impact);
+
+const toProvenance = ({
+  mode,
+  modelVersion,
+  overrides,
+  includeDerivedSignals,
+}: {
+  mode: CouplingScoreMode;
+  modelVersion: BalancedCouplingModelVersion;
+  overrides: CouplingOverrides;
+  includeDerivedSignals: boolean;
+}): CouplingScoreProvenance => {
+  const taxonomyOverrides: Array<"integrationType" | "subdomainType"> = [];
+  if (overrides.integrationType !== undefined) {
+    taxonomyOverrides.push("integrationType");
+  }
+  if (overrides.subdomainType !== undefined) {
+    taxonomyOverrides.push("subdomainType");
+  }
+
+  return {
+    mode,
+    modelVersion,
+    strategy: modelVersion === "v1"
+      ? "legacy-v1"
+      : mode === "manual"
+      ? "manual-curated"
+      : mode === "hybrid"
+      ? "hybrid-override"
+      : "auto-derived",
+    overrideKeys: Object.keys(overrides),
+    taxonomyOverrides,
+    signals: {
+      topology: includeDerivedSignals,
+      operational: includeDerivedSignals,
+      organizational: includeDerivedSignals,
+    },
+  };
+};
+
 const computeVolatilityPropagation = (
   volatility: number,
   outboundCount: number,
@@ -864,6 +978,8 @@ interface SnapshotMetrics {
   systemicRisk: number;
   riskTier: RiskTier;
   formulaExplanation?: CouplingFormulaExplanation;
+  contributors?: CouplingScoreContributor[];
+  provenance: CouplingScoreProvenance;
 }
 
 interface SnapshotComputationInput {
@@ -883,6 +999,8 @@ interface SnapshotComputationInput {
 }
 
 const computeSnapshotMetricsV1 = ({
+  scoreMode,
+  overrides,
   profile,
   integrationType,
   subdomainType,
@@ -906,6 +1024,12 @@ const computeSnapshotMetricsV1 = ({
     balance,
     systemicRisk,
     riskTier: toRiskTier(systemicRisk),
+    provenance: toProvenance({
+      mode: scoreMode,
+      modelVersion: "v1",
+      overrides,
+      includeDerivedSignals: true,
+    }),
   };
 };
 
@@ -959,12 +1083,74 @@ const computeSnapshotMetricsV2 = (
   const balance = formulaExplanation.balance;
   const systemicRisk = formulaExplanation.systemicRisk;
 
+  const profileDimensions = toCouplingDimensions(input.profile);
+  const contributors: CouplingScoreContributor[] = input.scoreMode === "manual"
+    ? [
+      toContributor(
+        "profile",
+        "NODE PROFILE",
+        profileDimensions,
+        "Base coupling profile for the node.",
+      ),
+      toContributor(
+        "manualOverrides",
+        "MANUAL OVERRIDES",
+        toContributorDelta(profileDimensions, manualDimensions),
+        "Manual mode ignores derived topology/operational/organizational signals.",
+      ),
+    ]
+    : [
+      toContributor(
+        "profile",
+        "NODE PROFILE",
+        profileDimensions,
+        "Base coupling profile for the node.",
+      ),
+      toContributor("nodeType", "NODE TYPE PRESSURE", typePressure),
+      toContributor(
+        "integration",
+        "INTEGRATION PRESSURE",
+        integrationPressure,
+      ),
+      toContributor("subdomain", "SUBDOMAIN PRESSURE", subdomainPressure),
+      toContributor("topology", "TOPOLOGY PRESSURE", topologyPressure),
+      toContributor(
+        "operational",
+        "OPERATIONAL PRESSURE",
+        operationalPressure,
+      ),
+      toContributor(
+        "organizational",
+        "ORGANIZATIONAL PRESSURE",
+        organizationalPressure,
+      ),
+      ...(input.scoreMode === "hybrid"
+        ? [
+          toContributor(
+            "hybridOverrides",
+            "HYBRID OVERRIDES",
+            toContributorDelta(autoDimensions, hybridDimensions),
+            "Hybrid mode starts from derived dimensions, then applies explicit numeric overrides.",
+          ),
+        ]
+        : []),
+    ];
+
   return {
     modularity,
     balance,
     systemicRisk,
     riskTier: toRiskTier(systemicRisk),
     formulaExplanation,
+    contributors: sortContributors(
+      contributors.filter(isNonZeroContributor),
+    ),
+    provenance: toProvenance({
+      mode: input.scoreMode,
+      modelVersion: "v2",
+      overrides: input.overrides,
+      includeDerivedSignals: input.scoreMode !== "manual",
+    }),
   };
 };
 
@@ -1067,6 +1253,10 @@ export const buildModuleSnapshots = (
       ...(metrics.formulaExplanation
         ? { formulaExplanation: metrics.formulaExplanation }
         : {}),
+      ...(metrics.contributors
+        ? { contributors: metrics.contributors }
+        : {}),
+      provenance: metrics.provenance,
       volatilityPropagation,
       outboundDependencies: adjacencyEntry.outbound,
       inboundDependents: adjacencyEntry.inbound,

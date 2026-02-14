@@ -2,6 +2,7 @@ import {
   CircleDashed,
   Cube,
   GitBranch,
+  Graph,
   Hexagon,
   Scales,
   SquareHalf,
@@ -16,7 +17,7 @@ import { scaleOrdinal } from "@visx/scale";
 import { Circle, Pie } from "@visx/shape";
 import { useTooltip } from "@visx/tooltip";
 import type { Edge, Node } from "@xyflow/react";
-import { useId, useMemo } from "react";
+import { useId, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { type BalancedCouplingModel, type ModuleCouplingSnapshot, type RiskTier } from "../../core/balancedCoupling";
 import { theme } from "../../styles/theme.css";
@@ -24,10 +25,25 @@ import type { DiagramDomain } from "../machines/canvas.machine";
 import {
   mudChartCanvas,
   mudChartCard,
+  mudChartContributorList,
+  mudChartContributorMetrics,
+  mudChartContributorName,
+  mudChartContributorRow,
   mudChartCriticalWarning,
   mudChartCriticalWarningSvg,
   mudChartEmptyState,
+  mudChartExplainabilityCard,
+  mudChartExplainabilityGrid,
+  mudChartExplainabilityHeader,
+  mudChartExplainabilityItem,
+  mudChartExplainabilityLabel,
+  mudChartExplainabilityMeta,
+  mudChartExplainabilityValue,
+  mudChartFormulaLine,
   mudChartHeader,
+  mudChartHeaderTitleRow,
+  mudChartHeaderToggle,
+  mudChartHeaderToggleActive,
   mudChartLegendGroup,
   mudChartLegendLabel,
   mudChartLegendRow,
@@ -305,6 +321,7 @@ export function BalancedMudChart({
   mudAlertThreshold = 8.0,
 }: BalancedMudChartProps) {
   const model = useBalancedCouplingModel(nodes, edges, domain);
+  const [isExplainabilityVisible, setIsExplainabilityVisible] = useState(true);
   const {
     tooltipData,
     tooltipOpen,
@@ -344,6 +361,33 @@ export function BalancedMudChart({
       : null;
   }, [model.snapshots]);
 
+  const focusedSnapshot = useMemo(() => {
+    if (selectedModuleId) {
+      const selected = model.snapshots.find((snapshot) => snapshot.id === selectedModuleId);
+      if (selected) {
+        return selected;
+      }
+    }
+    return topRisk ?? model.snapshots[0] ?? null;
+  }, [model.snapshots, selectedModuleId, topRisk]);
+
+  const strategyLabel = useMemo(() => {
+    if (!focusedSnapshot?.provenance) {
+      return "LEGACY";
+    }
+    switch (focusedSnapshot.provenance.strategy) {
+      case "auto-derived":
+        return "AUTO DERIVED";
+      case "hybrid-override":
+        return "HYBRID OVERRIDE";
+      case "manual-curated":
+        return "MANUAL CURATED";
+      case "legacy-v1":
+      default:
+        return "LEGACY V1";
+    }
+  }, [focusedSnapshot?.provenance]);
+
   const subdomainCounts = useMemo(
     () =>
       model.snapshots.reduce(
@@ -373,7 +417,23 @@ export function BalancedMudChart({
     return (
       <div className={mudChartCard}>
         <div className={mudChartHeader}>
-          <h3 className={mudChartTitle}>Complexity Field</h3>
+          <div className={mudChartHeaderTitleRow}>
+            <button
+              type="button"
+              className={`${mudChartHeaderToggle} ${isExplainabilityVisible ? mudChartHeaderToggleActive : ""}`}
+              aria-pressed={isExplainabilityVisible}
+              aria-label={isExplainabilityVisible
+                ? "Hide coupling explainability panel"
+                : "Show coupling explainability panel"}
+              title={isExplainabilityVisible
+                ? "Hide coupling explainability panel"
+                : "Show coupling explainability panel"}
+              onClick={() => setIsExplainabilityVisible((visible) => !visible)}
+            >
+              <Graph size={16} weight="duotone" />
+            </button>
+            <h3 className={mudChartTitle}>Complexity Field</h3>
+          </div>
         </div>
         <div className={mudChartEmptyState}>
           [░░░░] AWAITING TACTICAL DATA INPUT
@@ -388,7 +448,23 @@ export function BalancedMudChart({
     <>
       <div className={mudChartCard}>
         <div className={mudChartHeader}>
-          <h3 className={mudChartTitle}>Complexity Field</h3>
+          <div className={mudChartHeaderTitleRow}>
+            <button
+              type="button"
+              className={`${mudChartHeaderToggle} ${isExplainabilityVisible ? mudChartHeaderToggleActive : ""}`}
+              aria-pressed={isExplainabilityVisible}
+              aria-label={isExplainabilityVisible
+                ? "Hide coupling explainability panel"
+                : "Show coupling explainability panel"}
+              title={isExplainabilityVisible
+                ? "Hide coupling explainability panel"
+                : "Show coupling explainability panel"}
+              onClick={() => setIsExplainabilityVisible((visible) => !visible)}
+            >
+              <Graph size={16} weight="duotone" />
+            </button>
+            <h3 className={mudChartTitle}>Complexity Field</h3>
+          </div>
           <p className={mudChartMeta}>
             High risk nexus: {riskLabel}
           </p>
@@ -428,6 +504,12 @@ export function BalancedMudChart({
                     <span>{tooltipData.integrationType.toUpperCase()}</span>
                     <span>•</span>
                     <span>MODE {tooltipData.scoreMode.toUpperCase()}</span>
+                    <span>•</span>
+                    <span>
+                      PROV {tooltipData.provenance?.strategy
+                        ? tooltipData.provenance.strategy.replaceAll("-", " ").toUpperCase()
+                        : "LEGACY"}
+                    </span>
                     <span>•</span>
                     <span>Risk {tooltipData.systemicRisk.toFixed(1)}</span>
                   </div>
@@ -504,6 +586,101 @@ export function BalancedMudChart({
           <span className={mudChartSummaryValue}>{subdomainCounts.generic}</span>
         </div>
       </div>
+
+      {isExplainabilityVisible && focusedSnapshot && (
+        <section
+          className={mudChartExplainabilityCard}
+          aria-label="Coupling explainability panel"
+        >
+          <h4 className={mudChartExplainabilityHeader}>
+            Explainability :: {focusedSnapshot.label}
+          </h4>
+          <p className={mudChartExplainabilityMeta}>
+            Mode {focusedSnapshot.scoreMode.toUpperCase()} :: {strategyLabel}
+          </p>
+          <div className={mudChartExplainabilityGrid}>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>Strength</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.formulaExplanation?.dimensions.strength.toFixed(1) ?? "N/A"}
+              </span>
+            </div>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>Distance</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.formulaExplanation?.dimensions.distance.toFixed(1) ?? "N/A"}
+              </span>
+            </div>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>Volatility</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.formulaExplanation?.dimensions.volatility.toFixed(1) ?? "N/A"}
+              </span>
+            </div>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>XOR Balance</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.formulaExplanation?.xorBalance.toFixed(1) ?? "N/A"}
+              </span>
+            </div>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>NOT Volatility</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.formulaExplanation?.notVolatility.toFixed(1) ?? "N/A"}
+              </span>
+            </div>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>Balance</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.balance.toFixed(1)}
+              </span>
+            </div>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>Systemic Risk</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.systemicRisk.toFixed(1)}
+              </span>
+            </div>
+            <div className={mudChartExplainabilityItem}>
+              <span className={mudChartExplainabilityLabel}>Risk Tier</span>
+              <span className={mudChartExplainabilityValue}>
+                {focusedSnapshot.riskTier.toUpperCase()}
+              </span>
+            </div>
+          </div>
+          <p className={mudChartFormulaLine}>
+            BALANCE = MAX(XOR(STRENGTH, DISTANCE), NOT(VOLATILITY))
+          </p>
+          <p className={mudChartFormulaLine}>
+            RISK = 11 - BALANCE :: PROPAGATION {focusedSnapshot.volatilityPropagation}
+          </p>
+          {focusedSnapshot.provenance && focusedSnapshot.provenance.overrideKeys.length > 0 && (
+            <p className={mudChartFormulaLine}>
+              OVERRIDES :: {focusedSnapshot.provenance.overrideKeys.join(", ").toUpperCase()}
+            </p>
+          )}
+          <div className={mudChartContributorList}>
+            {(focusedSnapshot.contributors?.length ?? 0) > 0
+              ? focusedSnapshot.contributors?.map((contributor) => (
+                <div key={contributor.id} className={mudChartContributorRow}>
+                  <span className={mudChartContributorName}>
+                    {contributor.label}
+                  </span>
+                  <span className={mudChartContributorMetrics}>
+                    S {contributor.strength.toFixed(1)} · D {contributor.distance.toFixed(1)} · V{" "}
+                    {contributor.volatility.toFixed(1)} · I {contributor.impact.toFixed(1)}
+                  </span>
+                </div>
+              ))
+              : (
+                <div className={mudChartContributorRow}>
+                  <span className={mudChartContributorName}>No contributor telemetry</span>
+                  <span className={mudChartContributorMetrics}>MODEL LEGACY</span>
+                </div>
+              )}
+          </div>
+        </section>
+      )}
 
       <div className={mudChartLegendRow}>
         <div className={mudChartLegendGroup}>

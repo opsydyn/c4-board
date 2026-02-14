@@ -18,6 +18,7 @@
 4. Azure auth, query, dry-run preview, apply merge, and Azure subgraph layout are implemented.
 5. Azure relationship extraction includes `dependsOn`, property references, and ARM parent inference.
 6. Settings System Status already includes WAL/runtime probe diagnostics but not DB file size.
+7. Ownership team catalog is now deduped and shared across node properties and ownership lens filters.
 
 ## 3) Execution Priority (Sequenced)
 
@@ -77,18 +78,22 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 
 - [x] Add editable `teamOwnership` field to node properties for C4 and DDD nodes.
 - [x] Add explicit ownership lens/filter in board UI (show by team, cross-team edges, unknown ownership).
-- [ ] Add coupling explainability panel with formula inputs and contributors per node.
-- [ ] Add score provenance rendering (auto/hybrid/manual) in chart tooltip/details.
-- [ ] Add scenario fixtures for mono-team, multi-team, and unknown-ownership architectures.
-- [ ] Add user-facing docs for coupling model, governance guidance, and review playbooks.
+- [x] Add board-level ownership team catalog with dedupe and remove workflow.
+- [x] Sync ownership lens `Team Filter` options with ownership input catalog (single source of truth).
+- [x] Add ownership lens reset action (`RESET LENS`) to restore filter defaults.
+- [x] Add coupling explainability panel with formula inputs and contributors per node.
+- [x] Add score provenance rendering (auto/hybrid/manual) in chart tooltip/details.
+- [x] Add scenario fixtures for mono-team, multi-team, and unknown-ownership architectures.
+- [x] Add user-facing docs for coupling model, governance guidance, and review playbooks.
 
 ### Acceptance Criteria
 
 1. A user can assign, edit, and persist `teamOwnership` directly from the board UI.
 2. A user can identify cross-team dependencies and ownership gaps in <= 3 interactions.
-3. Every node risk score can be explained from visible inputs and formula output.
-4. Score mode behavior is deterministic for `auto`, `hybrid`, and `manual`.
-5. No save or load regressions are introduced for existing diagrams.
+3. Team input and team filter remain synchronized with no loss of options as teams are added/removed.
+4. Every node risk score can be explained from visible inputs and formula output.
+5. Score mode behavior is deterministic for `auto`, `hybrid`, and `manual`.
+6. No save or load regressions are introduced for existing diagrams.
 
 ### Milestone B: Azure Sync Hardening + Trust (Target: 2026-04-12)
 
