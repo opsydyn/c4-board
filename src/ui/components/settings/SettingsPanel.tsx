@@ -54,6 +54,46 @@ const formatClockTime = (timestamp: number | null): string => {
   }).format(timestamp);
 };
 
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+
+const normalizeByteCount = (value: number | null): number | null => {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+  return Math.max(0, Math.round(value));
+};
+
+const resolveMegabytes = (megabytes: number | null, bytes: number | null): number | null => {
+  if (megabytes !== null && Number.isFinite(megabytes)) {
+    return Math.max(0, megabytes);
+  }
+
+  if (bytes !== null && Number.isFinite(bytes)) {
+    return Math.max(0, bytes / BYTES_PER_MEGABYTE);
+  }
+
+  return null;
+};
+
+const formatStorageStatus = (bytes: number | null, megabytes: number | null): string => {
+  const normalizedBytes = normalizeByteCount(bytes);
+  const resolvedMegabytes = resolveMegabytes(megabytes, normalizedBytes);
+
+  if (normalizedBytes === null && resolvedMegabytes === null) {
+    return "N/A";
+  }
+
+  if (normalizedBytes === null) {
+    return `${resolvedMegabytes?.toFixed(2) ?? "0.00"} MB`;
+  }
+
+  if (resolvedMegabytes === null) {
+    return `${normalizedBytes.toLocaleString()} B`;
+  }
+
+  return `${resolvedMegabytes.toFixed(2)} MB (${normalizedBytes.toLocaleString()} B)`;
+};
+
 export function SettingsPanel() {
   const { runEffect } = useDatabase();
   const dbRuntimeStatus = useDatabaseRuntimeStatus();
@@ -137,6 +177,32 @@ export function SettingsPanel() {
     }
     return dbRuntimeStatus.synchronousMode.toUpperCase();
   }, [dbRuntimeStatus.synchronousMode]);
+  const runtimeDbSizeText = useMemo(
+    () =>
+      formatStorageStatus(
+        dbRuntimeStatus.dbFileSizeBytes,
+        dbRuntimeStatus.dbFileSizeMb,
+      ),
+    [dbRuntimeStatus.dbFileSizeBytes, dbRuntimeStatus.dbFileSizeMb],
+  );
+  const runtimeWalSizeText = useMemo(
+    () =>
+      formatStorageStatus(
+        dbRuntimeStatus.walFileSizeBytes,
+        dbRuntimeStatus.walFileSizeMb,
+      ),
+    [dbRuntimeStatus.walFileSizeBytes, dbRuntimeStatus.walFileSizeMb],
+  );
+  const runtimeTotalFootprintText = useMemo(() => {
+    const dbBytes = normalizeByteCount(dbRuntimeStatus.dbFileSizeBytes);
+    const walBytes = normalizeByteCount(dbRuntimeStatus.walFileSizeBytes);
+
+    if (dbBytes === null && walBytes === null) {
+      return "N/A";
+    }
+
+    return formatStorageStatus((dbBytes ?? 0) + (walBytes ?? 0), null);
+  }, [dbRuntimeStatus.dbFileSizeBytes, dbRuntimeStatus.walFileSizeBytes]);
   const refreshAudioContextStatus = useCallback(() => {
     try {
       const currentState = Tone.getContext().state;
@@ -147,9 +213,9 @@ export function SettingsPanel() {
   }, []);
   const audioRuntimeText = useMemo(() => {
     const contextLabel = audioContextStatus.toUpperCase();
-    const chimeLabel = settings.saveChimeEnabled ? "ON" : "OFF";
-    return `CTX::${contextLabel} VOL::${Math.round(diagnosticMasterVolume * 100)}% CHIME::${chimeLabel}`;
-  }, [audioContextStatus, diagnosticMasterVolume, settings.saveChimeEnabled]);
+    const volLabel = settings.saveVolEnabled ? "ON" : "OFF";
+    return `CTX::${contextLabel} MASTER-VOL::${Math.round(diagnosticMasterVolume * 100)}% SAVE-VOL::${volLabel}`;
+  }, [audioContextStatus, diagnosticMasterVolume, settings.saveVolEnabled]);
   const canRunAudioDiagnostic = useMemo(
     () => settings.masterAudioEnabled && diagnosticMasterVolume > 0,
     [diagnosticMasterVolume, settings.masterAudioEnabled],
@@ -168,7 +234,7 @@ export function SettingsPanel() {
     }
     return diagnosticSynthRef.current;
   }, []);
-  const handleTestSaveChime = useCallback(async () => {
+  const handleTestSaveVol = useCallback(async () => {
     if (!settings.masterAudioEnabled) {
       setAudioDiagnosticMessage("AUDIO TEST BLOCKED: MASTER AUDIO IS OFF");
       return;
@@ -191,9 +257,9 @@ export function SettingsPanel() {
       synth.triggerAttackRelease("E4", "16n", now + 0.08);
       synth.triggerAttackRelease("G4", "8n", now + 0.16);
       setAudioDiagnosticMessage(
-        settings.saveChimeEnabled
+        settings.saveVolEnabled
           ? "AUDIO TEST OK"
-          : "AUDIO TEST OK (SAVE CHIME TOGGLE IS OFF)",
+          : "AUDIO TEST OK (SAVE VOL TOGGLE IS OFF)",
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -206,7 +272,7 @@ export function SettingsPanel() {
     getDiagnosticSaveSynth,
     refreshAudioContextStatus,
     settings.masterAudioEnabled,
-    settings.saveChimeEnabled,
+    settings.saveVolEnabled,
   ]);
   const runtimeConfigMismatches = useMemo<RuntimeConfigMismatch[]>(() => {
     const mismatches: RuntimeConfigMismatch[] = [];
@@ -566,7 +632,7 @@ export function SettingsPanel() {
             <article id="audio" className={styles.settingsCard}>
               <h2 className={styles.settingsCardTitle}>Audio</h2>
               <p className={styles.settingsCardDescription}>
-                Default behavior for save chimes, sirens, and global master volume.
+                Default behavior for save vol cues, sirens, and global master volume.
               </p>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
@@ -586,16 +652,16 @@ export function SettingsPanel() {
               </div>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
-                  <span>Save Chime</span>
+                  <span>Save Vol</span>
                   <span className={styles.settingsRowHint}>Canvas save events</span>
                 </div>
                 <button
                   type="button"
                   className={styles.settingsToggleControl}
-                  data-active={settings.saveChimeEnabled ? "true" : "false"}
-                  onClick={() => applyPatch({ saveChimeEnabled: !settings.saveChimeEnabled })}
+                  data-active={settings.saveVolEnabled ? "true" : "false"}
+                  onClick={() => applyPatch({ saveVolEnabled: !settings.saveVolEnabled })}
                 >
-                  {settings.saveChimeEnabled ? "ON" : "OFF"}
+                  {settings.saveVolEnabled ? "ON" : "OFF"}
                 </button>
               </div>
               <div className={styles.settingsRow}>
@@ -647,7 +713,7 @@ export function SettingsPanel() {
               </div>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
-                  <span>Save Chime Diagnostics</span>
+                  <span>Save Vol Diagnostics</span>
                   <span className={styles.settingsRowHint}>
                     Manual audio test and runtime context
                   </span>
@@ -658,11 +724,11 @@ export function SettingsPanel() {
                     type="button"
                     className={styles.settingsActionButton}
                     onClick={() => {
-                      void handleTestSaveChime();
+                      void handleTestSaveVol();
                     }}
                     disabled={!canRunAudioDiagnostic}
                   >
-                    TEST CHIME
+                    TEST VOL
                   </button>
                 </div>
               </div>
@@ -944,6 +1010,33 @@ export function SettingsPanel() {
                   </span>
                 </div>
                 <span className={styles.settingsRowValue}>{runtimeSynchronousModeText}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Database Size</span>
+                  <span className={styles.settingsRowHint}>
+                    Main SQLite file footprint
+                  </span>
+                </div>
+                <span className={styles.settingsRowValue}>{runtimeDbSizeText}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>WAL Size</span>
+                  <span className={styles.settingsRowHint}>
+                    Write-ahead log file footprint
+                  </span>
+                </div>
+                <span className={styles.settingsRowValue}>{runtimeWalSizeText}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Local Footprint</span>
+                  <span className={styles.settingsRowHint}>
+                    Database + WAL combined
+                  </span>
+                </div>
+                <span className={styles.settingsRowValue}>{runtimeTotalFootprintText}</span>
               </div>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>

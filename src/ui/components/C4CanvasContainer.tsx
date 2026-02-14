@@ -11,79 +11,68 @@
  * - Load diagram on mount or create new
  */
 
+import { CaretLeftIcon, CaretRightIcon, CaretUpIcon, CloudIcon, GearSixIcon } from "@phosphor-icons/react";
+import { emit } from "@tauri-apps/api/event";
 import { useMachine } from "@xstate/react";
+import { type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from "@xyflow/react";
+import { Duration } from "effect";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ToggleButton } from "react-aria-components";
+import * as Tone from "tone";
 import type { Actor, AnyStateMachine, StateFrom } from "xstate";
 import { waitFor } from "xstate";
-import {
-	type Connection,
-	type Edge,
-	type EdgeChange,
-	type Node,
-	type NodeChange,
-} from "@xyflow/react";
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Duration } from "effect";
-import * as Tone from "tone";
-import { canvasMachine, type CanvasEvent } from "../machines/canvas.machine";
-import {
-	createC4SaveMachine,
-	type C4SaveMode,
-	type C4SaveMachineEvent,
-	type C4SaveRequest,
-	type C4SaveSuccess,
-} from "../machines/c4-save.machine";
-import { useC4AutosaveMachine } from "../hooks/useC4AutosaveMachine";
-import { useC4NavigationMachine } from "../hooks/useC4NavigationMachine";
-import { useC4CommandsMachine } from "../hooks/useC4CommandsMachine";
-import { C4Canvas, type C4CanvasRef } from "./C4Canvas";
-import { PropertiesPanel } from "./PropertiesPanel";
-import { Toolbar } from "./Toolbar";
-import { DDDToolbar } from "./DDDToolbar";
-import { DomainToggle } from "./DomainToggle";
-import * as styles from "./styles.css";
-import { BalancedMudChart } from "./BalancedMudChart";
-import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
-import { DataBar } from "./DataBar";
-import { ExportModal } from "./ExportModal";
-import { AzureSyncPanel } from "./AzureSyncPanel";
-import { useDatabase } from "../../core/effects/useDatabase";
-import { useAppSettings } from "../../core/effects/useAppSettings";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import {
-	saveDiagram,
-	loadDiagram,
-	createNewDiagram,
-	listAllDiagrams,
-	reactFlowNodeToDb,
+  createNewDiagram,
+  listAllDiagrams,
+  loadDiagram,
+  reactFlowNodeToDb,
+  saveDiagram,
 } from "../../core/effects/canvas-persistence";
 import { patchSettings } from "../../core/effects/database";
-import type { LayoutPresetName } from "../../core/effects/layout";
-import { emit } from "@tauri-apps/api/event";
-import type { NodeData } from "../../core/effects/node-operations";
-import { ToggleButton } from "react-aria-components";
-import {
-	CaretLeftIcon,
-	CaretRightIcon,
-	CaretUpIcon,
-	GearSixIcon,
-} from "@phosphor-icons/react";
-import type { ContextMenuAction } from "../utils/contextMenu";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
+import type { LayoutPresetName } from "../../core/effects/layout";
+import type { NodeData } from "../../core/effects/node-operations";
+import { useAppSettings } from "../../core/effects/useAppSettings";
+import { useDatabase } from "../../core/effects/useDatabase";
 import { flex } from "../../styles/sprinkles.css";
+import { useC4AutosaveMachine } from "../hooks/useC4AutosaveMachine";
+import { useC4CommandsMachine } from "../hooks/useC4CommandsMachine";
+import { useC4NavigationMachine } from "../hooks/useC4NavigationMachine";
+import {
+  type C4SaveMachineEvent,
+  type C4SaveMode,
+  type C4SaveRequest,
+  type C4SaveSuccess,
+  createC4SaveMachine,
+} from "../machines/c4-save.machine";
+import { type CanvasEvent, canvasMachine } from "../machines/canvas.machine";
+import type { ContextMenuAction } from "../utils/contextMenu";
+import { AzureSyncPanel } from "./AzureSyncPanel";
+import { BalancedMudChart } from "./BalancedMudChart";
+import { C4Canvas, type C4CanvasRef } from "./C4Canvas";
+import { DataBar } from "./DataBar";
+import { DDDToolbar } from "./DDDToolbar";
+import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
+import { DomainToggle } from "./DomainToggle";
+import { ExportModal } from "./ExportModal";
+import { PropertiesPanel } from "./PropertiesPanel";
+import * as styles from "./styles.css";
+import { Toolbar } from "./Toolbar";
 
 const sidebarBrandMetaClass = flex({
-	direction: "column",
-	align: "start",
-	gap: "1",
+  direction: "column",
+  align: "start",
+  gap: "1",
 });
 
 type UseMachineParam = Parameters<typeof useMachine>[0];
 
 type UseMachineTuple<TMachine extends AnyStateMachine> = [
-	StateFrom<TMachine>,
-	Actor<TMachine>["send"],
-	Actor<TMachine>,
+  StateFrom<TMachine>,
+  Actor<TMachine>["send"],
+  Actor<TMachine>,
 ];
 
 type SaveDiagramPayload = Parameters<typeof saveDiagram>[0];
@@ -91,1575 +80,1577 @@ type SaveDiagramPayload = Parameters<typeof saveDiagram>[0];
 const AUTO_SAVE_SOUND_COOLDOWN = Duration.seconds(5);
 const SAVE_REQUEST_TIMEOUT_MS = 20_000;
 const toSaveSynthVolumeDb = (masterVolume: number): number =>
-	masterVolume <= 0
-		? -60
-		: -24 + Math.max(0, Math.min(1, masterVolume)) * 20;
+  masterVolume <= 0
+    ? -60
+    : -24 + Math.max(0, Math.min(1, masterVolume)) * 20;
 
 export function C4CanvasContainer() {
-	const [state, send, canvasActor] = useMachine(
-		canvasMachine as unknown as UseMachineParam,
-	) as unknown as UseMachineTuple<typeof canvasMachine>;
-	const { runEffect } = useDatabase();
-	const {
-		settings: appSettings,
-		isLoading: isSettingsLoading,
-		settingsV1Enabled,
-	} = useAppSettings();
-	const canvasRef = useRef<C4CanvasRef>(null);
-	const lastDiagramIdRef = useRef<string | null>(null);
-	const lastPersistedFingerprintRef = useRef<string | null>(null);
-	const seededDiagramIdRef = useRef<string | null>(null);
-	const saveSynthRef = useRef<Tone.PolySynth<Tone.Synth> | null>(null);
-	const audioReadyRef = useRef(false);
-	const lastSaveSoundAtRef = useRef(0);
-	const lastSaveChimeSkipReasonRef = useRef<string | null>(null);
-	const pageHideSaveCompletedRef = useRef(false);
-	const settingsSeededRef = useRef(false);
-	const saveRequestCounterRef = useRef(0);
-	const saveInputOverridesByRequestIdRef = useRef(
-		new Map<number, SaveDiagramPayload>(),
-	);
-	const [isSidebarOpen, setSidebarOpen] = useState(true);
-	const [isDetailsOpen, setDetailsOpen] = useState(true);
-	const [isCompactLayout, setCompactLayout] = useState(false);
-	const [isCommandBarOpen, setCommandBarOpen] = useState(true);
-	const [isDataBarOpen, setDataBarOpen] = useState(false);
-
-	useEffect(() => {
-		if (typeof window === "undefined") {
-			return;
-		}
-
-		if (!("__TAURI_INTERNALS__" in window)) {
-			return;
-		}
-
-		emit("frontend:ready").catch((error) => {
-			console.warn("⚠️ Failed to emit frontend:ready event", error);
-		});
-	}, []);
-
-	const primeSaveAudio = useCallback(async (): Promise<boolean> => {
-		if (!appSettings.masterAudioEnabled || !appSettings.saveChimeEnabled) {
-			audioReadyRef.current = false;
-			return false;
-		}
-
-		try {
-			const context = Tone.getContext();
-			if (context.state !== "running") {
-				await Tone.start();
-			}
-			audioReadyRef.current = Tone.getContext().state === "running";
-			return audioReadyRef.current;
-		} catch {
-			audioReadyRef.current = false;
-			return false;
-		}
-	}, [appSettings.masterAudioEnabled, appSettings.saveChimeEnabled]);
-
-	useEffect(() => {
-		if (typeof window === "undefined") {
-			return;
-		}
-
-		const handleFirstInteraction = () => {
-			void primeSaveAudio();
-		};
-
-		window.addEventListener("pointerdown", handleFirstInteraction, {
-			once: true,
-		});
-		window.addEventListener("keydown", handleFirstInteraction, {
-			once: true,
-		});
-
-		return () => {
-			window.removeEventListener("pointerdown", handleFirstInteraction);
-			window.removeEventListener("keydown", handleFirstInteraction);
-		};
-	}, [primeSaveAudio]);
-
-	const getSaveSynth = useCallback((): Tone.PolySynth<Tone.Synth> => {
-		if (!saveSynthRef.current) {
-			saveSynthRef.current = new Tone.PolySynth(Tone.Synth, {
-				volume: toSaveSynthVolumeDb(appSettings.masterVolume),
-				oscillator: { type: "triangle8" },
-				envelope: {
-					attack: 0.006,
-					decay: 0.2,
-					sustain: 0.12,
-					release: 0.3,
-				},
-			}).toDestination();
-		}
-
-		return saveSynthRef.current;
-	}, [appSettings.masterVolume]);
-
-	useEffect(() => {
-		if (!saveSynthRef.current) {
-			return;
-		}
-
-		saveSynthRef.current.volume.value = toSaveSynthVolumeDb(
-			appSettings.masterVolume,
-		);
-	}, [appSettings.masterVolume]);
-
-	const playSaveChime = useCallback(
-		async (mode: C4SaveMode): Promise<void> => {
-			try {
-				const skipReason = !appSettings.masterAudioEnabled
-					? "master-audio-disabled"
-					: !appSettings.saveChimeEnabled
-					? "save-chime-disabled"
-					: appSettings.masterVolume <= 0
-					? "master-volume-zero"
-					: null;
-
-				if (skipReason !== null) {
-					if (lastSaveChimeSkipReasonRef.current !== skipReason) {
-						console.info(`🔇 Save chime skipped: ${skipReason}`);
-						lastSaveChimeSkipReasonRef.current = skipReason;
-					}
-					return;
-				}
-
-				const nowMs = Date.now();
-				if (
-					mode === "auto" &&
-					Duration.lessThan(
-						Duration.millis(nowMs - lastSaveSoundAtRef.current),
-						AUTO_SAVE_SOUND_COOLDOWN,
-					)
-				) {
-					return;
-				}
-
-				const ready = await primeSaveAudio();
-				if (!ready) {
-					if (lastSaveChimeSkipReasonRef.current !== "audio-not-ready") {
-						console.info("🔇 Save chime skipped: audio-not-ready");
-						lastSaveChimeSkipReasonRef.current = "audio-not-ready";
-					}
-					return;
-				}
-
-				const synth = getSaveSynth();
-				const now = Tone.now();
-				synth.triggerAttackRelease("C4", "16n", now);
-				synth.triggerAttackRelease("E4", "16n", now + 0.08);
-				synth.triggerAttackRelease("G4", "8n", now + 0.16);
-				lastSaveSoundAtRef.current = nowMs;
-				lastSaveChimeSkipReasonRef.current = null;
-			} catch (error) {
-				console.warn("⚠️ Save chime failed", error);
-			}
-		},
-		[
-			appSettings.masterAudioEnabled,
-			appSettings.saveChimeEnabled,
-			appSettings.masterVolume,
-			getSaveSynth,
-			primeSaveAudio,
-		],
-	);
-
-	const getLatestContext = useCallback(() => {
-		return canvasActor.getSnapshot().context;
-	}, [canvasActor]);
-
-	const buildSaveInput = useCallback((): SaveDiagramPayload | null => {
-		const context = getLatestContext();
-		if (!context.currentDiagramId) {
-			return null;
-		}
-
-		const saveInput: SaveDiagramPayload = {
-			id: context.currentDiagramId,
-			name: context.diagramName,
-			nodes: context.nodes,
-			edges: context.edges,
-		};
-
-		if (context.diagramDescription) {
-			saveInput.description = context.diagramDescription;
-		}
-
-		return saveInput;
-	}, [getLatestContext]);
-
-	const createSaveFingerprint = useCallback((input: SaveDiagramPayload): string => {
-		const normalizedNodes = input.nodes
-			.map((node) => {
-				const dbNode = reactFlowNodeToDb(node, input.id);
-				return {
-					id: dbNode.id,
-					domain: dbNode.domain,
-					type: dbNode.type,
-					label: dbNode.label,
-					technology: dbNode.technology ?? null,
-					description: dbNode.description ?? null,
-					positionX: dbNode.position_x,
-					positionY: dbNode.position_y,
-					width: dbNode.width ?? null,
-					height: dbNode.height ?? null,
-					parentId: dbNode.parent_id ?? null,
-					extent: dbNode.extent ?? null,
-					expandParent: dbNode.expand_parent ?? false,
-					iconId: dbNode.icon_id ?? null,
-				};
-			})
-			.sort((a, b) => a.id.localeCompare(b.id));
-
-		const normalizedEdges = input.edges
-			.map((edge) => {
-				const edgeData =
-					typeof edge.data === "object" && edge.data !== null
-						? (edge.data as { metadata?: unknown })
-						: undefined;
-				const metadataValue = edgeData?.metadata;
-				const metadata =
-					metadataValue === undefined || metadataValue === null
-						? null
-						: JSON.stringify(metadataValue);
-
-				return {
-					id: edge.id,
-					source: edge.source,
-					target: edge.target,
-					label: typeof edge.label === "string" ? edge.label : null,
-					metadata,
-				};
-			})
-			.sort((a, b) => a.id.localeCompare(b.id));
-
-		return JSON.stringify({
-			id: input.id,
-			name: input.name,
-			description: input.description ?? null,
-			nodes: normalizedNodes,
-			edges: normalizedEdges,
-		});
-	}, []);
-
-	const flushPendingInlineEdits = useCallback(async (): Promise<void> => {
-		if (typeof document === "undefined") {
-			return;
-		}
-
-		const activeElement = document.activeElement;
-		if (activeElement instanceof HTMLElement && activeElement !== document.body) {
-			activeElement.blur();
-			await new Promise<void>((resolve) => {
-				setTimeout(resolve, 0);
-			});
-			await new Promise<void>((resolve) => {
-				requestAnimationFrame(() => resolve());
-			});
-		}
-	}, []);
-
-	const persistSingleSave = useCallback(
-		async (request: C4SaveRequest): Promise<C4SaveSuccess> => {
-			const mode = request.mode;
-			const overriddenInput = saveInputOverridesByRequestIdRef.current.get(
-				request.id,
-			);
-			saveInputOverridesByRequestIdRef.current.delete(request.id);
-			const saveInput = overriddenInput ?? buildSaveInput();
-			if (!saveInput) {
-				if (mode === "manual") {
-					console.warn("No diagram to save");
-				}
-
-				return {
-					requestId: request.id,
-					mode,
-					saved: false,
-					savedAt: null,
-				};
-			}
-
-			const fingerprint = createSaveFingerprint(saveInput);
-			if (mode === "auto" && fingerprint === lastPersistedFingerprintRef.current) {
-				return {
-					requestId: request.id,
-					mode,
-					saved: false,
-					savedAt: null,
-				};
-			}
-
-			send({ type: mode === "manual" ? "SAVE_DIAGRAM" : "AUTO_SAVE" });
-
-			try {
-				const saveResult = await runEffect(saveDiagram(saveInput));
-				const savedAt =
-					typeof saveResult === "object" &&
-					saveResult !== null &&
-					"savedAt" in saveResult &&
-					typeof saveResult.savedAt === "number"
-						? saveResult.savedAt
-						: Date.now();
-
-				lastPersistedFingerprintRef.current = fingerprint;
-				seededDiagramIdRef.current = saveInput.id;
-				send({ type: "SAVE_SUCCESS" });
-				void playSaveChime(mode);
-				if (mode === "manual") {
-					console.log("✅ Saved diagram");
-				}
-
-				return {
-					requestId: request.id,
-					mode,
-					saved: true,
-					savedAt,
-				};
-			} catch (error) {
-				// Effect's FiberFailure wraps the actual error — extract it for better diagnostics
-				const causeMessage = typeof error === "object" && error !== null && "cause" in error
-					? String((error as { cause: unknown }).cause)
-					: undefined;
-				const errorMessage = error instanceof Error
-					? (causeMessage ? `${error.message} — ${causeMessage}` : error.message)
-					: "Save failed";
-				console.error(
-					mode === "manual" ? "❌ Save failed:" : "❌ Auto-save failed:",
-					error,
-				);
-				send({
-					type: "SAVE_ERROR",
-					error: errorMessage,
-				});
-				throw {
-					requestId: request.id,
-					message: errorMessage,
-					cause: error,
-				};
-			}
-		},
-		[buildSaveInput, createSaveFingerprint, playSaveChime, runEffect, send],
-	);
-
-	const saveMachine = useMemo(
-		() =>
-			createC4SaveMachine({
-				persistRequest: persistSingleSave,
-			}),
-		[persistSingleSave],
-	);
-
-	const [saveSnapshot, , saveActorRef] = useMachine(saveMachine);
-	const sendSaveEvent = useCallback(
-		(event: C4SaveMachineEvent) => {
-			saveActorRef.send(event);
-		},
-		[saveActorRef],
-	);
-
-	const requestSave = useCallback(
-		async (
-			mode: C4SaveMode,
-			options?: { overrideInput?: SaveDiagramPayload },
-		): Promise<boolean> => {
-			const requestId = saveRequestCounterRef.current + 1;
-			saveRequestCounterRef.current = requestId;
-			if (options?.overrideInput) {
-				saveInputOverridesByRequestIdRef.current.set(
-					requestId,
-					options.overrideInput,
-				);
-			}
-
-			sendSaveEvent({
-				type: "REQUEST_SAVE",
-				request: {
-					id: requestId,
-					mode,
-				},
-			});
-
-			try {
-				const completed = await waitFor(
-					saveActorRef,
-					(snapshot) => snapshot.context.lastCompletedRequestId === requestId,
-					{ timeout: SAVE_REQUEST_TIMEOUT_MS },
-				);
-				saveInputOverridesByRequestIdRef.current.delete(requestId);
-
-				return completed.context.lastCompletedOk;
-			} catch (error) {
-				saveInputOverridesByRequestIdRef.current.delete(requestId);
-				console.error("❌ Save request timed out or was interrupted", error);
-				send({
-					type: "SAVE_ERROR",
-					error: "Save request timed out before completion",
-				});
-				return false;
-			}
-		},
-		[saveActorRef, send, sendSaveEvent],
-	);
-
-	const requestManualSave = useCallback(
-		() => requestSave("manual"),
-		[requestSave],
-	);
-	const requestAutoSave = useCallback(() => requestSave("auto"), [requestSave]);
-	const handleBeforeNavigate = useCallback((didSave: boolean) => {
-		pageHideSaveCompletedRef.current = didSave;
-	}, []);
-
-	const navigationMachineOptions = useMemo(
-		() => ({
-			saveOnNavigate: appSettings.saveOnNavigate,
-			flushPendingInlineEdits,
-			requestManualSave,
-			beforeNavigate: handleBeforeNavigate,
-		}),
-		[
-			appSettings.saveOnNavigate,
-			flushPendingInlineEdits,
-			handleBeforeNavigate,
-			requestManualSave,
-		],
-	);
-
-	const { navigationTarget, navigateWithSave, handleNavigateWithSave } =
-		useC4NavigationMachine(navigationMachineOptions);
-
-	const autosaveMachineOptions = useMemo(
-		() => ({
-			isSettingsLoading,
-			autosaveEnabled: appSettings.autosaveEnabled,
-			autosaveIntervalMs: appSettings.autosaveIntervalMs,
-			currentDiagramId: state.context.currentDiagramId,
-			diagramName: state.context.diagramName,
-			diagramDescription: state.context.diagramDescription,
-			nodes: state.context.nodes,
-			edges: state.context.edges,
-			requestAutoSave,
-		}),
-		[
-			appSettings.autosaveEnabled,
-			appSettings.autosaveIntervalMs,
-			isSettingsLoading,
-			requestAutoSave,
-			state.context.currentDiagramId,
-			state.context.diagramDescription,
-			state.context.diagramName,
-			state.context.edges,
-			state.context.nodes,
-		],
-	);
-
-	const { cancelAutosave } = useC4AutosaveMachine(autosaveMachineOptions);
-
-	const seedPersistedFingerprintFromDiagram = useCallback(
-		(diagram: {
-			id: string;
-			name: string;
-			description?: string | null | undefined;
-			nodes: Node[];
-			edges: Edge[];
-			savedAt?: number;
-		}) => {
-			const saveInput: SaveDiagramPayload = {
-				id: diagram.id,
-				name: diagram.name,
-				nodes: diagram.nodes,
-				edges: diagram.edges,
-			};
-
-			if (diagram.description) {
-				saveInput.description = diagram.description;
-			}
-
-			lastPersistedFingerprintRef.current = createSaveFingerprint(saveInput);
-			seededDiagramIdRef.current = diagram.id;
-				sendSaveEvent({
-					type: "SYNC_LAST_SAVED_AT",
-					savedAt: diagram.savedAt ?? null,
-				});
-				saveInputOverridesByRequestIdRef.current.clear();
-				sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
-				cancelAutosave();
-			},
-			[cancelAutosave, createSaveFingerprint, sendSaveEvent],
-		);
-
-	// Initialize: Load most recent diagram or create new one
-	useEffect(() => {
-		const initializeDiagram = async () => {
-			try {
-				// Check for load query parameter
-				const urlParams = new URLSearchParams(window.location.search);
-				const loadDiagramId = urlParams.get("load");
-
-				if (loadDiagramId) {
-					// Load specific diagram from URL
-					const diagram = await runEffect(loadDiagram(loadDiagramId));
-					const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
-						type: "LOAD_DIAGRAM_SUCCESS",
-						diagram: {
-							id: diagram.id,
-							name: diagram.name,
-							nodes: diagram.nodes,
-							edges: diagram.edges,
-							updatedAt: diagram.updatedAt,
-							...(diagram.description ? { description: diagram.description } : {}),
-						},
-					};
-					send(loadEvent);
-					seedPersistedFingerprintFromDiagram({
-						id: diagram.id,
-						name: diagram.name,
-						description: diagram.description,
-						nodes: diagram.nodes,
-						edges: diagram.edges,
-						savedAt: diagram.updatedAt,
-					});
-					// Clear the query parameter
-					window.history.replaceState({}, "", "/");
-					return;
-				}
-
-				// Load diagrams from database (single source of truth)
-				const diagrams = await runEffect(listAllDiagrams());
-
-				if (diagrams.length > 0) {
-					// Load all diagrams with their content to determine which to use
-					const diagramsWithContent = await Promise.all(
-						diagrams.map(async (meta) => {
-							const full = await runEffect(loadDiagram(meta.id));
-							return {
-								...meta,
-								nodeCount: full.nodes.length,
-								edgeCount: full.edges.length,
-								fullDiagram: full,
-							};
-						}),
-					);
-
-					// IDIOMATIC TAURI: Query database to find best diagram
-					// Prioritize: diagrams with content > most recent
-					const diagramToLoad = diagramsWithContent
-						.sort((a, b) => {
-							// First: diagrams with nodes/edges
-							const aHasContent = a.nodeCount > 0 || a.edgeCount > 0 ? 1 : 0;
-							const bHasContent = b.nodeCount > 0 || b.edgeCount > 0 ? 1 : 0;
-							if (aHasContent !== bHasContent) {
-								return bHasContent - aHasContent;
-							}
-							// Then: most recently updated
-							return b.updatedAt - a.updatedAt;
-						})[0];
-
-					if (!diagramToLoad) {
-						throw new Error("No diagram found");
-					}
-
-					const diagram = diagramToLoad.fullDiagram;
-
-					console.log(
-						"📂 Loaded diagram:",
-						diagram.id,
-						"with",
-						diagram.nodes.length,
-						"nodes,",
-						diagram.edges.length,
-						"edges",
-					);
-
-					// Send success event to update state and trigger re-render
-					const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
-						type: "LOAD_DIAGRAM_SUCCESS",
-						diagram: {
-							id: diagram.id,
-							name: diagram.name,
-							nodes: diagram.nodes,
-							edges: diagram.edges,
-							updatedAt: diagram.updatedAt,
-							...(diagram.description ? { description: diagram.description } : {}),
-						},
-					};
-					send(loadEvent);
-					seedPersistedFingerprintFromDiagram({
-						id: diagram.id,
-						name: diagram.name,
-						description: diagram.description,
-						nodes: diagram.nodes,
-						edges: diagram.edges,
-						savedAt: diagram.updatedAt,
-					});
-				} else {
-					// No diagrams exist, create a new one
-					const diagram = await runEffect(
-						createNewDiagram("My First Diagram", "Getting started with C4"),
-					);
-
-					console.log("📝 Created new diagram:", diagram.id);
-
-					const createEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
-						type: "LOAD_DIAGRAM_SUCCESS",
-						diagram: {
-							id: diagram.id,
-							name: diagram.name,
-							nodes: [],
-							edges: [],
-							updatedAt: diagram.createdAt,
-							...(diagram.description ? { description: diagram.description } : {}),
-						},
-					};
-					send(createEvent);
-					seedPersistedFingerprintFromDiagram({
-						id: diagram.id,
-						name: diagram.name,
-						description: diagram.description,
-						nodes: [],
-						edges: [],
-						savedAt: diagram.createdAt,
-					});
-				}
-			} catch (error) {
-				console.error("⚠️ Failed to initialize diagram:", error);
-				// Create new diagram on error
-				const diagram = await runEffect(
-					createNewDiagram("DIAGRAM::UNTITLED"),
-				);
-
-				send({
-					type: "LOAD_DIAGRAM_SUCCESS",
-					diagram: {
-						id: diagram.id,
-						name: diagram.name,
-						nodes: [],
-						edges: [],
-						updatedAt: diagram.createdAt,
-					},
-				});
-				seedPersistedFingerprintFromDiagram({
-					id: diagram.id,
-					name: diagram.name,
-					nodes: [],
-					edges: [],
-					savedAt: diagram.createdAt,
-				});
-			}
-		};
-
-		initializeDiagram();
-	}, [runEffect, seedPersistedFingerprintFromDiagram, send]);
-
-	// Handle explicit save action
-	const handleSave = useCallback(async () => {
-		await primeSaveAudio();
-		await flushPendingInlineEdits();
-		await requestSave("manual");
-	}, [flushPendingInlineEdits, primeSaveAudio, requestSave]);
-
-	const handleLoadDiagram = useCallback(async (diagramId: string) => {
-		try {
-			const diagram = await runEffect(loadDiagram(diagramId));
-			send({
-				type: "LOAD_DIAGRAM_SUCCESS",
-				diagram: {
-					id: diagram.id,
-					name: diagram.name,
-					nodes: diagram.nodes,
-					edges: diagram.edges,
-					updatedAt: diagram.updatedAt,
-					...(diagram.description ? { description: diagram.description } : {}),
-				},
-			});
-			seedPersistedFingerprintFromDiagram({
-				id: diagram.id,
-				name: diagram.name,
-				description: diagram.description,
-				nodes: diagram.nodes,
-				edges: diagram.edges,
-				savedAt: diagram.updatedAt,
-			});
-			setDataBarOpen(false);
-		} catch (error) {
-			console.error("❌ Failed to load diagram:", error);
-		}
-	}, [runEffect, seedPersistedFingerprintFromDiagram, send]);
-
-	const handleApplyAzureSync = useCallback(
-		async (dryRun: AzureSyncDryRunOutput) => {
-			const currentDiagramId = state.context.currentDiagramId;
-			if (!currentDiagramId) {
-				throw new Error("No active diagram loaded for Azure sync apply.");
-			}
-
-			await flushPendingInlineEdits();
-
-			const merged = mergeAzureMappedGraphIntoCanvas({
-				nodes: state.context.nodes,
-				edges: state.context.edges,
-				mapped: dryRun.mapped,
-				syncedAt: dryRun.snapshot.collectedAt,
-			});
-
-			const saveInput: SaveDiagramPayload = {
-				id: currentDiagramId,
-				name: state.context.diagramName,
-				nodes: merged.nodes,
-				edges: merged.edges,
-			};
-
-			if (state.context.diagramDescription) {
-				saveInput.description = state.context.diagramDescription;
-			}
-
-			const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
-				type: "LOAD_DIAGRAM_SUCCESS",
-				diagram: {
-					id: currentDiagramId,
-					name: state.context.diagramName,
-					nodes: merged.nodes,
-					edges: merged.edges,
-					updatedAt:
-						saveSnapshot.context.lastSavedAt
-						?? state.context.lastSaved
-						?? Date.now(),
-					...(state.context.diagramDescription
-						? { description: state.context.diagramDescription }
-						: {}),
-				},
-			};
-			send(loadEvent);
-
-			const didSave = await requestSave("manual", {
-				overrideInput: saveInput,
-			});
-
-			if (!didSave) {
-				const saveError = saveActorRef.getSnapshot().context.errorMessage;
-				const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
-				throw new Error(`Azure sync apply save failed: ${detail}`);
-			}
-
-			console.log(
-				"☁️ Azure sync applied:",
-				dryRun.result.runId,
-				`nodes +${dryRun.result.delta.nodesToCreate} ~${dryRun.result.delta.nodesToUpdate} -${dryRun.result.delta.nodesToArchive}`,
-				`edges +${dryRun.result.delta.edgesToCreate} ~${dryRun.result.delta.edgesToUpdate} -${dryRun.result.delta.edgesToArchive}`,
-			);
-		},
-		[
-			flushPendingInlineEdits,
-			requestSave,
-			saveSnapshot.context.lastSavedAt,
-			send,
-			state.context.currentDiagramId,
-			state.context.diagramDescription,
-			state.context.diagramName,
-			state.context.edges,
-			state.context.lastSaved,
-			state.context.nodes,
-		],
-	);
-
-	// Handle node position/selection changes from ReactFlow
-	const onNodesChange = useCallback(
-		(changes: NodeChange[]) => {
-			send({ type: "NODES_CHANGED", changes });
-		},
-		[send],
-	);
-
-	// Handle edge changes from ReactFlow
-	const onEdgesChange = useCallback(
-		(changes: EdgeChange[]) => {
-			// Send event to XState machine - let it handle the logic
-			send({ type: "EDGES_CHANGED", changes });
-		},
-		[send],
-	);
-
-	// Handle new connections between nodes
-	const onConnect = useCallback(
-		(connection: Connection) => {
-			if (!connection.source || !connection.target) {
-				return;
-			}
-
-			send({
-				type: "CONNECT_NODES",
-				source: connection.source,
-				target: connection.target,
-			});
-		},
-		[send],
-	);
-
-	// Handle node clicks for selection
-	const onNodeClick = useCallback(
-		(_event: React.MouseEvent, node: Node) => {
-			send({ type: "SELECT_NODE", nodeId: node.id });
-		},
-		[send],
-	);
-
-	// Handle edge label updates
-	const onUpdateEdgeLabel = useCallback(
-		(edgeId: string, label: string) => {
-			send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
-		},
-		[send],
-	);
-
-	// Handle edge metadata updates
-	const onUpdateEdgeMetadata = useCallback(
-		(edgeId: string, label: string, metadata: EdgeMetadata) => {
-			// First update label
-			send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
-			// Then update metadata
-			send({ type: "UPDATE_EDGE_METADATA", edgeId, metadata });
-		},
-		[send],
-	);
-
-	// Handle context menu actions
-	const onContextMenuAction = useCallback(
-		(action: ContextMenuAction, nodeId?: string, edgeId?: string) => {
-			switch (action.type) {
-				case "edit":
-					if (nodeId) {
-						send({ type: "SELECT_NODE", nodeId });
-					}
-					break;
-
-				case "duplicate":
-					if (nodeId) {
-						send({ type: "DUPLICATE_NODE", nodeId });
-					}
-					break;
-
-				case "delete":
-					if (nodeId) {
-						send({ type: "DELETE_NODE", nodeId });
-					}
-					break;
-
-				case "change-type":
-					if (nodeId) {
-						send({ type: "CHANGE_NODE_TYPE", nodeId, nodeType: action.nodeType });
-					}
-					break;
-
-				case "add-node":
-					send({
-						type: "ADD_NODE_AT_POSITION",
-						nodeType: action.nodeType,
-						position: action.position ?? { x: 100, y: 100 },
-					});
-					break;
-
-				case "auto-layout":
-					send({ type: "AUTO_LAYOUT" });
-					break;
-
-				case "export":
-					// Open export modal - use current viewport
-					if (canvasRef.current) {
-						send({ type: "EXPORT_PLANTUML" });
-					}
-					break;
-
-				case "edit-label":
-					if (edgeId) {
-						send({ type: "UPDATE_EDGE_LABEL", edgeId, label: "" });
-					}
-					break;
-
-				case "change-edge-style":
-					if (edgeId) {
-						send({ type: "CHANGE_EDGE_STYLE", edgeId, style: action.style });
-					}
-					break;
-
-				case "reverse-direction":
-					if (edgeId) {
-						send({ type: "REVERSE_EDGE_DIRECTION", edgeId });
-					}
-					break;
-
-				case "delete-edge":
-					if (edgeId) {
-						send({ type: "DELETE_EDGE", edgeId });
-					}
-					break;
-
-				case "paste":
-					// TODO: Implement paste functionality
-					console.log("Paste action not yet implemented");
-					break;
-
-				case "add-connected":
-					// TODO: Implement add connected node
-					console.log("Add connected node not yet implemented");
-					break;
-			}
-		},
-		[send],
-	);
-
-	// Enrich nodes with onUpdate callback for inline editing
-	const enrichedNodes = useMemo(() => {
-		return state.context.nodes.map((node: Node<NodeData>) => ({
-			...node,
-			data: {
-				...node.data,
-				onUpdate: (updates: Partial<NodeData>) => {
-					send({ type: "UPDATE_NODE", nodeId: node.id, updates });
-				},
-			},
-		}));
-	}, [state.context.nodes, send]);
-
-	const handleNewBoard = useCallback(async () => {
-		try {
-			// Send CREATE_NEW_BOARD event to transition to creatingDiagram state
-			send({ type: "CREATE_NEW_BOARD" });
-
-			const diagram = await runEffect(createNewDiagram("DIAGRAM::UNTITLED"));
-
-			send({
-				type: "LOAD_DIAGRAM_SUCCESS",
-				diagram: {
-					id: diagram.id,
-					name: diagram.name,
-					nodes: diagram.nodes,
-					edges: diagram.edges,
-					updatedAt: diagram.updatedAt,
-					...(diagram.description ? { description: diagram.description } : {}),
-				},
-			});
-			seedPersistedFingerprintFromDiagram({
-				id: diagram.id,
-				name: diagram.name,
-				description: diagram.description,
-				nodes: diagram.nodes,
-				edges: diagram.edges,
-				savedAt: diagram.updatedAt,
-			});
-
-			console.log("📝 Created new board:", diagram.id);
-		} catch (error) {
-			console.error("❌ New board creation failed:", error);
-		}
-	}, [runEffect, seedPersistedFingerprintFromDiagram, send]);
-
-	// Establish a persisted baseline whenever the active diagram changes.
-	useEffect(() => {
-		const currentDiagramId = state.context.currentDiagramId;
-		if (!currentDiagramId) {
-				seededDiagramIdRef.current = null;
-				lastPersistedFingerprintRef.current = null;
-				saveInputOverridesByRequestIdRef.current.clear();
-				sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
-				sendSaveEvent({ type: "SYNC_LAST_SAVED_AT", savedAt: null });
-				cancelAutosave();
-				return;
-			}
-
-		if (seededDiagramIdRef.current === currentDiagramId) {
-			return;
-		}
-
-		const saveInput = buildSaveInput();
-		if (!saveInput) {
-			return;
-		}
-
-			lastPersistedFingerprintRef.current = createSaveFingerprint(saveInput);
-			seededDiagramIdRef.current = currentDiagramId;
-			saveInputOverridesByRequestIdRef.current.clear();
-			sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
-			cancelAutosave();
-		}, [
-			buildSaveInput,
-			cancelAutosave,
-			createSaveFingerprint,
-			sendSaveEvent,
-			state.context.currentDiagramId,
-		]);
-
-	// Debounced autosave for meaningful persisted changes only.
-	useEffect(() => {
-		if (isSettingsLoading) {
-			return;
-		}
-
-		if (settingsSeededRef.current) {
-			return;
-		}
-
-		settingsSeededRef.current = true;
-		if (state.context.animationsEnabled !== appSettings.animationsEnabled) {
-			send({ type: "TOGGLE_ANIMATIONS" });
-		}
-	}, [
-		appSettings.animationsEnabled,
-		isSettingsLoading,
-		send,
-		state.context.animationsEnabled,
-	]);
-
-	useEffect(() => {
-		return () => {
-			saveSynthRef.current?.dispose();
-			saveSynthRef.current = null;
-		};
-	}, []);
-
-	useEffect(() => {
-		if (!navigationTarget) {
-			pageHideSaveCompletedRef.current = false;
-		}
-	}, [navigationTarget]);
-
-	useEffect(() => {
-		const handlePageHide = () => {
-			if (pageHideSaveCompletedRef.current || !appSettings.saveOnNavigate) {
-				return;
-			}
-			void requestSave("manual");
-		};
-
-		window.addEventListener("pagehide", handlePageHide);
-		return () => window.removeEventListener("pagehide", handlePageHide);
-	}, [appSettings.saveOnNavigate, requestSave]);
-
-	const handleToggleAnimations = useCallback(() => {
-		const nextAnimationsEnabled = !state.context.animationsEnabled;
-		send({ type: "TOGGLE_ANIMATIONS" });
-		if (!settingsV1Enabled) {
-			return;
-		}
-		void runEffect(
-			patchSettings({ animationsEnabled: nextAnimationsEnabled }),
-		).catch((error) => {
-			console.warn("⚠️ Failed to persist animation preference", error);
-		});
-		if (
-			nextAnimationsEnabled &&
-			appSettings.masterAudioEnabled &&
-			appSettings.saveChimeEnabled
-		) {
-			void primeSaveAudio();
-		}
-	}, [
-		appSettings.masterAudioEnabled,
-		appSettings.saveChimeEnabled,
-		primeSaveAudio,
-		runEffect,
-		send,
-		settingsV1Enabled,
-		state.context.animationsEnabled,
-	]);
-	const saveChimeStatus = useMemo(() => {
-		if (!appSettings.masterAudioEnabled) {
-			return {
-				label: "CHIME::OFF (MASTER)",
-				hint: "Enable Master Audio in Settings > Audio",
-			};
-		}
-
-		if (!appSettings.saveChimeEnabled) {
-			return {
-				label: "CHIME::OFF (GLOBAL)",
-				hint: "Enable Save Chime in Settings > Audio",
-			};
-		}
-
-		if (appSettings.masterVolume <= 0) {
-			return {
-				label: "CHIME::MUTED (VOL 0)",
-				hint: "Raise Master Volume above 0% in Settings > Audio",
-			};
-		}
-
-		return {
-			label: `CHIME::ON (${Math.round(appSettings.masterVolume * 100)}%)`,
-			hint: "Chime level is controlled by Settings > Audio Master Volume",
-		};
-	}, [
-		appSettings.masterAudioEnabled,
-		appSettings.masterVolume,
-		appSettings.saveChimeEnabled,
-	]);
-
-	// Handle auto-layout action
-	const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
-		send({ type: "AUTO_LAYOUT", preset });
-		requestAnimationFrame(() => {
-			canvasRef.current?.fitViewToGraph();
-		});
-		console.log(`🎯 Auto-layout applied: ${preset}`);
-	}, [send]);
-
-	// Handle auto-layout selected nodes
-	const handleAutoLayoutSelected = useCallback((preset: LayoutPresetName) => {
-		send({ type: "AUTO_LAYOUT_SELECTED", preset });
-		requestAnimationFrame(() => {
-			canvasRef.current?.fitViewToGraph();
-		});
-		console.log(`🎯 Auto-layout (selected) applied: ${preset}`);
-	}, [send]);
-
-	const handleCommandAddPerson = useCallback(() => {
-		send({ type: "ADD_PERSON" });
-	}, [send]);
-	const handleCommandAddSystem = useCallback(() => {
-		send({ type: "ADD_SYSTEM" });
-	}, [send]);
-	const handleCommandAddExternal = useCallback(() => {
-		send({ type: "ADD_EXTERNAL_SYSTEM" });
-	}, [send]);
-	const handleCommandAddContainer = useCallback(() => {
-		send({ type: "ADD_CONTAINER" });
-	}, [send]);
-	const handleCommandAddComponent = useCallback(() => {
-		send({ type: "ADD_COMPONENT" });
-	}, [send]);
-	const handleCommandAutoLayout = useCallback(() => {
-		handleAutoLayout("command");
-	}, [handleAutoLayout]);
-	const handleCommandAutoLayoutSelected = useCallback(() => {
-		handleAutoLayoutSelected("command");
-	}, [handleAutoLayoutSelected]);
-
-	const commandsMachineOptions = useMemo(
-		() => ({
-			onSave: handleSave,
-			onNewBoard: handleNewBoard,
-			onAddPerson: handleCommandAddPerson,
-			onAddSystem: handleCommandAddSystem,
-			onAddExternal: handleCommandAddExternal,
-			onAddContainer: handleCommandAddContainer,
-			onAddComponent: handleCommandAddComponent,
-			onAutoLayout: handleCommandAutoLayout,
-			onAutoLayoutSelected: handleCommandAutoLayoutSelected,
-		}),
-		[
-			handleCommandAddComponent,
-			handleCommandAddContainer,
-			handleCommandAddExternal,
-			handleCommandAddPerson,
-			handleCommandAddSystem,
-			handleCommandAutoLayout,
-			handleCommandAutoLayoutSelected,
-			handleNewBoard,
-			handleSave,
-		],
-	);
-
-	useC4CommandsMachine(commandsMachineOptions);
-
-	// Get selected node object (cast to Node<NodeData> since our nodes always have NodeData)
-	const selectedNode = (state.context.nodes.find(
-		(n: { id: string }) => n.id === state.context.selectedNodeId,
-	) as Node<NodeData> | undefined) || null;
-
-	// Handle node selection from search
-	const handleSelectNode = useCallback(
-		(nodeId: string) => {
-			send({ type: "SELECT_NODE", nodeId });
-			// Pan and zoom to the selected node
-			canvasRef.current?.fitViewToNode(nodeId);
-		},
-		[send],
-	);
-
-	// Fit view whenever a new diagram is loaded
-	useEffect(() => {
-		const currentId = state.context.currentDiagramId;
-		if (!currentId) {
-			return;
-		}
-
-		const hasChanged = lastDiagramIdRef.current !== currentId;
-		const hasNodes = state.context.nodes.length > 0;
-
-		if (hasChanged) {
-			lastDiagramIdRef.current = currentId;
-			if (hasNodes) {
-				requestAnimationFrame(() => {
-					canvasRef.current?.fitViewToGraph();
-				});
-			}
-		}
-	}, [state.context.currentDiagramId, state.context.nodes.length]);
-
-	// Re-fit diagram when viewport size changes
-	useEffect(() => {
-		if (state.context.nodes.length === 0) {
-			return;
-		}
-
-		const handleResize = () => {
-			canvasRef.current?.fitViewToGraph();
-		};
-
-		window.addEventListener("resize", handleResize);
-		return () => window.removeEventListener("resize", handleResize);
-	}, [state.context.nodes.length]);
-
-	useEffect(() => {
-		if (state.context.nodes.length === 0) {
-			return;
-		}
-		canvasRef.current?.fitViewToGraph();
-	}, [isSidebarOpen, isDetailsOpen, state.context.nodes.length]);
-
-	useEffect(() => {
-		if (typeof window === "undefined" || !window.matchMedia) {
-			return;
-		}
-
-		const media = window.matchMedia("(max-width: 1200px)");
-		const update = (matches: boolean) => {
-			setCompactLayout(matches);
-			if (matches) {
-				setDetailsOpen(false);
-			}
-		};
-
-		update(media.matches);
-
-		const listener = (event: MediaQueryListEvent) => update(event.matches);
-		media.addEventListener("change", listener);
-		return () => media.removeEventListener("change", listener);
-	}, []);
-
-	const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
-	const rightTrack =
-		!isCompactLayout && isDetailsOpen ? "minmax(300px, 360px)" : "0px";
-	const rowTrack = isDataBarOpen ? "1fr auto" : "1fr";
-	const navigationLabel = useMemo(() => {
-		switch (navigationTarget) {
-			case "/postee":
-				return "LOADING POSTEE WORKSPACE";
-			case "/saved-diagrams":
-				return "LOADING SAVED DIAGRAMS";
-			case "/settings":
-				return "LOADING GLOBAL SETTINGS";
-			case "/splashscreen":
-				return "LOADING OPSYDYN SPLASHSCREEN";
-			default:
-				return "LOADING NEXT WORKSPACE";
-		}
-	}, [navigationTarget]);
-
-	return (
-		<div
-			className={styles.workspace}
-			style={{
-				gridTemplateColumns: `${leftTrack} 1fr ${rightTrack}`,
-				gridTemplateRows: rowTrack,
-			}}
-		>
-			{isSidebarOpen && (
-				<aside className={styles.sidebarColumn} aria-label="Toolbar panel">
-					<div className={styles.sidebarBrand}>
-						<span className={styles.sidebarBrandIdentity}>
-							<img
-								src="/app-icon.png"
-								alt="C4 Canvas"
-								className={styles.sidebarBrandIcon}
-								width={50}
-								height={50}
-							/>
-							<span className={sidebarBrandMetaClass}>
-								<span>OPSYDYN HUD::9000</span>
-								<span>V1.0.0</span>
-							</span>
-						</span>
-						<a
-							className={styles.sidebarBrandAction}
-							href="/settings"
-							aria-label="Open global settings"
-							title="Open global settings"
-							onClick={(event) => {
-								void handleNavigateWithSave(event, "/settings");
-							}}
-						>
-							<GearSixIcon size={16} weight="duotone" />
-						</a>
-						</div>
-						<p className={styles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
-						<nav className={styles.sidebarQuickActions} aria-label="Workspace shortcuts">
-							<a
-								className={styles.sidebarQuickActionLink}
-								href="/splashscreen"
-							onClick={(event) => {
-								void handleNavigateWithSave(event, "/splashscreen");
-							}}
-						>
-							VISIT OPSYDYN
-						</a>
-						<a
-							className={styles.sidebarQuickActionLink}
-							href="/postee"
-							onClick={(event) => {
-								void handleNavigateWithSave(event, "/postee");
-							}}
-						>
-							USE POSTEE
-						</a>
-						<a
-							className={styles.sidebarQuickActionLink}
-							href="/saved-diagrams"
-							onClick={(event) => {
-								void handleNavigateWithSave(event, "/saved-diagrams");
-							}}
-							>
-								SAVED DIAGRAMS
-							</a>
-						</nav>
-						{state.context.currentDomain === "c4" && (
-							<AzureSyncPanel
-								nodes={state.context.nodes}
-								edges={state.context.edges}
-								diagramId={state.context.currentDiagramId}
-								onApply={handleApplyAzureSync}
-							/>
-						)}
-
-						<div className={styles.panelHeader}>
-							<ToggleButton
-								isSelected={isSidebarOpen}
-								onChange={setSidebarOpen}
-							className={styles.collapseToggle}
-							aria-label="Collapse left panel"
-						>
-							<CaretLeftIcon size={16} weight="bold" />
-							ESC
-						</ToggleButton>
-						<DomainToggle
-							currentDomain={state.context.currentDomain}
-							onDomainChange={(domain) => send({ type: "SET_DOMAIN", domain })}
-						/>
-					</div>
-					{state.context.currentDomain === "c4" ? (
-						<Toolbar
-							onAddPerson={() => send({ type: "ADD_PERSON" })}
-							onAddSystem={() => send({ type: "ADD_SYSTEM" })}
-							onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
-							onAddContainer={() => send({ type: "ADD_CONTAINER" })}
-							onAddComponent={() => send({ type: "ADD_COMPONENT" })}
-							onSave={handleSave}
-							onNewBoard={handleNewBoard}
-								onAutoLayout={handleAutoLayout}
-								onAutoLayoutSelected={handleAutoLayoutSelected}
-								onOpenSavedDiagrams={() => {
-									void navigateWithSave("/saved-diagrams");
-								}}
-								onSessionNameChange={(name) =>
-									send({ type: "UPDATE_SESSION_NAME", name })
-								}
-							onDiagramNameChange={(name) =>
-								send({ type: "UPDATE_DIAGRAM_NAME", name })
-							}
-								sessionName={state.context.sessionName}
-								isSaving={state.context.isSaving}
-								lastSaved={saveSnapshot.context.lastSavedAt ?? state.context.lastSaved}
-								diagramName={state.context.diagramName}
-								onToggleAnimations={handleToggleAnimations}
-								animationsEnabled={state.context.animationsEnabled}
-								saveError={state.context.saveError}
-								saveChimeStatusLabel={saveChimeStatus.label}
-								saveChimeStatusHint={saveChimeStatus.hint}
-								{...(state.context.currentLayout && {
-									currentLayout: state.context.currentLayout,
-								})}
-						/>
-					) : (
-						<DDDToolbar
-							onAddBoundedContext={() => send({ type: "ADD_BOUNDED_CONTEXT" })}
-							onAddAggregate={() => send({ type: "ADD_AGGREGATE" })}
-							onAddDomainEvent={() => send({ type: "ADD_DOMAIN_EVENT" })}
-							onAddEntity={() => send({ type: "ADD_ENTITY" })}
-							onAddValueObject={() => send({ type: "ADD_VALUE_OBJECT" })}
-							onAddDomainService={() => send({ type: "ADD_DOMAIN_SERVICE" })}
-							onAddRepository={() => send({ type: "ADD_REPOSITORY" })}
-							onAddFactory={() => send({ type: "ADD_FACTORY" })}
-							onAddCommand={() => send({ type: "ADD_COMMAND" })}
-							onAddQuery={() => send({ type: "ADD_QUERY" })}
-							onAddApplicationService={() => send({ type: "ADD_APPLICATION_SERVICE" })}
-							onAddIntegrationEvent={() => send({ type: "ADD_INTEGRATION_EVENT" })}
-							onAddACL={() => send({ type: "ADD_ACL" })}
-							onAddSaga={() => send({ type: "ADD_SAGA" })}
-							onSave={handleSave}
-							onNewBoard={handleNewBoard}
-								onAutoLayout={handleAutoLayout}
-								onAutoLayoutSelected={handleAutoLayoutSelected}
-								onOpenSavedDiagrams={() => {
-									void navigateWithSave("/saved-diagrams");
-								}}
-								onSessionNameChange={(name) =>
-									send({ type: "UPDATE_SESSION_NAME", name })
-								}
-							onDiagramNameChange={(name) =>
-								send({ type: "UPDATE_DIAGRAM_NAME", name })
-							}
-								sessionName={state.context.sessionName}
-								isSaving={state.context.isSaving}
-								lastSaved={saveSnapshot.context.lastSavedAt ?? state.context.lastSaved}
-								diagramName={state.context.diagramName}
-								onToggleAnimations={handleToggleAnimations}
-								animationsEnabled={state.context.animationsEnabled}
-								saveError={state.context.saveError}
-								saveChimeStatusLabel={saveChimeStatus.label}
-								saveChimeStatusHint={saveChimeStatus.hint}
-								{...(state.context.currentLayout && {
-									currentLayout: state.context.currentLayout,
-								})}
-						/>
-					)}
-					<DiagramEvolutionChart
-						nodes={state.context.nodes}
-						edges={state.context.edges}
-						domain={state.context.currentDomain}
-					/>
-				</aside>
-			)}
-
-			<section className={styles.canvasRegion}>
-				<C4Canvas
-					ref={canvasRef}
-					nodes={enrichedNodes}
-					edges={state.context.edges}
-					onNodesChange={onNodesChange}
-					onEdgesChange={onEdgesChange}
-					onConnect={onConnect}
-					onNodeClick={onNodeClick}
-					onUpdateEdgeLabel={onUpdateEdgeLabel}
-					onUpdateEdgeMetadata={onUpdateEdgeMetadata}
-					isCommandBarOpen={isCommandBarOpen}
-					onToggleCommandBar={setCommandBarOpen}
-					onSelectNode={handleSelectNode}
-					onExportPlantUML={(viewport) => send({ type: "EXPORT_PLANTUML", viewport })}
-					onExportMermaid={(viewport) => send({ type: "EXPORT_MERMAID", viewport })}
-					onImportDiagram={(content, format, mode) =>
-						send({ type: "IMPORT_DIAGRAM", content, format, mode })
-					}
-					viewportToApply={state.context.viewport}
-					onContextMenuAction={onContextMenuAction}
-					animationsEnabled={state.context.animationsEnabled}
-				/>
-				{!isSidebarOpen && (
-					<ToggleButton
-						isSelected={isSidebarOpen}
-						onChange={setSidebarOpen}
-						className={styles.collapseHandleLeft}
-						aria-label="Expand left panel"
-					>
-						<CaretRightIcon size={16} weight="bold" />
-					</ToggleButton>
-				)}
-				{!isCompactLayout && !isDetailsOpen && (
-					<ToggleButton
-						isSelected={isDetailsOpen}
-						onChange={setDetailsOpen}
-						className={styles.collapseHandleRight}
-						aria-label="Expand right panel"
-					>
-						<CaretLeftIcon size={16} weight="bold" />
-					</ToggleButton>
-				)}
-				{!isDataBarOpen && (
-					<ToggleButton
-						isSelected={isDataBarOpen}
-						onChange={(selected) => setDataBarOpen(selected)}
-						className={styles.bottomHandle}
-						aria-label="Expand data bar"
-					>
-						<CaretUpIcon size={16} weight="bold" />
-					</ToggleButton>
-				)}
-			</section>
-
-			{!isCompactLayout && isDetailsOpen && (
-				<aside className={styles.detailsColumn} aria-label="Properties panel">
-					<div className={styles.panelHeader}>
-						<ToggleButton
-							isSelected={isDetailsOpen}
-							onChange={setDetailsOpen}
-							className={styles.collapseToggle}
-							aria-label="Collapse right panel"
-						>
-							<CaretRightIcon size={16} weight="bold" />
-							ESC
-						</ToggleButton>
-					</div>
-					<BalancedMudChart
-						nodes={state.context.nodes}
-						edges={state.context.edges}
-						selectedModuleId={selectedNode?.id ?? null}
-						onSelectModule={handleSelectNode}
-						domain={state.context.currentDomain}
-						mudAlertThreshold={appSettings.bigBallOfMudAlertThreshold}
-					/>
-					<PropertiesPanel
-						selectedNode={selectedNode}
-						onUpdateNode={(nodeId, updates) =>
-							send({ type: "UPDATE_NODE", nodeId, updates })
-						}
-					/>
-				</aside>
-			)}
-
-				{isDataBarOpen && (
-					<DataBar
-						isOpen={isDataBarOpen}
-						onToggle={setDataBarOpen}
-						onLoadDiagram={handleLoadDiagram}
-					/>
-				)}
-				{navigationTarget && (
-					<div className={styles.navigationOverlay} role="status" aria-live="polite">
-						<div
-							className={styles.navigationOverlayCard}
-							style={
-								state.context.animationsEnabled
-									? undefined
-									: { animation: "none" }
-							}
-						>
-							<div
-								className={styles.navigationOverlayScanline}
-								aria-hidden="true"
-								style={
-									state.context.animationsEnabled
-										? undefined
-										: { display: "none" }
-								}
-							/>
-							<h1 className={styles.navigationOverlayTitle}>
-								OPSYDYN // PRECISION TOOLS
-							</h1>
-							<p className={styles.navigationOverlayStep}>SYNCING BOARD STATE</p>
-							<p className={styles.navigationOverlayTarget}>{navigationLabel}</p>
-						</div>
-					</div>
-				)}
-
-				{/* Export Modal */}
-				<ExportModal
-				isOpen={state.context.exportModalOpen}
-				exportedCode={state.context.exportedCode}
-				exportFormat={state.context.exportFormat}
-				diagramName={state.context.diagramName}
-				onClose={() => send({ type: "CLOSE_EXPORT_MODAL" })}
-			/>
-		</div>
-	);
+  const [state, send, canvasActor] = useMachine(
+    canvasMachine as unknown as UseMachineParam,
+  ) as unknown as UseMachineTuple<typeof canvasMachine>;
+  const { runEffect } = useDatabase();
+  const {
+    settings: appSettings,
+    isLoading: isSettingsLoading,
+    settingsV1Enabled,
+  } = useAppSettings();
+  const canvasRef = useRef<C4CanvasRef>(null);
+  const lastDiagramIdRef = useRef<string | null>(null);
+  const lastPersistedFingerprintRef = useRef<string | null>(null);
+  const seededDiagramIdRef = useRef<string | null>(null);
+  const saveSynthRef = useRef<Tone.PolySynth<Tone.Synth> | null>(null);
+  const audioReadyRef = useRef(false);
+  const lastSaveSoundAtRef = useRef(0);
+  const lastSaveVolSkipReasonRef = useRef<string | null>(null);
+  const pageHideSaveCompletedRef = useRef(false);
+  const settingsSeededRef = useRef(false);
+  const saveRequestCounterRef = useRef(0);
+  const saveInputOverridesByRequestIdRef = useRef(
+    new Map<number, SaveDiagramPayload>(),
+  );
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isDetailsOpen, setDetailsOpen] = useState(true);
+  const [isCompactLayout, setCompactLayout] = useState(false);
+  const [isCommandBarOpen, setCommandBarOpen] = useState(true);
+  const [isDataBarOpen, setDataBarOpen] = useState(false);
+  const [isAzurePanelOpen, setAzurePanelOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!("__TAURI_INTERNALS__" in window)) {
+      return;
+    }
+
+    emit("frontend:ready").catch((error) => {
+      console.warn("⚠️ Failed to emit frontend:ready event", error);
+    });
+  }, []);
+
+  const primeSaveAudio = useCallback(async (): Promise<boolean> => {
+    if (!appSettings.masterAudioEnabled || !appSettings.saveVolEnabled) {
+      audioReadyRef.current = false;
+      return false;
+    }
+
+    try {
+      const context = Tone.getContext();
+      if (context.state !== "running") {
+        await Tone.start();
+      }
+      audioReadyRef.current = Tone.getContext().state === "running";
+      return audioReadyRef.current;
+    } catch {
+      audioReadyRef.current = false;
+      return false;
+    }
+  }, [appSettings.masterAudioEnabled, appSettings.saveVolEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleFirstInteraction = () => {
+      void primeSaveAudio();
+    };
+
+    window.addEventListener("pointerdown", handleFirstInteraction, {
+      once: true,
+    });
+    window.addEventListener("keydown", handleFirstInteraction, {
+      once: true,
+    });
+
+    return () => {
+      window.removeEventListener("pointerdown", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
+  }, [primeSaveAudio]);
+
+  const getSaveSynth = useCallback((): Tone.PolySynth<Tone.Synth> => {
+    if (!saveSynthRef.current) {
+      saveSynthRef.current = new Tone.PolySynth(Tone.Synth, {
+        volume: toSaveSynthVolumeDb(appSettings.masterVolume),
+        oscillator: { type: "triangle8" },
+        envelope: {
+          attack: 0.006,
+          decay: 0.2,
+          sustain: 0.12,
+          release: 0.3,
+        },
+      }).toDestination();
+    }
+
+    return saveSynthRef.current;
+  }, [appSettings.masterVolume]);
+
+  useEffect(() => {
+    if (!saveSynthRef.current) {
+      return;
+    }
+
+    saveSynthRef.current.volume.value = toSaveSynthVolumeDb(
+      appSettings.masterVolume,
+    );
+  }, [appSettings.masterVolume]);
+
+  const playSaveVol = useCallback(
+    async (mode: C4SaveMode): Promise<void> => {
+      try {
+        const skipReason = !appSettings.masterAudioEnabled
+          ? "master-audio-disabled"
+          : !appSettings.saveVolEnabled
+          ? "save-vol-disabled"
+          : appSettings.masterVolume <= 0
+          ? "master-volume-zero"
+          : null;
+
+        if (skipReason !== null) {
+          if (lastSaveVolSkipReasonRef.current !== skipReason) {
+            console.info(`🔇 Save vol skipped: ${skipReason}`);
+            lastSaveVolSkipReasonRef.current = skipReason;
+          }
+          return;
+        }
+
+        const nowMs = Date.now();
+        if (
+          mode === "auto"
+          && Duration.lessThan(
+            Duration.millis(nowMs - lastSaveSoundAtRef.current),
+            AUTO_SAVE_SOUND_COOLDOWN,
+          )
+        ) {
+          return;
+        }
+
+        const ready = await primeSaveAudio();
+        if (!ready) {
+          if (lastSaveVolSkipReasonRef.current !== "audio-not-ready") {
+            console.info("🔇 Save vol skipped: audio-not-ready");
+            lastSaveVolSkipReasonRef.current = "audio-not-ready";
+          }
+          return;
+        }
+
+        const synth = getSaveSynth();
+        const now = Tone.now();
+        synth.triggerAttackRelease("C4", "16n", now);
+        synth.triggerAttackRelease("E4", "16n", now + 0.08);
+        synth.triggerAttackRelease("G4", "8n", now + 0.16);
+        lastSaveSoundAtRef.current = nowMs;
+        lastSaveVolSkipReasonRef.current = null;
+      } catch (error) {
+        console.warn("⚠️ Save vol failed", error);
+      }
+    },
+    [
+      appSettings.masterAudioEnabled,
+      appSettings.saveVolEnabled,
+      appSettings.masterVolume,
+      getSaveSynth,
+      primeSaveAudio,
+    ],
+  );
+
+  const getLatestContext = useCallback(() => {
+    return canvasActor.getSnapshot().context;
+  }, [canvasActor]);
+
+  const buildSaveInput = useCallback((): SaveDiagramPayload | null => {
+    const context = getLatestContext();
+    if (!context.currentDiagramId) {
+      return null;
+    }
+
+    const saveInput: SaveDiagramPayload = {
+      id: context.currentDiagramId,
+      name: context.diagramName,
+      nodes: context.nodes,
+      edges: context.edges,
+    };
+
+    if (context.diagramDescription) {
+      saveInput.description = context.diagramDescription;
+    }
+
+    return saveInput;
+  }, [getLatestContext]);
+
+  const createSaveFingerprint = useCallback((input: SaveDiagramPayload): string => {
+    const normalizedNodes = input.nodes
+      .map((node) => {
+        const dbNode = reactFlowNodeToDb(node, input.id);
+        return {
+          id: dbNode.id,
+          domain: dbNode.domain,
+          type: dbNode.type,
+          label: dbNode.label,
+          technology: dbNode.technology ?? null,
+          description: dbNode.description ?? null,
+          positionX: dbNode.position_x,
+          positionY: dbNode.position_y,
+          width: dbNode.width ?? null,
+          height: dbNode.height ?? null,
+          parentId: dbNode.parent_id ?? null,
+          extent: dbNode.extent ?? null,
+          expandParent: dbNode.expand_parent ?? false,
+          iconId: dbNode.icon_id ?? null,
+        };
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    const normalizedEdges = input.edges
+      .map((edge) => {
+        const edgeData = typeof edge.data === "object" && edge.data !== null
+          ? (edge.data as { metadata?: unknown })
+          : undefined;
+        const metadataValue = edgeData?.metadata;
+        const metadata = metadataValue === undefined || metadataValue === null
+          ? null
+          : JSON.stringify(metadataValue);
+
+        return {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          label: typeof edge.label === "string" ? edge.label : null,
+          metadata,
+        };
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    return JSON.stringify({
+      id: input.id,
+      name: input.name,
+      description: input.description ?? null,
+      nodes: normalizedNodes,
+      edges: normalizedEdges,
+    });
+  }, []);
+
+  const flushPendingInlineEdits = useCallback(async (): Promise<void> => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && activeElement !== document.body) {
+      activeElement.blur();
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    }
+  }, []);
+
+  const persistSingleSave = useCallback(
+    async (request: C4SaveRequest): Promise<C4SaveSuccess> => {
+      const mode = request.mode;
+      const overriddenInput = saveInputOverridesByRequestIdRef.current.get(
+        request.id,
+      );
+      saveInputOverridesByRequestIdRef.current.delete(request.id);
+      const saveInput = overriddenInput ?? buildSaveInput();
+      if (!saveInput) {
+        if (mode === "manual") {
+          console.warn("No diagram to save");
+        }
+
+        return {
+          requestId: request.id,
+          mode,
+          saved: false,
+          savedAt: null,
+        };
+      }
+
+      const fingerprint = createSaveFingerprint(saveInput);
+      if (mode === "auto" && fingerprint === lastPersistedFingerprintRef.current) {
+        return {
+          requestId: request.id,
+          mode,
+          saved: false,
+          savedAt: null,
+        };
+      }
+
+      send({ type: mode === "manual" ? "SAVE_DIAGRAM" : "AUTO_SAVE" });
+
+      try {
+        const saveResult = await runEffect(saveDiagram(saveInput));
+        const savedAt = typeof saveResult === "object"
+            && saveResult !== null
+            && "savedAt" in saveResult
+            && typeof saveResult.savedAt === "number"
+          ? saveResult.savedAt
+          : Date.now();
+
+        lastPersistedFingerprintRef.current = fingerprint;
+        seededDiagramIdRef.current = saveInput.id;
+        send({ type: "SAVE_SUCCESS" });
+        void playSaveVol(mode);
+        if (mode === "manual") {
+          console.log("✅ Saved diagram");
+        }
+
+        return {
+          requestId: request.id,
+          mode,
+          saved: true,
+          savedAt,
+        };
+      } catch (error) {
+        // Effect's FiberFailure wraps the actual error — extract it for better diagnostics
+        const causeMessage = typeof error === "object" && error !== null && "cause" in error
+          ? String((error as { cause: unknown }).cause)
+          : undefined;
+        const errorMessage = error instanceof Error
+          ? (causeMessage ? `${error.message} — ${causeMessage}` : error.message)
+          : "Save failed";
+        console.error(
+          mode === "manual" ? "❌ Save failed:" : "❌ Auto-save failed:",
+          error,
+        );
+        send({
+          type: "SAVE_ERROR",
+          error: errorMessage,
+        });
+        throw {
+          requestId: request.id,
+          message: errorMessage,
+          cause: error,
+        };
+      }
+    },
+    [buildSaveInput, createSaveFingerprint, playSaveVol, runEffect, send],
+  );
+
+  const saveMachine = useMemo(
+    () =>
+      createC4SaveMachine({
+        persistRequest: persistSingleSave,
+      }),
+    [persistSingleSave],
+  );
+
+  const [saveSnapshot, , saveActorRef] = useMachine(saveMachine);
+  const sendSaveEvent = useCallback(
+    (event: C4SaveMachineEvent) => {
+      saveActorRef.send(event);
+    },
+    [saveActorRef],
+  );
+
+  const requestSave = useCallback(
+    async (
+      mode: C4SaveMode,
+      options?: { overrideInput?: SaveDiagramPayload },
+    ): Promise<boolean> => {
+      const requestId = saveRequestCounterRef.current + 1;
+      saveRequestCounterRef.current = requestId;
+      if (options?.overrideInput) {
+        saveInputOverridesByRequestIdRef.current.set(
+          requestId,
+          options.overrideInput,
+        );
+      }
+
+      sendSaveEvent({
+        type: "REQUEST_SAVE",
+        request: {
+          id: requestId,
+          mode,
+        },
+      });
+
+      try {
+        const completed = await waitFor(
+          saveActorRef,
+          (snapshot) => snapshot.context.lastCompletedRequestId === requestId,
+          { timeout: SAVE_REQUEST_TIMEOUT_MS },
+        );
+        saveInputOverridesByRequestIdRef.current.delete(requestId);
+
+        return completed.context.lastCompletedOk;
+      } catch (error) {
+        saveInputOverridesByRequestIdRef.current.delete(requestId);
+        console.error("❌ Save request timed out or was interrupted", error);
+        send({
+          type: "SAVE_ERROR",
+          error: "Save request timed out before completion",
+        });
+        return false;
+      }
+    },
+    [saveActorRef, send, sendSaveEvent],
+  );
+
+  const requestManualSave = useCallback(
+    () => requestSave("manual"),
+    [requestSave],
+  );
+  const requestAutoSave = useCallback(() => requestSave("auto"), [requestSave]);
+  const handleBeforeNavigate = useCallback((didSave: boolean) => {
+    pageHideSaveCompletedRef.current = didSave;
+  }, []);
+
+  const navigationMachineOptions = useMemo(
+    () => ({
+      saveOnNavigate: appSettings.saveOnNavigate,
+      flushPendingInlineEdits,
+      requestManualSave,
+      beforeNavigate: handleBeforeNavigate,
+    }),
+    [
+      appSettings.saveOnNavigate,
+      flushPendingInlineEdits,
+      handleBeforeNavigate,
+      requestManualSave,
+    ],
+  );
+
+  const { navigationTarget, navigateWithSave, handleNavigateWithSave } = useC4NavigationMachine(
+    navigationMachineOptions,
+  );
+
+  const autosaveMachineOptions = useMemo(
+    () => ({
+      isSettingsLoading,
+      autosaveEnabled: appSettings.autosaveEnabled,
+      autosaveIntervalMs: appSettings.autosaveIntervalMs,
+      currentDiagramId: state.context.currentDiagramId,
+      diagramName: state.context.diagramName,
+      diagramDescription: state.context.diagramDescription,
+      nodes: state.context.nodes,
+      edges: state.context.edges,
+      requestAutoSave,
+    }),
+    [
+      appSettings.autosaveEnabled,
+      appSettings.autosaveIntervalMs,
+      isSettingsLoading,
+      requestAutoSave,
+      state.context.currentDiagramId,
+      state.context.diagramDescription,
+      state.context.diagramName,
+      state.context.edges,
+      state.context.nodes,
+    ],
+  );
+
+  const { cancelAutosave } = useC4AutosaveMachine(autosaveMachineOptions);
+
+  const seedPersistedFingerprintFromDiagram = useCallback(
+    (diagram: {
+      id: string;
+      name: string;
+      description?: string | null | undefined;
+      nodes: Node[];
+      edges: Edge[];
+      savedAt?: number;
+    }) => {
+      const saveInput: SaveDiagramPayload = {
+        id: diagram.id,
+        name: diagram.name,
+        nodes: diagram.nodes,
+        edges: diagram.edges,
+      };
+
+      if (diagram.description) {
+        saveInput.description = diagram.description;
+      }
+
+      lastPersistedFingerprintRef.current = createSaveFingerprint(saveInput);
+      seededDiagramIdRef.current = diagram.id;
+      sendSaveEvent({
+        type: "SYNC_LAST_SAVED_AT",
+        savedAt: diagram.savedAt ?? null,
+      });
+      saveInputOverridesByRequestIdRef.current.clear();
+      sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
+      cancelAutosave();
+    },
+    [cancelAutosave, createSaveFingerprint, sendSaveEvent],
+  );
+
+  // Initialize: Load most recent diagram or create new one
+  useEffect(() => {
+    const initializeDiagram = async () => {
+      try {
+        // Check for load query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const loadDiagramId = urlParams.get("load");
+
+        if (loadDiagramId) {
+          // Load specific diagram from URL
+          const diagram = await runEffect(loadDiagram(loadDiagramId));
+          const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+            type: "LOAD_DIAGRAM_SUCCESS",
+            diagram: {
+              id: diagram.id,
+              name: diagram.name,
+              nodes: diagram.nodes,
+              edges: diagram.edges,
+              updatedAt: diagram.updatedAt,
+              ...(diagram.description ? { description: diagram.description } : {}),
+            },
+          };
+          send(loadEvent);
+          seedPersistedFingerprintFromDiagram({
+            id: diagram.id,
+            name: diagram.name,
+            description: diagram.description,
+            nodes: diagram.nodes,
+            edges: diagram.edges,
+            savedAt: diagram.updatedAt,
+          });
+          // Clear the query parameter
+          window.history.replaceState({}, "", "/");
+          return;
+        }
+
+        // Load diagrams from database (single source of truth)
+        const diagrams = await runEffect(listAllDiagrams());
+
+        if (diagrams.length > 0) {
+          // Load all diagrams with their content to determine which to use
+          const diagramsWithContent = await Promise.all(
+            diagrams.map(async (meta) => {
+              const full = await runEffect(loadDiagram(meta.id));
+              return {
+                ...meta,
+                nodeCount: full.nodes.length,
+                edgeCount: full.edges.length,
+                fullDiagram: full,
+              };
+            }),
+          );
+
+          // IDIOMATIC TAURI: Query database to find best diagram
+          // Prioritize: diagrams with content > most recent
+          const diagramToLoad = diagramsWithContent
+            .sort((a, b) => {
+              // First: diagrams with nodes/edges
+              const aHasContent = a.nodeCount > 0 || a.edgeCount > 0 ? 1 : 0;
+              const bHasContent = b.nodeCount > 0 || b.edgeCount > 0 ? 1 : 0;
+              if (aHasContent !== bHasContent) {
+                return bHasContent - aHasContent;
+              }
+              // Then: most recently updated
+              return b.updatedAt - a.updatedAt;
+            })[0];
+
+          if (!diagramToLoad) {
+            throw new Error("No diagram found");
+          }
+
+          const diagram = diagramToLoad.fullDiagram;
+
+          console.log(
+            "📂 Loaded diagram:",
+            diagram.id,
+            "with",
+            diagram.nodes.length,
+            "nodes,",
+            diagram.edges.length,
+            "edges",
+          );
+
+          // Send success event to update state and trigger re-render
+          const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+            type: "LOAD_DIAGRAM_SUCCESS",
+            diagram: {
+              id: diagram.id,
+              name: diagram.name,
+              nodes: diagram.nodes,
+              edges: diagram.edges,
+              updatedAt: diagram.updatedAt,
+              ...(diagram.description ? { description: diagram.description } : {}),
+            },
+          };
+          send(loadEvent);
+          seedPersistedFingerprintFromDiagram({
+            id: diagram.id,
+            name: diagram.name,
+            description: diagram.description,
+            nodes: diagram.nodes,
+            edges: diagram.edges,
+            savedAt: diagram.updatedAt,
+          });
+        } else {
+          // No diagrams exist, create a new one
+          const diagram = await runEffect(
+            createNewDiagram("My First Diagram", "Getting started with C4"),
+          );
+
+          console.log("📝 Created new diagram:", diagram.id);
+
+          const createEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+            type: "LOAD_DIAGRAM_SUCCESS",
+            diagram: {
+              id: diagram.id,
+              name: diagram.name,
+              nodes: [],
+              edges: [],
+              updatedAt: diagram.createdAt,
+              ...(diagram.description ? { description: diagram.description } : {}),
+            },
+          };
+          send(createEvent);
+          seedPersistedFingerprintFromDiagram({
+            id: diagram.id,
+            name: diagram.name,
+            description: diagram.description,
+            nodes: [],
+            edges: [],
+            savedAt: diagram.createdAt,
+          });
+        }
+      } catch (error) {
+        console.error("⚠️ Failed to initialize diagram:", error);
+        // Create new diagram on error
+        const diagram = await runEffect(
+          createNewDiagram("DIAGRAM::UNTITLED"),
+        );
+
+        send({
+          type: "LOAD_DIAGRAM_SUCCESS",
+          diagram: {
+            id: diagram.id,
+            name: diagram.name,
+            nodes: [],
+            edges: [],
+            updatedAt: diagram.createdAt,
+          },
+        });
+        seedPersistedFingerprintFromDiagram({
+          id: diagram.id,
+          name: diagram.name,
+          nodes: [],
+          edges: [],
+          savedAt: diagram.createdAt,
+        });
+      }
+    };
+
+    initializeDiagram();
+  }, [runEffect, seedPersistedFingerprintFromDiagram, send]);
+
+  // Handle explicit save action
+  const handleSave = useCallback(async () => {
+    await primeSaveAudio();
+    await flushPendingInlineEdits();
+    await requestSave("manual");
+  }, [flushPendingInlineEdits, primeSaveAudio, requestSave]);
+
+  const handleLoadDiagram = useCallback(async (diagramId: string) => {
+    try {
+      const diagram = await runEffect(loadDiagram(diagramId));
+      send({
+        type: "LOAD_DIAGRAM_SUCCESS",
+        diagram: {
+          id: diagram.id,
+          name: diagram.name,
+          nodes: diagram.nodes,
+          edges: diagram.edges,
+          updatedAt: diagram.updatedAt,
+          ...(diagram.description ? { description: diagram.description } : {}),
+        },
+      });
+      seedPersistedFingerprintFromDiagram({
+        id: diagram.id,
+        name: diagram.name,
+        description: diagram.description,
+        nodes: diagram.nodes,
+        edges: diagram.edges,
+        savedAt: diagram.updatedAt,
+      });
+      setDataBarOpen(false);
+    } catch (error) {
+      console.error("❌ Failed to load diagram:", error);
+    }
+  }, [runEffect, seedPersistedFingerprintFromDiagram, send]);
+
+  const handleApplyAzureSync = useCallback(
+    async (dryRun: AzureSyncDryRunOutput) => {
+      const currentDiagramId = state.context.currentDiagramId;
+      if (!currentDiagramId) {
+        throw new Error("No active diagram loaded for Azure sync apply.");
+      }
+
+      await flushPendingInlineEdits();
+
+      const merged = mergeAzureMappedGraphIntoCanvas({
+        nodes: state.context.nodes,
+        edges: state.context.edges,
+        mapped: dryRun.mapped,
+        syncedAt: dryRun.snapshot.collectedAt,
+      });
+
+      const saveInput: SaveDiagramPayload = {
+        id: currentDiagramId,
+        name: state.context.diagramName,
+        nodes: merged.nodes,
+        edges: merged.edges,
+      };
+
+      if (state.context.diagramDescription) {
+        saveInput.description = state.context.diagramDescription;
+      }
+
+      const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+        type: "LOAD_DIAGRAM_SUCCESS",
+        diagram: {
+          id: currentDiagramId,
+          name: state.context.diagramName,
+          nodes: merged.nodes,
+          edges: merged.edges,
+          updatedAt: saveSnapshot.context.lastSavedAt
+            ?? state.context.lastSaved
+            ?? Date.now(),
+          ...(state.context.diagramDescription
+            ? { description: state.context.diagramDescription }
+            : {}),
+        },
+      };
+      send(loadEvent);
+
+      const didSave = await requestSave("manual", {
+        overrideInput: saveInput,
+      });
+
+      if (!didSave) {
+        const saveError = saveActorRef.getSnapshot().context.errorMessage;
+        const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+        throw new Error(`Azure sync apply save failed: ${detail}`);
+      }
+
+      console.log(
+        "☁️ Azure sync applied:",
+        dryRun.result.runId,
+        `nodes +${dryRun.result.delta.nodesToCreate} ~${dryRun.result.delta.nodesToUpdate} -${dryRun.result.delta.nodesToArchive}`,
+        `edges +${dryRun.result.delta.edgesToCreate} ~${dryRun.result.delta.edgesToUpdate} -${dryRun.result.delta.edgesToArchive}`,
+      );
+    },
+    [
+      flushPendingInlineEdits,
+      requestSave,
+      saveSnapshot.context.lastSavedAt,
+      send,
+      state.context.currentDiagramId,
+      state.context.diagramDescription,
+      state.context.diagramName,
+      state.context.edges,
+      state.context.lastSaved,
+      state.context.nodes,
+    ],
+  );
+
+  // Handle node position/selection changes from ReactFlow
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      send({ type: "NODES_CHANGED", changes });
+    },
+    [send],
+  );
+
+  // Handle edge changes from ReactFlow
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      // Send event to XState machine - let it handle the logic
+      send({ type: "EDGES_CHANGED", changes });
+    },
+    [send],
+  );
+
+  // Handle new connections between nodes
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) {
+        return;
+      }
+
+      send({
+        type: "CONNECT_NODES",
+        source: connection.source,
+        target: connection.target,
+      });
+    },
+    [send],
+  );
+
+  // Handle node clicks for selection
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      send({ type: "SELECT_NODE", nodeId: node.id });
+    },
+    [send],
+  );
+
+  // Handle edge label updates
+  const onUpdateEdgeLabel = useCallback(
+    (edgeId: string, label: string) => {
+      send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
+    },
+    [send],
+  );
+
+  // Handle edge metadata updates
+  const onUpdateEdgeMetadata = useCallback(
+    (edgeId: string, label: string, metadata: EdgeMetadata) => {
+      // First update label
+      send({ type: "UPDATE_EDGE_LABEL", edgeId, label });
+      // Then update metadata
+      send({ type: "UPDATE_EDGE_METADATA", edgeId, metadata });
+    },
+    [send],
+  );
+
+  // Handle context menu actions
+  const onContextMenuAction = useCallback(
+    (action: ContextMenuAction, nodeId?: string, edgeId?: string) => {
+      switch (action.type) {
+        case "edit":
+          if (nodeId) {
+            send({ type: "SELECT_NODE", nodeId });
+          }
+          break;
+
+        case "duplicate":
+          if (nodeId) {
+            send({ type: "DUPLICATE_NODE", nodeId });
+          }
+          break;
+
+        case "delete":
+          if (nodeId) {
+            send({ type: "DELETE_NODE", nodeId });
+          }
+          break;
+
+        case "change-type":
+          if (nodeId) {
+            send({ type: "CHANGE_NODE_TYPE", nodeId, nodeType: action.nodeType });
+          }
+          break;
+
+        case "add-node":
+          send({
+            type: "ADD_NODE_AT_POSITION",
+            nodeType: action.nodeType,
+            position: action.position ?? { x: 100, y: 100 },
+          });
+          break;
+
+        case "auto-layout":
+          send({ type: "AUTO_LAYOUT" });
+          break;
+
+        case "export":
+          // Open export modal - use current viewport
+          if (canvasRef.current) {
+            send({ type: "EXPORT_PLANTUML" });
+          }
+          break;
+
+        case "edit-label":
+          if (edgeId) {
+            send({ type: "UPDATE_EDGE_LABEL", edgeId, label: "" });
+          }
+          break;
+
+        case "change-edge-style":
+          if (edgeId) {
+            send({ type: "CHANGE_EDGE_STYLE", edgeId, style: action.style });
+          }
+          break;
+
+        case "reverse-direction":
+          if (edgeId) {
+            send({ type: "REVERSE_EDGE_DIRECTION", edgeId });
+          }
+          break;
+
+        case "delete-edge":
+          if (edgeId) {
+            send({ type: "DELETE_EDGE", edgeId });
+          }
+          break;
+
+        case "paste":
+          // TODO: Implement paste functionality
+          console.log("Paste action not yet implemented");
+          break;
+
+        case "add-connected":
+          // TODO: Implement add connected node
+          console.log("Add connected node not yet implemented");
+          break;
+      }
+    },
+    [send],
+  );
+
+  // Enrich nodes with onUpdate callback for inline editing
+  const enrichedNodes = useMemo(() => {
+    return state.context.nodes.map((node: Node<NodeData>) => ({
+      ...node,
+      data: {
+        ...node.data,
+        onUpdate: (updates: Partial<NodeData>) => {
+          send({ type: "UPDATE_NODE", nodeId: node.id, updates });
+        },
+      },
+    }));
+  }, [state.context.nodes, send]);
+
+  const handleNewBoard = useCallback(async () => {
+    try {
+      // Send CREATE_NEW_BOARD event to transition to creatingDiagram state
+      send({ type: "CREATE_NEW_BOARD" });
+
+      const diagram = await runEffect(createNewDiagram("DIAGRAM::UNTITLED"));
+
+      send({
+        type: "LOAD_DIAGRAM_SUCCESS",
+        diagram: {
+          id: diagram.id,
+          name: diagram.name,
+          nodes: diagram.nodes,
+          edges: diagram.edges,
+          updatedAt: diagram.updatedAt,
+          ...(diagram.description ? { description: diagram.description } : {}),
+        },
+      });
+      seedPersistedFingerprintFromDiagram({
+        id: diagram.id,
+        name: diagram.name,
+        description: diagram.description,
+        nodes: diagram.nodes,
+        edges: diagram.edges,
+        savedAt: diagram.updatedAt,
+      });
+
+      console.log("📝 Created new board:", diagram.id);
+    } catch (error) {
+      console.error("❌ New board creation failed:", error);
+    }
+  }, [runEffect, seedPersistedFingerprintFromDiagram, send]);
+
+  // Establish a persisted baseline whenever the active diagram changes.
+  useEffect(() => {
+    const currentDiagramId = state.context.currentDiagramId;
+    if (!currentDiagramId) {
+      seededDiagramIdRef.current = null;
+      lastPersistedFingerprintRef.current = null;
+      saveInputOverridesByRequestIdRef.current.clear();
+      sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
+      sendSaveEvent({ type: "SYNC_LAST_SAVED_AT", savedAt: null });
+      cancelAutosave();
+      return;
+    }
+
+    if (seededDiagramIdRef.current === currentDiagramId) {
+      return;
+    }
+
+    const saveInput = buildSaveInput();
+    if (!saveInput) {
+      return;
+    }
+
+    lastPersistedFingerprintRef.current = createSaveFingerprint(saveInput);
+    seededDiagramIdRef.current = currentDiagramId;
+    saveInputOverridesByRequestIdRef.current.clear();
+    sendSaveEvent({ type: "CLEAR_PENDING_REQUESTS" });
+    cancelAutosave();
+  }, [
+    buildSaveInput,
+    cancelAutosave,
+    createSaveFingerprint,
+    sendSaveEvent,
+    state.context.currentDiagramId,
+  ]);
+
+  // Debounced autosave for meaningful persisted changes only.
+  useEffect(() => {
+    if (isSettingsLoading) {
+      return;
+    }
+
+    if (settingsSeededRef.current) {
+      return;
+    }
+
+    settingsSeededRef.current = true;
+    if (state.context.animationsEnabled !== appSettings.animationsEnabled) {
+      send({ type: "TOGGLE_ANIMATIONS" });
+    }
+  }, [
+    appSettings.animationsEnabled,
+    isSettingsLoading,
+    send,
+    state.context.animationsEnabled,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      saveSynthRef.current?.dispose();
+      saveSynthRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!navigationTarget) {
+      pageHideSaveCompletedRef.current = false;
+    }
+  }, [navigationTarget]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      if (pageHideSaveCompletedRef.current || !appSettings.saveOnNavigate) {
+        return;
+      }
+      void requestSave("manual");
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [appSettings.saveOnNavigate, requestSave]);
+
+  const handleToggleAnimations = useCallback(() => {
+    const nextAnimationsEnabled = !state.context.animationsEnabled;
+    send({ type: "TOGGLE_ANIMATIONS" });
+    if (!settingsV1Enabled) {
+      return;
+    }
+    void runEffect(
+      patchSettings({ animationsEnabled: nextAnimationsEnabled }),
+    ).catch((error) => {
+      console.warn("⚠️ Failed to persist animation preference", error);
+    });
+    if (
+      nextAnimationsEnabled
+      && appSettings.masterAudioEnabled
+      && appSettings.saveVolEnabled
+    ) {
+      void primeSaveAudio();
+    }
+  }, [
+    appSettings.masterAudioEnabled,
+    appSettings.saveVolEnabled,
+    primeSaveAudio,
+    runEffect,
+    send,
+    settingsV1Enabled,
+    state.context.animationsEnabled,
+  ]);
+  const saveVolStatus = useMemo(() => {
+    if (!appSettings.masterAudioEnabled) {
+      return {
+        label: "VOL::OFF (MASTER)",
+        hint: "Enable Master Audio in Settings > Audio",
+      };
+    }
+
+    if (!appSettings.saveVolEnabled) {
+      return {
+        label: "VOL::OFF (GLOBAL)",
+        hint: "Enable Save Vol in Settings > Audio",
+      };
+    }
+
+    if (appSettings.masterVolume <= 0) {
+      return {
+        label: "VOL::MUTED (VOL 0)",
+        hint: "Raise Master Volume above 0% in Settings > Audio",
+      };
+    }
+
+    return {
+      label: `VOL::ON (${Math.round(appSettings.masterVolume * 100)}%)`,
+      hint: "Vol level is controlled by Settings > Audio Master Volume",
+    };
+  }, [
+    appSettings.masterAudioEnabled,
+    appSettings.masterVolume,
+    appSettings.saveVolEnabled,
+  ]);
+
+  // Handle auto-layout action
+  const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
+    send({ type: "AUTO_LAYOUT", preset });
+    requestAnimationFrame(() => {
+      canvasRef.current?.fitViewToGraph();
+    });
+    console.log(`🎯 Auto-layout applied: ${preset}`);
+  }, [send]);
+
+  // Handle auto-layout selected nodes
+  const handleAutoLayoutSelected = useCallback((preset: LayoutPresetName) => {
+    send({ type: "AUTO_LAYOUT_SELECTED", preset });
+    requestAnimationFrame(() => {
+      canvasRef.current?.fitViewToGraph();
+    });
+    console.log(`🎯 Auto-layout (selected) applied: ${preset}`);
+  }, [send]);
+
+  const handleCommandAddPerson = useCallback(() => {
+    send({ type: "ADD_PERSON" });
+  }, [send]);
+  const handleCommandAddSystem = useCallback(() => {
+    send({ type: "ADD_SYSTEM" });
+  }, [send]);
+  const handleCommandAddExternal = useCallback(() => {
+    send({ type: "ADD_EXTERNAL_SYSTEM" });
+  }, [send]);
+  const handleCommandAddContainer = useCallback(() => {
+    send({ type: "ADD_CONTAINER" });
+  }, [send]);
+  const handleCommandAddComponent = useCallback(() => {
+    send({ type: "ADD_COMPONENT" });
+  }, [send]);
+  const handleCommandAutoLayout = useCallback(() => {
+    handleAutoLayout("command");
+  }, [handleAutoLayout]);
+  const handleCommandAutoLayoutSelected = useCallback(() => {
+    handleAutoLayoutSelected("command");
+  }, [handleAutoLayoutSelected]);
+
+  const commandsMachineOptions = useMemo(
+    () => ({
+      onSave: handleSave,
+      onNewBoard: handleNewBoard,
+      onAddPerson: handleCommandAddPerson,
+      onAddSystem: handleCommandAddSystem,
+      onAddExternal: handleCommandAddExternal,
+      onAddContainer: handleCommandAddContainer,
+      onAddComponent: handleCommandAddComponent,
+      onAutoLayout: handleCommandAutoLayout,
+      onAutoLayoutSelected: handleCommandAutoLayoutSelected,
+    }),
+    [
+      handleCommandAddComponent,
+      handleCommandAddContainer,
+      handleCommandAddExternal,
+      handleCommandAddPerson,
+      handleCommandAddSystem,
+      handleCommandAutoLayout,
+      handleCommandAutoLayoutSelected,
+      handleNewBoard,
+      handleSave,
+    ],
+  );
+
+  useC4CommandsMachine(commandsMachineOptions);
+
+  // Get selected node object (cast to Node<NodeData> since our nodes always have NodeData)
+  const selectedNode = (state.context.nodes.find(
+    (n: { id: string }) => n.id === state.context.selectedNodeId,
+  ) as Node<NodeData> | undefined) || null;
+
+  // Handle node selection from search
+  const handleSelectNode = useCallback(
+    (nodeId: string) => {
+      send({ type: "SELECT_NODE", nodeId });
+      // Pan and zoom to the selected node
+      canvasRef.current?.fitViewToNode(nodeId);
+    },
+    [send],
+  );
+
+  // Fit view whenever a new diagram is loaded
+  useEffect(() => {
+    const currentId = state.context.currentDiagramId;
+    if (!currentId) {
+      return;
+    }
+
+    const hasChanged = lastDiagramIdRef.current !== currentId;
+    const hasNodes = state.context.nodes.length > 0;
+
+    if (hasChanged) {
+      lastDiagramIdRef.current = currentId;
+      if (hasNodes) {
+        requestAnimationFrame(() => {
+          canvasRef.current?.fitViewToGraph();
+        });
+      }
+    }
+  }, [state.context.currentDiagramId, state.context.nodes.length]);
+
+  // Re-fit diagram when viewport size changes
+  useEffect(() => {
+    if (state.context.nodes.length === 0) {
+      return;
+    }
+
+    const handleResize = () => {
+      canvasRef.current?.fitViewToGraph();
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [state.context.nodes.length]);
+
+  useEffect(() => {
+    if (state.context.nodes.length === 0) {
+      return;
+    }
+    canvasRef.current?.fitViewToGraph();
+  }, [isSidebarOpen, isDetailsOpen, state.context.nodes.length]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+
+    const media = window.matchMedia("(max-width: 1200px)");
+    const update = (matches: boolean) => {
+      setCompactLayout(matches);
+      if (matches) {
+        setDetailsOpen(false);
+      }
+    };
+
+    update(media.matches);
+
+    const listener = (event: MediaQueryListEvent) => update(event.matches);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, []);
+
+  const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
+  const rightTrack = !isCompactLayout && isDetailsOpen ? "minmax(300px, 360px)" : "0px";
+  const rowTrack = isDataBarOpen ? "1fr auto" : "1fr";
+  const canvasAmbientTone = useMemo<"c4" | "ddd" | "azure">(() => {
+    if (isAzurePanelOpen) {
+      return "azure";
+    }
+    return state.context.currentDomain === "ddd" ? "ddd" : "c4";
+  }, [isAzurePanelOpen, state.context.currentDomain]);
+  const navigationLabel = useMemo(() => {
+    switch (navigationTarget) {
+      case "/postee":
+        return "LOADING POSTEE WORKSPACE";
+      case "/saved-diagrams":
+        return "LOADING SAVED DIAGRAMS";
+      case "/settings":
+        return "LOADING GLOBAL SETTINGS";
+      case "/splashscreen":
+        return "LOADING OPSYDYN SPLASHSCREEN";
+      default:
+        return "LOADING NEXT WORKSPACE";
+    }
+  }, [navigationTarget]);
+
+  return (
+    <div
+      className={styles.workspace}
+      style={{
+        gridTemplateColumns: `${leftTrack} 1fr ${rightTrack}`,
+        gridTemplateRows: rowTrack,
+      }}
+    >
+      {isSidebarOpen && (
+        <aside className={styles.sidebarColumn} aria-label="Toolbar panel">
+          <div className={styles.sidebarBrand}>
+            <span className={styles.sidebarBrandIdentity}>
+              <img
+                src="/app-icon.png"
+                alt="C4 Canvas"
+                className={styles.sidebarBrandIcon}
+                width={50}
+                height={50}
+              />
+              <span className={sidebarBrandMetaClass}>
+                <span>OPSYDYN HUD::9000</span>
+                <span>V1.0.0</span>
+              </span>
+            </span>
+            <span className={styles.sidebarBrandActions}>
+              <button
+                type="button"
+                className={`${styles.sidebarBrandAction} ${isAzurePanelOpen ? styles.sidebarBrandActionActive : ""}`}
+                aria-label={isAzurePanelOpen ? "Hide Azure sync panel" : "Show Azure sync panel"}
+                aria-pressed={isAzurePanelOpen}
+                title={isAzurePanelOpen ? "Hide Azure sync panel" : "Show Azure sync panel"}
+                onClick={() => setAzurePanelOpen((open) => !open)}
+              >
+                <CloudIcon size={16} weight="duotone" />
+              </button>
+              <a
+                className={styles.sidebarBrandAction}
+                href="/settings"
+                aria-label="Open global settings"
+                title="Open global settings"
+                onClick={(event) => {
+                  void handleNavigateWithSave(event, "/settings");
+                }}
+              >
+                <GearSixIcon size={16} weight="duotone" />
+              </a>
+            </span>
+          </div>
+          <p className={styles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
+          <nav className={styles.sidebarQuickActions} aria-label="Workspace shortcuts">
+            <a
+              className={styles.sidebarQuickActionLink}
+              href="/splashscreen"
+              onClick={(event) => {
+                void handleNavigateWithSave(event, "/splashscreen");
+              }}
+            >
+              VISIT OPSYDYN
+            </a>
+            <a
+              className={styles.sidebarQuickActionLink}
+              href="/postee"
+              onClick={(event) => {
+                void handleNavigateWithSave(event, "/postee");
+              }}
+            >
+              USE POSTEE
+            </a>
+            <a
+              className={styles.sidebarQuickActionLink}
+              href="/saved-diagrams"
+              onClick={(event) => {
+                void handleNavigateWithSave(event, "/saved-diagrams");
+              }}
+            >
+              SAVED DIAGRAMS
+            </a>
+          </nav>
+          {isAzurePanelOpen && (
+            <AzureSyncPanel
+              nodes={state.context.nodes}
+              edges={state.context.edges}
+              diagramId={state.context.currentDiagramId}
+              onApply={handleApplyAzureSync}
+            />
+          )}
+
+          <div className={styles.panelHeader}>
+            <ToggleButton
+              isSelected={isSidebarOpen}
+              onChange={setSidebarOpen}
+              className={styles.collapseToggle}
+              aria-label="Collapse left panel"
+            >
+              <CaretLeftIcon size={16} weight="bold" />
+              ESC
+            </ToggleButton>
+            <DomainToggle
+              currentDomain={state.context.currentDomain}
+              onDomainChange={(domain) => send({ type: "SET_DOMAIN", domain })}
+            />
+          </div>
+          {state.context.currentDomain === "c4"
+            ? (
+              <Toolbar
+                onAddPerson={() => send({ type: "ADD_PERSON" })}
+                onAddSystem={() => send({ type: "ADD_SYSTEM" })}
+                onAddExternalSystem={() => send({ type: "ADD_EXTERNAL_SYSTEM" })}
+                onAddContainer={() => send({ type: "ADD_CONTAINER" })}
+                onAddComponent={() => send({ type: "ADD_COMPONENT" })}
+                onSave={handleSave}
+                onNewBoard={handleNewBoard}
+                onAutoLayout={handleAutoLayout}
+                onAutoLayoutSelected={handleAutoLayoutSelected}
+                onOpenSavedDiagrams={() => {
+                  void navigateWithSave("/saved-diagrams");
+                }}
+                onSessionNameChange={(name) => send({ type: "UPDATE_SESSION_NAME", name })}
+                onDiagramNameChange={(name) => send({ type: "UPDATE_DIAGRAM_NAME", name })}
+                sessionName={state.context.sessionName}
+                isSaving={state.context.isSaving}
+                lastSaved={saveSnapshot.context.lastSavedAt ?? state.context.lastSaved}
+                diagramName={state.context.diagramName}
+                onToggleAnimations={handleToggleAnimations}
+                animationsEnabled={state.context.animationsEnabled}
+                saveError={state.context.saveError}
+                saveVolStatusLabel={saveVolStatus.label}
+                saveVolStatusHint={saveVolStatus.hint}
+                {...(state.context.currentLayout && {
+                  currentLayout: state.context.currentLayout,
+                })}
+              />
+            )
+            : (
+              <DDDToolbar
+                onAddBoundedContext={() => send({ type: "ADD_BOUNDED_CONTEXT" })}
+                onAddAggregate={() => send({ type: "ADD_AGGREGATE" })}
+                onAddDomainEvent={() => send({ type: "ADD_DOMAIN_EVENT" })}
+                onAddEntity={() => send({ type: "ADD_ENTITY" })}
+                onAddValueObject={() => send({ type: "ADD_VALUE_OBJECT" })}
+                onAddDomainService={() => send({ type: "ADD_DOMAIN_SERVICE" })}
+                onAddRepository={() => send({ type: "ADD_REPOSITORY" })}
+                onAddFactory={() => send({ type: "ADD_FACTORY" })}
+                onAddCommand={() => send({ type: "ADD_COMMAND" })}
+                onAddQuery={() => send({ type: "ADD_QUERY" })}
+                onAddApplicationService={() => send({ type: "ADD_APPLICATION_SERVICE" })}
+                onAddIntegrationEvent={() => send({ type: "ADD_INTEGRATION_EVENT" })}
+                onAddACL={() => send({ type: "ADD_ACL" })}
+                onAddSaga={() => send({ type: "ADD_SAGA" })}
+                onSave={handleSave}
+                onNewBoard={handleNewBoard}
+                onAutoLayout={handleAutoLayout}
+                onAutoLayoutSelected={handleAutoLayoutSelected}
+                onOpenSavedDiagrams={() => {
+                  void navigateWithSave("/saved-diagrams");
+                }}
+                onSessionNameChange={(name) => send({ type: "UPDATE_SESSION_NAME", name })}
+                onDiagramNameChange={(name) => send({ type: "UPDATE_DIAGRAM_NAME", name })}
+                sessionName={state.context.sessionName}
+                isSaving={state.context.isSaving}
+                lastSaved={saveSnapshot.context.lastSavedAt ?? state.context.lastSaved}
+                diagramName={state.context.diagramName}
+                onToggleAnimations={handleToggleAnimations}
+                animationsEnabled={state.context.animationsEnabled}
+                saveError={state.context.saveError}
+                saveVolStatusLabel={saveVolStatus.label}
+                saveVolStatusHint={saveVolStatus.hint}
+                {...(state.context.currentLayout && {
+                  currentLayout: state.context.currentLayout,
+                })}
+              />
+            )}
+          <DiagramEvolutionChart
+            nodes={state.context.nodes}
+            edges={state.context.edges}
+            domain={state.context.currentDomain}
+          />
+        </aside>
+      )}
+
+      <section className={styles.canvasRegion}>
+        <C4Canvas
+          ref={canvasRef}
+          nodes={enrichedNodes}
+          edges={state.context.edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onUpdateEdgeLabel={onUpdateEdgeLabel}
+          onUpdateEdgeMetadata={onUpdateEdgeMetadata}
+          isCommandBarOpen={isCommandBarOpen}
+          onToggleCommandBar={setCommandBarOpen}
+          onSelectNode={handleSelectNode}
+          onExportPlantUML={(viewport) => send({ type: "EXPORT_PLANTUML", viewport })}
+          onExportMermaid={(viewport) => send({ type: "EXPORT_MERMAID", viewport })}
+          onImportDiagram={(content, format, mode) => send({ type: "IMPORT_DIAGRAM", content, format, mode })}
+          viewportToApply={state.context.viewport}
+          onContextMenuAction={onContextMenuAction}
+          animationsEnabled={state.context.animationsEnabled}
+          ambientTone={canvasAmbientTone}
+        />
+        {!isSidebarOpen && (
+          <ToggleButton
+            isSelected={isSidebarOpen}
+            onChange={setSidebarOpen}
+            className={styles.collapseHandleLeft}
+            aria-label="Expand left panel"
+          >
+            <CaretRightIcon size={16} weight="bold" />
+          </ToggleButton>
+        )}
+        {!isCompactLayout && !isDetailsOpen && (
+          <ToggleButton
+            isSelected={isDetailsOpen}
+            onChange={setDetailsOpen}
+            className={styles.collapseHandleRight}
+            aria-label="Expand right panel"
+          >
+            <CaretLeftIcon size={16} weight="bold" />
+          </ToggleButton>
+        )}
+        {!isDataBarOpen && (
+          <ToggleButton
+            isSelected={isDataBarOpen}
+            onChange={(selected) => setDataBarOpen(selected)}
+            className={styles.bottomHandle}
+            aria-label="Expand data bar"
+          >
+            <CaretUpIcon size={16} weight="bold" />
+          </ToggleButton>
+        )}
+      </section>
+
+      {!isCompactLayout && isDetailsOpen && (
+        <aside className={styles.detailsColumn} aria-label="Properties panel">
+          <div className={styles.panelHeader}>
+            <ToggleButton
+              isSelected={isDetailsOpen}
+              onChange={setDetailsOpen}
+              className={styles.collapseToggle}
+              aria-label="Collapse right panel"
+            >
+              <CaretRightIcon size={16} weight="bold" />
+              ESC
+            </ToggleButton>
+          </div>
+          <BalancedMudChart
+            nodes={state.context.nodes}
+            edges={state.context.edges}
+            selectedModuleId={selectedNode?.id ?? null}
+            onSelectModule={handleSelectNode}
+            domain={state.context.currentDomain}
+            mudAlertThreshold={appSettings.bigBallOfMudAlertThreshold}
+          />
+          <PropertiesPanel
+            selectedNode={selectedNode}
+            onUpdateNode={(nodeId, updates) => send({ type: "UPDATE_NODE", nodeId, updates })}
+          />
+        </aside>
+      )}
+
+      {isDataBarOpen && (
+        <DataBar
+          isOpen={isDataBarOpen}
+          onToggle={setDataBarOpen}
+          onLoadDiagram={handleLoadDiagram}
+        />
+      )}
+      {navigationTarget && (
+        <div className={styles.navigationOverlay} role="status" aria-live="polite">
+          <div
+            className={styles.navigationOverlayCard}
+            style={state.context.animationsEnabled
+              ? undefined
+              : { animation: "none" }}
+          >
+            <div
+              className={styles.navigationOverlayScanline}
+              aria-hidden="true"
+              style={state.context.animationsEnabled
+                ? undefined
+                : { display: "none" }}
+            />
+            <h1 className={styles.navigationOverlayTitle}>
+              OPSYDYN // PRECISION TOOLS
+            </h1>
+            <p className={styles.navigationOverlayStep}>SYNCING BOARD STATE</p>
+            <p className={styles.navigationOverlayTarget}>{navigationLabel}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={state.context.exportModalOpen}
+        exportedCode={state.context.exportedCode}
+        exportFormat={state.context.exportFormat}
+        diagramName={state.context.diagramName}
+        onClose={() => send({ type: "CLOSE_EXPORT_MODAL" })}
+      />
+    </div>
+  );
 }

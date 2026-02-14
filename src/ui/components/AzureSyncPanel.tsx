@@ -2,6 +2,7 @@ import { CloudIcon } from "@phosphor-icons/react";
 import type { Edge, Node } from "@xyflow/react";
 import { useMemo } from "react";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
+import type { AzureRelationshipConfidence, AzureRelationshipSource } from "../../core/effects/azure-sync.types";
 import { useAzureSync } from "../hooks/useAzureSync";
 import * as styles from "./AzureSyncPanel.css";
 
@@ -23,6 +24,64 @@ const formatTimestamp = (value: number | null): string => {
     second: "2-digit",
   });
 };
+
+const EDGE_SOURCE_ORDER: readonly AzureRelationshipSource[] = [
+  "arm_depends_on",
+  "property_ref",
+  "arm_parent",
+  "inferred",
+];
+
+const EDGE_SOURCE_LABELS: Record<AzureRelationshipSource, string> = {
+  arm_depends_on: "DEPENDS_ON",
+  property_ref: "PROPERTY_REF",
+  arm_parent: "ARM_PARENT",
+  inferred: "INFERRED",
+};
+
+const EDGE_CONFIDENCE_ORDER: readonly AzureRelationshipConfidence[] = [
+  "high",
+  "medium",
+  "low",
+];
+
+const EDGE_CONFIDENCE_LABELS: Record<AzureRelationshipConfidence, string> = {
+  high: "HIGH",
+  medium: "MEDIUM",
+  low: "LOW",
+};
+
+type TelemetryTone = "ready" | "caution" | "critical" | "selected";
+
+const SOURCE_TONE: Record<AzureRelationshipSource, TelemetryTone> = {
+  arm_depends_on: "ready",
+  property_ref: "selected",
+  arm_parent: "caution",
+  inferred: "critical",
+};
+
+const CONFIDENCE_TONE: Record<AzureRelationshipConfidence, TelemetryTone> = {
+  high: "ready",
+  medium: "caution",
+  low: "critical",
+};
+
+const TELEMETRY_TONE_CLASS: Record<TelemetryTone, string> = {
+  ready: styles.telemetryBadgeReady,
+  caution: styles.telemetryBadgeCaution,
+  critical: styles.telemetryBadgeCritical,
+  selected: styles.telemetryBadgeSelected,
+};
+
+const TELEMETRY_COUNT_TONE_CLASS: Record<TelemetryTone, string> = {
+  ready: styles.telemetryBadgeCountReady,
+  caution: styles.telemetryBadgeCountCaution,
+  critical: styles.telemetryBadgeCountCritical,
+  selected: styles.telemetryBadgeCountSelected,
+};
+
+const RELATIONSHIP_INFERRED_WARNING_THRESHOLD_PERCENT = 60;
+const RELATIONSHIP_INFERRED_WARNING_THRESHOLD_RATIO = RELATIONSHIP_INFERRED_WARNING_THRESHOLD_PERCENT / 100;
 
 export function AzureSyncPanel({
   nodes,
@@ -81,6 +140,79 @@ export function AzureSyncPanel({
     }
     return "AUTH::READY";
   }, [authStatus]);
+
+  const relationshipTelemetry = useMemo(() => {
+    if (!dryRun) {
+      return null;
+    }
+
+    const sourceCounts: Record<AzureRelationshipSource, number> = {
+      arm_depends_on: 0,
+      property_ref: 0,
+      arm_parent: 0,
+      inferred: 0,
+    };
+
+    const confidenceCounts: Record<AzureRelationshipConfidence, number> = {
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+
+    for (const relationship of dryRun.snapshot.relationships) {
+      sourceCounts[relationship.source] += 1;
+      confidenceCounts[relationship.confidence] += 1;
+    }
+
+    const total = dryRun.snapshot.relationships.length;
+    const inferredCount = sourceCounts.inferred;
+    const inferredRatio = total > 0 ? inferredCount / total : 0;
+
+    const warnings: string[] = [];
+    if (total > 0 && inferredRatio >= RELATIONSHIP_INFERRED_WARNING_THRESHOLD_RATIO) {
+      warnings.push(
+        `RELATIONSHIP TRUST WARNING :: ${
+          Math.round(inferredRatio * 100)
+        }% inferred links (threshold ${RELATIONSHIP_INFERRED_WARNING_THRESHOLD_PERCENT}%). Consider refining query scope.`,
+      );
+    }
+    if (total > 0 && confidenceCounts.high === 0) {
+      warnings.push(
+        "RELATIONSHIP TRUST WARNING :: No high-confidence links detected in this run.",
+      );
+    }
+
+    return {
+      sourceCounts,
+      confidenceCounts,
+      sourceTelemetry: EDGE_SOURCE_ORDER.map((source) => ({
+        source,
+        label: EDGE_SOURCE_LABELS[source],
+        count: sourceCounts[source],
+        tone: SOURCE_TONE[source],
+      })),
+      confidenceTelemetry: EDGE_CONFIDENCE_ORDER.map((confidence) => ({
+        confidence,
+        label: EDGE_CONFIDENCE_LABELS[confidence],
+        count: confidenceCounts[confidence],
+        tone: CONFIDENCE_TONE[confidence],
+      })),
+      warnings,
+    };
+  }, [dryRun]);
+
+  const dryRunWarnings = useMemo(() => {
+    if (!dryRun) {
+      return [];
+    }
+
+    const combinedWarnings = [...dryRun.result.warnings];
+    if (relationshipTelemetry) {
+      combinedWarnings.push(...relationshipTelemetry.warnings);
+    }
+
+    return [...new Set(combinedWarnings)];
+  }, [dryRun, relationshipTelemetry]);
 
   return (
     <section className={styles.syncCard} aria-label="Azure Resource Graph sync panel">
@@ -226,10 +358,50 @@ export function AzureSyncPanel({
                 {dryRun.result.delta.edgesToArchive}
               </span>
             </div>
+            {relationshipTelemetry && (
+              <>
+                <div className={styles.syncSummaryItem}>
+                  <span className={styles.syncSummaryLabel}>Relationship Sources</span>
+                  <div className={styles.telemetryBadgeRow}>
+                    {relationshipTelemetry.sourceTelemetry.map((entry) => (
+                      <span
+                        key={entry.source}
+                        className={`${styles.telemetryBadge} ${TELEMETRY_TONE_CLASS[entry.tone]}`}
+                      >
+                        <span>{entry.label}</span>
+                        <span
+                          className={`${styles.telemetryBadgeCount} ${TELEMETRY_COUNT_TONE_CLASS[entry.tone]}`}
+                        >
+                          {entry.count}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className={styles.syncSummaryItem}>
+                  <span className={styles.syncSummaryLabel}>Relationship Confidence</span>
+                  <div className={styles.telemetryBadgeRow}>
+                    {relationshipTelemetry.confidenceTelemetry.map((entry) => (
+                      <span
+                        key={entry.confidence}
+                        className={`${styles.telemetryBadge} ${TELEMETRY_TONE_CLASS[entry.tone]}`}
+                      >
+                        <span>{entry.label}</span>
+                        <span
+                          className={`${styles.telemetryBadgeCount} ${TELEMETRY_COUNT_TONE_CLASS[entry.tone]}`}
+                        >
+                          {entry.count}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-          {dryRun.result.warnings.length > 0 && (
+          {dryRunWarnings.length > 0 && (
             <ul className={styles.syncList}>
-              {dryRun.result.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              {dryRunWarnings.map((warning) => <li key={warning}>{warning}</li>)}
             </ul>
           )}
         </>

@@ -37,6 +37,9 @@ pub struct AzureRelationshipSnapshotDto {
     pub to_resource_id: String,
     pub relationship_type: String,
     pub confidence: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -362,7 +365,9 @@ fn infer_arm_parent_id(resource_id: &str) -> Option<String> {
     }
 
     // Find the provider index to count type/name pairs after it
-    let provider_idx = segments.iter().position(|s| s.eq_ignore_ascii_case("providers"))?;
+    let provider_idx = segments
+        .iter()
+        .position(|s| s.eq_ignore_ascii_case("providers"))?;
     let after_provider = &segments[provider_idx + 1..]; // e.g. ["Microsoft.X", "accounts", "foo", "projects", "bar"]
 
     // Need namespace + at least 2 type/name pairs (4 segments) to have a parent
@@ -450,11 +455,20 @@ fn build_default_query(scope: &AzureSyncScopeDto) -> String {
         "Resources | project id, type, name, location, subscriptionId, resourceGroup, tags, \
          dependsOn = properties.dependsOn, \
          _ref_serverFarmId = properties.serverFarmId, \
-         _ref_workspaceId = properties.WorkspaceResourceId, \
-         _ref_subnetId = properties.subnet.id, \
+         _ref_workspaceId = coalesce(properties.WorkspaceResourceId, properties.workspaceResourceId), \
+         _ref_subnetId = coalesce(properties.subnet.id, properties.subnetId), \
          _ref_vnetSubnetId = properties.vnetSubnetResourceId, \
-         _ref_nsgId = properties.networkSecurityGroup.id, \
-         _ref_storageAccountId = properties.storageAccount.id",
+         _ref_nsgId = coalesce(properties.networkSecurityGroup.id, properties.networkSecurityGroupId), \
+         _ref_storageAccountId = coalesce(properties.storageAccount.id, properties.storageAccountId), \
+         _ref_virtualNetworkId = coalesce(properties.virtualNetwork.id, properties.virtualNetworkId), \
+         _ref_publicIpAddressId = coalesce(properties.publicIPAddress.id, properties.publicIpAddressId), \
+         _ref_routeTableId = coalesce(properties.routeTable.id, properties.routeTableId), \
+         _ref_natGatewayId = coalesce(properties.natGateway.id, properties.natGatewayId), \
+         _ref_privateEndpointId = properties.privateEndpoint.id, \
+         _ref_privateLinkServiceId = properties.privateLinkService.id, \
+         _ref_dnsZoneId = coalesce(properties.privateDnsZoneId, properties.privateDnsZone.id), \
+         _ref_keyVaultId = properties.keyVault.id, \
+         _ref_managedBy = managedBy",
     );
 
     if let Some(resource_groups) = &scope.resource_groups {
@@ -481,10 +495,60 @@ fn relationship_type_for_property_ref(label: &str) -> (&'static str, &'static st
         "serverFarmId" => ("depends_on", "high"),
         "workspaceId" => ("data_link", "high"),
         "storageAccountId" => ("data_link", "high"),
-        "subnetId" | "vnetSubnetId" => ("network_link", "high"),
-        "nsgId" => ("network_link", "high"),
+        "subnetId"
+        | "vnetSubnetId"
+        | "nsgId"
+        | "virtualNetworkId"
+        | "publicIpAddressId"
+        | "routeTableId"
+        | "natGatewayId"
+        | "privateEndpointId"
+        | "privateLinkServiceId"
+        | "dnsZoneId" => ("network_link", "high"),
+        "keyVaultId" => ("identity_link", "medium"),
+        "managedBy" => ("depends_on", "medium"),
         _ => ("inferred", "medium"),
     }
+}
+
+fn confidence_rank(confidence: &str) -> i8 {
+    match confidence {
+        "high" => 3,
+        "medium" => 2,
+        "low" => 1,
+        _ => 0,
+    }
+}
+
+fn relationship_source_rank(source: &str) -> i8 {
+    match source {
+        "arm_depends_on" => 4,
+        "property_ref" => 3,
+        "arm_parent" => 2,
+        "inferred" => 1,
+        _ => 0,
+    }
+}
+
+fn should_replace_relationship(
+    current: &AzureRelationshipSnapshotDto,
+    candidate: &AzureRelationshipSnapshotDto,
+) -> bool {
+    let current_confidence = confidence_rank(&current.confidence);
+    let candidate_confidence = confidence_rank(&candidate.confidence);
+    if candidate_confidence != current_confidence {
+        return candidate_confidence > current_confidence;
+    }
+
+    let current_source = relationship_source_rank(&current.source);
+    let candidate_source = relationship_source_rank(&candidate.source);
+    if candidate_source != current_source {
+        return candidate_source > current_source;
+    }
+
+    let current_detail = current.source_detail.as_deref().unwrap_or("");
+    let candidate_detail = candidate.source_detail.as_deref().unwrap_or("");
+    candidate_detail.len() > current_detail.len()
 }
 
 fn build_relationships(
@@ -500,16 +564,17 @@ fn build_relationships(
         })
         .collect();
 
-    let mut relationships: Vec<AzureRelationshipSnapshotDto> = Vec::new();
-    let mut dedupe: BTreeMap<(String, String, String), ()> = BTreeMap::new();
+    let mut dedupe: BTreeMap<(String, String, String), AzureRelationshipSnapshotDto> =
+        BTreeMap::new();
 
     let try_add_edge =
         |from_canonical: &str,
          target_id: &str,
          relationship_type: &str,
          confidence: &str,
-         dedupe: &mut BTreeMap<(String, String, String), ()>,
-         relationships: &mut Vec<AzureRelationshipSnapshotDto>| {
+         source: &str,
+         source_detail: Option<&str>,
+         dedupe: &mut BTreeMap<(String, String, String), AzureRelationshipSnapshotDto>| {
             let from_normalized = normalize_resource_id(from_canonical);
             let target_normalized = normalize_resource_id(target_id);
 
@@ -526,13 +591,25 @@ fn build_relationships(
                 target_normalized,
                 relationship_type.to_string(),
             );
-            if dedupe.insert(key, ()).is_none() {
-                relationships.push(AzureRelationshipSnapshotDto {
-                    from_resource_id: from_canonical.to_string(),
-                    to_resource_id: target_canonical.clone(),
-                    relationship_type: relationship_type.to_string(),
-                    confidence: confidence.to_string(),
-                });
+
+            let candidate = AzureRelationshipSnapshotDto {
+                from_resource_id: from_canonical.to_string(),
+                to_resource_id: target_canonical.clone(),
+                relationship_type: relationship_type.to_string(),
+                confidence: confidence.to_string(),
+                source: source.to_string(),
+                source_detail: source_detail
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string),
+            };
+
+            if let Some(existing) = dedupe.get(&key) {
+                if should_replace_relationship(existing, &candidate) {
+                    dedupe.insert(key, candidate);
+                }
+            } else {
+                dedupe.insert(key, candidate);
             }
         };
 
@@ -545,8 +622,9 @@ fn build_relationships(
                     dependency,
                     "depends_on",
                     "high",
+                    "arm_depends_on",
+                    Some("dependsOn"),
                     &mut dedupe,
-                    &mut relationships,
                 );
             }
         }
@@ -559,8 +637,9 @@ fn build_relationships(
                 target_id,
                 rel_type,
                 confidence,
+                "property_ref",
+                Some(label),
                 &mut dedupe,
-                &mut relationships,
             );
         }
 
@@ -571,13 +650,14 @@ fn build_relationships(
                 &parent_id,
                 "depends_on",
                 "high",
+                "arm_parent",
+                Some("resource_id_hierarchy"),
                 &mut dedupe,
-                &mut relationships,
             );
         }
     }
 
-    relationships
+    dedupe.into_values().collect()
 }
 
 fn summarize_account(payload: &JsonValue) -> String {

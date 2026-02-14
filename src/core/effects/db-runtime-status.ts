@@ -28,6 +28,10 @@ export const DatabaseRuntimeStatusSchema = Schema.Struct({
   busyTimeoutMs: Schema.NullOr(Schema.Number),
   foreignKeysEnabled: Schema.NullOr(Schema.Boolean),
   synchronousMode: Schema.NullOr(Schema.String),
+  dbFileSizeBytes: Schema.NullOr(Schema.Number),
+  dbFileSizeMb: Schema.NullOr(Schema.Number),
+  walFileSizeBytes: Schema.NullOr(Schema.Number),
+  walFileSizeMb: Schema.NullOr(Schema.Number),
   probeLastUpdatedAt: Schema.NullOr(Schema.Number),
   probeError: Schema.NullOr(Schema.String),
 });
@@ -41,6 +45,10 @@ export const DatabaseRuntimeProbeSchema = Schema.Struct({
   busy_timeout_ms: Schema.Number,
   synchronous_mode: Schema.String,
   max_connections: Schema.Number,
+  db_file_size_bytes: Schema.optional(Schema.NullOr(Schema.Number)),
+  db_file_size_mb: Schema.optional(Schema.NullOr(Schema.Number)),
+  wal_file_size_bytes: Schema.optional(Schema.NullOr(Schema.Number)),
+  wal_file_size_mb: Schema.optional(Schema.NullOr(Schema.Number)),
 });
 
 type DatabaseRuntimeProbe = Schema.Schema.Type<typeof DatabaseRuntimeProbeSchema>;
@@ -76,6 +84,10 @@ let snapshot: DatabaseRuntimeStatus = {
   busyTimeoutMs: null,
   foreignKeysEnabled: null,
   synchronousMode: null,
+  dbFileSizeBytes: null,
+  dbFileSizeMb: null,
+  walFileSizeBytes: null,
+  walFileSizeMb: null,
   probeLastUpdatedAt: null,
   probeError: null,
 };
@@ -311,6 +323,10 @@ export const applyDatabaseRuntimeProbe = (probe: DatabaseRuntimeProbe): void => 
     synchronousMode: normalizedSynchronous.length > 0
       ? normalizedSynchronous
       : null,
+    dbFileSizeBytes: probe.db_file_size_bytes ?? null,
+    dbFileSizeMb: probe.db_file_size_mb ?? null,
+    walFileSizeBytes: probe.wal_file_size_bytes ?? null,
+    walFileSizeMb: probe.wal_file_size_mb ?? null,
     probeLastUpdatedAt: now,
     probeError: null,
   }));

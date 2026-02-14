@@ -38,7 +38,7 @@ Implement Settings as a first-class domain with a phased, low-risk rollout:
 Create `AppSettings` with explicit keys and defaults, including:
 
 - Experience: `animationsEnabled`, `transitionIntensity`
-- Audio: `masterAudioEnabled`, `saveChimeEnabled`, `sirenEnabledDefault`, `masterVolume`
+- Audio: `masterAudioEnabled`, `saveVolEnabled`, `sirenEnabledDefault`, `masterVolume`
 - Save and sync: `autosaveEnabled`, `autosaveIntervalMs`, `saveOnNavigate`
 - Privacy/security: `telemetryEnabled`, `redactionMode`
 - Data lifecycle: `historyRetentionDays`

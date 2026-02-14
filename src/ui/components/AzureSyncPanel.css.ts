@@ -2,13 +2,16 @@ import { style } from "@vanilla-extract/css";
 import { theme } from "../../styles/theme.css";
 import { formGroup, input, label, toolbarButton } from "./styles.css";
 
+const telemetryTintStrength = "16%";
+const telemetryCountTintStrength = "24%";
+
 export const syncCard = style({
   display: "flex",
   flexDirection: "column",
   gap: theme.spacing["3"],
   clipPath: theme.clipPath.lg,
   border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-  backgroundColor: "rgba(8, 14, 11, 0.92)",
+  backgroundColor: theme.color.surface.base,
   padding: theme.spacing["4"],
 });
 
@@ -103,7 +106,7 @@ export const syncButton = style([
 
     selectors: {
       "&:disabled": {
-        opacity: 0.5,
+        opacity: theme.opacity.disabled,
         boxShadow: "none",
         cursor: "not-allowed",
       },
@@ -122,7 +125,7 @@ export const syncSummaryItem = style({
   flexDirection: "column",
   gap: theme.spacing["1"],
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-  backgroundColor: "rgba(11, 20, 16, 0.86)",
+  backgroundColor: theme.color.surface.elevated,
   padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
 });
 
@@ -141,6 +144,83 @@ export const syncSummaryValue = style({
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
   fontWeight: theme.typography.weight.bold,
+});
+
+export const telemetryBadgeRow = style({
+  display: "flex",
+  flexWrap: "wrap",
+  gap: theme.spacing["1"],
+});
+
+export const telemetryBadge = style({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: theme.color.background.input,
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.medium,
+});
+
+export const telemetryBadgeCount = style({
+  borderLeft: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  paddingLeft: theme.spacing["1"],
+  color: theme.color.foreground.primary,
+  fontWeight: theme.typography.weight.bold,
+});
+
+export const telemetryBadgeReady = style({
+  borderColor: theme.color.status.ready,
+  backgroundColor:
+    `color-mix(in srgb, ${theme.color.status.ready} ${telemetryTintStrength}, ${theme.color.surface.base})`,
+  color: theme.color.status.ready,
+});
+
+export const telemetryBadgeCaution = style({
+  borderColor: theme.color.status.caution,
+  backgroundColor:
+    `color-mix(in srgb, ${theme.color.status.caution} ${telemetryTintStrength}, ${theme.color.surface.base})`,
+  color: theme.color.status.caution,
+});
+
+export const telemetryBadgeCritical = style({
+  borderColor: theme.color.status.critical,
+  backgroundColor:
+    `color-mix(in srgb, ${theme.color.status.critical} ${telemetryTintStrength}, ${theme.color.surface.base})`,
+  color: theme.color.status.critical,
+});
+
+export const telemetryBadgeSelected = style({
+  borderColor: theme.color.status.selected,
+  backgroundColor:
+    `color-mix(in srgb, ${theme.color.status.selected} ${telemetryTintStrength}, ${theme.color.surface.base})`,
+  color: theme.color.status.selected,
+});
+
+export const telemetryBadgeCountReady = style({
+  borderColor: theme.color.status.ready,
+  backgroundColor: `color-mix(in srgb, ${theme.color.status.ready} ${telemetryCountTintStrength}, transparent)`,
+});
+
+export const telemetryBadgeCountCaution = style({
+  borderColor: theme.color.status.caution,
+  backgroundColor: `color-mix(in srgb, ${theme.color.status.caution} ${telemetryCountTintStrength}, transparent)`,
+});
+
+export const telemetryBadgeCountCritical = style({
+  borderColor: theme.color.status.critical,
+  backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} ${telemetryCountTintStrength}, transparent)`,
+});
+
+export const telemetryBadgeCountSelected = style({
+  borderColor: theme.color.status.selected,
+  backgroundColor: `color-mix(in srgb, ${theme.color.status.selected} ${telemetryCountTintStrength}, transparent)`,
 });
 
 export const syncList = style({

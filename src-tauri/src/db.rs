@@ -7,7 +7,7 @@
 //!
 //! See ADR-004 for the full architectural rationale.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use indexmap::IndexMap;
@@ -168,6 +168,49 @@ pub struct DbRuntimeProbe {
     pub busy_timeout_ms: i64,
     pub synchronous_mode: String,
     pub max_connections: u32,
+    pub db_file_size_bytes: Option<i64>,
+    pub db_file_size_mb: Option<f64>,
+    pub wal_file_size_bytes: Option<i64>,
+    pub wal_file_size_mb: Option<f64>,
+}
+
+#[derive(sqlx::FromRow)]
+struct DatabaseListRow {
+    name: String,
+    file: String,
+}
+
+fn bytes_to_megabytes(bytes: i64) -> f64 {
+    (bytes as f64) / (1024_f64 * 1024_f64)
+}
+
+fn normalize_file_size(bytes: u64) -> i64 {
+    if bytes > i64::MAX as u64 {
+        i64::MAX
+    } else {
+        bytes as i64
+    }
+}
+
+fn read_file_size_bytes(path: &Path) -> Option<i64> {
+    std::fs::metadata(path)
+        .ok()
+        .map(|metadata| normalize_file_size(metadata.len()))
+}
+
+async fn resolve_main_database_path(pool: &SqlitePool) -> Result<Option<PathBuf>, DbError> {
+    let databases = sqlx::query_as::<_, DatabaseListRow>("PRAGMA database_list;")
+        .fetch_all(pool)
+        .await?;
+
+    let main_path = databases
+        .iter()
+        .find(|database| database.name.eq_ignore_ascii_case("main"))
+        .map(|database| database.file.trim())
+        .filter(|file| !file.is_empty() && *file != ":memory:")
+        .map(PathBuf::from);
+
+    Ok(main_path)
 }
 
 #[tauri::command]
@@ -196,11 +239,44 @@ pub async fn db_runtime_probe(state: State<'_, AppDb>) -> Result<DbRuntimeProbe,
         _ => "unknown",
     };
 
+    let page_count: i64 = sqlx::query_scalar("PRAGMA page_count;")
+        .fetch_one(&state.0)
+        .await?;
+    let page_size: i64 = sqlx::query_scalar("PRAGMA page_size;")
+        .fetch_one(&state.0)
+        .await?;
+    let pragma_db_size_bytes = page_count.saturating_mul(page_size);
+
+    let main_database_path = resolve_main_database_path(&state.0).await?;
+    let db_file_size_bytes = main_database_path
+        .as_deref()
+        .and_then(read_file_size_bytes)
+        .or_else(|| {
+            if pragma_db_size_bytes > 0 {
+                Some(pragma_db_size_bytes)
+            } else {
+                None
+            }
+        });
+    let db_file_size_mb = db_file_size_bytes.map(bytes_to_megabytes);
+
+    let wal_file_size_bytes = main_database_path
+        .as_deref()
+        .and_then(|path| {
+            let wal_path = PathBuf::from(format!("{}-wal", path.to_string_lossy()));
+            read_file_size_bytes(wal_path.as_path())
+        });
+    let wal_file_size_mb = wal_file_size_bytes.map(bytes_to_megabytes);
+
     Ok(DbRuntimeProbe {
         journal_mode: journal_mode.to_lowercase(),
         foreign_keys: foreign_keys_raw != 0,
         busy_timeout_ms,
         synchronous_mode: synchronous_mode.to_string(),
         max_connections: 1,
+        db_file_size_bytes,
+        db_file_size_mb,
+        wal_file_size_bytes,
+        wal_file_size_mb,
     })
 }

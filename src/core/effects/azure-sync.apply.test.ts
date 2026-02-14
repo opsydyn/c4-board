@@ -98,6 +98,8 @@ describe("mergeAzureMappedGraphIntoCanvas", () => {
           label: "depends_on",
           relationshipType: "depends_on",
           confidence: "high",
+          provenanceSource: "arm_depends_on",
+          provenanceDetail: "dependsOn",
         },
       ],
     };
@@ -130,6 +132,9 @@ describe("mergeAzureMappedGraphIntoCanvas", () => {
       "azure-edge:new",
       "manual-edge",
     ]);
+    const mergedAzureEdge = result.edges.find((edge) => edge.id === "azure-edge:new");
+    expect(mergedAzureEdge?.data?.provenanceSource).toBe("arm_depends_on");
+    expect(mergedAzureEdge?.data?.provenanceDetail).toBe("dependsOn");
   });
 
   it("drops edges that target archived Azure nodes", () => {

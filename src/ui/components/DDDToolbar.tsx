@@ -78,8 +78,8 @@ interface DDDToolbarProps {
 	diagramName?: string;
 	currentLayout?: LayoutPresetName;
 	animationsEnabled?: boolean;
-	saveChimeStatusLabel?: string;
-	saveChimeStatusHint?: string;
+	saveVolStatusLabel?: string;
+	saveVolStatusHint?: string;
 }
 
 function formatSaveTime(timestamp: number, now: number): string {
@@ -145,8 +145,8 @@ export function DDDToolbar({
 	diagramName = "Untitled",
 	currentLayout,
 	animationsEnabled = true,
-	saveChimeStatusLabel,
-	saveChimeStatusHint,
+	saveVolStatusLabel,
+	saveVolStatusHint,
 }: DDDToolbarProps) {
 	const saveTimeLabel = useLiveSaveTime(lastSaved);
 
@@ -180,10 +180,10 @@ export function DDDToolbar({
 								<span title={saveError}>SAVE::ERROR</span>
 							</>
 						)}
-						{saveChimeStatusLabel && !isSaving && !saveError && (
+						{saveVolStatusLabel && !isSaving && !saveError && (
 							<>
 								<CloudIcon size={14} weight="duotone" />
-								<span title={saveChimeStatusHint}>{saveChimeStatusLabel}</span>
+								<span title={saveVolStatusHint}>{saveVolStatusLabel}</span>
 							</>
 						)}
 					</div>

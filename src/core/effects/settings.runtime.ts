@@ -18,6 +18,10 @@ interface AppSettingRow {
 	updated_at: number;
 }
 
+const LEGACY_APP_SETTING_KEY_ALIASES: Readonly<Record<string, AppSettingKey>> = {
+	saveChimeEnabled: "saveVolEnabled",
+};
+
 const SELECT_APP_SETTINGS_SQL = `
 	SELECT key, value, updated_at
 	FROM app_settings
@@ -72,18 +76,34 @@ const parseStoredSetting = (
 		},
 	});
 
+const toAppSettingKey = (rawKey: string): AppSettingKey | null => {
+	if (isAppSettingKey(rawKey)) {
+		return rawKey;
+	}
+
+	return LEGACY_APP_SETTING_KEY_ALIASES[rawKey] ?? null;
+};
+
 const hydrateSettings = (
 	rows: ReadonlyArray<AppSettingRow>,
 ): Effect.Effect<AppSettings, SettingsValidationError> =>
 	Effect.gen(function* () {
 		const overrides: Partial<Record<AppSettingKey, unknown>> = {};
+		const hasCanonicalSaveVolEnabled = rows.some(
+			(row) => row.key === "saveVolEnabled",
+		);
 
 		for (const row of rows) {
-			if (!isAppSettingKey(row.key)) {
+			if (hasCanonicalSaveVolEnabled && row.key === "saveChimeEnabled") {
 				continue;
 			}
-			const parsedValue = yield* parseStoredSetting(row.key, row.value);
-			overrides[row.key] = parsedValue;
+
+			const key = toAppSettingKey(row.key);
+			if (key === null) {
+				continue;
+			}
+			const parsedValue = yield* parseStoredSetting(key, row.value);
+			overrides[key] = parsedValue;
 		}
 
 		return yield* decodeSettings({

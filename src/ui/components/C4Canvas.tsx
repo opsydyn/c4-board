@@ -81,6 +81,8 @@ import {
 	type EdgeMetadata,
 } from "../../core/effects/edge-operations";
 
+type CanvasAmbientTone = "c4" | "ddd" | "azure";
+
 interface C4CanvasProps {
 	nodes: Node[];
 	edges: Edge[];
@@ -99,6 +101,7 @@ interface C4CanvasProps {
 	viewportToApply?: Viewport | null;
 	onContextMenuAction?: (action: ContextMenuAction, nodeId?: string, edgeId?: string) => void;
 	animationsEnabled?: boolean;
+	ambientTone?: CanvasAmbientTone;
 }
 
 export interface C4CanvasRef {
@@ -125,6 +128,7 @@ function C4CanvasInner(
 		viewportToApply,
 		onContextMenuAction,
 		animationsEnabled = true,
+		ambientTone = "c4",
 	}: C4CanvasProps,
 	ref: React.Ref<C4CanvasRef>,
 ) {
@@ -271,6 +275,18 @@ function C4CanvasInner(
 		}),
 		[],
 	);
+
+	const canvasToneClassName = useMemo(() => {
+		switch (ambientTone) {
+			case "azure":
+				return styles.canvasContainerToneAzure;
+			case "ddd":
+				return styles.canvasContainerToneDDD;
+			case "c4":
+			default:
+				return styles.canvasContainerToneC4;
+		}
+	}, [ambientTone]);
 
 	const handleNodeDoubleClick = useCallback(
 		(event: React.MouseEvent, node: Node) => {
@@ -434,7 +450,7 @@ function C4CanvasInner(
 					<CaretDownIcon size={16} weight="bold" />
 				</ToggleButton>
 			)}
-			<div className={styles.canvasContainer}>
+			<div className={`${styles.canvasContainer} ${canvasToneClassName}`}>
 				<ReactFlow
 					proOptions={{ hideAttribution: true }}
 					nodes={nodes}

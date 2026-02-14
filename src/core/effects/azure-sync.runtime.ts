@@ -12,6 +12,7 @@ import type {
   AzureGraphSnapshot,
   AzureRelationshipConfidence,
   AzureRelationshipSnapshot,
+  AzureRelationshipSource,
   AzureRelationshipType,
   AzureResourceSnapshot,
   AzureSyncResult,
@@ -129,6 +130,9 @@ const AzureRelationshipPayloadSchema = Schema.Struct({
   relationshipType: Schema.optional(Schema.NullOr(Schema.String)),
   relationship_type: Schema.optional(Schema.NullOr(Schema.String)),
   confidence: Schema.optional(Schema.NullOr(Schema.String)),
+  source: Schema.optional(Schema.NullOr(Schema.String)),
+  source_detail: Schema.optional(Schema.NullOr(Schema.String)),
+  sourceDetail: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const AzureGraphSnapshotPayloadSchema = Schema.Struct({
@@ -221,6 +225,20 @@ const decodeRelationshipConfidence = (
   }
 };
 
+const decodeRelationshipSource = (
+  value: unknown,
+): AzureRelationshipSource => {
+  switch (value) {
+    case "arm_depends_on":
+    case "property_ref":
+    case "arm_parent":
+    case "inferred":
+      return value;
+    default:
+      return "inferred";
+  }
+};
+
 const decodeResourceSnapshot = (value: unknown): AzureResourceSnapshot => {
   const payload = decodeUnknownSync(
     AzureResourcePayloadSchema,
@@ -285,6 +303,11 @@ const decodeRelationshipSnapshot = (
     });
   }
 
+  const sourceDetail = firstNonEmptyString(
+    payload.sourceDetail,
+    payload.source_detail,
+  );
+
   return {
     fromResourceId,
     toResourceId,
@@ -292,6 +315,8 @@ const decodeRelationshipSnapshot = (
       firstNonEmptyString(payload.relationshipType, payload.relationship_type),
     ),
     confidence: decodeRelationshipConfidence(firstNonEmptyString(payload.confidence)),
+    source: decodeRelationshipSource(firstNonEmptyString(payload.source)),
+    ...(sourceDetail ? { sourceDetail } : {}),
   };
 };
 
@@ -367,6 +392,8 @@ const toEdgeEntitySnapshot = (
     label: edge.label,
     relationshipType: edge.relationshipType,
     confidence: edge.confidence,
+    provenanceSource: edge.provenanceSource,
+    provenanceDetail: edge.provenanceDetail ?? null,
   }),
 });
 

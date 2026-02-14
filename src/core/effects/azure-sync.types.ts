@@ -6,6 +6,11 @@ export type AzureRelationshipType =
   | "inferred";
 
 export type AzureRelationshipConfidence = "high" | "medium" | "low";
+export type AzureRelationshipSource =
+  | "arm_depends_on"
+  | "property_ref"
+  | "arm_parent"
+  | "inferred";
 
 export interface AzureSyncScope {
   subscriptionIds: readonly string[];
@@ -41,6 +46,8 @@ export interface AzureRelationshipSnapshot {
   toResourceId: string;
   relationshipType: AzureRelationshipType;
   confidence: AzureRelationshipConfidence;
+  source: AzureRelationshipSource;
+  sourceDetail?: string;
 }
 
 export interface AzureGraphSnapshot {

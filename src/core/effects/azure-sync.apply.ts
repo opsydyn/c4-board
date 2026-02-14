@@ -602,6 +602,8 @@ const mergeMappedEdge = (
       sourceProvider: "azure",
       relationshipType: mappedEdge.relationshipType,
       confidence: mappedEdge.confidence,
+      provenanceSource: mappedEdge.provenanceSource,
+      ...(mappedEdge.provenanceDetail ? { provenanceDetail: mappedEdge.provenanceDetail } : {}),
       createdAt: priorCreatedAt,
       lastSyncedAt: syncedAt,
       syncVersion: 1,

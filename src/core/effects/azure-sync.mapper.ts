@@ -1,4 +1,9 @@
-import type { AzureGraphSnapshot, AzureRelationshipSnapshot, AzureResourceSnapshot } from "./azure-sync.types";
+import type {
+  AzureGraphSnapshot,
+  AzureRelationshipSnapshot,
+  AzureRelationshipSource,
+  AzureResourceSnapshot,
+} from "./azure-sync.types";
 import {
   normalizeAzureResourceId,
   toAzureEdgeId,
@@ -34,6 +39,8 @@ export interface AzureMappedEdge {
   label: string;
   relationshipType: string;
   confidence: string;
+  provenanceSource: AzureRelationshipSource;
+  provenanceDetail?: string;
 }
 
 export interface AzureMappedGraph {
@@ -179,6 +186,8 @@ const mapRelationship = (
     label: relationship.relationshipType,
     relationshipType: relationship.relationshipType,
     confidence: relationship.confidence,
+    provenanceSource: relationship.source,
+    ...(relationship.sourceDetail ? { provenanceDetail: relationship.sourceDetail } : {}),
   };
 };
 
