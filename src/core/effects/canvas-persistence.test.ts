@@ -80,6 +80,40 @@ describe("reactFlowNodeToDb", () => {
       },
     });
   });
+
+  it("normalizes and persists team ownership when provided", () => {
+    const reactNode: ReactFlowNode = {
+      id: "node-team-1",
+      type: "system",
+      position: { x: 20, y: 30 },
+      data: {
+        label: "Core API",
+        c4Type: "system",
+        teamOwnership: "  Team-Platform  ",
+      },
+    };
+
+    const result = reactFlowNodeToDb(reactNode, "diagram-1");
+
+    expect(result.team_ownership).toBe("Team-Platform");
+  });
+
+  it("omits team ownership when the input is blank", () => {
+    const reactNode: ReactFlowNode = {
+      id: "node-team-2",
+      type: "system",
+      position: { x: 20, y: 30 },
+      data: {
+        label: "Core API",
+        c4Type: "system",
+        teamOwnership: "   ",
+      },
+    };
+
+    const result = reactFlowNodeToDb(reactNode, "diagram-1");
+
+    expect(result.team_ownership).toBeUndefined();
+  });
 });
 
 describe("dbNodeToReactFlow", () => {
@@ -172,6 +206,32 @@ describe("dbNodeToReactFlow", () => {
       (result.data?.couplingOverrides as Record<string, unknown> | undefined)
         ?.distance,
     ).toBe(9);
+  });
+
+  it("hydrates team ownership from persisted node metadata", () => {
+    const dbNode: Partial<DbNode> = {
+      id: "node-team-3",
+      diagram_id: "diagram-1",
+      type: "system",
+      label: "Core Domain",
+      technology: null,
+      description: null,
+      position_x: 12,
+      position_y: 34,
+      width: null,
+      height: null,
+      parent_id: null,
+      extent: null,
+      expand_parent: 0,
+      icon_id: null,
+      team_ownership: "team-platform",
+      created_at: 1,
+      updated_at: 2,
+    };
+
+    const result = dbNodeToReactFlow(dbNode as DbNode);
+
+    expect(result.data?.teamOwnership).toBe("team-platform");
   });
 
   it("ignores invalid coupling state JSON", () => {

@@ -202,6 +202,7 @@ export interface UpdateNodeInput {
   icon_id?: string | null;
   coupling_state_version?: number;
   coupling_state_json?: string | null;
+  team_ownership?: string | null;
 }
 
 export interface CreateEdgeInput {
@@ -502,6 +503,10 @@ export const updateNode = (id: string, input: UpdateNodeInput) =>
     if (input.coupling_state_json !== undefined) {
       updates.push("coupling_state_json = ?");
       values.push(input.coupling_state_json);
+    }
+    if (input.team_ownership !== undefined) {
+      updates.push("team_ownership = ?");
+      values.push(input.team_ownership ?? null);
     }
 
     if (updates.length === 0) {

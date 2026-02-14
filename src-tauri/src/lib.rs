@@ -482,6 +482,12 @@ pub fn run() {
             sql: include_str!("../migrations/017_add_node_coupling_state.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 18,
+            description: "normalize_team_ownership",
+            sql: include_str!("../migrations/018_normalize_team_ownership.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

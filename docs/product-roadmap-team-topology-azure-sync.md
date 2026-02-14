@@ -75,8 +75,8 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 
 ### Checklist
 
-- [ ] Add editable `teamOwnership` field to node properties for C4 and DDD nodes.
-- [ ] Add explicit ownership lens/filter in board UI (show by team, cross-team edges, unknown ownership).
+- [x] Add editable `teamOwnership` field to node properties for C4 and DDD nodes.
+- [x] Add explicit ownership lens/filter in board UI (show by team, cross-team edges, unknown ownership).
 - [ ] Add coupling explainability panel with formula inputs and contributors per node.
 - [ ] Add score provenance rendering (auto/hybrid/manual) in chart tooltip/details.
 - [ ] Add scenario fixtures for mono-team, multi-team, and unknown-ownership architectures.

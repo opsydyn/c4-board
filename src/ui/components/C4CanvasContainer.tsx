@@ -11,7 +11,14 @@
  * - Load diagram on mount or create new
  */
 
-import { CaretLeftIcon, CaretRightIcon, CaretUpIcon, CloudIcon, GearSixIcon } from "@phosphor-icons/react";
+import {
+  CaretLeftIcon,
+  CaretRightIcon,
+  CaretUpIcon,
+  CloudIcon,
+  GearSixIcon,
+  UsersFourIcon,
+} from "@phosphor-icons/react";
 import { emit } from "@tauri-apps/api/event";
 import { useMachine } from "@xstate/react";
 import { type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from "@xyflow/react";
@@ -59,6 +66,7 @@ import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
+import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
 import { Toolbar } from "./Toolbar";
 
 const sidebarBrandMetaClass = flex({
@@ -83,6 +91,19 @@ const toSaveSynthVolumeDb = (masterVolume: number): number =>
   masterVolume <= 0
     ? -60
     : -24 + Math.max(0, Math.min(1, masterVolume)) * 20;
+const OWNERSHIP_FILTER_ALL = "__all__";
+const OWNERSHIP_FILTER_UNASSIGNED = "__unassigned__";
+
+const normalizeTeamOwnership = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed.toLowerCase();
+};
 
 export function C4CanvasContainer() {
   const [state, send, canvasActor] = useMachine(
@@ -114,6 +135,12 @@ export function C4CanvasContainer() {
   const [isCommandBarOpen, setCommandBarOpen] = useState(true);
   const [isDataBarOpen, setDataBarOpen] = useState(false);
   const [isAzurePanelOpen, setAzurePanelOpen] = useState(false);
+  const [isOwnershipLensOpen, setOwnershipLensOpen] = useState(true);
+  const [ownershipTeamFilter, setOwnershipTeamFilter] = useState<string>(
+    OWNERSHIP_FILTER_ALL,
+  );
+  const [showCrossTeamOnly, setShowCrossTeamOnly] = useState(false);
+  const [showUnknownOwnershipOnly, setShowUnknownOwnershipOnly] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -299,6 +326,7 @@ export function C4CanvasContainer() {
           extent: dbNode.extent ?? null,
           expandParent: dbNode.expand_parent ?? false,
           iconId: dbNode.icon_id ?? null,
+          teamOwnership: dbNode.team_ownership ?? null,
         };
       })
       .sort((a, b) => a.id.localeCompare(b.id));
@@ -1010,6 +1038,180 @@ export function C4CanvasContainer() {
     }));
   }, [state.context.nodes, send]);
 
+  const normalizedTeamByNodeId = useMemo(() => {
+    const teamByNodeId = new Map<string, string | null>();
+    for (const node of state.context.nodes) {
+      teamByNodeId.set(node.id, normalizeTeamOwnership(node.data?.teamOwnership));
+    }
+    return teamByNodeId;
+  }, [state.context.nodes]);
+
+  const teamDisplayByNormalized = useMemo(() => {
+    const teams = new Map<string, string>();
+    for (const node of state.context.nodes) {
+      const rawOwnership = node.data?.teamOwnership;
+      if (typeof rawOwnership !== "string") {
+        continue;
+      }
+      const trimmed = rawOwnership.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+      const normalized = trimmed.toLowerCase();
+      if (!teams.has(normalized)) {
+        teams.set(normalized, trimmed);
+      }
+    }
+    return teams;
+  }, [state.context.nodes]);
+
+  const ownershipTeamOptions = useMemo<TacticalSelectOption[]>(() => {
+    const dynamicTeams = Array.from(teamDisplayByNormalized.entries())
+      .sort(([teamA], [teamB]) => teamA.localeCompare(teamB))
+      .map(([value, label]) => ({
+        value,
+        label: label.toUpperCase(),
+      }));
+
+    return [
+      { value: OWNERSHIP_FILTER_ALL, label: "ALL TEAMS" },
+      { value: OWNERSHIP_FILTER_UNASSIGNED, label: "UNASSIGNED" },
+      ...dynamicTeams,
+    ];
+  }, [teamDisplayByNormalized]);
+
+  useEffect(() => {
+    if (
+      ownershipTeamFilter !== OWNERSHIP_FILTER_ALL
+      && ownershipTeamFilter !== OWNERSHIP_FILTER_UNASSIGNED
+      && !teamDisplayByNormalized.has(ownershipTeamFilter)
+    ) {
+      setOwnershipTeamFilter(OWNERSHIP_FILTER_ALL);
+    }
+  }, [ownershipTeamFilter, teamDisplayByNormalized]);
+
+  const crossTeamEdgeCount = useMemo(() => {
+    return state.context.edges.filter((edge) => {
+      const sourceOwnership = normalizedTeamByNodeId.get(edge.source) ?? null;
+      const targetOwnership = normalizedTeamByNodeId.get(edge.target) ?? null;
+      return sourceOwnership !== targetOwnership
+        && (sourceOwnership !== null || targetOwnership !== null);
+    }).length;
+  }, [normalizedTeamByNodeId, state.context.edges]);
+
+  const unknownOwnershipCount = useMemo(() => {
+    return state.context.nodes.filter(
+      (node) => (normalizedTeamByNodeId.get(node.id) ?? null) === null,
+    ).length;
+  }, [normalizedTeamByNodeId, state.context.nodes]);
+
+  const filteredCanvas = useMemo(() => {
+    if (!isOwnershipLensOpen) {
+      return {
+        nodes: enrichedNodes,
+        edges: state.context.edges,
+      };
+    }
+
+    const getEdgeOwnership = (edge: Edge): { source: string | null; target: string | null } => {
+      const sourceOwnership = normalizedTeamByNodeId.get(edge.source) ?? null;
+      const targetOwnership = normalizedTeamByNodeId.get(edge.target) ?? null;
+      return { source: sourceOwnership, target: targetOwnership };
+    };
+
+    const isCrossTeamEdge = (edge: Edge): boolean => {
+      const { source, target } = getEdgeOwnership(edge);
+      return source !== target && (source !== null || target !== null);
+    };
+
+    const matchesSelectedTeam = (nodeId: string): boolean => {
+      const ownership = normalizedTeamByNodeId.get(nodeId) ?? null;
+      if (ownershipTeamFilter === OWNERSHIP_FILTER_ALL) {
+        return true;
+      }
+      if (ownershipTeamFilter === OWNERSHIP_FILTER_UNASSIGNED) {
+        return ownership === null;
+      }
+      return ownership === ownershipTeamFilter;
+    };
+
+    const edgeMatchesSelectedTeam = (edge: Edge): boolean => {
+      if (ownershipTeamFilter === OWNERSHIP_FILTER_ALL) {
+        return true;
+      }
+
+      const { source, target } = getEdgeOwnership(edge);
+      if (ownershipTeamFilter === OWNERSHIP_FILTER_UNASSIGNED) {
+        return source === null || target === null;
+      }
+
+      return source === ownershipTeamFilter || target === ownershipTeamFilter;
+    };
+
+    if (showCrossTeamOnly) {
+      let candidateEdges = state.context.edges.filter(
+        (edge) => isCrossTeamEdge(edge) && edgeMatchesSelectedTeam(edge),
+      );
+
+      if (showUnknownOwnershipOnly) {
+        candidateEdges = candidateEdges.filter((edge) => {
+          const { source, target } = getEdgeOwnership(edge);
+          return source === null || target === null;
+        });
+      }
+
+      const edgeNodeIds = new Set<string>();
+      for (const edge of candidateEdges) {
+        edgeNodeIds.add(edge.source);
+        edgeNodeIds.add(edge.target);
+      }
+
+      return {
+        nodes: enrichedNodes.filter((node) => edgeNodeIds.has(node.id)),
+        edges: candidateEdges,
+      };
+    }
+
+    const candidateNodes = enrichedNodes.filter((node) => {
+      if (!matchesSelectedTeam(node.id)) {
+        return false;
+      }
+
+      if (showUnknownOwnershipOnly) {
+        return (normalizedTeamByNodeId.get(node.id) ?? null) === null;
+      }
+
+      return true;
+    });
+
+    const visibleNodeIds = new Set(candidateNodes.map((node) => node.id));
+    const candidateEdges = state.context.edges.filter(
+      (edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target),
+    );
+
+    return {
+      nodes: candidateNodes,
+      edges: candidateEdges,
+    };
+  }, [
+    enrichedNodes,
+    normalizedTeamByNodeId,
+    ownershipTeamFilter,
+    showCrossTeamOnly,
+    showUnknownOwnershipOnly,
+    isOwnershipLensOpen,
+    state.context.edges,
+  ]);
+
+  const isOwnershipLensAtDefault = ownershipTeamFilter === OWNERSHIP_FILTER_ALL
+    && !showCrossTeamOnly
+    && !showUnknownOwnershipOnly;
+  const handleResetOwnershipLens = useCallback(() => {
+    setOwnershipTeamFilter(OWNERSHIP_FILTER_ALL);
+    setShowCrossTeamOnly(false);
+    setShowUnknownOwnershipOnly(false);
+  }, []);
+
   const handleNewBoard = useCallback(async () => {
     try {
       // Send CREATE_NEW_BOARD event to transition to creatingDiagram state
@@ -1254,6 +1456,30 @@ export function C4CanvasContainer() {
   const selectedNode = (state.context.nodes.find(
     (n: { id: string }) => n.id === state.context.selectedNodeId,
   ) as Node<NodeData> | undefined) || null;
+  const ownershipTeams = useMemo(
+    () => Array.from(teamDisplayByNormalized.values()),
+    [teamDisplayByNormalized],
+  );
+
+  const handleRemoveOwnershipTeamFromBoard = useCallback(
+    (team: string) => {
+      const normalizedTarget = normalizeTeamOwnership(team);
+      if (!normalizedTarget) {
+        return;
+      }
+
+      for (const node of state.context.nodes) {
+        if (normalizeTeamOwnership(node.data?.teamOwnership) === normalizedTarget) {
+          send({
+            type: "UPDATE_NODE",
+            nodeId: node.id,
+            updates: { teamOwnership: "" },
+          });
+        }
+      }
+    },
+    [send, state.context.nodes],
+  );
 
   // Handle node selection from search
   const handleSelectNode = useCallback(
@@ -1385,6 +1611,16 @@ export function C4CanvasContainer() {
               >
                 <CloudIcon size={16} weight="duotone" />
               </button>
+              <button
+                type="button"
+                className={`${styles.sidebarBrandAction} ${isOwnershipLensOpen ? styles.sidebarBrandActionActive : ""}`}
+                aria-label={isOwnershipLensOpen ? "Hide ownership lens panel" : "Show ownership lens panel"}
+                aria-pressed={isOwnershipLensOpen}
+                title={isOwnershipLensOpen ? "Hide ownership lens panel" : "Show ownership lens panel"}
+                onClick={() => setOwnershipLensOpen((open) => !open)}
+              >
+                <UsersFourIcon size={16} weight="duotone" />
+              </button>
               <a
                 className={styles.sidebarBrandAction}
                 href="/settings"
@@ -1452,6 +1688,58 @@ export function C4CanvasContainer() {
               onDomainChange={(domain) => send({ type: "SET_DOMAIN", domain })}
             />
           </div>
+          {isOwnershipLensOpen && (
+            <section className={styles.ownershipLensCard} aria-label="Ownership lens filters">
+              <h3 className={styles.ownershipLensTitle}>OWNERSHIP LENS</h3>
+              <p className={styles.ownershipLensHint}>
+                Filter by team, isolate cross-team dependencies, and expose unknown ownership.
+              </p>
+              <div className={styles.formGroup}>
+                <label className={styles.label} htmlFor="ownership-team-filter">
+                  Team Filter
+                </label>
+                <TacticalSelect
+                  id="ownership-team-filter"
+                  ariaLabel="Filter nodes by team ownership"
+                  value={ownershipTeamFilter}
+                  options={ownershipTeamOptions}
+                  onChange={setOwnershipTeamFilter}
+                />
+              </div>
+              <div className={styles.ownershipLensToggleRow}>
+                <button
+                  type="button"
+                  className={styles.ownershipLensToggleButton}
+                  aria-pressed={showCrossTeamOnly}
+                  onClick={() => setShowCrossTeamOnly((current) => !current)}
+                >
+                  CROSS-TEAM EDGES
+                </button>
+                <button
+                  type="button"
+                  className={styles.ownershipLensToggleButton}
+                  aria-pressed={showUnknownOwnershipOnly}
+                  onClick={() => setShowUnknownOwnershipOnly((current) => !current)}
+                >
+                  UNKNOWN OWNERSHIP
+                </button>
+              </div>
+              <div className={styles.ownershipLensStats}>
+                <span>{`VISIBLE::${filteredCanvas.nodes.length}N / ${filteredCanvas.edges.length}E`}</span>
+                <span>{`TEAMS::${teamDisplayByNormalized.size}`}</span>
+                <span>{`CROSS-TEAM::${crossTeamEdgeCount}`}</span>
+                <span>{`UNASSIGNED::${unknownOwnershipCount}`}</span>
+              </div>
+              <button
+                type="button"
+                className={styles.toolbarButton}
+                onClick={handleResetOwnershipLens}
+                disabled={isOwnershipLensAtDefault}
+              >
+                RESET LENS
+              </button>
+            </section>
+          )}
           {state.context.currentDomain === "c4"
             ? (
               <Toolbar
@@ -1533,8 +1821,8 @@ export function C4CanvasContainer() {
       <section className={styles.canvasRegion}>
         <C4Canvas
           ref={canvasRef}
-          nodes={enrichedNodes}
-          edges={state.context.edges}
+          nodes={filteredCanvas.nodes}
+          edges={filteredCanvas.edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -1607,6 +1895,8 @@ export function C4CanvasContainer() {
           />
           <PropertiesPanel
             selectedNode={selectedNode}
+            ownershipTeams={ownershipTeams}
+            onRemoveOwnershipTeamFromBoard={handleRemoveOwnershipTeamFromBoard}
             onUpdateNode={(nodeId, updates) => send({ type: "UPDATE_NODE", nodeId, updates })}
           />
         </aside>

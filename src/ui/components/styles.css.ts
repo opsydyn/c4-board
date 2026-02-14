@@ -377,6 +377,35 @@ export const toolbarButton = style({
   },
 });
 
+export const dangerIconButton = style([
+  toolbarButton,
+  {
+    flexShrink: 0,
+    justifyContent: "center",
+    borderColor: theme.color.status.critical,
+    padding: 0,
+    width: "2rem",
+    height: "2rem",
+    color: theme.color.status.critical,
+
+    selectors: {
+      "&:hover": {
+        borderColor: theme.color.status.critical,
+        boxShadow: `0 0 10px ${theme.color.status.critical}55`,
+        backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} 14%, transparent)`,
+      },
+      "&:disabled, &:disabled:hover": {
+        opacity: theme.opacity.disabled,
+        borderColor: theme.color.border.secondary,
+        boxShadow: "none",
+        backgroundColor: "rgba(13, 23, 18, 0.95)",
+        cursor: "not-allowed",
+        color: theme.color.foreground.disabled,
+      },
+    },
+  },
+]);
+
 export const commandBarButton = style([
   toolbarButton,
   {
@@ -411,6 +440,86 @@ export const sidebarQuickActionLink = style([
     fontSize: theme.typography.size.xs,
   },
 ]);
+
+export const ownershipLensCard = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.md,
+  border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+  backgroundColor: "rgba(10, 18, 14, 0.92)",
+  padding: theme.spacing["3"],
+});
+
+export const ownershipLensTitle = style({
+  margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wider,
+  color: theme.color.interactive.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.bold,
+});
+
+export const ownershipLensHint = style({
+  margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const ownershipLensToggleRow = style({
+  display: "flex",
+  flexWrap: "wrap",
+  gap: theme.spacing["2"],
+});
+
+export const ownershipLensToggleButton = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  transition: theme.transition.base,
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(12, 20, 16, 0.92)",
+  cursor: "pointer",
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+
+  selectors: {
+    "&:hover": {
+      borderColor: theme.color.border.primary,
+      boxShadow: theme.effect.glow.sm,
+      color: theme.color.foreground.primary,
+    },
+    "&[aria-pressed=\"true\"], &[data-selected=\"true\"]": {
+      borderColor: theme.color.status.selected,
+      boxShadow: theme.effect.glow.sm,
+      backgroundColor: "rgba(14, 26, 20, 0.98)",
+      color: theme.color.interactive.primary,
+    },
+    "&[aria-pressed=\"true\"]:hover, &[data-selected=\"true\"]:hover": {
+      borderColor: theme.color.status.selected,
+      color: theme.color.interactive.primary,
+    },
+  },
+});
+
+export const ownershipLensStats = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: theme.spacing["1"],
+  borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  paddingTop: theme.spacing["2"],
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
 
 /**
  * Domain Toggle
@@ -825,6 +934,17 @@ export const formGroup = style({
   display: "flex",
   flexDirection: "column",
   gap: theme.spacing["1"],
+});
+
+export const formInlineRow = style({
+  display: "flex",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+});
+
+export const inputGrow = style({
+  flex: 1,
+  minWidth: 0,
 });
 
 /**

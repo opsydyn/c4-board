@@ -285,6 +285,7 @@ const encodeCouplingState = (data: Record<string, unknown>): string | null => {
 export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
   const fallbackIcon = getDefaultIconId(dbNode.type as C4Type);
   const couplingState = decodeCouplingState(dbNode);
+  const teamOwnership = dbNode.team_ownership?.trim();
 
   // Base node (always present fields)
   const baseNode: ReactFlowNode = {
@@ -301,6 +302,9 @@ export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
       c4Type: dbNode.type,
       createdAt: dbNode.created_at,
       iconId: (dbNode.icon_id as NodeIconId | null) ?? fallbackIcon,
+      ...(teamOwnership && teamOwnership.length > 0
+        ? { teamOwnership }
+        : {}),
       ...couplingState,
     },
     // Initialize measured dimensions for ReactFlow v12+
@@ -363,6 +367,10 @@ export function reactFlowNodeToDb(
 
   const technology = typeof technologyValue === "string" ? technologyValue : undefined;
   const description = typeof descriptionValue === "string" ? descriptionValue : undefined;
+  const teamOwnershipValue = dataRecord.teamOwnership;
+  const teamOwnership = typeof teamOwnershipValue === "string"
+    ? teamOwnershipValue.trim()
+    : "";
   const iconValue = typeof dataRecord.iconId === "string" && dataRecord.iconId.length > 0
     ? (dataRecord.iconId as string)
     : undefined;
@@ -387,6 +395,10 @@ export function reactFlowNodeToDb(
     ...optional("extent", node.extent as "parent" | undefined),
     ...optional("expand_parent", node.expandParent),
     ...optional("icon_id", resolvedIconId),
+    ...optional(
+      "team_ownership",
+      teamOwnership.length > 0 ? teamOwnership : undefined,
+    ),
     coupling_state_version: COUPLING_STATE_VERSION,
     coupling_state_json: couplingStateJson,
   };
@@ -475,6 +487,7 @@ const hasNodeChanges = (
     || existing.extent !== toNullableExtent(next.extent)
     || existing.expand_parent !== toExpandParentInt(next.expand_parent)
     || existing.icon_id !== toNullableString(next.icon_id)
+    || existing.team_ownership !== toNullableString(next.team_ownership)
     || existing.coupling_state_version
       !== toCouplingStateVersion(next.coupling_state_version)
     || existing.coupling_state_json
@@ -591,6 +604,7 @@ export const saveDiagram = (
               ...(dbNodeInput.icon_id !== undefined
                 ? { icon_id: dbNodeInput.icon_id }
                 : {}),
+              team_ownership: dbNodeInput.team_ownership ?? null,
               coupling_state_version: couplingStateVersion,
               coupling_state_json: couplingStateJson,
             };
