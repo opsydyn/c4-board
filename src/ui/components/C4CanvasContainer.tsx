@@ -17,6 +17,7 @@ import {
   CaretUpIcon,
   CloudIcon,
   GearSixIcon,
+  RobotIcon,
   UsersFourIcon,
 } from "@phosphor-icons/react";
 import { emit } from "@tauri-apps/api/event";
@@ -47,6 +48,8 @@ import { flex } from "../../styles/sprinkles.css";
 import { useC4AutosaveMachine } from "../hooks/useC4AutosaveMachine";
 import { useC4CommandsMachine } from "../hooks/useC4CommandsMachine";
 import { useC4NavigationMachine } from "../hooks/useC4NavigationMachine";
+import { useC4PanelPreferencesMachine } from "../hooks/useC4PanelPreferencesMachine";
+import type { C4PanelPreferencePatch } from "../machines/c4-panel-preferences.machine";
 import {
   type C4SaveMachineEvent,
   type C4SaveMode,
@@ -64,6 +67,8 @@ import { DDDToolbar } from "./DDDToolbar";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
+import { OpyAvatar } from "./OpyAvatar";
+import { OpyCopilotPanel } from "./OpyCopilotPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
@@ -164,14 +169,51 @@ export function C4CanvasContainer() {
   const [isCompactLayout, setCompactLayout] = useState(false);
   const [isCommandBarOpen, setCommandBarOpen] = useState(true);
   const [isDataBarOpen, setDataBarOpen] = useState(false);
-  const [isAzurePanelOpen, setAzurePanelOpen] = useState(false);
-  const [isOwnershipLensOpen, setOwnershipLensOpen] = useState(true);
   const [ownershipTeamCatalog, setOwnershipTeamCatalog] = useState<string[]>([]);
   const [ownershipTeamFilter, setOwnershipTeamFilter] = useState<string>(
     OWNERSHIP_FILTER_ALL,
   );
   const [showCrossTeamOnly, setShowCrossTeamOnly] = useState(false);
   const [showUnknownOwnershipOnly, setShowUnknownOwnershipOnly] = useState(false);
+  const [isOpy9000Open, setOpy9000Open] = useState(false);
+
+  const persistPanelPreferencePatch = useCallback(
+    async (patch: C4PanelPreferencePatch): Promise<void> => {
+      if (!settingsV1Enabled) {
+        return;
+      }
+      await runEffect(patchSettings(patch));
+    },
+    [runEffect, settingsV1Enabled],
+  );
+
+  const handlePanelPreferencePersistFailure = useCallback(
+    (event: {
+      patch: C4PanelPreferencePatch;
+      message: string;
+    }) => {
+      console.warn("⚠️ Failed to persist panel preference", event.patch, event.message);
+    },
+    [],
+  );
+
+  const {
+    azurePanelVisible: isAzurePanelOpen,
+    ownershipLensVisible: isOwnershipLensOpen,
+    couplingExplainabilityVisible: isCouplingExplainabilityVisible,
+    toggleAzurePanel,
+    toggleOwnershipLens,
+    toggleCouplingExplainability,
+  } = useC4PanelPreferencesMachine({
+    isSettingsLoading,
+    settings: {
+      azurePanelVisible: appSettings.azurePanelVisible,
+      ownershipLensVisible: appSettings.ownershipLensVisible,
+      couplingExplainabilityVisible: appSettings.couplingExplainabilityVisible,
+    },
+    persistPatch: persistPanelPreferencePatch,
+    onPersistFailure: handlePanelPreferencePersistFailure,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1162,7 +1204,7 @@ export function C4CanvasContainer() {
   }, [ownershipTeamDisplayByNormalized, ownershipTeamFilter]);
 
   const crossTeamEdgeCount = useMemo(() => {
-    return state.context.edges.filter((edge) => {
+    return state.context.edges.filter((edge: Edge) => {
       const sourceOwnership = normalizedTeamByNodeId.get(edge.source) ?? null;
       const targetOwnership = normalizedTeamByNodeId.get(edge.target) ?? null;
       return sourceOwnership !== targetOwnership
@@ -1172,7 +1214,7 @@ export function C4CanvasContainer() {
 
   const unknownOwnershipCount = useMemo(() => {
     return state.context.nodes.filter(
-      (node) => (normalizedTeamByNodeId.get(node.id) ?? null) === null,
+      (node: Node<NodeData>) => (normalizedTeamByNodeId.get(node.id) ?? null) === null,
     ).length;
   }, [normalizedTeamByNodeId, state.context.nodes]);
 
@@ -1221,11 +1263,11 @@ export function C4CanvasContainer() {
 
     if (showCrossTeamOnly) {
       let candidateEdges = state.context.edges.filter(
-        (edge) => isCrossTeamEdge(edge) && edgeMatchesSelectedTeam(edge),
+        (edge: Edge) => isCrossTeamEdge(edge) && edgeMatchesSelectedTeam(edge),
       );
 
       if (showUnknownOwnershipOnly) {
-        candidateEdges = candidateEdges.filter((edge) => {
+        candidateEdges = candidateEdges.filter((edge: Edge) => {
           const { source, target } = getEdgeOwnership(edge);
           return source === null || target === null;
         });
@@ -1238,12 +1280,12 @@ export function C4CanvasContainer() {
       }
 
       return {
-        nodes: enrichedNodes.filter((node) => edgeNodeIds.has(node.id)),
+        nodes: enrichedNodes.filter((node: Node<NodeData>) => edgeNodeIds.has(node.id)),
         edges: candidateEdges,
       };
     }
 
-    const candidateNodes = enrichedNodes.filter((node) => {
+    const candidateNodes = enrichedNodes.filter((node: Node<NodeData>) => {
       if (!matchesSelectedTeam(node.id)) {
         return false;
       }
@@ -1255,9 +1297,9 @@ export function C4CanvasContainer() {
       return true;
     });
 
-    const visibleNodeIds = new Set(candidateNodes.map((node) => node.id));
+    const visibleNodeIds = new Set(candidateNodes.map((node: Node<NodeData>) => node.id));
     const candidateEdges = state.context.edges.filter(
-      (edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target),
+      (edge: Edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target),
     );
 
     return {
@@ -1702,7 +1744,7 @@ export function C4CanvasContainer() {
                 aria-label={isAzurePanelOpen ? "Hide Azure sync panel" : "Show Azure sync panel"}
                 aria-pressed={isAzurePanelOpen}
                 title={isAzurePanelOpen ? "Hide Azure sync panel" : "Show Azure sync panel"}
-                onClick={() => setAzurePanelOpen((open) => !open)}
+                onClick={toggleAzurePanel}
               >
                 <CloudIcon size={16} weight="duotone" />
               </button>
@@ -1712,9 +1754,19 @@ export function C4CanvasContainer() {
                 aria-label={isOwnershipLensOpen ? "Hide ownership lens panel" : "Show ownership lens panel"}
                 aria-pressed={isOwnershipLensOpen}
                 title={isOwnershipLensOpen ? "Hide ownership lens panel" : "Show ownership lens panel"}
-                onClick={() => setOwnershipLensOpen((open) => !open)}
+                onClick={toggleOwnershipLens}
               >
                 <UsersFourIcon size={16} weight="duotone" />
+              </button>
+              <button
+                type="button"
+                className={`${styles.sidebarBrandAction} ${isOpy9000Open ? styles.sidebarBrandActionActive : ""}`}
+                aria-label={isOpy9000Open ? "Hide OPY::9000 assistant panel" : "Show OPY::9000 assistant panel"}
+                aria-pressed={isOpy9000Open}
+                title={isOpy9000Open ? "Hide OPY::9000 assistant panel" : "Show OPY::9000 assistant panel"}
+                onClick={() => setOpy9000Open((current) => !current)}
+              >
+                <RobotIcon size={16} weight="duotone" />
               </button>
               <a
                 className={styles.sidebarBrandAction}
@@ -1833,6 +1885,29 @@ export function C4CanvasContainer() {
               diagramId={state.context.currentDiagramId}
               onApply={handleApplyAzureSync}
             />
+          )}
+          {isOpy9000Open && (
+            <section className={styles.ownershipLensCard} aria-label="OPY::9000 assistant panel">
+              <h3 className={styles.ownershipLensTitle}>
+                <span className={styles.opyHeaderRow}>
+                  <OpyAvatar />
+                  <span>OPY::9000</span>
+                </span>
+              </h3>
+              <p className={styles.ownershipLensHint}>
+                HAL-inspired architecture copilot. Operator prompts are scoped to this board.
+              </p>
+              <OpyCopilotPanel
+                hasOpenAiApiKey={appSettings.openAiApiKey.trim().length > 0}
+                domain={state.context.currentDomain}
+                diagramId={state.context.currentDiagramId}
+                nodeCount={state.context.nodes.length}
+                edgeCount={state.context.edges.length}
+                onOpenAiSettings={() => {
+                  void navigateWithSave("/settings");
+                }}
+              />
+            </section>
           )}
           {state.context.currentDomain === "c4"
             ? (
@@ -1986,6 +2061,8 @@ export function C4CanvasContainer() {
             onSelectModule={handleSelectNode}
             domain={state.context.currentDomain}
             mudAlertThreshold={appSettings.bigBallOfMudAlertThreshold}
+            isExplainabilityVisible={isCouplingExplainabilityVisible}
+            onToggleExplainability={toggleCouplingExplainability}
           />
           <PropertiesPanel
             selectedNode={selectedNode}

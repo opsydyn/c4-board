@@ -7,9 +7,11 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 use tokio::time::sleep;
 
 mod azure_sync;
+mod ai_agent;
 mod db;
 mod load_test;
 
+use ai_agent::rig_agent_hello;
 use azure_sync::{azure_graph_query, azure_graph_validate_auth};
 use db::{db_runtime_probe, sql_execute, sql_query};
 use load_test::{LoadTestConfig, LoadTestEngine};
@@ -488,6 +490,12 @@ pub fn run() {
             sql: include_str!("../migrations/018_normalize_team_ownership.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 19,
+            description: "create_opy_chat_tables",
+            sql: include_str!("../migrations/019_create_opy_chat_tables.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -508,7 +516,8 @@ pub fn run() {
             sql_query,
             db_runtime_probe,
             azure_graph_validate_auth,
-            azure_graph_query
+            azure_graph_query,
+            rig_agent_hello
         ])
         .setup(|app| {
             // Create a properly configured SQLite pool (single connection, busy_timeout, WAL)

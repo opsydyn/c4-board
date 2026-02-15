@@ -521,6 +521,254 @@ export const ownershipLensStats = style({
   fontSize: theme.typography.size.xs,
 });
 
+export const opyCopilotShell = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+});
+
+const opyAvatarPulse = keyframes({
+  "0%": {
+    transform: "scale(0.92)",
+    opacity: 0.35,
+  },
+  "50%": {
+    transform: "scale(1.08)",
+    opacity: 0.78,
+  },
+  "100%": {
+    transform: "scale(0.92)",
+    opacity: 0.35,
+  },
+});
+
+const opyAvatarGlow = (percentage: number) =>
+  `color-mix(in srgb, ${theme.color.status.critical} ${percentage}%, transparent)`;
+
+export const opyHeaderRow = style({
+  display: "flex",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+});
+
+export const opyAvatar = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "1.75rem",
+  height: "1.75rem",
+});
+
+export const opyAvatarSvg = style({
+  display: "block",
+  overflow: "visible",
+});
+
+export const opyAvatarRing = style({
+  transformOrigin: "center",
+  transformBox: "fill-box",
+  filter: `drop-shadow(0 0 7px ${opyAvatarGlow(45)})`,
+  animation: `${opyAvatarPulse} 2.8s ease-in-out infinite`,
+});
+
+export const opyCopilotTranscript = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  paddingRight: theme.spacing["1"],
+  maxHeight: "16rem",
+  overflowY: "auto",
+});
+
+export const opyCopilotMessage = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(8, 14, 11, 0.9)",
+  padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
+});
+
+export const opyCopilotMessageUser = style({
+  borderColor: theme.color.status.selected,
+});
+
+export const opyCopilotMessageAssistant = style({
+  borderColor: theme.color.interactive.primary,
+});
+
+export const opyCopilotMessageSystem = style({
+  borderColor: theme.color.status.critical,
+});
+
+export const opyCopilotMessageMeta = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${opyCopilotMessage} p`, {
+  margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
+  whiteSpace: "pre-wrap",
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.sm,
+});
+
+export const opyCopilotInput = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(10, 16, 13, 0.92)",
+  padding: theme.spacing["2"],
+});
+
+globalStyle(`${opyCopilotInput} textarea`, {
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(8, 13, 11, 0.96)",
+  padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
+  minHeight: "4.5rem",
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.sm,
+});
+
+globalStyle(`${opyCopilotInput} button`, {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  transition: theme.transition.base,
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(12, 20, 16, 0.92)",
+  cursor: "pointer",
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${opyCopilotInput} button:hover`, {
+  borderColor: theme.color.status.selected,
+  boxShadow: theme.effect.glow.sm,
+  color: theme.color.foreground.primary,
+});
+
+globalStyle(`${opyCopilotInput} button[disabled]`, {
+  opacity: theme.opacity.disabled,
+  cursor: "not-allowed",
+});
+
+globalStyle("[data-slot=\"tooltip-content\"]", {
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  borderRadius: theme.border.radius.none,
+  boxShadow: `0 0 18px ${theme.color.status.selected}33`,
+  backgroundColor: theme.color.background.surface,
+  backgroundImage: `
+    linear-gradient(${theme.color.grid} 1px, transparent 1px),
+    linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+  `,
+  backgroundSize: "20px 20px",
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle("[data-slot=\"tooltip-content\"] p", {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: theme.spacing["1"],
+  margin: 0,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle("[data-slot=\"tooltip-content\"] code", {
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  borderRadius: theme.border.radius.none,
+  backgroundColor: "rgba(10, 16, 13, 0.96)",
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle("[data-slot=\"dropdown-menu-content\"], [data-slot=\"dropdown-menu-sub-content\"]", {
+  clipPath: theme.clipPath.md,
+  border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+  borderRadius: theme.border.radius.none,
+  boxShadow: `0 0 30px ${theme.color.background.base}dd, 0 0 60px ${theme.color.status.selected}22`,
+  backgroundColor: theme.color.background.surface,
+  backgroundImage: `
+    linear-gradient(${theme.color.grid} 1px, transparent 1px),
+    linear-gradient(90deg, ${theme.color.grid} 1px, transparent 1px)
+  `,
+  backgroundSize: "20px 20px",
+  padding: theme.spacing["1"],
+});
+
+globalStyle("[data-slot=\"dropdown-menu-item\"], [data-slot=\"dropdown-menu-sub-trigger\"]", {
+  display: "flex",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+  transition: theme.transition.base,
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid transparent`,
+  borderRadius: theme.border.radius.none,
+  backgroundColor: "transparent",
+  cursor: "pointer",
+  padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.sm,
+  fontWeight: theme.typography.weight.semibold,
+});
+
+globalStyle("[data-slot=\"dropdown-menu-item\"]:hover, [data-slot=\"dropdown-menu-sub-trigger\"]:hover", {
+  borderColor: theme.color.status.selected,
+  boxShadow: `0 0 8px ${theme.color.status.selected}33`,
+  backgroundColor: theme.color.background.raised,
+  color: theme.color.foreground.primary,
+});
+
+globalStyle("[data-slot=\"dropdown-menu-separator\"]", {
+  margin: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  border: "none",
+  backgroundColor: theme.color.border.secondary,
+  height: "1px",
+});
+
+export const opyCopilotActions = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotError = style({
+  margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.status.critical,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
 /**
  * Domain Toggle
  * Switch between C4 and DDD modeling modes

@@ -9,6 +9,7 @@
 1. Make the C4 board a trusted system-of-record for architecture and ownership.
 2. Complete Azure sync from "good dry-run/apply" to "enterprise-safe and scalable".
 3. Expose critical local runtime diagnostics in Settings, including SQLite DB size.
+4. Add AI copilot + agent workflows so users can chat with architecture data and apply safe board/settings actions.
 
 ## 2) Current Baseline (as of 2026-02-14)
 
@@ -19,12 +20,15 @@
 5. Azure relationship extraction includes `dependsOn`, property references, and ARM parent inference.
 6. Settings System Status already includes WAL/runtime probe diagnostics but not DB file size.
 7. Ownership team catalog is now deduped and shared across node properties and ownership lens filters.
+8. Explainability and provenance surfaces exist, giving strong context inputs for LLM-assisted architecture analysis.
+9. Azure sync run summaries/deltas are available and can be reused for AI explain/query flows.
 
 ## 3) Execution Priority (Sequenced)
 
 1. **P0 (Now)**: Ship Settings `System Status` SQLite DB size telemetry.
-2. **P1 (Next)**: Team Topologies productization (ownership UX + explainability).
-3. **P2 (Then)**: Azure Sync hardening, safety guardrails, and rollout controls.
+2. **P1 (Next)**: AI foundation (BYOK providers + read-only copilot + safe action registry).
+3. **P2 (Then)**: Team Topologies productization (ownership UX + explainability).
+4. **P3 (Then)**: Azure Sync hardening, safety guardrails, and rollout controls.
 
 ### P0 Detailed Breakdown: Settings DB Size Telemetry
 
@@ -149,12 +153,73 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 3. Size values refresh via existing runtime probe loop and remain within 5 seconds of probe update.
 4. Runtime probe overhead stays negligible (no user-perceptible latency added).
 
+### Milestone D: AI Copilot + Agent Actions (Target: 2026-05-10)
+
+### Scope
+
+1. Add CopilotKit-powered conversational UX that can query diagram, ownership, coupling, and sync context.
+2. Support Bring-Your-Own-Key providers (`OpenAI`, `Anthropic`, `OpenRouter`) with secure local persistence.
+3. Enable guarded agent actions that can update board structure and settings through typed contracts.
+4. Make existing features LLM-friendly via normalized context, provenance, and deterministic action plans.
+
+### Architecture Tracks
+
+1. **Track D1: AI Runtime and Provider Abstraction**
+   - [ ] Define `ai_settings` contract (provider, model, key presence, temperature, max tokens, action mode).
+   - [ ] Add settings schema + migration for AI provider/model defaults and redaction policy.
+   - [ ] Implement provider adapter boundary (`openai`, `anthropic`, `openrouter`) behind one typed runtime interface.
+   - [ ] Store API keys in OS keychain where available; fallback encrypted local storage only with explicit warning.
+   - [ ] Add health-check endpoint per provider/model for validation from Settings.
+
+2. **Track D2: CopilotKit UX Integration**
+   - [ ] Add global AI toggle and launch surface in C4/DDD sidebars (opt-in, off by default).
+   - [ ] Add chat panel with context selector: `board`, `selection`, `ownership`, `coupling`, `azure-sync`.
+   - [ ] Add response cards for "insights", "recommended actions", and "explainability links".
+   - [ ] Add clear offline/no-key/invalid-key UX states with fast retry path.
+
+3. **Track D3: Agent Action System (Safe-by-Default)**
+   - [ ] Implement action registry using `Effect Schema` contracts for all agent-callable operations.
+   - [ ] Start with safe actions: move nodes, run layout, update node metadata, update ownership tags, toggle view/settings.
+   - [ ] Require preview plan + user confirmation before any state mutation.
+   - [ ] Route confirmed actions through existing save/write serialization boundary (no bypass).
+   - [ ] Add undo checkpoint creation for each AI-applied action batch.
+
+4. **Track D4: LLM-Friendly Context Layer**
+   - [ ] Build a deterministic context assembler from board graph + ownership + coupling + Azure sync runs.
+   - [ ] Include provenance markers for each context block (source, timestamp, confidence).
+   - [ ] Add token-budgeting and chunking strategy to prevent oversized prompts on large diagrams.
+   - [ ] Add redaction transform aligned to existing privacy settings.
+
+5. **Track D5: Evaluation, Trust, and Observability**
+   - [ ] Create eval fixtures covering mono-team, multi-team, unknown ownership, and Azure-heavy topologies.
+   - [ ] Add automated eval checks for factuality vs source graph, unsafe action attempts, and policy compliance.
+   - [ ] Emit AI telemetry: latency, token usage, model/provider, failure class, confirmation/cancel rates.
+   - [ ] Add kill switch (`ai_assistant_v1`) and staged rollout controls.
+
+### Acceptance Criteria
+
+1. Users can configure and validate BYOK provider settings in under 2 minutes with no app restart.
+2. Chat answers include cited context blocks (node/edge/settings/sync provenance) for traceability.
+3. Agent actions never mutate state without explicit user confirmation and produce undo checkpoints.
+4. AI-applied changes preserve save correctness (no write-lock regressions, no unsynced UI status regressions).
+5. AI context generation stays within configured token budgets and remains responsive on medium/large boards.
+6. Eval suite passes baseline thresholds for factuality, action safety, and error handling before general rollout.
+
+### Suggested Delivery Sequence
+
+1. D1 provider abstraction + settings contract/migration.
+2. D4 context assembler and provenance/citation model.
+3. D2 CopilotKit read-only chat integration (insights only).
+4. D3 safe action registry + preview/confirm/undo workflow.
+5. D5 eval/telemetry gates + staged rollout.
+
 ## 5) Release Gates
 
 1. **Functional Gate**: All acceptance criteria for a milestone pass.
 2. **Stability Gate**: No regression in save/apply behavior under autosave and manual save.
 3. **Performance Gate**: No noticeable FPS/interaction regressions on medium diagrams.
 4. **Trust Gate**: Diagnostics and provenance are visible for risky or inferred outputs.
+5. **AI Safety Gate**: No unconfirmed mutations, no secret leakage in prompts, and eval thresholds met.
 
 ## 6) Risks and Mitigations
 
@@ -164,10 +229,16 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    Mitigation: Manual override in node properties + unknown-ownership spotlight in topology view.
 3. Risk: DB status feature adds noise or confusion.
    Mitigation: Keep concise labels, human-readable units, and clear fallback messages.
+4. Risk: LLM hallucination or low-confidence recommendations erode trust.
+   Mitigation: Source citations, confidence scoring, and read-only default until action gates pass.
+5. Risk: Provider/API key handling introduces security risk.
+   Mitigation: Keychain-first storage, explicit redaction policy, and kill-switch rollout controls.
+6. Risk: Agent actions regress save/runtime reliability.
+   Mitigation: Existing serialized write boundary reuse, preview-confirm flow, and undo checkpoints.
 
 ## 7) Definition of Done (Roadmap)
 
-1. Milestones A, B, and C have all checklist items completed.
+1. Milestones A, B, C, and D have all checklist items completed.
 2. Acceptance criteria for each milestone are demoed and test-backed.
 3. Relevant ADR statuses are updated from `Proposed` to `Accepted` where implemented.
 4. User docs and runbooks are updated for release readiness.

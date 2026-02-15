@@ -1,6 +1,8 @@
 import { useMachine } from "@xstate/react";
+import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tone from "tone";
+import { runRigHello } from "../../../core/effects/ai-agent.runtime";
 import { getSettingsV1Flag } from "../../../core/effects/feature-flags";
 import type { AppSettingsPatch, RedactionMode, TransitionIntensity } from "../../../core/effects/settings.types";
 import { useDatabase } from "../../../core/effects/useDatabase";
@@ -10,6 +12,7 @@ import { createSettingsMachine } from "../../machines/settings.machine";
 import { TacticalSelect } from "../TacticalSelect";
 
 type SaveState = "disabled" | "loading" | "saving" | "saved" | "error";
+type AgentHelloState = "idle" | "running" | "success" | "error";
 type RuntimeConfigMismatch = {
   key: string;
   expected: string;
@@ -18,6 +21,7 @@ type RuntimeConfigMismatch = {
 type AudioContextStatus = "running" | "suspended" | "closed" | "unavailable" | "unknown";
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 const toSaveSynthVolumeDb = (masterVolume: number): number =>
   masterVolume <= 0
     ? -60
@@ -39,6 +43,11 @@ const redactionModeOptions = [
   { value: "off", label: "OFF" },
   { value: "standard", label: "STANDARD" },
   { value: "strict", label: "STRICT" },
+] as const;
+
+const rigModelOptions = [
+  { value: "gpt-4o-mini", label: "GPT-4O-MINI" },
+  { value: "gpt-4.1-mini", label: "GPT-4.1-MINI" },
 ] as const;
 
 const formatClockTime = (timestamp: number | null): string => {
@@ -112,6 +121,14 @@ export function SettingsPanel() {
   const diagnosticSynthRef = useRef<Tone.PolySynth<Tone.Synth> | null>(null);
   const [audioContextStatus, setAudioContextStatus] = useState<AudioContextStatus>("unknown");
   const [audioDiagnosticMessage, setAudioDiagnosticMessage] = useState<string | null>(null);
+  const [agentHelloState, setAgentHelloState] = useState<AgentHelloState>("idle");
+  const [agentHelloModel, setAgentHelloModel] = useState<string>("gpt-4o-mini");
+  const [agentHelloPrompt, setAgentHelloPrompt] = useState<string>(
+    "Say hello to OPSYDYN // PRECISION TOOLS.",
+  );
+  const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState<string>("");
+  const [agentHelloOutput, setAgentHelloOutput] = useState<string | null>(null);
+  const [agentHelloError, setAgentHelloError] = useState<string | null>(null);
   const lastSavedAt = state.context.lastSavedAt;
   const pendingOperations = state.context.pendingOperations;
   const pendingWrites = state.context.pendingWrites;
@@ -274,6 +291,42 @@ export function SettingsPanel() {
     settings.masterAudioEnabled,
     settings.saveVolEnabled,
   ]);
+  const handleRunRigHello = useCallback(() => {
+    setAgentHelloState("running");
+    setAgentHelloOutput(null);
+    setAgentHelloError(null);
+
+    void Effect.runPromise(
+      runRigHello({
+        model: agentHelloModel,
+        prompt: agentHelloPrompt,
+      }),
+    )
+      .then((result) => {
+        setAgentHelloState("success");
+        setAgentHelloOutput(result.message);
+      })
+      .catch((error: unknown) => {
+        setAgentHelloState("error");
+        setAgentHelloError(toErrorMessage(error));
+      });
+  }, [agentHelloModel, agentHelloPrompt]);
+  const hasStoredOpenAiApiKey = useMemo(
+    () => settings.openAiApiKey.trim().length > 0,
+    [settings.openAiApiKey],
+  );
+  const agentHelloStatusText = useMemo(() => {
+    switch (agentHelloState) {
+      case "idle":
+        return "IDLE";
+      case "running":
+        return "RUNNING";
+      case "success":
+        return "SUCCESS";
+      case "error":
+        return "ERROR";
+    }
+  }, [agentHelloState]);
   const runtimeConfigMismatches = useMemo<RuntimeConfigMismatch[]>(() => {
     const mismatches: RuntimeConfigMismatch[] = [];
 
@@ -493,6 +546,17 @@ export function SettingsPanel() {
     send,
     settings.bigBallOfMudAlertThreshold,
   ]);
+  const commitOpenAiApiKey = useCallback(() => {
+    const normalized = openAiApiKeyDraft.trim();
+    if (normalized === settings.openAiApiKey.trim()) {
+      return;
+    }
+    applyPatch({ openAiApiKey: normalized });
+  }, [applyPatch, openAiApiKeyDraft, settings.openAiApiKey]);
+
+  useEffect(() => {
+    setOpenAiApiKeyDraft(settings.openAiApiKey);
+  }, [settings.openAiApiKey]);
 
   useEffect(() => {
     refreshAudioContextStatus();
@@ -824,6 +888,64 @@ export function SettingsPanel() {
               </div>
             </article>
 
+            <article id="workspace-panels" className={styles.settingsCard}>
+              <h2 className={styles.settingsCardTitle}>Workspace Panels</h2>
+              <p className={styles.settingsCardDescription}>
+                Default panel visibility for C4 and DDD workspaces.
+              </p>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Azure Sync Panel</span>
+                  <span className={styles.settingsRowHint}>Cloud icon panel toggle default</span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.settingsToggleControl}
+                  data-active={settings.azurePanelVisible ? "true" : "false"}
+                  onClick={() =>
+                    applyPatch({
+                      azurePanelVisible: !settings.azurePanelVisible,
+                    })}
+                >
+                  {settings.azurePanelVisible ? "ON" : "OFF"}
+                </button>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Ownership Lens</span>
+                  <span className={styles.settingsRowHint}>Users icon panel toggle default</span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.settingsToggleControl}
+                  data-active={settings.ownershipLensVisible ? "true" : "false"}
+                  onClick={() =>
+                    applyPatch({
+                      ownershipLensVisible: !settings.ownershipLensVisible,
+                    })}
+                >
+                  {settings.ownershipLensVisible ? "ON" : "OFF"}
+                </button>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Coupling Explainability</span>
+                  <span className={styles.settingsRowHint}>Graph icon panel toggle default</span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.settingsToggleControl}
+                  data-active={settings.couplingExplainabilityVisible ? "true" : "false"}
+                  onClick={() =>
+                    applyPatch({
+                      couplingExplainabilityVisible: !settings.couplingExplainabilityVisible,
+                    })}
+                >
+                  {settings.couplingExplainabilityVisible ? "ON" : "OFF"}
+                </button>
+              </div>
+            </article>
+
             <article id="data-control" className={styles.settingsCard}>
               <h2 className={styles.settingsCardTitle}>Data Control</h2>
               <p className={styles.settingsCardDescription}>
@@ -926,6 +1048,96 @@ export function SettingsPanel() {
                   }}
                 />
               </div>
+            </article>
+
+            <article id="ai-agent" className={styles.settingsCard}>
+              <h2 className={styles.settingsCardTitle}>AI Agent (Rig)</h2>
+              <p className={styles.settingsCardDescription}>
+                Hello-world agent path wired through Rust + Tauri command boundary.
+              </p>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>OpenAI API Key</span>
+                  <span className={styles.settingsRowHint}>Persisted in app settings database</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="password"
+                    className={styles.settingsNumberControl}
+                    value={openAiApiKeyDraft}
+                    onChange={(event) => setOpenAiApiKeyDraft(event.currentTarget.value)}
+                    onBlur={commitOpenAiApiKey}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitOpenAiApiKey();
+                      }
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="sk-..."
+                    aria-label="OpenAI API key"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Runtime</span>
+                  <span className={styles.settingsRowHint}>rig-core + OpenAI provider</span>
+                </div>
+                <span className={styles.settingsRowValue}>
+                  {hasStoredOpenAiApiKey ? "READY (KEY PRESENT)" : "MISSING KEY"}
+                </span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Model</span>
+                  <span className={styles.settingsRowHint}>Agent execution target</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <TacticalSelect
+                    ariaLabel="Rig hello model"
+                    value={agentHelloModel}
+                    options={rigModelOptions}
+                    onChange={(nextValue) => {
+                      setAgentHelloModel(nextValue);
+                    }}
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Prompt</span>
+                  <span className={styles.settingsRowHint}>Single hello-world request</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="text"
+                    className={styles.settingsNumberControl}
+                    value={agentHelloPrompt}
+                    onChange={(event) => setAgentHelloPrompt(event.currentTarget.value)}
+                    aria-label="Rig hello prompt"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Status</span>
+                  <span className={styles.settingsRowHint}>Rust command execution state</span>
+                </div>
+                <div className={styles.settingsInlineActions}>
+                  <span className={styles.settingsRowValue}>{agentHelloStatusText}</span>
+                  <button
+                    type="button"
+                    className={styles.settingsActionButton}
+                    onClick={handleRunRigHello}
+                    disabled={agentHelloState === "running"}
+                  >
+                    RUN HELLO AGENT
+                  </button>
+                </div>
+              </div>
+              {agentHelloOutput && <p className={styles.settingsNotice}>{agentHelloOutput}</p>}
+              {agentHelloError && <p className={styles.settingsErrorText}>{agentHelloError}</p>}
             </article>
 
             <article id="system-status" className={styles.settingsCard}>

@@ -17,7 +17,7 @@ import { scaleOrdinal } from "@visx/scale";
 import { Circle, Pie } from "@visx/shape";
 import { useTooltip } from "@visx/tooltip";
 import type { Edge, Node } from "@xyflow/react";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { type BalancedCouplingModel, type ModuleCouplingSnapshot, type RiskTier } from "../../core/balancedCoupling";
 import { theme } from "../../styles/theme.css";
@@ -65,6 +65,8 @@ interface BalancedMudChartProps {
   onSelectModule?: (moduleId: string) => void;
   domain: DiagramDomain;
   mudAlertThreshold?: number;
+  isExplainabilityVisible: boolean;
+  onToggleExplainability: () => void;
 }
 
 const subdomainPalette: Record<ModuleCouplingSnapshot["subdomainType"], string> = {
@@ -319,9 +321,10 @@ export function BalancedMudChart({
   selectedModuleId,
   domain,
   mudAlertThreshold = 8.0,
+  isExplainabilityVisible,
+  onToggleExplainability,
 }: BalancedMudChartProps) {
   const model = useBalancedCouplingModel(nodes, edges, domain);
-  const [isExplainabilityVisible, setIsExplainabilityVisible] = useState(true);
   const {
     tooltipData,
     tooltipOpen,
@@ -428,7 +431,7 @@ export function BalancedMudChart({
               title={isExplainabilityVisible
                 ? "Hide coupling explainability panel"
                 : "Show coupling explainability panel"}
-              onClick={() => setIsExplainabilityVisible((visible) => !visible)}
+              onClick={onToggleExplainability}
             >
               <Graph size={16} weight="duotone" />
             </button>
@@ -459,7 +462,7 @@ export function BalancedMudChart({
               title={isExplainabilityVisible
                 ? "Hide coupling explainability panel"
                 : "Show coupling explainability panel"}
-              onClick={() => setIsExplainabilityVisible((visible) => !visible)}
+              onClick={onToggleExplainability}
             >
               <Graph size={16} weight="duotone" />
             </button>

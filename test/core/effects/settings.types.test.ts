@@ -45,6 +45,25 @@ describe("settings.types", () => {
   it("exports stable setting keys and key guard", () => {
     expect(APP_SETTING_KEYS.length).toBeGreaterThan(0);
     expect(isAppSettingKey("autosaveEnabled")).toBe(true);
+    expect(isAppSettingKey("azurePanelVisible")).toBe(true);
+    expect(isAppSettingKey("ownershipLensVisible")).toBe(true);
+    expect(isAppSettingKey("couplingExplainabilityVisible")).toBe(true);
+    expect(isAppSettingKey("openAiApiKey")).toBe(true);
     expect(isAppSettingKey("not_a_real_setting")).toBe(false);
+  });
+
+  it("defaults panel toggles to hidden", () => {
+    expect(DEFAULT_APP_SETTINGS.azurePanelVisible).toBe(false);
+    expect(DEFAULT_APP_SETTINGS.ownershipLensVisible).toBe(false);
+    expect(DEFAULT_APP_SETTINGS.couplingExplainabilityVisible).toBe(false);
+  });
+
+  it("rejects oversized OpenAI API key values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        openAiApiKey: "x".repeat(4_097),
+      })
+    ).toThrow();
   });
 });
