@@ -659,6 +659,12 @@ globalStyle(`${opyCopilotInput} button`, {
   fontSize: theme.typography.size.xs,
 });
 
+export const opyCopilotCommandToken = style({
+  textShadow: `0 0 12px ${theme.color.interactive.primary}33`,
+  color: theme.color.interactive.primary,
+  fontWeight: theme.typography.weight.bold,
+});
+
 globalStyle(`${opyCopilotInput} button:hover`, {
   borderColor: theme.color.status.selected,
   boxShadow: theme.effect.glow.sm,

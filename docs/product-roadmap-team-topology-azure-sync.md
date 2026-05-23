@@ -1,6 +1,6 @@
 # Product Roadmap: Team Topologies + Azure Sync
 
-**Last Updated**: 2026-02-14
+**Last Updated**: 2026-02-15
 **Owner**: Product + Platform Engineering
 **Scope Horizon**: 2026-Q1 to 2026-Q2
 
@@ -29,6 +29,7 @@
 2. **P1 (Next)**: AI foundation (BYOK providers + read-only copilot + safe action registry).
 3. **P2 (Then)**: Team Topologies productization (ownership UX + explainability).
 4. **P3 (Then)**: Azure Sync hardening, safety guardrails, and rollout controls.
+5. **P4 (Then)**: Rig agent platform expansion (typed tools, orchestration roles, memory lifecycle, governance).
 
 ### P0 Detailed Breakdown: Settings DB Size Telemetry
 
@@ -213,6 +214,78 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 4. D3 safe action registry + preview/confirm/undo workflow.
 5. D5 eval/telemetry gates + staged rollout.
 
+### Milestone E: Rig Agent Platform Expansion (Target: 2026-06-21)
+
+### Scope
+
+1. Move from single-prompt assistant behavior to a typed Rig agent platform.
+2. Introduce planner/analyst/executor/verifier responsibilities with deterministic action boundaries.
+3. Add durable memory and task lifecycle controls so sessions are resumable, auditable, and recoverable.
+4. Keep all mutations routed through the same save/transaction safety boundaries used by manual UI.
+5. Detailed execution plan and architecture baseline: `docs/adr/008-rig-agent-platform-orchestration.md`.
+6. Task-level implementation backlog: `docs/rig-agent-task-breakdown.md`.
+
+### Architecture Tracks
+
+1. **Track E1: Rig Tooling Surface (Typed + Safe)**
+   - [ ] Define a Rig tool registry for board read models (`board_summary`, `node_lookup`, `edge_lookup`, `ownership_summary`, `coupling_summary`, `azure_sync_summary`).
+   - [ ] Define mutation tools (`update_node`, `create_edge`, `layout_graph`, `set_owner`, `set_setting`) with `Effect Schema` contracts.
+   - [ ] Add tool capability metadata (`read_only`, `requires_confirmation`, `risk_level`) and enforce it at runtime.
+   - [ ] Add policy guardrails to deny out-of-scope tool calls (diagram scope, hidden features, restricted settings).
+   - [ ] Emit normalized tool execution telemetry (`tool`, `args_hash`, `duration_ms`, `result`, `error_class`).
+
+2. **Track E2: Multi-Agent/Role Orchestration**
+   - [ ] Implement role separation in Rig flows: `planner` (plan), `analyst` (explain), `executor` (propose actions), `verifier` (post-check).
+   - [ ] Require planner output before any executable action batch.
+   - [ ] Add iteration budgets and hard timeouts per stage to prevent runaway agent loops.
+   - [ ] Add cancellation and retry semantics surfaced in UI session state.
+   - [ ] Add deterministic stage transitions logged per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`).
+
+3. **Track E3: Memory, Sessions, and Task Lifecycle**
+   - [ ] Extend persisted OPY sessions with task metadata (`intent`, `status`, `last_stage`, `last_error`, `last_artifact`).
+   - [ ] Add first-class task records for long-running operations and resumable workflows.
+   - [ ] Persist board snapshot references per applied task for diff/review.
+   - [ ] Add session operations: rename, archive, restore, pin, and export transcript.
+   - [ ] Add background cleanup/retention controls in Settings (TTL + max session count).
+
+4. **Track E4: Grounded Context + Retrieval**
+   - [ ] Build local retrieval index over nodes, edges, settings, sync run summaries, and explainability artifacts.
+   - [ ] Add retrieval filters by domain (`c4`, `ddd`, `azure`), scope (current diagram/all diagrams), and recency.
+   - [ ] Return explicit citation bundles for every generated recommendation.
+   - [ ] Add confidence scoring tied to citation coverage (low citation coverage => low confidence banner).
+   - [ ] Add redaction pipeline before retrieval/prompt assembly using existing privacy settings.
+
+5. **Track E5: Action Safety, Governance, and Rollout**
+   - [ ] Add approval policies by action class (always-confirm, confirm-on-threshold, auto-apply for read-only).
+   - [ ] Add per-provider and per-model allow-lists in settings with kill switch support.
+   - [ ] Add anomaly detection for suspicious prompts/tool-call patterns (prompt injection, unsafe request patterns).
+   - [ ] Add canary rollout mode (`rig_agent_v1`) and environment-level overrides.
+   - [ ] Add governance audit log view in Settings (`who`, `what`, `when`, `why`, `source session`).
+
+6. **Track E6: Developer Experience + Evaluation**
+   - [ ] Add deterministic fixture suite for Rig runs (`read-only qa`, `safe mutation`, `failure recovery`, `rollback`).
+   - [ ] Add regression tests for tool contracts and schema migration compatibility.
+   - [ ] Add local replay utility for failed agent runs using stored transcripts and tool traces.
+   - [ ] Add budget/latency dashboards (p50/p95 latency, token usage, cost estimate, tool success rate).
+   - [ ] Add pass/fail quality gates before enabling mutation mode by default.
+
+### Acceptance Criteria
+
+1. Rig can execute read-only architecture QA with cited sources and deterministic outputs across repeated runs.
+2. Any mutation proposal is represented as a typed plan and never applies without policy-compliant confirmation.
+3. Multi-stage runs are resumable after restart and preserve task/session integrity.
+4. Agent-applied changes are diffable, undoable, and linked to transcript + tool trace provenance.
+5. Eval suite passes thresholds for safety, determinism, and factual grounding before rollout expansion.
+
+### Suggested Delivery Sequence
+
+1. E1 typed tool registry + policy metadata.
+2. E4 retrieval + citation confidence model.
+3. E2 role orchestration with stage lifecycle controls.
+4. E3 session/task lifecycle and snapshot linkage.
+5. E5 governance + rollout controls.
+6. E6 eval/replay dashboards and release gating.
+
 ## 5) Release Gates
 
 1. **Functional Gate**: All acceptance criteria for a milestone pass.
@@ -238,7 +311,7 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 
 ## 7) Definition of Done (Roadmap)
 
-1. Milestones A, B, C, and D have all checklist items completed.
+1. Milestones A, B, C, D, and E have all checklist items completed.
 2. Acceptance criteria for each milestone are demoed and test-backed.
 3. Relevant ADR statuses are updated from `Proposed` to `Accepted` where implemented.
 4. User docs and runbooks are updated for release readiness.

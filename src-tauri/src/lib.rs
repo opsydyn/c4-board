@@ -11,7 +11,7 @@ mod ai_agent;
 mod db;
 mod load_test;
 
-use ai_agent::rig_agent_hello;
+use ai_agent::{rig_agent_hello, rig_agent_secret_status};
 use azure_sync::{azure_graph_query, azure_graph_validate_auth};
 use db::{db_runtime_probe, sql_execute, sql_query};
 use load_test::{LoadTestConfig, LoadTestEngine};
@@ -496,6 +496,12 @@ pub fn run() {
             sql: include_str!("../migrations/019_create_opy_chat_tables.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 20,
+            description: "add_ai_settings_default",
+            sql: include_str!("../migrations/020_add_ai_settings_default.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -517,7 +523,8 @@ pub fn run() {
             db_runtime_probe,
             azure_graph_validate_auth,
             azure_graph_query,
-            rig_agent_hello
+            rig_agent_hello,
+            rig_agent_secret_status
         ])
         .setup(|app| {
             // Create a properly configured SQLite pool (single connection, busy_timeout, WAL)

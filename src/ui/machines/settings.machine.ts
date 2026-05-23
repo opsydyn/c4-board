@@ -12,6 +12,33 @@ const clamp = (value: number, min: number, max: number): number => Math.min(max,
 const toIntegerDuration = (durationMs: number): number =>
   Number.isFinite(durationMs) ? Math.max(0, Math.round(durationMs)) : 0;
 
+const stableSerializeSettingValue = (value: unknown): string | null => {
+  if (value === null || typeof value !== "object") {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+};
+
+const areSettingValuesEqual = (left: unknown, right: unknown): boolean => {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  const leftSerialized = stableSerializeSettingValue(left);
+  const rightSerialized = stableSerializeSettingValue(right);
+
+  if (leftSerialized === null || rightSerialized === null) {
+    return false;
+  }
+
+  return leftSerialized === rightSerialized;
+};
+
 interface SettingsDrafts {
   autosaveIntervalDraft: string;
   historyRetentionDraft: string;
@@ -202,12 +229,12 @@ const settingsMachineSetup = setup({
       event.type === "PATCH"
       && Object.entries(event.patch).some(([key, value]) => {
         const typedKey = key as keyof AppSettings;
-        return !Object.is(context.settings[typedKey], value);
+        return !areSettingValuesEqual(context.settings[typedKey], value);
       }),
     settingsDifferFromDefaults: ({ context }) =>
       Object.entries(DEFAULT_APP_SETTINGS).some(([key, value]) => {
         const typedKey = key as keyof AppSettings;
-        return !Object.is(context.settings[typedKey], value);
+        return !areSettingValuesEqual(context.settings[typedKey], value);
       }),
   },
   actions: {

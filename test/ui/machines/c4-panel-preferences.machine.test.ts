@@ -25,6 +25,7 @@ describe("c4-panel-preferences.machine", () => {
         azurePanelVisible: true,
         ownershipLensVisible: false,
         couplingExplainabilityVisible: true,
+        opyCopilotVisible: false,
       },
     });
 
@@ -46,6 +47,26 @@ describe("c4-panel-preferences.machine", () => {
     });
 
     subscription.unsubscribe();
+  });
+
+  it("persists OPY copilot visibility toggle", async () => {
+    const persistPatch = vi.fn().mockResolvedValue(undefined);
+    const actor = createActor(
+      createC4PanelPreferencesMachine({
+        persistPatch,
+      }),
+    );
+
+    actor.start();
+    actor.send({ type: "TOGGLE_OPY_COPILOT" });
+
+    await waitFor(
+      actor,
+      (snapshot) => snapshot.matches("idle") && snapshot.context.activePatch === null,
+    );
+
+    expect(actor.getSnapshot().context.opyCopilotVisible).toBe(true);
+    expect(persistPatch).toHaveBeenCalledWith({ opyCopilotVisible: true });
   });
 
   it("queues toggles while persistence is in-flight", async () => {

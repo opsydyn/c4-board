@@ -68,7 +68,7 @@ import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
 import { OpyAvatar } from "./OpyAvatar";
-import { OpyCopilotPanel } from "./OpyCopilotPanel";
+import { type OpyBoardAction, OpyCopilotPanel } from "./OpyCopilotPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
@@ -175,7 +175,6 @@ export function C4CanvasContainer() {
   );
   const [showCrossTeamOnly, setShowCrossTeamOnly] = useState(false);
   const [showUnknownOwnershipOnly, setShowUnknownOwnershipOnly] = useState(false);
-  const [isOpy9000Open, setOpy9000Open] = useState(false);
 
   const persistPanelPreferencePatch = useCallback(
     async (patch: C4PanelPreferencePatch): Promise<void> => {
@@ -201,15 +200,18 @@ export function C4CanvasContainer() {
     azurePanelVisible: isAzurePanelOpen,
     ownershipLensVisible: isOwnershipLensOpen,
     couplingExplainabilityVisible: isCouplingExplainabilityVisible,
+    opyCopilotVisible: isOpy9000Open,
     toggleAzurePanel,
     toggleOwnershipLens,
     toggleCouplingExplainability,
+    toggleOpyCopilot,
   } = useC4PanelPreferencesMachine({
     isSettingsLoading,
     settings: {
       azurePanelVisible: appSettings.azurePanelVisible,
       ownershipLensVisible: appSettings.ownershipLensVisible,
       couplingExplainabilityVisible: appSettings.couplingExplainabilityVisible,
+      opyCopilotVisible: appSettings.opyCopilotVisible,
     },
     persistPatch: persistPanelPreferencePatch,
     onPersistFailure: handlePanelPreferencePersistFailure,
@@ -951,6 +953,22 @@ export function C4CanvasContainer() {
       state.context.lastSaved,
       state.context.nodes,
     ],
+  );
+
+  const handleApplyOpyBoardAction = useCallback(
+    async (action: OpyBoardAction): Promise<string> => {
+      if (action.kind === "add-node") {
+        send({
+          type: "ADD_NODE_WITH_LABEL",
+          nodeType: action.nodeType,
+          label: action.label,
+        });
+        return `ACTION APPLIED:: ADD ${action.nodeType.toUpperCase()} "${action.label}"`;
+      }
+
+      return "NO ACTION APPLIED.";
+    },
+    [send],
   );
 
   // Handle node position/selection changes from ReactFlow
@@ -1761,10 +1779,10 @@ export function C4CanvasContainer() {
               <button
                 type="button"
                 className={`${styles.sidebarBrandAction} ${isOpy9000Open ? styles.sidebarBrandActionActive : ""}`}
-                aria-label={isOpy9000Open ? "Hide OPY::9000 assistant panel" : "Show OPY::9000 assistant panel"}
+                aria-label={isOpy9000Open ? "Hide OPY Net assistant panel" : "Show OPY Net assistant panel"}
                 aria-pressed={isOpy9000Open}
-                title={isOpy9000Open ? "Hide OPY::9000 assistant panel" : "Show OPY::9000 assistant panel"}
-                onClick={() => setOpy9000Open((current) => !current)}
+                title={isOpy9000Open ? "Hide OPY Net assistant panel" : "Show OPY Net assistant panel"}
+                onClick={toggleOpyCopilot}
               >
                 <RobotIcon size={16} weight="duotone" />
               </button>
@@ -1887,11 +1905,11 @@ export function C4CanvasContainer() {
             />
           )}
           {isOpy9000Open && (
-            <section className={styles.ownershipLensCard} aria-label="OPY::9000 assistant panel">
+            <section className={styles.ownershipLensCard} aria-label="OPY Net assistant panel">
               <h3 className={styles.ownershipLensTitle}>
                 <span className={styles.opyHeaderRow}>
                   <OpyAvatar />
-                  <span>OPY::9000</span>
+                  <span>OPY Net</span>
                 </span>
               </h3>
               <p className={styles.ownershipLensHint}>
@@ -1903,6 +1921,8 @@ export function C4CanvasContainer() {
                 diagramId={state.context.currentDiagramId}
                 nodeCount={state.context.nodes.length}
                 edgeCount={state.context.edges.length}
+                actionMode={appSettings.aiSettings.actionMode}
+                onApplyBoardAction={handleApplyOpyBoardAction}
                 onOpenAiSettings={() => {
                   void navigateWithSave("/settings");
                 }}

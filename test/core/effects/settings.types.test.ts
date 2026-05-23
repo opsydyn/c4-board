@@ -48,7 +48,9 @@ describe("settings.types", () => {
     expect(isAppSettingKey("azurePanelVisible")).toBe(true);
     expect(isAppSettingKey("ownershipLensVisible")).toBe(true);
     expect(isAppSettingKey("couplingExplainabilityVisible")).toBe(true);
+    expect(isAppSettingKey("opyCopilotVisible")).toBe(true);
     expect(isAppSettingKey("openAiApiKey")).toBe(true);
+    expect(isAppSettingKey("aiSettings")).toBe(true);
     expect(isAppSettingKey("not_a_real_setting")).toBe(false);
   });
 
@@ -56,6 +58,7 @@ describe("settings.types", () => {
     expect(DEFAULT_APP_SETTINGS.azurePanelVisible).toBe(false);
     expect(DEFAULT_APP_SETTINGS.ownershipLensVisible).toBe(false);
     expect(DEFAULT_APP_SETTINGS.couplingExplainabilityVisible).toBe(false);
+    expect(DEFAULT_APP_SETTINGS.opyCopilotVisible).toBe(false);
   });
 
   it("rejects oversized OpenAI API key values", () => {
@@ -63,6 +66,30 @@ describe("settings.types", () => {
       Schema.decodeUnknownSync(AppSettingsSchema)({
         ...DEFAULT_APP_SETTINGS,
         openAiApiKey: "x".repeat(4_097),
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid aiSettings.actionMode values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        aiSettings: {
+          ...DEFAULT_APP_SETTINGS.aiSettings,
+          actionMode: "auto-apply",
+        },
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid aiSettings.temperature values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        aiSettings: {
+          ...DEFAULT_APP_SETTINGS.aiSettings,
+          temperature: 2.5,
+        },
       })
     ).toThrow();
   });

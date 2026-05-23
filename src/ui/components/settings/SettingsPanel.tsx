@@ -2,9 +2,15 @@ import { useMachine } from "@xstate/react";
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tone from "tone";
-import { runRigHello } from "../../../core/effects/ai-agent.runtime";
+import { getRigSecretStatus, type RigSecretSource, runRigHello } from "../../../core/effects/ai-agent.runtime";
 import { getSettingsV1Flag } from "../../../core/effects/feature-flags";
-import type { AppSettingsPatch, RedactionMode, TransitionIntensity } from "../../../core/effects/settings.types";
+import type {
+  AiActionMode,
+  AiProvider,
+  AppSettingsPatch,
+  RedactionMode,
+  TransitionIntensity,
+} from "../../../core/effects/settings.types";
 import { useDatabase } from "../../../core/effects/useDatabase";
 import * as styles from "../../../pages/settings.css";
 import { useDatabaseRuntimeStatus } from "../../hooks/useDatabaseRuntimeStatus";
@@ -13,6 +19,7 @@ import { TacticalSelect } from "../TacticalSelect";
 
 type SaveState = "disabled" | "loading" | "saving" | "saved" | "error";
 type AgentHelloState = "idle" | "running" | "success" | "error";
+type AgentSecretStatus = "idle" | "loading" | "ready" | "error";
 type RuntimeConfigMismatch = {
   key: string;
   expected: string;
@@ -33,6 +40,15 @@ const isTransitionIntensity = (value: string): value is TransitionIntensity =>
 const isRedactionMode = (value: string): value is RedactionMode =>
   value === "off" || value === "standard" || value === "strict";
 
+const isAiProvider = (value: string): value is AiProvider =>
+  value === "openai" || value === "anthropic" || value === "openrouter";
+
+const isAiActionMode = (value: string): value is AiActionMode =>
+  value === "disabled"
+  || value === "read-only"
+  || value === "propose"
+  || value === "apply-with-confirmation";
+
 const transitionIntensityOptions = [
   { value: "low", label: "LOW" },
   { value: "normal", label: "NORMAL" },
@@ -48,6 +64,19 @@ const redactionModeOptions = [
 const rigModelOptions = [
   { value: "gpt-4o-mini", label: "GPT-4O-MINI" },
   { value: "gpt-4.1-mini", label: "GPT-4.1-MINI" },
+] as const;
+
+const aiProviderOptions = [
+  { value: "openai", label: "OPENAI" },
+  { value: "anthropic", label: "ANTHROPIC" },
+  { value: "openrouter", label: "OPENROUTER" },
+] as const;
+
+const aiActionModeOptions = [
+  { value: "disabled", label: "DISABLED" },
+  { value: "read-only", label: "READ-ONLY" },
+  { value: "propose", label: "PROPOSE" },
+  { value: "apply-with-confirmation", label: "APPLY W/ CONFIRM" },
 ] as const;
 
 const formatClockTime = (timestamp: number | null): string => {
@@ -122,13 +151,38 @@ export function SettingsPanel() {
   const [audioContextStatus, setAudioContextStatus] = useState<AudioContextStatus>("unknown");
   const [audioDiagnosticMessage, setAudioDiagnosticMessage] = useState<string | null>(null);
   const [agentHelloState, setAgentHelloState] = useState<AgentHelloState>("idle");
-  const [agentHelloModel, setAgentHelloModel] = useState<string>("gpt-4o-mini");
   const [agentHelloPrompt, setAgentHelloPrompt] = useState<string>(
     "Say hello to OPSYDYN // PRECISION TOOLS.",
   );
+  const [aiTemperatureDraft, setAiTemperatureDraft] = useState<string>("0.2");
+  const [aiMaxTokensDraft, setAiMaxTokensDraft] = useState<string>("1024");
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState<string>("");
   const [agentHelloOutput, setAgentHelloOutput] = useState<string | null>(null);
   const [agentHelloError, setAgentHelloError] = useState<string | null>(null);
+  const [agentSecretStatus, setAgentSecretStatus] = useState<AgentSecretStatus>("idle");
+  const [agentSecretSource, setAgentSecretSource] = useState<RigSecretSource>("none");
+  const [agentSecretWarning, setAgentSecretWarning] = useState<string | null>(null);
+  const [agentSecretStatusError, setAgentSecretStatusError] = useState<string | null>(null);
+  const [agentSecretResolutionOrder, setAgentSecretResolutionOrder] = useState<ReadonlyArray<string>>([]);
+  const hasOpenAiRuntimeProvider = settings.aiSettings.provider === "openai";
+  const hasPendingProviderSupport = settings.aiSettings.provider !== "openai";
+  const runtimeProviderText = hasOpenAiRuntimeProvider
+    ? "OPENAI ACTIVE"
+    : `LIMITED (OPENAI RUNTIME, CONFIG=${settings.aiSettings.provider.toUpperCase()})`;
+  const agentModelOptions = useMemo(() => {
+    const model = settings.aiSettings.model.trim();
+    if (model.length === 0 || rigModelOptions.some((option) => option.value === model)) {
+      return [...rigModelOptions];
+    }
+
+    return [
+      {
+        value: model,
+        label: model.toUpperCase(),
+      },
+      ...rigModelOptions,
+    ];
+  }, [settings.aiSettings.model]);
   const lastSavedAt = state.context.lastSavedAt;
   const pendingOperations = state.context.pendingOperations;
   const pendingWrites = state.context.pendingWrites;
@@ -292,14 +346,23 @@ export function SettingsPanel() {
     settings.saveVolEnabled,
   ]);
   const handleRunRigHello = useCallback(() => {
+    if (!hasOpenAiRuntimeProvider) {
+      setAgentHelloState("error");
+      setAgentHelloOutput(null);
+      setAgentHelloError("RUNTIME CURRENTLY SUPPORTS OPENAI ONLY. SWITCH PROVIDER TO OPENAI.");
+      return;
+    }
+
     setAgentHelloState("running");
     setAgentHelloOutput(null);
     setAgentHelloError(null);
 
     void Effect.runPromise(
       runRigHello({
-        model: agentHelloModel,
+        model: settings.aiSettings.model,
         prompt: agentHelloPrompt,
+        temperature: settings.aiSettings.temperature,
+        maxTokens: settings.aiSettings.maxTokens,
       }),
     )
       .then((result) => {
@@ -310,11 +373,59 @@ export function SettingsPanel() {
         setAgentHelloState("error");
         setAgentHelloError(toErrorMessage(error));
       });
-  }, [agentHelloModel, agentHelloPrompt]);
-  const hasStoredOpenAiApiKey = useMemo(
-    () => settings.openAiApiKey.trim().length > 0,
-    [settings.openAiApiKey],
+  }, [
+    agentHelloPrompt,
+    hasOpenAiRuntimeProvider,
+    settings.aiSettings.maxTokens,
+    settings.aiSettings.model,
+    settings.aiSettings.temperature,
+  ]);
+  const refreshAgentSecretStatus = useCallback(() => {
+    setAgentSecretStatus("loading");
+    setAgentSecretStatusError(null);
+
+    void Effect.runPromise(getRigSecretStatus())
+      .then((status) => {
+        setAgentSecretStatus("ready");
+        setAgentSecretSource(status.source);
+        setAgentSecretWarning(status.warning);
+        setAgentSecretResolutionOrder(status.resolutionOrder);
+      })
+      .catch((error: unknown) => {
+        setAgentSecretStatus("error");
+        setAgentSecretSource("none");
+        setAgentSecretWarning(null);
+        setAgentSecretStatusError(toErrorMessage(error));
+      });
+  }, []);
+  const hasConfiguredAgentSecret = useMemo(
+    () => agentSecretSource !== "none",
+    [agentSecretSource],
   );
+  const agentSecretSourceLabel = useMemo(() => {
+    switch (agentSecretSource) {
+      case "keychain":
+        return "KEYCHAIN";
+      case "settings-db":
+        return "SETTINGS DB (FALLBACK)";
+      case "env":
+        return "ENV VAR (FALLBACK)";
+      case "none":
+        return "UNCONFIGURED";
+    }
+  }, [agentSecretSource]);
+  const agentSecretStatusText = useMemo(() => {
+    switch (agentSecretStatus) {
+      case "idle":
+        return "IDLE";
+      case "loading":
+        return "CHECKING";
+      case "ready":
+        return hasConfiguredAgentSecret ? "KEY PRESENT" : "MISSING KEY";
+      case "error":
+        return "STATUS ERROR";
+    }
+  }, [agentSecretStatus, hasConfiguredAgentSecret]);
   const agentHelloStatusText = useMemo(() => {
     switch (agentHelloState) {
       case "idle":
@@ -554,9 +665,60 @@ export function SettingsPanel() {
     applyPatch({ openAiApiKey: normalized });
   }, [applyPatch, openAiApiKeyDraft, settings.openAiApiKey]);
 
+  const commitAiTemperature = useCallback(() => {
+    const parsed = Number(aiTemperatureDraft);
+    if (!Number.isFinite(parsed)) {
+      setAiTemperatureDraft(settings.aiSettings.temperature.toFixed(2));
+      return;
+    }
+
+    const normalized = Math.round(clamp(parsed, 0, 2) * 100) / 100;
+    setAiTemperatureDraft(normalized.toFixed(2));
+    if (normalized === settings.aiSettings.temperature) {
+      return;
+    }
+
+    applyPatch({
+      aiSettings: {
+        ...settings.aiSettings,
+        temperature: normalized,
+      },
+    });
+  }, [aiTemperatureDraft, applyPatch, settings.aiSettings]);
+
+  const commitAiMaxTokens = useCallback(() => {
+    const parsed = Number(aiMaxTokensDraft);
+    if (!Number.isFinite(parsed)) {
+      setAiMaxTokensDraft(String(settings.aiSettings.maxTokens));
+      return;
+    }
+
+    const normalized = clamp(Math.round(parsed), 64, 32_768);
+    setAiMaxTokensDraft(String(normalized));
+    if (normalized === settings.aiSettings.maxTokens) {
+      return;
+    }
+
+    applyPatch({
+      aiSettings: {
+        ...settings.aiSettings,
+        maxTokens: normalized,
+      },
+    });
+  }, [aiMaxTokensDraft, applyPatch, settings.aiSettings]);
+
   useEffect(() => {
     setOpenAiApiKeyDraft(settings.openAiApiKey);
   }, [settings.openAiApiKey]);
+  useEffect(() => {
+    setAiTemperatureDraft(settings.aiSettings.temperature.toFixed(2));
+  }, [settings.aiSettings.temperature]);
+  useEffect(() => {
+    setAiMaxTokensDraft(String(settings.aiSettings.maxTokens));
+  }, [settings.aiSettings.maxTokens]);
+  useEffect(() => {
+    refreshAgentSecretStatus();
+  }, [refreshAgentSecretStatus, settings.openAiApiKey]);
 
   useEffect(() => {
     refreshAudioContextStatus();
@@ -1058,7 +1220,9 @@ export function SettingsPanel() {
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
                   <span>OpenAI API Key</span>
-                  <span className={styles.settingsRowHint}>Persisted in app settings database</span>
+                  <span className={styles.settingsRowHint}>
+                    Keychain-first resolver with secure fallbacks
+                  </span>
                 </div>
                 <div className={styles.settingsControlGroup}>
                   <input
@@ -1081,25 +1245,136 @@ export function SettingsPanel() {
               </div>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
+                  <span>Secret Source</span>
+                  <span className={styles.settingsRowHint}>Resolution priority: keychain to settings-db to env</span>
+                </div>
+                <span className={styles.settingsRowValue}>{agentSecretSourceLabel}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
                   <span>Runtime</span>
                   <span className={styles.settingsRowHint}>rig-core + OpenAI provider</span>
                 </div>
                 <span className={styles.settingsRowValue}>
-                  {hasStoredOpenAiApiKey ? "READY (KEY PRESENT)" : "MISSING KEY"}
+                  {agentSecretStatusText}
                 </span>
               </div>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
+                  <span>Provider</span>
+                  <span className={styles.settingsRowHint}>Configured provider target</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <TacticalSelect
+                    ariaLabel="AI provider"
+                    value={settings.aiSettings.provider}
+                    options={aiProviderOptions}
+                    onChange={(nextValue) => {
+                      if (!isAiProvider(nextValue)) {
+                        return;
+                      }
+                      applyPatch({
+                        aiSettings: {
+                          ...settings.aiSettings,
+                          provider: nextValue,
+                        },
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
                   <span>Model</span>
-                  <span className={styles.settingsRowHint}>Agent execution target</span>
+                  <span className={styles.settingsRowHint}>Default model target</span>
                 </div>
                 <div className={styles.settingsControlGroup}>
                   <TacticalSelect
                     ariaLabel="Rig hello model"
-                    value={agentHelloModel}
-                    options={rigModelOptions}
+                    value={settings.aiSettings.model}
+                    options={agentModelOptions}
                     onChange={(nextValue) => {
-                      setAgentHelloModel(nextValue);
+                      if (nextValue.trim().length === 0) {
+                        return;
+                      }
+                      applyPatch({
+                        aiSettings: {
+                          ...settings.aiSettings,
+                          model: nextValue,
+                        },
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Temperature</span>
+                  <span className={styles.settingsRowHint}>Sampling (0.00 to 2.00)</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={2}
+                    step={0.01}
+                    className={styles.settingsNumberControl}
+                    value={aiTemperatureDraft}
+                    onChange={(event) => setAiTemperatureDraft(event.currentTarget.value)}
+                    onBlur={commitAiTemperature}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitAiTemperature();
+                      }
+                    }}
+                    aria-label="AI temperature"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Max Tokens</span>
+                  <span className={styles.settingsRowHint}>Response ceiling (64 to 32768)</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="number"
+                    min={64}
+                    max={32768}
+                    step={1}
+                    className={styles.settingsNumberControl}
+                    value={aiMaxTokensDraft}
+                    onChange={(event) => setAiMaxTokensDraft(event.currentTarget.value)}
+                    onBlur={commitAiMaxTokens}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitAiMaxTokens();
+                      }
+                    }}
+                    aria-label="AI max tokens"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Action Mode</span>
+                  <span className={styles.settingsRowHint}>Safety profile for OPY mutations</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <TacticalSelect
+                    ariaLabel="AI action mode"
+                    value={settings.aiSettings.actionMode}
+                    options={aiActionModeOptions}
+                    onChange={(nextValue) => {
+                      if (!isAiActionMode(nextValue)) {
+                        return;
+                      }
+                      applyPatch({
+                        aiSettings: {
+                          ...settings.aiSettings,
+                          actionMode: nextValue,
+                        },
+                      });
                     }}
                   />
                 </div>
@@ -1122,20 +1397,32 @@ export function SettingsPanel() {
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
                   <span>Status</span>
-                  <span className={styles.settingsRowHint}>Rust command execution state</span>
+                  <span className={styles.settingsRowHint}>Rust command execution state + provider runtime</span>
                 </div>
                 <div className={styles.settingsInlineActions}>
-                  <span className={styles.settingsRowValue}>{agentHelloStatusText}</span>
+                  <span className={styles.settingsRowValue}>{`${agentHelloStatusText} :: ${runtimeProviderText}`}</span>
                   <button
                     type="button"
                     className={styles.settingsActionButton}
                     onClick={handleRunRigHello}
-                    disabled={agentHelloState === "running"}
+                    disabled={agentHelloState === "running" || !hasOpenAiRuntimeProvider}
                   >
                     RUN HELLO AGENT
                   </button>
                 </div>
               </div>
+              {hasPendingProviderSupport && (
+                <p className={styles.settingsNotice}>
+                  SELECTED PROVIDER IS CONFIGURED FOR FUTURE PHASES. CURRENT RUNTIME EXECUTION IS OPENAI ONLY.
+                </p>
+              )}
+              {agentSecretWarning && <p className={styles.settingsNotice}>{agentSecretWarning}</p>}
+              {agentSecretStatusError && <p className={styles.settingsErrorText}>{agentSecretStatusError}</p>}
+              {agentSecretResolutionOrder.length > 0 && (
+                <p className={styles.settingsRowHint}>
+                  {`RESOLUTION ORDER :: ${agentSecretResolutionOrder.join(" -> ").toUpperCase()}`}
+                </p>
+              )}
               {agentHelloOutput && <p className={styles.settingsNotice}>{agentHelloOutput}</p>}
               {agentHelloError && <p className={styles.settingsErrorText}>{agentHelloError}</p>}
             </article>

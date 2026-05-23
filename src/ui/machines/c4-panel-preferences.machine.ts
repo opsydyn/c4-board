@@ -4,6 +4,7 @@ export interface C4PanelPreferences {
   azurePanelVisible: boolean;
   ownershipLensVisible: boolean;
   couplingExplainabilityVisible: boolean;
+  opyCopilotVisible: boolean;
 }
 
 export type C4PanelPreferenceKey = keyof C4PanelPreferences;
@@ -29,7 +30,8 @@ export type C4PanelPreferencesMachineEvent =
   | { type: "HYDRATE"; values: C4PanelPreferences }
   | { type: "TOGGLE_AZURE_PANEL" }
   | { type: "TOGGLE_OWNERSHIP_LENS" }
-  | { type: "TOGGLE_COUPLING_EXPLAINABILITY" };
+  | { type: "TOGGLE_COUPLING_EXPLAINABILITY" }
+  | { type: "TOGGLE_OPY_COPILOT" };
 
 type PersistPatchErrorEvent = ErrorActorEvent<unknown, "persistPatch">;
 
@@ -80,6 +82,7 @@ const panelPreferencesMachineSetup = setup({
         azurePanelVisible: event.values.azurePanelVisible,
         ownershipLensVisible: event.values.ownershipLensVisible,
         couplingExplainabilityVisible: event.values.couplingExplainabilityVisible,
+        opyCopilotVisible: event.values.opyCopilotVisible,
         hydrated: true,
         errorMessage: null,
       };
@@ -144,6 +147,26 @@ const panelPreferencesMachineSetup = setup({
         errorMessage: null,
       };
     }),
+    toggleOpyAsActivePatch: assign(({ context }) => {
+      const next = !context.opyCopilotVisible;
+      return {
+        opyCopilotVisible: next,
+        activePatch: mergePatch(context.activePatch, {
+          opyCopilotVisible: next,
+        }),
+        errorMessage: null,
+      };
+    }),
+    toggleOpyAsQueuedPatch: assign(({ context }) => {
+      const next = !context.opyCopilotVisible;
+      return {
+        opyCopilotVisible: next,
+        queuedPatch: mergePatch(context.queuedPatch, {
+          opyCopilotVisible: next,
+        }),
+        errorMessage: null,
+      };
+    }),
     emitAzureToggle: emit(({ context }) => ({
       type: "panelPreferenceChanged",
       key: "azurePanelVisible",
@@ -158,6 +181,11 @@ const panelPreferencesMachineSetup = setup({
       type: "panelPreferenceChanged",
       key: "couplingExplainabilityVisible",
       value: context.couplingExplainabilityVisible,
+    })),
+    emitOpyToggle: emit(({ context }) => ({
+      type: "panelPreferenceChanged",
+      key: "opyCopilotVisible",
+      value: context.opyCopilotVisible,
     })),
     promoteQueuedPatch: assign(({ context }) => ({
       activePatch: context.queuedPatch,
@@ -208,6 +236,10 @@ const idleState = panelPreferencesMachineSetup.createStateConfig({
       target: "persisting",
       actions: ["toggleCouplingAsActivePatch", "emitCouplingToggle"],
     },
+    TOGGLE_OPY_COPILOT: {
+      target: "persisting",
+      actions: ["toggleOpyAsActivePatch", "emitOpyToggle"],
+    },
   },
 });
 
@@ -225,6 +257,9 @@ const createPersistingState = (input: C4PanelPreferencesMachineInput) =>
       },
       TOGGLE_COUPLING_EXPLAINABILITY: {
         actions: ["toggleCouplingAsQueuedPatch", "emitCouplingToggle"],
+      },
+      TOGGLE_OPY_COPILOT: {
+        actions: ["toggleOpyAsQueuedPatch", "emitOpyToggle"],
       },
     },
     invoke: {
@@ -274,6 +309,7 @@ export const createC4PanelPreferencesMachine = (input: C4PanelPreferencesMachine
       azurePanelVisible: false,
       ownershipLensVisible: false,
       couplingExplainabilityVisible: false,
+      opyCopilotVisible: false,
       activePatch: null,
       queuedPatch: null,
       hydrated: false,

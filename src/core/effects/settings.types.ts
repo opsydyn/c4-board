@@ -6,6 +6,17 @@ export type TransitionIntensity = Schema.Schema.Type<typeof TransitionIntensityS
 export const RedactionModeSchema = Schema.Literal("off", "standard", "strict");
 export type RedactionMode = Schema.Schema.Type<typeof RedactionModeSchema>;
 
+export const AiProviderSchema = Schema.Literal("openai", "anthropic", "openrouter");
+export type AiProvider = Schema.Schema.Type<typeof AiProviderSchema>;
+
+export const AiActionModeSchema = Schema.Literal(
+  "disabled",
+  "read-only",
+  "propose",
+  "apply-with-confirmation",
+);
+export type AiActionMode = Schema.Schema.Type<typeof AiActionModeSchema>;
+
 const MasterVolumeSchema = pipe(
   Schema.Number,
   Schema.filter((value) => value >= 0 && value <= 1, {
@@ -53,6 +64,46 @@ const OpenAiApiKeySchema = pipe(
   ),
 );
 
+const AiModelSchema = pipe(
+  Schema.String,
+  Schema.filter(
+    (value) => value.length > 0 && value.length <= 128,
+    {
+      message: () => "aiSettings.model must be between 1 and 128 characters",
+    },
+  ),
+);
+
+const AiTemperatureSchema = pipe(
+  Schema.Number,
+  Schema.filter(
+    (value) => Number.isFinite(value) && value >= 0 && value <= 2,
+    {
+      message: () => "aiSettings.temperature must be between 0 and 2",
+    },
+  ),
+);
+
+const AiMaxTokensSchema = pipe(
+  Schema.Number,
+  Schema.filter(
+    (value) => Number.isInteger(value) && value >= 64 && value <= 32_768,
+    {
+      message: () => "aiSettings.maxTokens must be an integer between 64 and 32768",
+    },
+  ),
+);
+
+export const AiSettingsSchema = Schema.Struct({
+  provider: AiProviderSchema,
+  model: AiModelSchema,
+  temperature: AiTemperatureSchema,
+  maxTokens: AiMaxTokensSchema,
+  actionMode: AiActionModeSchema,
+});
+
+export type AiSettings = Schema.Schema.Type<typeof AiSettingsSchema>;
+
 export const AppSettingsSchema = Schema.Struct({
   animationsEnabled: Schema.Boolean,
   transitionIntensity: TransitionIntensitySchema,
@@ -62,6 +113,7 @@ export const AppSettingsSchema = Schema.Struct({
   azurePanelVisible: Schema.Boolean,
   ownershipLensVisible: Schema.Boolean,
   couplingExplainabilityVisible: Schema.Boolean,
+  opyCopilotVisible: Schema.Boolean,
   masterVolume: MasterVolumeSchema,
   autosaveEnabled: Schema.Boolean,
   autosaveIntervalMs: AutosaveIntervalMsSchema,
@@ -71,6 +123,7 @@ export const AppSettingsSchema = Schema.Struct({
   redactionMode: RedactionModeSchema,
   historyRetentionDays: HistoryRetentionDaysSchema,
   openAiApiKey: OpenAiApiKeySchema,
+  aiSettings: AiSettingsSchema,
 });
 
 export type AppSettings = Schema.Schema.Type<typeof AppSettingsSchema>;
@@ -86,6 +139,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   azurePanelVisible: false,
   ownershipLensVisible: false,
   couplingExplainabilityVisible: false,
+  opyCopilotVisible: false,
   masterVolume: 0.8,
   autosaveEnabled: true,
   autosaveIntervalMs: 1_500,
@@ -95,6 +149,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   redactionMode: "strict",
   historyRetentionDays: 30,
   openAiApiKey: "",
+  aiSettings: {
+    provider: "openai",
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    maxTokens: 1_024,
+    actionMode: "read-only",
+  },
 };
 
 export const APP_SETTING_KEYS = Object.freeze(

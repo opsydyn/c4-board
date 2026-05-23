@@ -174,4 +174,24 @@ describe("settings.runtime", () => {
     const settings = await runWithService(getSettings(), db.service);
     expect(settings).toEqual(DEFAULT_APP_SETTINGS);
   });
+
+  it("fails for schema-invalid aiSettings payloads", async () => {
+    const db = makeInMemorySettingsDb([
+      {
+        key: "aiSettings",
+        value: JSON.stringify({
+          provider: "openai",
+          model: "gpt-4o-mini",
+          temperature: 0.2,
+          maxTokens: 1024,
+          actionMode: "auto-apply",
+        }),
+        updated_at: Date.now(),
+      },
+    ]);
+
+    await expect(runWithService(getSettings(), db.service)).rejects.toThrow(
+      "App settings schema validation failed",
+    );
+  });
 });

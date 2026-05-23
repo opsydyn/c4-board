@@ -11,9 +11,20 @@ import {
   type OpyChatSession,
   renameOpyChatSession,
 } from "../../core/effects/opy-chat.persistence";
+import type { AiActionMode } from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
 import * as styles from "./styles.css";
 import { TacticalSelect } from "./TacticalSelect";
+
+type OpyC4NodeType = "person" | "system" | "externalSystem" | "container" | "component";
+
+export interface OpyBoardAddNodeAction {
+  readonly kind: "add-node";
+  readonly nodeType: OpyC4NodeType;
+  readonly label: string;
+}
+
+export type OpyBoardAction = OpyBoardAddNodeAction;
 
 interface OpyCopilotPanelProps {
   readonly hasOpenAiApiKey: boolean;
@@ -21,6 +32,8 @@ interface OpyCopilotPanelProps {
   readonly diagramId: string | null;
   readonly nodeCount: number;
   readonly edgeCount: number;
+  readonly actionMode: AiActionMode;
+  readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
 }
 
@@ -51,15 +64,91 @@ const buildBootstrapMessage = (hasOpenAiApiKey: boolean): { role: OpyChatRole; c
   hasOpenAiApiKey
     ? {
       role: "assistant",
-      content: "OPY::9000 online. Ask about architecture, ownership, or coupling on this board.",
+      content: "OPY Net online. Ask about architecture, ownership, or coupling on this board.",
     }
     : {
       role: "system",
-      content: "OpenAI key not configured. Add it in SETTINGS to enable OPY::9000 responses.",
+      content: "OpenAI key not configured. Add it in SETTINGS to enable OPY Net responses.",
     };
 
 const sortSessionsByRecency = (sessions: readonly OpyChatSession[]): OpyChatSession[] =>
   [...sessions].sort((left, right) => right.updatedAt - left.updatedAt);
+
+const C4_NODE_TYPE_ALIASES: Record<string, OpyC4NodeType> = {
+  person: "person",
+  people: "person",
+  system: "system",
+  external: "externalSystem",
+  "external-system": "externalSystem",
+  externalsystem: "externalSystem",
+  container: "container",
+  component: "component",
+};
+
+type ParseBoardCommandResult =
+  | { readonly type: "none" }
+  | { readonly type: "invalid"; readonly reason: string }
+  | { readonly type: "action"; readonly action: OpyBoardAction };
+
+const normalizeNodeTypeToken = (value: string): string => value.trim().toLowerCase();
+
+const stripWrappingQuotes = (value: string): string => {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
+const parseBoardCommand = (value: string): ParseBoardCommandResult => {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/")) {
+    return { type: "none" };
+  }
+
+  if (!trimmed.toLowerCase().startsWith("/add ")) {
+    return {
+      type: "invalid",
+      reason: "UNKNOWN COMMAND. USE /add <person|system|external|container|component> <label>.",
+    };
+  }
+
+  const payload = trimmed.slice(5).trim();
+  const separator = payload.indexOf(" ");
+  if (separator < 1) {
+    return {
+      type: "invalid",
+      reason: "MISSING LABEL. USE /add <type> <label>.",
+    };
+  }
+
+  const rawType = payload.slice(0, separator);
+  const rawLabel = payload.slice(separator + 1);
+  const nodeType = C4_NODE_TYPE_ALIASES[normalizeNodeTypeToken(rawType)];
+  if (!nodeType) {
+    return {
+      type: "invalid",
+      reason: `UNSUPPORTED TYPE '${rawType}'. USE person/system/external/container/component.`,
+    };
+  }
+
+  const label = stripWrappingQuotes(rawLabel);
+  if (label.length === 0) {
+    return {
+      type: "invalid",
+      reason: "LABEL CANNOT BE EMPTY.",
+    };
+  }
+
+  return {
+    type: "action",
+    action: {
+      kind: "add-node",
+      nodeType,
+      label,
+    },
+  };
+};
 
 export function OpyCopilotPanel({
   hasOpenAiApiKey,
@@ -67,6 +156,8 @@ export function OpyCopilotPanel({
   diagramId,
   nodeCount,
   edgeCount,
+  actionMode,
+  onApplyBoardAction,
   onOpenAiSettings,
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
@@ -376,6 +467,76 @@ export function OpyCopilotPanel({
         return;
       }
 
+      const boardCommand = parseBoardCommand(trimmed);
+      if (boardCommand.type === "invalid") {
+        await appendAndPersistMessage(
+          sessionId,
+          "system",
+          `BOARD COMMAND ERROR: ${boardCommand.reason}`,
+        );
+        return;
+      }
+
+      if (boardCommand.type === "action") {
+        if (domain !== "c4") {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            "BOARD COMMANDS ARE CURRENTLY AVAILABLE IN C4 MODE ONLY.",
+          );
+          return;
+        }
+
+        if (actionMode === "disabled" || actionMode === "read-only") {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            `ACTION BLOCKED BY MODE::${actionMode.toUpperCase()}. SWITCH TO APPLY-WITH-CONFIRMATION TO EXECUTE.`,
+          );
+          return;
+        }
+
+        if (actionMode === "propose") {
+          await appendAndPersistMessage(
+            sessionId,
+            "assistant",
+            `PROPOSAL:: ADD ${boardCommand.action.nodeType.toUpperCase()} "${boardCommand.action.label}". SWITCH MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE.`,
+          );
+          return;
+        }
+
+        if (
+          !window.confirm(
+            `Apply OPY board action?\n\nADD ${boardCommand.action.nodeType.toUpperCase()} "${boardCommand.action.label}"`,
+          )
+        ) {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            "ACTION CANCELLED BY OPERATOR.",
+          );
+          return;
+        }
+
+        try {
+          const actionResult = await onApplyBoardAction(boardCommand.action);
+          await appendAndPersistMessage(
+            sessionId,
+            "assistant",
+            actionResult,
+          );
+        } catch (error) {
+          const message = toErrorMessage(error);
+          setRuntimeError(message);
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            `BOARD ACTION FAILED: ${message}`,
+          );
+        }
+        return;
+      }
+
       if (!hasOpenAiApiKey) {
         await appendAndPersistMessage(
           sessionId,
@@ -390,7 +551,7 @@ export function OpyCopilotPanel({
         const response = await runEffect(
           runRigHello({
             prompt: [
-              "You are OPY::9000, an architecture copilot for OPSYDYN.",
+              "You are OPY Net, an architecture copilot for OPSYDYN.",
               "Respond with concise, actionable architecture guidance.",
               `Board context: ${promptContext}.`,
               `Operator request: ${trimmed}`,
@@ -411,9 +572,12 @@ export function OpyCopilotPanel({
       }
     },
     [
+      actionMode,
       appendAndPersistMessage,
+      domain,
       hasOpenAiApiKey,
       isRunning,
+      onApplyBoardAction,
       promptContext,
       runEffect,
       selectedSessionId,
@@ -421,15 +585,27 @@ export function OpyCopilotPanel({
   );
 
   const statusText = hasOpenAiApiKey ? "KEY::CONFIGURED" : "KEY::MISSING";
+  const actionModeText = `ACTION::${actionMode.toUpperCase()}`;
+  const isAddCommandDraft = draftPrompt.trimStart().toLowerCase().startsWith("/add");
 
   return (
     <div className={styles.opyCopilotShell}>
       <div className={styles.ownershipLensStats}>
         <span>MODE::ASSIST</span>
         <span>{statusText}</span>
+        <span>{actionModeText}</span>
         <span>{`SESSIONS::${sessions.length}`}</span>
         <span>{`ACTIVE::${selectedSession ? "ONLINE" : "NONE"}`}</span>
       </div>
+      <p className={styles.ownershipLensHint}>
+        {"COMMAND::/add person|system|external|container|component <label>"}
+      </p>
+      {isAddCommandDraft && (
+        <p className={styles.ownershipLensHint}>
+          {"TOOL TOKEN ACTIVE:: "}
+          <span className={styles.opyCopilotCommandToken}>/add</span>
+        </p>
+      )}
       <div className={styles.formGroup}>
         <label className={styles.label} htmlFor="opy-session-select">
           Session
@@ -527,8 +703,8 @@ export function OpyCopilotPanel({
         agentId="opy-9000"
         labels={{
           chatInputPlaceholder: hasOpenAiApiKey
-            ? "Ask OPY::9000 about this architecture..."
-            : "Configure OpenAI key in Settings to enable OPY::9000",
+            ? "Ask OPY Net about this architecture..."
+            : "Configure OpenAI key in Settings to enable OPY Net",
         }}
       >
         <CopilotChatInput

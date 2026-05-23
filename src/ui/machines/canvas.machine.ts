@@ -84,6 +84,7 @@ export type CanvasEvent =
 	| { type: "SHOW_EDGE_CONTEXT_MENU"; edgeId: string; position: { x: number; y: number } }
 	| { type: "SHOW_CANVAS_CONTEXT_MENU"; position: { x: number; y: number } }
 	| { type: "ADD_NODE_AT_POSITION"; nodeType: string; position: { x: number; y: number } }
+	| { type: "ADD_NODE_WITH_LABEL"; nodeType: NodeOps.C4Type; label: string }
 	// Persistence events
 	| { type: "CREATE_NEW_DIAGRAM"; name: string; description?: string }
 	| { type: "CREATE_NEW_BOARD" }
@@ -1098,6 +1099,29 @@ const canvasMachineDefinition = setup({
 				return context.nodeCounter + 1;
 			},
 		}),
+
+		addNodeWithLabel: assign({
+			nodes: ({ context, event }) => {
+				if (event.type !== "ADD_NODE_WITH_LABEL") return context.nodes;
+
+				const normalizedLabel = event.label.trim();
+				const newNode = runEffectSync(
+					NodeOps.createNode({
+						type: event.nodeType,
+						label: normalizedLabel.length > 0 ? normalizedLabel : event.nodeType,
+						nodeCounter: context.nodeCounter,
+						selectedNodeId: context.selectedNodeId,
+						existingNodes: context.nodes,
+					}),
+				);
+
+				return [...context.nodes, newNode];
+			},
+			nodeCounter: ({ context, event }) => {
+				if (event.type !== "ADD_NODE_WITH_LABEL") return context.nodeCounter;
+				return context.nodeCounter + 1;
+			},
+		}),
 	},
 }).createMachine({
 	id: "canvas",
@@ -1244,6 +1268,9 @@ const canvasMachineDefinition = setup({
 				},
 				ADD_NODE_AT_POSITION: {
 					actions: "addNodeAtPosition",
+				},
+				ADD_NODE_WITH_LABEL: {
+					actions: "addNodeWithLabel",
 				},
 				NODES_CHANGED: {
 					actions: "updateNodesFromReactFlow",
@@ -1403,6 +1430,9 @@ const canvasMachineDefinition = setup({
 				},
 				DELETE_NODE: {
 					actions: "deleteNode",
+				},
+				ADD_NODE_WITH_LABEL: {
+					actions: "addNodeWithLabel",
 				},
 			},
 			after: {

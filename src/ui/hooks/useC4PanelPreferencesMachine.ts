@@ -21,6 +21,7 @@ interface UseC4PanelPreferencesMachineResult extends C4PanelPreferences {
   toggleAzurePanel: () => void;
   toggleOwnershipLens: () => void;
   toggleCouplingExplainability: () => void;
+  toggleOpyCopilot: () => void;
 }
 
 export const useC4PanelPreferencesMachine = (
@@ -59,6 +60,7 @@ export const useC4PanelPreferencesMachine = (
         azurePanelVisible: settings.azurePanelVisible,
         ownershipLensVisible: settings.ownershipLensVisible,
         couplingExplainabilityVisible: settings.couplingExplainabilityVisible,
+        opyCopilotVisible: settings.opyCopilotVisible,
       },
     });
   }, [
@@ -67,6 +69,7 @@ export const useC4PanelPreferencesMachine = (
     settings.azurePanelVisible,
     settings.couplingExplainabilityVisible,
     settings.ownershipLensVisible,
+    settings.opyCopilotVisible,
   ]);
 
   useEffect(() => {
@@ -95,13 +98,19 @@ export const useC4PanelPreferencesMachine = (
     panelPreferencesSend({ type: "TOGGLE_COUPLING_EXPLAINABILITY" });
   }, [panelPreferencesSend]);
 
+  const toggleOpyCopilot = useCallback(() => {
+    panelPreferencesSend({ type: "TOGGLE_OPY_COPILOT" });
+  }, [panelPreferencesSend]);
+
   return {
     azurePanelVisible: panelPreferencesSnapshot.context.azurePanelVisible,
     ownershipLensVisible: panelPreferencesSnapshot.context.ownershipLensVisible,
     couplingExplainabilityVisible: panelPreferencesSnapshot.context.couplingExplainabilityVisible,
+    opyCopilotVisible: panelPreferencesSnapshot.context.opyCopilotVisible,
     errorMessage: panelPreferencesSnapshot.context.errorMessage,
     toggleAzurePanel,
     toggleOwnershipLens,
     toggleCouplingExplainability,
+    toggleOpyCopilot,
   };
 };
