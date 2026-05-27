@@ -154,9 +154,7 @@ impl LoadTestEngine {
         Ok(stats.snapshot())
     }
 
-    fn build_rate_limiter(
-        &self,
-    ) -> Result<Option<Arc<DirectRateLimiter>>, String> {
+    fn build_rate_limiter(&self) -> Result<Option<Arc<DirectRateLimiter>>, String> {
         match self.config.rps_limit {
             Some(rps) => {
                 let rps_u32 = u32::try_from(rps).map_err(|_| {
