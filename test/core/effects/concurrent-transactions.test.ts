@@ -141,12 +141,6 @@ describe("Concurrent transaction serialization (reproducer)", () => {
       Effect.runPromise(saveDiagram()),
     ]);
 
-    console.log("Transaction log:", log);
-    console.log(
-      "Results:",
-      results.map((r) => r.status),
-    );
-
     // All should succeed — no "transaction within transaction" errors
     for (const result of results) {
       expect(result.status).toBe("fulfilled");

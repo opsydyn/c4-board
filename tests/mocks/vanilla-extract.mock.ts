@@ -1,19 +1,46 @@
 /**
- * Mock for Vanilla Extract CSS modules in tests
+ * Mock for app-local `.css.ts` modules in tests.
  *
- * This provides a Proxy that returns empty strings for all imported class names
- * from .css.ts files, allowing components to render without CSS processing.
+ * Most imports are consumed as class-name strings, but some style utility
+ * modules export functions (`flex`) or token objects (`theme`). Provide
+ * lightweight stubs for both cases so component imports can execute.
  */
 
-export default new Proxy(
-	{},
-	{
-		get(_target, prop) {
-			// Return empty string for all class name accesses
-			if (typeof prop === "string") {
-				return "";
-			}
-			return undefined;
-		},
-	},
+const classNameProxy = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (typeof prop === "string") {
+        return "";
+      }
+      return undefined;
+    },
+  },
 );
+
+const tokenProxy: Record<string | symbol, unknown> = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (prop === Symbol.toPrimitive) {
+        return () => "";
+      }
+      if (prop === "toString" || prop === "valueOf") {
+        return () => "";
+      }
+      return tokenProxy;
+    },
+  },
+);
+
+export const flex = (): string => "";
+export const sprinkles = (): string => "";
+export const theme = tokenProxy;
+export const themeContract = tokenProxy;
+export const defaultTheme = "";
+export const darkTheme = "";
+export const lightTheme = "";
+export const darkNordTheme = "";
+export const componentsLayer = "";
+
+export default classNameProxy;

@@ -21,8 +21,8 @@
     "prepare": "effect-language-service patch"
   },
   "dependencies": {
-    "@astrojs/check": "0.9.6",
-    "@astrojs/react": "4.4.2",
+    "@astrojs/check": "0.9.9",
+    "@astrojs/react": "5.0.5",
     "@copilotkit/react-core": "^1.51.3",
     "@effect-atom/atom-react": "^0.4.0",
     "@effect/typeclass": "^0.38.0",
@@ -64,7 +64,7 @@
     "@xyflow/react": "^12.9.3",
     "ag-grid-community": "^34.3.0",
     "ag-grid-react": "^34.3.0",
-    "astro": "5.16.6",
+    "astro": "6.3.8",
     "dagre": "^0.8.5",
     "date-fns": "^4.1.0",
     "effect": "^3.19.2",

@@ -5,11 +5,19 @@
  * Verifies that the Functional Core / Imperative Shell pattern is working correctly.
  */
 
-import { describe, test, expect } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createActor } from "xstate";
 import { canvasMachine } from "./canvas.machine";
 
 describe("Canvas Machine", () => {
+	beforeEach(() => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	describe("Node Operations", () => {
 		test("should add a person node", () => {
 			// Arrange

@@ -221,7 +221,6 @@ export const PosteeConfigProviderLive = (
 export const makeConfigProvider = (
 	_variables?: EnvironmentVariable[],
 ): PosteeConfigProviderService => {
-	console.log('_variables:', _variables);
 	return new PosteeConfigProviderImpl();
 };
 

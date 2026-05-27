@@ -55,7 +55,6 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
 
     await Effect.runPromise(program);
 
-    console.log("FiberRef observations:", observations);
     // All should be 1: [beforeBody, insideBody, insideBodyAfterAwait, afterBody]
     expect(observations).toEqual([1, 1, 1, 1]);
   });
@@ -106,8 +105,6 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
     );
 
     await Effect.runPromise(transaction);
-
-    console.log("Transaction log:", log);
 
     // Expected: outer withWritePermit acquires semaphore,
     // inner withWritePermit skips semaphore (lockDepth=1)

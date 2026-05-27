@@ -1,8 +1,8 @@
 import { type Effect, Either, pipe, Schema } from "effect";
 import { assign, type DoneActorEvent, type ErrorActorEvent, fromPromise, setup } from "xstate";
-import { getSettings, patchSettings, resetSettings } from "../../core/effects/database";
 import type { DatabaseService } from "../../core/effects/database";
 import type { SettingsV1FlagState } from "../../core/effects/feature-flags";
+import { getSettings, patchSettings, resetSettings } from "../../core/effects/settings.runtime";
 import { emitSettingsTelemetry } from "../../core/effects/settings.telemetry";
 import type { AppSettings, AppSettingsPatch } from "../../core/effects/settings.types";
 import { AppSettingsSchema, DEFAULT_APP_SETTINGS } from "../../core/effects/settings.types";
@@ -184,6 +184,14 @@ type SettingsRuntimeEvent =
   | PersistOperationDoneEvent
   | PersistOperationErrorEvent;
 
+const hasActorOutput = (
+  event: SettingsRuntimeEvent,
+): event is LoadSettingsDoneEvent | PersistOperationDoneEvent => "output" in event;
+
+const hasActorError = (
+  event: SettingsRuntimeEvent,
+): event is LoadSettingsErrorEvent | PersistOperationErrorEvent => "error" in event;
+
 const settingsMachineSetup = setup({
   types: {
     context: {} as SettingsMachineContext,
@@ -296,7 +304,7 @@ const settingsMachineSetup = setup({
       ...toDrafts(DEFAULT_APP_SETTINGS),
     })),
     applyLoadSuccess: assign(({ event }) => {
-      if (event.type !== "xstate.done.actor.loadSettings") {
+      if (!hasActorOutput(event)) {
         return {};
       }
 
@@ -308,7 +316,7 @@ const settingsMachineSetup = setup({
       };
     }),
     applyLoadFailure: assign(({ event }) => {
-      if (event.type !== "xstate.error.actor.loadSettings") {
+      if (!hasActorError(event)) {
         return {};
       }
 
@@ -317,7 +325,7 @@ const settingsMachineSetup = setup({
       };
     }),
     applyWriteSuccess: assign(({ context, event }) => {
-      if (event.type !== "xstate.done.actor.persistOperation") {
+      if (!hasActorOutput(event)) {
         return {};
       }
 
@@ -332,7 +340,7 @@ const settingsMachineSetup = setup({
       };
     }),
     applyWriteSuccessAndPrepareNext: assign(({ context, event }) => {
-      if (event.type !== "xstate.done.actor.persistOperation") {
+      if (!hasActorOutput(event)) {
         return {};
       }
 
@@ -350,7 +358,7 @@ const settingsMachineSetup = setup({
       };
     }),
     applyWriteFailure: assign(({ context, event }) => {
-      if (event.type !== "xstate.error.actor.persistOperation") {
+      if (!hasActorError(event)) {
         return {};
       }
 
@@ -361,7 +369,7 @@ const settingsMachineSetup = setup({
       };
     }),
     applyRecoverySuccess: assign(({ event }) => {
-      if (event.type !== "xstate.done.actor.loadSettings") {
+      if (!hasActorOutput(event)) {
         return {};
       }
 
@@ -372,7 +380,7 @@ const settingsMachineSetup = setup({
       };
     }),
     applyRecoverySuccessAndPrepareNext: assign(({ context, event }) => {
-      if (event.type !== "xstate.done.actor.loadSettings") {
+      if (!hasActorOutput(event)) {
         return {};
       }
 
@@ -411,7 +419,7 @@ const settingsMachineSetup = setup({
         : {}
     ),
     emitLoadSuccessTelemetry: ({ event }) => {
-      if (event.type !== "xstate.done.actor.loadSettings") {
+      if (!hasActorOutput(event)) {
         return;
       }
 
@@ -426,7 +434,7 @@ const settingsMachineSetup = setup({
       );
     },
     emitLoadFailureTelemetry: ({ context, event }) => {
-      if (event.type !== "xstate.error.actor.loadSettings") {
+      if (!hasActorError(event)) {
         return;
       }
 
@@ -442,7 +450,7 @@ const settingsMachineSetup = setup({
       );
     },
     emitWriteSuccessTelemetry: ({ context, event }) => {
-      if (event.type !== "xstate.done.actor.persistOperation") {
+      if (!hasActorOutput(event)) {
         return;
       }
 
@@ -458,7 +466,7 @@ const settingsMachineSetup = setup({
       );
     },
     emitWriteFailureTelemetry: ({ context, event }) => {
-      if (event.type !== "xstate.error.actor.persistOperation") {
+      if (!hasActorError(event)) {
         return;
       }
 

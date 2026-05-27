@@ -29,8 +29,6 @@ describe("Effect.Semaphore cross-fiber isolation", () => {
       Effect.runPromise(criticalSection("B")),
     ]);
 
-    console.log("Execution order:", log);
-
     // If semaphore works: A:enter, A:exit, B:enter, B:exit (or B first)
     // If semaphore DOESN'T work: A:enter, B:enter, A:exit, B:exit (interleaved)
     const aEnter = log.indexOf("A:enter");
@@ -44,13 +42,6 @@ describe("Effect.Semaphore cross-fiber isolation", () => {
     const aFullyBeforeB = aExit < bEnter;
     const bFullyBeforeA = bExit < aEnter;
     const serialized = aFullyBeforeB || bFullyBeforeA;
-
-    if (!serialized) {
-      console.error(
-        "SEMAPHORE DOES NOT SERIALIZE across Effect.runPromise calls!",
-        { log, aEnter, aExit, bEnter, bExit },
-      );
-    }
 
     expect(serialized).toBe(true);
   });
