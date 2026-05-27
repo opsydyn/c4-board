@@ -6,6 +6,7 @@ allow_dirty = true
 
 git_only = true
 publish = false
+publish_no_verify = true
 release_always = true
 changelog_update = false
 semver_check = false
