@@ -20,6 +20,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, watch};
 
+type DirectRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock>;
+
 pub struct LoadTestEngine {
     config: LoadTestConfig,
 }
@@ -154,7 +156,7 @@ impl LoadTestEngine {
 
     fn build_rate_limiter(
         &self,
-    ) -> Result<Option<Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>, String> {
+    ) -> Result<Option<Arc<DirectRateLimiter>>, String> {
         match self.config.rps_limit {
             Some(rps) => {
                 let rps_u32 = u32::try_from(rps).map_err(|_| {
@@ -205,7 +207,7 @@ impl LoadTestEngine {
         _worker_id: usize,
         client: Client,
         plan: Arc<RequestPlan>,
-        rate_limiter: Option<Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>,
+        rate_limiter: Option<Arc<DirectRateLimiter>>,
         tx: mpsc::Sender<WorkerResult>,
         test_start: Instant,
         test_duration: Duration,

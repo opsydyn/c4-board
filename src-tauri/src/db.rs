@@ -251,13 +251,7 @@ pub async fn db_runtime_probe(state: State<'_, AppDb>) -> Result<DbRuntimeProbe,
     let db_file_size_bytes = main_database_path
         .as_deref()
         .and_then(read_file_size_bytes)
-        .or_else(|| {
-            if pragma_db_size_bytes > 0 {
-                Some(pragma_db_size_bytes)
-            } else {
-                None
-            }
-        });
+        .or((pragma_db_size_bytes > 0).then_some(pragma_db_size_bytes));
     let db_file_size_mb = db_file_size_bytes.map(bytes_to_megabytes);
 
     let wal_file_size_bytes = main_database_path.as_deref().and_then(|path| {
