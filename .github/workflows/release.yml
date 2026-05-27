@@ -117,7 +117,6 @@ jobs:
         with:
           command: release-pr
           config: src-tauri/release-plz.toml
-          manifest_path: src-tauri/Cargo.toml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -175,7 +174,6 @@ jobs:
         with:
           command: release
           config: src-tauri/release-plz.toml
-          manifest_path: src-tauri/Cargo.toml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

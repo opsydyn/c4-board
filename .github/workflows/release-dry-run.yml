@@ -56,7 +56,6 @@ jobs:
           command: release
           config: src-tauri/release-plz.toml
           dry_run: true
-          manifest_path: src-tauri/Cargo.toml
           verbose: ${{ inputs.verbose }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
