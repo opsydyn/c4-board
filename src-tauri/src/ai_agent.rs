@@ -1,7 +1,9 @@
 use crate::db::AppDb;
 use rig::{client::CompletionClient, completion::Prompt, providers::openai};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
@@ -39,6 +41,96 @@ pub struct RigAgentHelloResponse {
     pub prompt: String,
     pub temperature: f64,
     pub max_tokens: u64,
+    pub responded_at_ms: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4DiagramPlanRequest {
+    pub description: String,
+    pub diagram_context: Option<String>,
+    pub board_summary: Option<RigC4BoardSummary>,
+    pub model: Option<String>,
+    pub max_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4BoardSummaryNode {
+    pub id: String,
+    pub label: String,
+    pub node_type: RigC4ProposalNodeType,
+    pub description: Option<String>,
+    pub technology: Option<String>,
+    pub team_ownership: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4BoardSummaryEdge {
+    pub id: String,
+    pub source_id: String,
+    pub target_id: String,
+    pub source_label: String,
+    pub target_label: String,
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4BoardSummary {
+    pub diagram_id: Option<String>,
+    pub diagram_name: Option<String>,
+    pub node_count: i64,
+    pub edge_count: i64,
+    pub nodes: Vec<RigC4BoardSummaryNode>,
+    pub edges: Vec<RigC4BoardSummaryEdge>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RigC4ProposalNodeType {
+    Person,
+    System,
+    ExternalSystem,
+    Container,
+    Component,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4ProposalNode {
+    pub key: String,
+    pub node_type: RigC4ProposalNodeType,
+    pub label: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4ProposalEdge {
+    pub source_key: String,
+    pub target_key: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4DiagramProposalPayload {
+    pub summary: String,
+    pub rationale: String,
+    pub warnings: Vec<String>,
+    pub nodes: Vec<RigC4ProposalNode>,
+    pub edges: Vec<RigC4ProposalEdge>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4DiagramPlanResponse {
+    #[serde(flatten)]
+    pub proposal: RigC4DiagramProposalPayload,
+    pub provider: String,
+    pub model: String,
     pub responded_at_ms: i64,
 }
 
@@ -88,6 +180,10 @@ fn normalize_secret(value: &str) -> Option<String> {
     } else {
         Some(normalized.to_string())
     }
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| normalize_secret(&raw))
 }
 
 fn normalize_temperature(value: Option<f64>) -> Option<f64> {
@@ -177,6 +273,177 @@ fn now_unix_ms() -> i64 {
     }
 }
 
+fn build_c4_diagram_plan_preamble() -> &'static str {
+    "You are OPY Net, a proposal-only C4 architecture planner.
+Convert architecture descriptions into concise C4 node and edge proposals.
+Always return a realistic draft, even when details are missing.
+When current-board context shows an existing node already fits the request, prefer reusing that concept instead of duplicating it.
+Use the warnings field for ambiguity, assumptions, guessed boundaries, or unresolved relationships.
+Do not describe implementation code, database tables, deployment YAML, or anything outside C4 concepts.
+Node keys must be unique kebab-case identifiers.
+Every edge must reference valid node keys and include a concise relationship label.
+Prefer 2 to 8 nodes unless the operator explicitly asks for more detail.
+Treat this as preview mode only. No board mutation is being applied."
+}
+
+fn build_c4_diagram_plan_text(description: &str) -> String {
+    let normalized_description = description.trim();
+    format!(
+        "Create a proposal-only C4 diagram draft from the operator description below.\n\
+         Return only the structured fields requested by the extraction schema.\n\
+         \n\
+         Operator description:\n\
+         {normalized_description}"
+    )
+}
+
+fn build_c4_board_summary_context(board_summary: &RigC4BoardSummary) -> Option<String> {
+    if board_summary.nodes.is_empty() && board_summary.edges.is_empty() {
+        return Some("Current board snapshot: empty board.".to_string());
+    }
+
+    let mut sections = Vec::new();
+
+    let diagram_name = board_summary.diagram_name.as_deref().unwrap_or("untitled");
+    let diagram_id = board_summary.diagram_id.as_deref().unwrap_or("unsaved");
+
+    sections.push(format!(
+        "Current board snapshot:\n\
+         - diagram name: {diagram_name}\n\
+         - diagram id: {diagram_id}\n\
+         - node count: {}\n\
+         - edge count: {}",
+        board_summary.node_count, board_summary.edge_count
+    ));
+
+    if !board_summary.nodes.is_empty() {
+        let node_lines = board_summary
+            .nodes
+            .iter()
+            .map(|node| {
+                let mut fields = vec![
+                    format!("id={}", node.id),
+                    format!("type={:?}", node.node_type),
+                    format!("label={}", node.label),
+                ];
+
+                if let Some(description) =
+                    normalize_secret(node.description.as_deref().unwrap_or(""))
+                {
+                    fields.push(format!("description={description}"));
+                }
+
+                if let Some(technology) = normalize_secret(node.technology.as_deref().unwrap_or(""))
+                {
+                    fields.push(format!("technology={technology}"));
+                }
+
+                if let Some(owner) = normalize_secret(node.team_ownership.as_deref().unwrap_or(""))
+                {
+                    fields.push(format!("owner={owner}"));
+                }
+
+                format!("- {}", fields.join(" | "))
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!("Existing nodes:\n{node_lines}"));
+    }
+
+    if !board_summary.edges.is_empty() {
+        let edge_lines = board_summary
+            .edges
+            .iter()
+            .map(|edge| {
+                let label = edge.label.as_deref().unwrap_or("(no label)");
+                format!(
+                    "- id={} | {} -> {} | label={} | sourceId={} | targetId={}",
+                    edge.id,
+                    edge.source_label,
+                    edge.target_label,
+                    label,
+                    edge.source_id,
+                    edge.target_id
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!("Existing edges:\n{edge_lines}"));
+    }
+
+    Some(sections.join("\n\n"))
+}
+
+fn validate_c4_diagram_plan(proposal: &RigC4DiagramProposalPayload) -> Result<(), String> {
+    if proposal.summary.trim().is_empty() {
+        return Err("Proposal summary cannot be empty.".to_string());
+    }
+
+    if proposal.rationale.trim().is_empty() {
+        return Err("Proposal rationale cannot be empty.".to_string());
+    }
+
+    if proposal.nodes.is_empty() {
+        return Err("Proposal must contain at least one node.".to_string());
+    }
+
+    if proposal.nodes.len() > 12 {
+        return Err("Proposal exceeds the maximum supported node count (12).".to_string());
+    }
+
+    if proposal.edges.len() > 24 {
+        return Err("Proposal exceeds the maximum supported edge count (24).".to_string());
+    }
+
+    let mut node_keys = HashSet::new();
+    for node in &proposal.nodes {
+        let key = node.key.trim();
+        if key.is_empty() {
+            return Err("Proposal contains a node with an empty key.".to_string());
+        }
+
+        if !node_keys.insert(key.to_string()) {
+            return Err(format!("Proposal contains duplicate node key '{key}'."));
+        }
+
+        if node.label.trim().is_empty() {
+            return Err(format!("Proposal node '{key}' has an empty label."));
+        }
+    }
+
+    for edge in &proposal.edges {
+        let source_key = edge.source_key.trim();
+        let target_key = edge.target_key.trim();
+        let label = edge.label.trim();
+
+        if source_key.is_empty() || target_key.is_empty() {
+            return Err(
+                "Proposal contains an edge with an empty source or target key.".to_string(),
+            );
+        }
+
+        if !node_keys.contains(source_key) {
+            return Err(format!(
+                "Proposal edge references unknown source key '{source_key}'."
+            ));
+        }
+
+        if !node_keys.contains(target_key) {
+            return Err(format!(
+                "Proposal edge references unknown target key '{target_key}'."
+            ));
+        }
+
+        if label.is_empty() {
+            return Err(format!(
+                "Proposal edge '{source_key} -> {target_key}' has an empty label."
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn rig_agent_secret_status(
     state: State<'_, AppDb>,
@@ -242,6 +509,81 @@ pub async fn rig_agent_hello(
         prompt,
         temperature,
         max_tokens,
+        responded_at_ms: now_unix_ms(),
+    })
+}
+
+#[tauri::command]
+pub async fn rig_agent_plan_c4_diagram(
+    state: State<'_, AppDb>,
+    input: RigC4DiagramPlanRequest,
+) -> Result<RigC4DiagramPlanResponse, String> {
+    let RigC4DiagramPlanRequest {
+        description,
+        diagram_context,
+        board_summary,
+        model,
+        max_tokens,
+    } = input;
+
+    let description = description.trim();
+    if description.is_empty() {
+        return Err("Diagram proposal description cannot be empty.".to_string());
+    }
+
+    let prompt_text = build_c4_diagram_plan_text(description);
+    let model = first_non_empty(model, DEFAULT_MODEL);
+    let max_tokens = normalize_max_tokens(max_tokens).unwrap_or(DEFAULT_MAX_TOKENS);
+    let mut context_sections = Vec::new();
+
+    if let Some(context) = normalize_optional_string(diagram_context) {
+        context_sections.push(format!("Current board context:\n{context}"));
+    }
+
+    if let Some(summary) = board_summary
+        .as_ref()
+        .and_then(build_c4_board_summary_context)
+    {
+        context_sections.push(summary);
+    }
+
+    let combined_context = if context_sections.is_empty() {
+        None
+    } else {
+        Some(context_sections.join("\n\n"))
+    };
+
+    let secret = resolve_openai_secret(&state).await.ok_or_else(|| {
+        "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
+    })?;
+
+    let client: openai::Client = openai::Client::builder()
+        .api_key(&secret.value)
+        .build()
+        .map_err(|error| format!("Failed to initialize OpenAI client: {error}"))?;
+
+    let mut extractor = client
+        .extractor::<RigC4DiagramProposalPayload>(&model)
+        .preamble(build_c4_diagram_plan_preamble())
+        .max_tokens(max_tokens)
+        .retries(1);
+
+    if let Some(ref context) = combined_context {
+        extractor = extractor.context(context);
+    }
+
+    let proposal = extractor
+        .build()
+        .extract(prompt_text)
+        .await
+        .map_err(|error| format!("rig_agent_plan_c4_diagram failed: {error}"))?;
+
+    validate_c4_diagram_plan(&proposal)?;
+
+    Ok(RigC4DiagramPlanResponse {
+        proposal,
+        provider: "openai".to_string(),
+        model,
         responded_at_ms: now_unix_ms(),
     })
 }

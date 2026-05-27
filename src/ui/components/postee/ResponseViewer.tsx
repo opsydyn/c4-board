@@ -160,15 +160,6 @@ export function ResponseViewer({
 		},
 		// Enable Command Palette (Cmd+Shift+P / F1)
 		quickSuggestionsDelay: 10,
-		// Enable Breadcrumbs (shows JSON path at top)
-		breadcrumbs: {
-			enabled: true,
-			showKeys: true,
-			showArrays: true,
-			showObjects: true,
-			showFunctions: false,
-			showVariables: true,
-		},
 	};
 
 	// Search JSON content when query changes

@@ -1,6 +1,5 @@
 {
   "productName": "c4-board",
-  "version": "0.0.0",
   "identifier": "com.tauri.devs",
   "build": {
     "beforeDevCommand": "bun dev",

@@ -799,6 +799,11 @@ const canvasMachineDefinition = setup({
 				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return [];
 				return event.diagram.edges;
 			},
+			selectedNodeId: () => null,
+			nodeCounter: ({ event }) => {
+				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return 0;
+				return event.diagram.nodes.length;
+			},
 			lastSaved: ({ event }) => {
 				if (event.type !== "LOAD_DIAGRAM_SUCCESS") return null;
 				return event.diagram.updatedAt;

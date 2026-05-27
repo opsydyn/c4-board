@@ -23,7 +23,7 @@ import {
 import { emit } from "@tauri-apps/api/event";
 import { useMachine } from "@xstate/react";
 import { type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from "@xyflow/react";
-import { Duration } from "effect";
+import { Duration, Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToggleButton } from "react-aria-components";
 import * as Tone from "tone";
@@ -39,9 +39,13 @@ import {
   saveDiagram,
 } from "../../core/effects/canvas-persistence";
 import { patchSettings } from "../../core/effects/database";
+import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../../core/effects/ai-agent.runtime";
+import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import type { LayoutPresetName } from "../../core/effects/layout";
+import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
+import { buildGroundedProposalDiff, summarizeGroundedProposalDiff } from "../../core/effects/opy-c4-proposals";
 import { useAppSettings } from "../../core/effects/useAppSettings";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { flex } from "../../styles/sprinkles.css";
@@ -99,6 +103,13 @@ const toSaveSynthVolumeDb = (masterVolume: number): number =>
 const OWNERSHIP_FILTER_ALL = "__all__";
 const OWNERSHIP_FILTER_UNASSIGNED = "__unassigned__";
 
+const isRigC4BoardNodeType = (value: unknown): value is RigC4BoardNodeType =>
+  value === "person" ||
+  value === "system" ||
+  value === "externalSystem" ||
+  value === "container" ||
+  value === "component";
+
 const normalizeTeamOwnership = (value: unknown): string | null => {
   if (typeof value !== "string") {
     return null;
@@ -137,6 +148,68 @@ const mergeOwnershipTeams = (
   }
 
   return Array.from(byNormalized.values());
+};
+
+const toNullableTrimmedString = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const toRigC4BoardNode = (node: Node<NodeData>): RigC4BoardNode | null => {
+  const data = (node.data ?? {}) as Partial<NodeData>;
+  const nodeType = data.c4Type ?? (typeof node.type === "string" ? node.type : undefined);
+
+  if (!isRigC4BoardNodeType(nodeType)) {
+    return null;
+  }
+
+  return {
+    id: node.id,
+    label: toNullableTrimmedString(data.label) ?? node.id,
+    nodeType,
+    description: toNullableTrimmedString(data.description),
+    technology: toNullableTrimmedString(data.technology),
+    teamOwnership: toNullableTrimmedString(data.teamOwnership),
+  };
+};
+
+const buildRigC4BoardSummary = (input: {
+  domain: "c4" | "ddd";
+  diagramId: string | null;
+  diagramName: string;
+  nodes: readonly Node[];
+  edges: readonly Edge[];
+}): RigC4BoardSummary | null => {
+  if (input.domain !== "c4") {
+    return null;
+  }
+
+  const nodes = input.nodes
+    .map((node: Node) => toRigC4BoardNode(node as Node<NodeData>))
+    .filter((node: RigC4BoardNode | null): node is RigC4BoardNode => node !== null);
+  const nodeLabelById = new Map(nodes.map((node: RigC4BoardNode) => [node.id, node.label] as const));
+  const edges = input.edges.map((edge: Edge) => ({
+    id: edge.id,
+    sourceId: edge.source,
+    targetId: edge.target,
+    sourceLabel: nodeLabelById.get(edge.source) ?? edge.source,
+    targetLabel: nodeLabelById.get(edge.target) ?? edge.target,
+    label: typeof edge.label === "string" && edge.label.trim().length > 0
+      ? edge.label.trim()
+      : null,
+  }));
+
+  return {
+    diagramId: input.diagramId,
+    diagramName: toNullableTrimmedString(input.diagramName),
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    nodes,
+    edges,
+  };
 };
 
 export function C4CanvasContainer() {
@@ -966,9 +1039,177 @@ export function C4CanvasContainer() {
         return `ACTION APPLIED:: ADD ${action.nodeType.toUpperCase()} "${action.label}"`;
       }
 
+      if (action.kind === "apply-c4-proposal") {
+        if (state.context.currentDomain !== "c4") {
+          throw new Error("OPY proposal apply is currently available in C4 mode only.");
+        }
+
+        const currentDiagramId = state.context.currentDiagramId;
+        if (!currentDiagramId) {
+          throw new Error("No active diagram loaded for OPY proposal apply.");
+        }
+
+        await flushPendingInlineEdits();
+
+        const currentBoardSummary = buildRigC4BoardSummary({
+          domain: state.context.currentDomain,
+          diagramId: currentDiagramId,
+          diagramName: state.context.diagramName,
+          nodes: state.context.nodes,
+          edges: state.context.edges,
+        });
+        const groundedProposal = buildGroundedProposalDiff(action.proposal, currentBoardSummary);
+        if (!groundedProposal) {
+          throw new Error("Unable to ground the proposal against the current board.");
+        }
+
+        const summary = summarizeGroundedProposalDiff(groundedProposal);
+        if (!summary.canApply) {
+          throw new Error(
+            `Proposal apply blocked by ambiguity (${summary.ambiguousNodes} node(s), ${summary.ambiguousEdges} edge(s)).`,
+          );
+        }
+
+        if (!summary.hasChanges) {
+          return "NO CHANGES APPLIED:: PROPOSAL ALREADY MATCHES THE CURRENT BOARD.";
+        }
+
+        let nextNodes = [...state.context.nodes];
+        let nextEdges = [...state.context.edges];
+        let nextNodeCounter = state.context.nodeCounter;
+        const nodeIdByProposalKey = new Map<string, string>();
+
+        for (const nodeDiff of groundedProposal.nodeDiffs) {
+          if (nodeDiff.status === "existing") {
+            const existingMatch = nodeDiff.matches[0];
+            if (!existingMatch) {
+              throw new Error(`Missing exact board match for proposal node ${nodeDiff.node.key}.`);
+            }
+            nodeIdByProposalKey.set(nodeDiff.node.key, existingMatch.id);
+            continue;
+          }
+
+          if (nodeDiff.status !== "new") {
+            throw new Error(`Proposal node ${nodeDiff.node.key} is not safe to apply.`);
+          }
+
+          const createdNode = Effect.runSync(
+            NodeOps.createNode({
+              type: nodeDiff.node.nodeType,
+              label: nodeDiff.node.label,
+              nodeCounter: nextNodeCounter,
+              selectedNodeId: null,
+              existingNodes: nextNodes,
+            }),
+          );
+
+          const normalizedDescription = toNullableTrimmedString(nodeDiff.node.description) ?? "";
+          if (normalizedDescription.length > 0) {
+            createdNode.data = {
+              ...(createdNode.data as NodeData),
+              description: normalizedDescription,
+            };
+          }
+
+          nextNodes = [...nextNodes, createdNode];
+          nextNodeCounter += 1;
+          nodeIdByProposalKey.set(nodeDiff.node.key, createdNode.id);
+        }
+
+        for (const edgeDiff of groundedProposal.edgeDiffs) {
+          if (edgeDiff.status === "existing") {
+            continue;
+          }
+
+          if (edgeDiff.status !== "new") {
+            throw new Error(
+              `Proposal edge ${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey} is not safe to apply.`,
+            );
+          }
+
+          const sourceId = nodeIdByProposalKey.get(edgeDiff.edge.sourceKey);
+          const targetId = nodeIdByProposalKey.get(edgeDiff.edge.targetKey);
+
+          if (!sourceId || !targetId) {
+            throw new Error(
+              `Could not resolve edge endpoints for ${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey}.`,
+            );
+          }
+
+          try {
+            nextEdges = Effect.runSync(
+              EdgeOps.addValidatedEdge(
+                nextEdges,
+                sourceId,
+                targetId,
+                edgeDiff.edge.label,
+              ),
+            );
+          } catch (error) {
+            throw new Error(
+              `Failed to apply edge "${edgeDiff.edge.label}" (${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey}): ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+
+        const saveInput: SaveDiagramPayload = {
+          id: currentDiagramId,
+          name: state.context.diagramName,
+          nodes: nextNodes,
+          edges: nextEdges,
+        };
+
+        if (state.context.diagramDescription) {
+          saveInput.description = state.context.diagramDescription;
+        }
+
+        const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+          type: "LOAD_DIAGRAM_SUCCESS",
+          diagram: {
+            id: currentDiagramId,
+            name: state.context.diagramName,
+            nodes: nextNodes,
+            edges: nextEdges,
+            updatedAt: saveSnapshot.context.lastSavedAt
+              ?? state.context.lastSaved
+              ?? Date.now(),
+            ...(state.context.diagramDescription
+              ? { description: state.context.diagramDescription }
+              : {}),
+          },
+        };
+        send(loadEvent);
+
+        const didSave = await requestSave("manual", {
+          overrideInput: saveInput,
+        });
+
+        if (!didSave) {
+          const saveError = saveActorRef.getSnapshot().context.errorMessage;
+          const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+          throw new Error(`OPY proposal apply save failed: ${detail}`);
+        }
+
+        return `PROPOSAL APPLIED:: +${summary.newNodes} NODE(S) · +${summary.newEdges} EDGE(S) · REUSED ${summary.existingNodes} NODE(S) / ${summary.existingEdges} EDGE(S).`;
+      }
+
       return "NO ACTION APPLIED.";
     },
-    [send],
+    [
+      flushPendingInlineEdits,
+      requestSave,
+      saveActorRef,
+      saveSnapshot.context.lastSavedAt,
+      send,
+      state.context.currentDiagramId,
+      state.context.currentDomain,
+      state.context.diagramDescription,
+      state.context.diagramName,
+      state.context.edges,
+      state.context.lastSaved,
+      state.context.nodeCounter,
+      state.context.nodes,
+    ],
   );
 
   // Handle node position/selection changes from ReactFlow
@@ -1730,6 +1971,21 @@ export function C4CanvasContainer() {
         return "LOADING NEXT WORKSPACE";
     }
   }, [navigationTarget]);
+  const opyBoardSummary = useMemo<RigC4BoardSummary | null>(() => {
+    return buildRigC4BoardSummary({
+      domain: state.context.currentDomain,
+      diagramId: state.context.currentDiagramId,
+      diagramName: state.context.diagramName,
+      nodes: state.context.nodes,
+      edges: state.context.edges,
+    });
+  }, [
+    state.context.currentDiagramId,
+    state.context.currentDomain,
+    state.context.diagramName,
+    state.context.edges,
+    state.context.nodes,
+  ]);
 
   return (
     <div
@@ -1919,8 +2175,10 @@ export function C4CanvasContainer() {
                 hasOpenAiApiKey={appSettings.openAiApiKey.trim().length > 0}
                 domain={state.context.currentDomain}
                 diagramId={state.context.currentDiagramId}
+                diagramName={state.context.diagramName}
                 nodeCount={state.context.nodes.length}
                 edgeCount={state.context.edges.length}
+                boardSummary={opyBoardSummary}
                 actionMode={appSettings.aiSettings.actionMode}
                 onApplyBoardAction={handleApplyOpyBoardAction}
                 onOpenAiSettings={() => {

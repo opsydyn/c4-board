@@ -1,0 +1,299 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "*.afdesign"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to build and upload desktop assets for
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-gate:
+    name: Release gate
+    if: ${{ github.event_name == 'push' && github.repository_owner == 'opsydyn' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run frontend tests
+        run: bun run test:run
+
+      - name: Build frontend
+        run: bun run build
+
+      - name: Check Rust formatting
+        working-directory: src-tauri
+        run: cargo fmt --all --check
+
+      - name: Run Rust clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test --locked
+
+  release-plz-pr:
+    name: Release-plz PR
+    if: ${{ github.event_name == 'push' && github.repository_owner == 'opsydyn' }}
+    needs: release-gate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Prepare release surface marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_ref="${{ github.event.before }}"
+          if [[ "${base_ref}" == "0000000000000000000000000000000000000000" ]]; then
+            base_ref="$(git hash-object -t tree /dev/null)"
+          fi
+
+          bun .github/scripts/prepare-release-plz-surface.ts "${base_ref}" "${GITHUB_SHA}" "src-tauri/release-plz-surface.json"
+
+          if ! git diff --quiet -- src-tauri/release-plz-surface.json; then
+            echo "Prepared src-tauri/release-plz-surface.json for app changes outside src-tauri/."
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run release-plz release-pr
+        id: release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+          config: src-tauri/release-plz.toml
+          manifest_path: src-tauri/Cargo.toml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write PR workflow summary
+        shell: bash
+        env:
+          PR: ${{ steps.release-plz.outputs.pr }}
+          PRS: ${{ steps.release-plz.outputs.prs }}
+          PRS_CREATED: ${{ steps.release-plz.outputs.prs_created }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## release-plz PR"
+            echo
+            echo "- Release PR created or updated: \`${PRS_CREATED:-false}\`"
+            if [[ -n "${PR:-}" && "${PR}" != "{}" ]]; then
+              echo "- Release PR: \`${PR}\`"
+            elif [[ -n "${PRS:-}" && "${PRS}" != "[]" ]]; then
+              echo "- Release PR payload: \`${PRS}\`"
+            else
+              echo "- No release PR was created or updated on this run."
+              echo "- If this is unexpected, verify repo workflow permissions and whether release-surface files changed."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release-plz-release:
+    name: Release-plz release
+    if: ${{ github.event_name == 'push' && github.repository_owner == 'opsydyn' }}
+    needs: release-gate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      release_id: ${{ steps.meta.outputs.release_id }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      releases_created: ${{ steps.release-plz.outputs.releases_created }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run release-plz release
+        id: release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+          config: src-tauri/release-plz.toml
+          manifest_path: src-tauri/Cargo.toml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write release workflow summary
+        shell: bash
+        env:
+          RELEASES_CREATED: ${{ steps.release-plz.outputs.releases_created }}
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## release-plz release"
+            echo
+            echo "- Releases created: \`${RELEASES_CREATED:-false}\`"
+            if [[ "${RELEASES_CREATED:-false}" == "true" ]]; then
+              echo "- Release payload: \`${RELEASES}\`"
+            else
+              echo "- No GitHub release was created from this ref, so desktop bundling is skipped intentionally."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture release metadata
+        id: meta
+        if: ${{ steps.release-plz.outputs.releases_created == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          set -euo pipefail
+          release_tag="$(jq -r '.[0].tag' <<<"${RELEASES}")"
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" --jq '.id')"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
+          echo "Released ${release_tag} via GitHub release ${release_id}"
+
+  resolve-existing-release:
+    name: Resolve existing release
+    if: ${{ github.event_name == 'workflow_dispatch' && github.repository_owner == 'opsydyn' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      release_id: ${{ steps.meta.outputs.release_id }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          release_tag="${{ inputs.release_tag }}"
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" --jq '.id')"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
+          echo "Resolved ${release_tag} to GitHub release ${release_id}"
+
+  build-release-assets:
+    name: Build release assets (${{ matrix.label }})
+    if: ${{ always() && github.repository_owner == 'opsydyn' && (needs.release-plz-release.outputs.releases_created == 'true' || needs.resolve-existing-release.outputs.release_id != '') }}
+    needs:
+      - release-plz-release
+      - resolve-existing-release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: linux-x64
+          - os: macos-13
+            label: macos-x64
+          - os: macos-14
+            label: macos-arm64
+          - os: windows-latest
+            label: windows-x64
+    env:
+      RELEASE_ID: ${{ needs.release-plz-release.outputs.release_id != '' && needs.release-plz-release.outputs.release_id || needs.resolve-existing-release.outputs.release_id }}
+      RELEASE_TAG: ${{ needs.release-plz-release.outputs.release_tag != '' && needs.release-plz-release.outputs.release_tag || needs.resolve-existing-release.outputs.release_tag }}
+    steps:
+      - name: Checkout released tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Linux Tauri dependencies
+        if: ${{ matrix.os == 'ubuntu-22.04' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build and upload Tauri bundles
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseAssetNamePattern: "[name]_[version]_[platform]_[arch][ext]"
+          releaseDraft: false
+          releaseId: ${{ env.RELEASE_ID }}
+          tagName: ${{ env.RELEASE_TAG }}
+          tauriScript: bun tauri
+          uploadUpdaterJson: false

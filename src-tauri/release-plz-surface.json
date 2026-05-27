@@ -1,0 +1,7 @@
+{
+  "managedBy": "github-actions/release-plz",
+  "purpose": "Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
+  "base": null,
+  "head": null,
+  "paths": []
+}

@@ -18,6 +18,7 @@
     "test:watch": "vitest watch",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "release:surface": "bun .github/scripts/prepare-release-plz-surface.ts",
     "prepare": "effect-language-service patch"
   },
   "dependencies": {
@@ -71,6 +72,7 @@
     "fuse.js": "^7.1.0",
     "html-to-image": "1.11.13",
     "lexical": "^0.38.2",
+    "monaco-editor": "^0.54.0",
     "nanoid": "^5.1.6",
     "react": "^19.2.0",
     "react-aria-components": "^1.13.0",

@@ -5,19 +5,20 @@ export type HttpClientErrorType = {
   readonly error: unknown;
 };
 
-export const HttpClientError =
-  Data.tagged<HttpClientErrorType>("HttpClientError");
+export const HttpClientError = Data.tagged<HttpClientErrorType>("HttpClientError");
+
+export type HttpClientRequest = RequestInfo | URL;
 
 export type HttpClientType = {
   readonly request: (
-    input: RequestInfo,
-    init?: RequestInit
+    input: HttpClientRequest,
+    init?: RequestInit,
   ) => Effect.Effect<Response, HttpClientErrorType>;
 };
 
-export class HttpClient extends Effect.Service<HttpClientType>()("HttpClient", {
+export class HttpClient extends Effect.Service<HttpClient>()("HttpClient", {
   sync: () => ({
-    request: (input: string | Request | URL, init: RequestInit | undefined) =>
+    request: (input: HttpClientRequest, init?: RequestInit) =>
       Effect.tryPromise<Response, HttpClientErrorType>({
         try: () => fetch(input, init),
         catch: (error) => HttpClientError({ error }),
@@ -27,24 +28,24 @@ export class HttpClient extends Effect.Service<HttpClientType>()("HttpClient", {
 
 export const HttpClientLive = Layer.succeed(
   HttpClient,
-  HttpClient.of({
+  HttpClient.make({
     request: (input, init) =>
       Effect.tryPromise<Response, HttpClientErrorType>({
         try: () => fetch(input, init),
         catch: (error) => HttpClientError({ error }),
       }),
-  })
+  }),
 );
 
 export const makeHttpClientTestLayer = (
   handler: (
-    input: RequestInfo,
-    init?: RequestInit
-  ) => Effect.Effect<Response, HttpClientErrorType>
+    input: HttpClientRequest,
+    init?: RequestInit,
+  ) => Effect.Effect<Response, HttpClientErrorType>,
 ) =>
   Layer.succeed(
     HttpClient,
-    HttpClient.of({
+    HttpClient.make({
       request: handler,
-    })
+    }),
   );

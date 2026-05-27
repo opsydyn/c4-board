@@ -260,12 +260,10 @@ pub async fn db_runtime_probe(state: State<'_, AppDb>) -> Result<DbRuntimeProbe,
         });
     let db_file_size_mb = db_file_size_bytes.map(bytes_to_megabytes);
 
-    let wal_file_size_bytes = main_database_path
-        .as_deref()
-        .and_then(|path| {
-            let wal_path = PathBuf::from(format!("{}-wal", path.to_string_lossy()));
-            read_file_size_bytes(wal_path.as_path())
-        });
+    let wal_file_size_bytes = main_database_path.as_deref().and_then(|path| {
+        let wal_path = PathBuf::from(format!("{}-wal", path.to_string_lossy()));
+        read_file_size_bytes(wal_path.as_path())
+    });
     let wal_file_size_mb = wal_file_size_bytes.map(bytes_to_megabytes);
 
     Ok(DbRuntimeProbe {

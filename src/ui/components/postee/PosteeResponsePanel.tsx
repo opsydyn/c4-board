@@ -74,6 +74,13 @@ export function PosteeResponsePanel({
 	masterVolume,
 	animationsEnabled,
 }: PosteeResponsePanelProps) {
+	type ComparedHistoryResponse = {
+		body: string;
+		status: number | null;
+		executedAt: number;
+		id: string;
+	};
+
 	const [inspectedHistoryEntry, setInspectedHistoryEntry] = useState<PosteeHistoryEntry | null>(null);
 	const [compareMode, setCompareMode] = useState(false);
 	const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
@@ -93,8 +100,8 @@ export function PosteeResponsePanel({
 				return prev.filter((id) => id !== entryId);
 			}
 			if (prev.length >= 2) {
-				// Replace the oldest selection (first item)
-				return [prev[1], entryId];
+				// Replace the oldest selection and keep the newer one.
+				return [...prev.slice(-1), entryId];
 			}
 			// Add to selection
 			return [...prev, entryId];
@@ -146,7 +153,7 @@ export function PosteeResponsePanel({
 		};
 	}, [inspectedHistoryEntry]);
 
-	const comparisonResponses = useMemo(() => {
+	const comparisonResponses = useMemo<readonly [ComparedHistoryResponse, ComparedHistoryResponse] | null>(() => {
 		if (selectedForCompare.length !== 2) return null;
 
 		const entries = selectedForCompare
@@ -155,7 +162,7 @@ export function PosteeResponsePanel({
 
 		if (entries.length !== 2) return null;
 
-		return entries.map((entry) => {
+		const responses = entries.map((entry) => {
 			// Extract body from response_body or error_message
 			let body = "";
 			if (entry.response_body) {
@@ -176,6 +183,7 @@ export function PosteeResponsePanel({
 				id: entry.id,
 			};
 		});
+		return [responses[0]!, responses[1]!] as const;
 	}, [selectedForCompare, history]);
 
 	return (
@@ -242,7 +250,6 @@ export function PosteeResponsePanel({
 							onSetBaseline={onSetBaseline}
 							onClearBaseline={onClearBaseline}
 							onToggleDiff={onToggleDiff}
-							timing={lastResponse.timing}
 						/>
 					)}
 				</div>
@@ -320,13 +327,20 @@ export function PosteeResponsePanel({
 											✕ Clear
 										</button>
 									</div>
+									{(() => {
+										const [baselineComparison, currentComparison] = comparisonResponses;
+										return (
 									<ResponseViewer
-										body={comparisonResponses[1].body}
-										status={comparisonResponses[1].status ?? undefined}
-										baselineBody={comparisonResponses[0].body}
-										showDiff={true}
-										defaultExpanded
-									/>
+											body={currentComparison.body}
+											{...(currentComparison.status !== null && {
+												status: currentComparison.status,
+											})}
+											baselineBody={baselineComparison.body}
+											showDiff={true}
+											defaultExpanded
+										/>
+										);
+									})()}
 								</>
 							)}
 						</div>

@@ -1,4 +1,5 @@
-import { defineConfig, Plugin } from "vitest/config";
+import { defineConfig } from "vitest/config";
+import type { Plugin } from "vitest/config";
 import path from "node:path";
 
 // Custom plugin to mock Vanilla Extract CSS files in tests

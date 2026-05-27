@@ -1,0 +1,104 @@
+name: Release dry run
+
+on:
+  workflow_dispatch:
+    inputs:
+      verbose:
+        description: Enable verbose release-plz logging
+        required: false
+        default: false
+        type: boolean
+      compare_from:
+        description: Optional git ref to diff against when simulating frontend-only release triggers
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-dry-run:
+    name: release-plz dry run
+    if: ${{ github.repository_owner == 'opsydyn' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Prepare release surface marker
+        if: ${{ inputs.compare_from != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun .github/scripts/prepare-release-plz-surface.ts "${{ inputs.compare_from }}" "${GITHUB_SHA}" "src-tauri/release-plz-surface.json"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run release-plz release dry run
+        id: release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+          config: src-tauri/release-plz.toml
+          dry_run: true
+          manifest_path: src-tauri/Cargo.toml
+          verbose: ${{ inputs.verbose }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize dry run
+        shell: bash
+        env:
+          RELEASES_CREATED: ${{ steps.release-plz.outputs.releases_created }}
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          set -euo pipefail
+          echo "releases_created=${RELEASES_CREATED}"
+          if [[ "${RELEASES_CREATED}" == "true" ]]; then
+            jq . <<<"${RELEASES}"
+          else
+            echo "No release would be created from the selected ref."
+          fi
+
+      - name: Write workflow summary
+        shell: bash
+        env:
+          RELEASES_CREATED: ${{ steps.release-plz.outputs.releases_created }}
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## release-plz dry run"
+            echo
+            echo "- Ref: \`${GITHUB_REF_NAME}\`"
+            if [[ -n "${{ inputs.compare_from }}" ]]; then
+              echo "- Frontend diff base: \`${{ inputs.compare_from }}\`"
+            fi
+            echo "- Would create release: \`${RELEASES_CREATED}\`"
+            echo
+            if [[ "${RELEASES_CREATED}" == "true" ]]; then
+              echo "| Package | Version | Tag |"
+              echo "| --- | --- | --- |"
+              jq -r '.[] | [.package_name, .version, .tag] | @tsv' <<<"${RELEASES}" |
+                while IFS=$'\t' read -r package version tag; do
+                  echo "| \`${package}\` | \`${version}\` | \`${tag}\` |"
+                done
+            else
+              echo "No release would be created from the selected ref."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

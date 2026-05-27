@@ -1,0 +1,16 @@
+[workspace]
+# This repo ships a Tauri desktop app, but the frontend lives outside src-tauri/.
+# The release workflow may stage src-tauri/release-plz-surface.json so release-plz
+# still sees frontend-only app changes as releasable package updates.
+allow_dirty = true
+
+git_only = true
+publish = false
+release_always = false
+changelog_update = false
+semver_check = false
+
+git_tag_name = "v{{ version }}"
+git_release_name = "c4-board v{{ version }}"
+
+pr_labels = ["release"]

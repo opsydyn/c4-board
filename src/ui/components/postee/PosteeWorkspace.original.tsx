@@ -1067,7 +1067,7 @@ useEffect(() => {
 						<ToggleButton
 							isSelected={activeResponseTab === "LoadTest"}
 							onChange={handleLoadTestToggle}
-							disabled={!selectedRequest}
+							isDisabled={!selectedRequest}
 							aria-label="Open load test panel"
 						>
 							<CaretRightIcon size={16} weight="bold" />

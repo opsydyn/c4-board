@@ -614,7 +614,160 @@ export const opyCopilotMessageMeta = style({
   fontSize: theme.typography.size.xs,
 });
 
+export const opyCopilotProposalCard = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.interactive.primary}`,
+  backgroundColor: "rgba(9, 17, 14, 0.94)",
+  padding: theme.spacing["2"],
+  boxShadow: theme.effect.glow.sm,
+});
+
+export const opyCopilotProposalHeader = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotProposalSummary = style({
+  margin: 0,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.sm,
+  lineHeight: theme.typography.lineHeight.normal,
+});
+
+export const opyCopilotProposalRationale = style({
+  margin: 0,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.sm,
+  lineHeight: theme.typography.lineHeight.normal,
+});
+
+export const opyCopilotProposalWarnings = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
+  backgroundColor: "rgba(27, 14, 14, 0.72)",
+  padding: theme.spacing["2"],
+});
+
+globalStyle(`${opyCopilotProposalWarnings} p`, {
+  margin: 0,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.normal,
+});
+
+export const opyCopilotProposalStats = style({
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotProposalColumns = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotProposalColumn = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotProposalItem = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(8, 13, 11, 0.94)",
+  padding: theme.spacing["2"],
+});
+
+export const opyCopilotProposalItemMeta = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotProposalBadge = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotProposalBadgeNew = style({
+  borderColor: theme.color.interactive.primary,
+  color: theme.color.interactive.primary,
+});
+
+export const opyCopilotProposalBadgeExisting = style({
+  borderColor: theme.color.status.selected,
+  color: theme.color.status.selected,
+});
+
+export const opyCopilotProposalBadgeAmbiguous = style({
+  borderColor: theme.color.status.critical,
+  color: theme.color.status.critical,
+});
+
+export const opyCopilotProposalHint = style({
+  margin: 0,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.normal,
+});
+
+export const opyCopilotProposalActions = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  gap: theme.spacing["2"],
+});
+
 globalStyle(`${opyCopilotMessage} p`, {
+  margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
+  whiteSpace: "pre-wrap",
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.sm,
+});
+
+globalStyle(`${opyCopilotProposalItem} p`, {
   margin: 0,
   lineHeight: theme.typography.lineHeight.normal,
   whiteSpace: "pre-wrap",

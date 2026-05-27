@@ -10,7 +10,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const createNode = (
   id: string,
-  overrides: Partial<Node<NodeData>> = {},
+  overrides: Partial<Omit<Node<NodeData>, "data">> & {
+    data?: Partial<NodeData>;
+  } = {},
 ): Node<NodeData> => {
   const baseData: NodeData = {
     label: id,

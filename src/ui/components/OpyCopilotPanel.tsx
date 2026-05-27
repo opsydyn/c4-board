@@ -1,6 +1,18 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { runRigHello } from "../../core/effects/ai-agent.runtime";
+import {
+  planRigC4Diagram,
+  type RigC4BoardEdge,
+  type RigC4BoardNode,
+  type RigC4BoardSummary,
+  type RigC4DiagramProposal,
+  runRigHello,
+} from "../../core/effects/ai-agent.runtime";
+import {
+  buildGroundedProposalDiff,
+  type OpyProposalDiffStatus,
+  summarizeGroundedProposalDiff,
+} from "../../core/effects/opy-c4-proposals";
 import {
   appendOpyChatMessage,
   createOpyChatSession,
@@ -24,14 +36,31 @@ export interface OpyBoardAddNodeAction {
   readonly label: string;
 }
 
-export type OpyBoardAction = OpyBoardAddNodeAction;
+export interface OpyBoardApplyC4ProposalAction {
+  readonly kind: "apply-c4-proposal";
+  readonly proposal: RigC4DiagramProposal;
+}
+
+export type OpyBoardAction = OpyBoardAddNodeAction | OpyBoardApplyC4ProposalAction;
+
+interface OpyDiagramProposalCommand {
+  readonly kind: "plan-c4-diagram";
+  readonly description: string;
+}
+
+interface OpySessionDiagramProposal {
+  readonly command: OpyDiagramProposalCommand;
+  readonly proposal: RigC4DiagramProposal;
+}
 
 interface OpyCopilotPanelProps {
   readonly hasOpenAiApiKey: boolean;
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
+  readonly diagramName: string;
   readonly nodeCount: number;
   readonly edgeCount: number;
+  readonly boardSummary: RigC4BoardSummary | null;
   readonly actionMode: AiActionMode;
   readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
@@ -60,6 +89,12 @@ const ROLE_LABEL: Record<OpyChatRole, string> = {
   system: "SYSTEM",
 };
 
+const DIFF_STATUS_LABEL: Record<OpyProposalDiffStatus, string> = {
+  new: "NEW",
+  existing: "MATCH",
+  ambiguous: "AMBIG",
+};
+
 const buildBootstrapMessage = (hasOpenAiApiKey: boolean): { role: OpyChatRole; content: string } =>
   hasOpenAiApiKey
     ? {
@@ -85,10 +120,11 @@ const C4_NODE_TYPE_ALIASES: Record<string, OpyC4NodeType> = {
   component: "component",
 };
 
-type ParseBoardCommandResult =
+type ParseOpyCommandResult =
   | { readonly type: "none" }
   | { readonly type: "invalid"; readonly reason: string }
-  | { readonly type: "action"; readonly action: OpyBoardAction };
+  | { readonly type: "action"; readonly action: OpyBoardAddNodeAction }
+  | { readonly type: "diagram-proposal"; readonly proposal: OpyDiagramProposalCommand };
 
 const normalizeNodeTypeToken = (value: string): string => value.trim().toLowerCase();
 
@@ -100,16 +136,39 @@ const stripWrappingQuotes = (value: string): string => {
   return trimmed;
 };
 
-const parseBoardCommand = (value: string): ParseBoardCommandResult => {
+const parseOpyCommand = (value: string): ParseOpyCommandResult => {
   const trimmed = value.trim();
   if (!trimmed.startsWith("/")) {
     return { type: "none" };
   }
 
-  if (!trimmed.toLowerCase().startsWith("/add ")) {
+  const normalized = trimmed.toLowerCase();
+  if (normalized.startsWith("/diagram ") || normalized.startsWith("/plan ")) {
+    const payload = normalized.startsWith("/diagram ")
+      ? trimmed.slice("/diagram".length).trim()
+      : trimmed.slice("/plan".length).trim();
+
+    if (payload.length === 0) {
+      return {
+        type: "invalid",
+        reason: "MISSING DESCRIPTION. USE /diagram <architecture description>.",
+      };
+    }
+
+    return {
+      type: "diagram-proposal",
+      proposal: {
+        kind: "plan-c4-diagram",
+        description: payload,
+      },
+    };
+  }
+
+  if (!normalized.startsWith("/add ")) {
     return {
       type: "invalid",
-      reason: "UNKNOWN COMMAND. USE /add <person|system|external|container|component> <label>.",
+      reason:
+        "UNKNOWN COMMAND. USE /add <person|system|external|container|component> <label> OR /diagram <description>.",
     };
   }
 
@@ -150,12 +209,35 @@ const parseBoardCommand = (value: string): ParseBoardCommandResult => {
   };
 };
 
+const detectCommandToken = (value: string): "/add" | "/diagram" | null => {
+  const trimmed = value.trimStart().toLowerCase();
+  if (trimmed.startsWith("/add")) {
+    return "/add";
+  }
+  if (trimmed.startsWith("/diagram") || trimmed.startsWith("/plan")) {
+    return "/diagram";
+  }
+  return null;
+};
+
+const formatNodeMatchSummary = (matches: ReadonlyArray<RigC4BoardNode>): string =>
+  matches
+    .map((match) => `${match.nodeType.toUpperCase()} ${match.label}`)
+    .join(" | ");
+
+const formatEdgeMatchSummary = (matches: ReadonlyArray<RigC4BoardEdge>): string =>
+  matches
+    .map((match) => `${match.sourceLabel} -> ${match.targetLabel}${match.label ? ` (${match.label})` : ""}`)
+    .join(" | ");
+
 export function OpyCopilotPanel({
   hasOpenAiApiKey,
   domain,
   diagramId,
+  diagramName,
   nodeCount,
   edgeCount,
+  boardSummary,
   actionMode,
   onApplyBoardAction,
   onOpenAiSettings,
@@ -170,16 +252,36 @@ export function OpyCopilotPanel({
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
   const [sessionTitleDraft, setSessionTitleDraft] = useState("");
   const [messages, setMessages] = useState<ReadonlyArray<OpyChatMessage>>([]);
+  const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
+    Readonly<Record<string, OpySessionDiagramProposal | undefined>>
+  >({});
   const selectedSessionIdRef = useRef<string>("");
 
   const promptContext = useMemo(() => {
     const diagramLabel = diagramId ?? "unsaved";
-    return `DOMAIN=${domain.toUpperCase()} | DIAGRAM=${diagramLabel} | NODES=${nodeCount} | EDGES=${edgeCount}`;
-  }, [diagramId, domain, edgeCount, nodeCount]);
+    const normalizedDiagramName = diagramName.trim().length > 0 ? diagramName.trim() : "untitled";
+    return `DOMAIN=${domain.toUpperCase()} | DIAGRAM=${diagramLabel} | NAME=${normalizedDiagramName} | NODES=${nodeCount} | EDGES=${edgeCount}`;
+  }, [diagramId, diagramName, domain, edgeCount, nodeCount]);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
     [selectedSessionId, sessions],
+  );
+
+  const activeDiagramProposal = useMemo(
+    () => diagramProposalsBySessionId[selectedSessionId] ?? null,
+    [diagramProposalsBySessionId, selectedSessionId],
+  );
+  const activeGroundedProposal = useMemo(
+    () =>
+      activeDiagramProposal
+        ? buildGroundedProposalDiff(activeDiagramProposal.proposal, boardSummary)
+        : null,
+    [activeDiagramProposal, boardSummary],
+  );
+  const activeProposalSummary = useMemo(
+    () => activeGroundedProposal ? summarizeGroundedProposalDiff(activeGroundedProposal) : null,
+    [activeGroundedProposal],
   );
 
   useEffect(() => {
@@ -467,17 +569,17 @@ export function OpyCopilotPanel({
         return;
       }
 
-      const boardCommand = parseBoardCommand(trimmed);
-      if (boardCommand.type === "invalid") {
+      const opyCommand = parseOpyCommand(trimmed);
+      if (opyCommand.type === "invalid") {
         await appendAndPersistMessage(
           sessionId,
           "system",
-          `BOARD COMMAND ERROR: ${boardCommand.reason}`,
+          `BOARD COMMAND ERROR: ${opyCommand.reason}`,
         );
         return;
       }
 
-      if (boardCommand.type === "action") {
+      if (opyCommand.type === "action") {
         if (domain !== "c4") {
           await appendAndPersistMessage(
             sessionId,
@@ -500,14 +602,14 @@ export function OpyCopilotPanel({
           await appendAndPersistMessage(
             sessionId,
             "assistant",
-            `PROPOSAL:: ADD ${boardCommand.action.nodeType.toUpperCase()} "${boardCommand.action.label}". SWITCH MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE.`,
+            `PROPOSAL:: ADD ${opyCommand.action.nodeType.toUpperCase()} "${opyCommand.action.label}". SWITCH MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE.`,
           );
           return;
         }
 
         if (
           !window.confirm(
-            `Apply OPY board action?\n\nADD ${boardCommand.action.nodeType.toUpperCase()} "${boardCommand.action.label}"`,
+            `Apply OPY board action?\n\nADD ${opyCommand.action.nodeType.toUpperCase()} "${opyCommand.action.label}"`,
           )
         ) {
           await appendAndPersistMessage(
@@ -519,7 +621,7 @@ export function OpyCopilotPanel({
         }
 
         try {
-          const actionResult = await onApplyBoardAction(boardCommand.action);
+          const actionResult = await onApplyBoardAction(opyCommand.action);
           await appendAndPersistMessage(
             sessionId,
             "assistant",
@@ -533,6 +635,71 @@ export function OpyCopilotPanel({
             "system",
             `BOARD ACTION FAILED: ${message}`,
           );
+        }
+        return;
+      }
+
+      if (opyCommand.type === "diagram-proposal") {
+        if (domain !== "c4") {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            "DIAGRAM PROPOSALS ARE CURRENTLY AVAILABLE IN C4 MODE ONLY.",
+          );
+          return;
+        }
+
+        if (actionMode === "disabled" || actionMode === "read-only") {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            `PROPOSAL BLOCKED BY MODE::${actionMode.toUpperCase()}. SWITCH TO PROPOSE OR APPLY-WITH-CONFIRMATION.`,
+          );
+          return;
+        }
+
+        if (!hasOpenAiApiKey) {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            "OPENAI KEY REQUIRED. Navigate to SETTINGS > AI AGENT and configure your key.",
+          );
+          return;
+        }
+
+        setIsRunning(true);
+        try {
+          const proposal = await runEffect(
+            planRigC4Diagram({
+              description: opyCommand.proposal.description,
+              diagramContext: promptContext,
+              ...(boardSummary ? { boardSummary } : {}),
+            }),
+          );
+
+          setDiagramProposalsBySessionId((current) => ({
+            ...current,
+            [sessionId]: {
+              command: opyCommand.proposal,
+              proposal,
+            },
+          }));
+
+          await appendAndPersistMessage(
+            sessionId,
+            "assistant",
+            `PROPOSAL READY:: ${proposal.summary}\nNO BOARD CHANGES WERE APPLIED.`,
+          );
+        } catch (error) {
+          const message = toErrorMessage(error);
+          setRuntimeError(message);
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            `DIAGRAM PROPOSAL FAILED: ${message}`,
+          );
+        } finally {
+          setIsRunning(false);
         }
         return;
       }
@@ -574,6 +741,7 @@ export function OpyCopilotPanel({
     [
       actionMode,
       appendAndPersistMessage,
+      boardSummary,
       domain,
       hasOpenAiApiKey,
       isRunning,
@@ -584,9 +752,100 @@ export function OpyCopilotPanel({
     ],
   );
 
+  const handleApplyActiveProposal = useCallback(async () => {
+    const sessionId = selectedSessionId;
+    if (
+      sessionId.length === 0
+      || !activeDiagramProposal
+      || !activeGroundedProposal
+      || !activeProposalSummary
+      || isRunning
+    ) {
+      return;
+    }
+
+    if (actionMode !== "apply-with-confirmation") {
+      await appendAndPersistMessage(
+        sessionId,
+        "system",
+        `PROPOSAL APPLY BLOCKED BY MODE::${actionMode.toUpperCase()}. SWITCH TO APPLY-WITH-CONFIRMATION.`,
+      );
+      return;
+    }
+
+    if (!activeProposalSummary.canApply) {
+      await appendAndPersistMessage(
+        sessionId,
+        "system",
+        `PROPOSAL APPLY BLOCKED:: ${activeProposalSummary.ambiguousNodes} AMBIGUOUS NODE(S), ${activeProposalSummary.ambiguousEdges} AMBIGUOUS EDGE(S).`,
+      );
+      return;
+    }
+
+    if (!activeProposalSummary.hasChanges) {
+      await appendAndPersistMessage(
+        sessionId,
+        "assistant",
+        "NO NEW CHANGES TO APPLY. PROPOSAL ALREADY MATCHES THE BOARD.",
+      );
+      return;
+    }
+
+    if (
+      !window.confirm(
+        [
+          "Apply OPY diagram proposal?",
+          "",
+          `Create ${activeProposalSummary.newNodes} node(s)`,
+          `Create ${activeProposalSummary.newEdges} edge(s)`,
+          `Reuse ${activeProposalSummary.existingNodes} node(s)`,
+          `Reuse ${activeProposalSummary.existingEdges} edge(s)`,
+          "",
+          "This will update and save the current board.",
+        ].join("\n"),
+      )
+    ) {
+      await appendAndPersistMessage(
+        sessionId,
+        "system",
+        "PROPOSAL APPLY CANCELLED BY OPERATOR.",
+      );
+      return;
+    }
+
+    setRuntimeError(null);
+    setIsRunning(true);
+    try {
+      const actionResult = await onApplyBoardAction({
+        kind: "apply-c4-proposal",
+        proposal: activeDiagramProposal.proposal,
+      });
+      await appendAndPersistMessage(sessionId, "assistant", actionResult);
+    } catch (error) {
+      const message = toErrorMessage(error);
+      setRuntimeError(message);
+      await appendAndPersistMessage(
+        sessionId,
+        "system",
+        `PROPOSAL APPLY FAILED: ${message}`,
+      );
+    } finally {
+      setIsRunning(false);
+    }
+  }, [
+    actionMode,
+    activeDiagramProposal,
+    activeGroundedProposal,
+    activeProposalSummary,
+    appendAndPersistMessage,
+    isRunning,
+    onApplyBoardAction,
+    selectedSessionId,
+  ]);
+
   const statusText = hasOpenAiApiKey ? "KEY::CONFIGURED" : "KEY::MISSING";
   const actionModeText = `ACTION::${actionMode.toUpperCase()}`;
-  const isAddCommandDraft = draftPrompt.trimStart().toLowerCase().startsWith("/add");
+  const activeCommandToken = detectCommandToken(draftPrompt);
 
   return (
     <div className={styles.opyCopilotShell}>
@@ -600,10 +859,13 @@ export function OpyCopilotPanel({
       <p className={styles.ownershipLensHint}>
         {"COMMAND::/add person|system|external|container|component <label>"}
       </p>
-      {isAddCommandDraft && (
+      <p className={styles.ownershipLensHint}>
+        {"COMMAND::/diagram <architecture description>"}
+      </p>
+      {activeCommandToken && (
         <p className={styles.ownershipLensHint}>
           {"TOOL TOKEN ACTIVE:: "}
-          <span className={styles.opyCopilotCommandToken}>/add</span>
+          <span className={styles.opyCopilotCommandToken}>{activeCommandToken}</span>
         </p>
       )}
       <div className={styles.formGroup}>
@@ -699,11 +961,163 @@ export function OpyCopilotPanel({
             );
           })}
       </div>
+      {activeDiagramProposal && (
+        <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">
+          <div className={styles.opyCopilotProposalHeader}>
+            <span>PROPOSAL::C4</span>
+            <span>{formatClockTime(activeDiagramProposal.proposal.respondedAtMs)}</span>
+          </div>
+          <p className={styles.opyCopilotProposalSummary}>{activeDiagramProposal.proposal.summary}</p>
+          <p className={styles.opyCopilotProposalRationale}>{activeDiagramProposal.proposal.rationale}</p>
+          <p className={styles.ownershipLensHint}>
+            {`SOURCE:: ${activeDiagramProposal.command.description}`}
+          </p>
+          {activeProposalSummary && (
+            <p className={styles.opyCopilotProposalHint}>
+              {activeProposalSummary.canApply
+                ? activeProposalSummary.hasChanges
+                  ? `APPLY READY:: +${activeProposalSummary.newNodes} NODE(S) · +${activeProposalSummary.newEdges} EDGE(S) · REUSE ${activeProposalSummary.existingNodes} NODE(S) / ${activeProposalSummary.existingEdges} EDGE(S).`
+                  : "APPLY NO-OP:: PROPOSAL ALREADY MATCHES THE CURRENT BOARD."
+                : `APPLY BLOCKED:: ${activeProposalSummary.ambiguousNodes} AMBIGUOUS NODE(S) · ${activeProposalSummary.ambiguousEdges} AMBIGUOUS EDGE(S).`}
+            </p>
+          )}
+          {boardSummary && activeGroundedProposal && activeProposalSummary && (
+            <div className={styles.opyCopilotProposalStats}>
+              <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
+              <span>
+                {`NODE DIFF::${activeProposalSummary.newNodes} NEW · ${activeProposalSummary.existingNodes} MATCH · ${activeProposalSummary.ambiguousNodes} AMBIG`}
+              </span>
+              <span>
+                {`EDGE DIFF::${activeProposalSummary.newEdges} NEW · ${activeProposalSummary.existingEdges} MATCH · ${activeProposalSummary.ambiguousEdges} AMBIG`}
+              </span>
+            </div>
+          )}
+          {activeDiagramProposal.proposal.warnings.length > 0 && (
+            <div className={styles.opyCopilotProposalWarnings}>
+              {activeDiagramProposal.proposal.warnings.map((warning, index) => (
+                <p key={`${warning}-${index}`}>{`WARNING:: ${warning}`}</p>
+              ))}
+            </div>
+          )}
+          <div className={styles.opyCopilotProposalColumns}>
+            <div className={styles.opyCopilotProposalColumn}>
+              <div className={styles.opyCopilotProposalHeader}>
+                <span>{`NODES::${activeDiagramProposal.proposal.nodes.length}`}</span>
+                <span>{activeDiagramProposal.proposal.model}</span>
+              </div>
+              {(activeGroundedProposal?.nodeDiffs ?? activeDiagramProposal.proposal.nodes.map((node) => ({
+                node,
+                status: "new" as const,
+                matches: [],
+              }))).map((nodeDiff) => (
+                <article key={nodeDiff.node.key} className={styles.opyCopilotProposalItem}>
+                  <div className={styles.opyCopilotProposalItemMeta}>
+                    <span>{nodeDiff.node.nodeType.toUpperCase()}</span>
+                    <span
+                      className={`${styles.opyCopilotProposalBadge} ${
+                        nodeDiff.status === "new"
+                          ? styles.opyCopilotProposalBadgeNew
+                          : nodeDiff.status === "existing"
+                          ? styles.opyCopilotProposalBadgeExisting
+                          : styles.opyCopilotProposalBadgeAmbiguous
+                      }`}
+                    >
+                      {DIFF_STATUS_LABEL[nodeDiff.status]}
+                    </span>
+                  </div>
+                  <p>{nodeDiff.node.label}</p>
+                  <p className={styles.opyCopilotProposalHint}>{`KEY:: ${nodeDiff.node.key}`}</p>
+                  {nodeDiff.node.description && <p>{nodeDiff.node.description}</p>}
+                  {nodeDiff.matches.length > 0 && (
+                    <p className={styles.opyCopilotProposalHint}>
+                      {`${nodeDiff.status === "existing" ? "MATCH" : "CANDIDATES"}:: ${
+                        formatNodeMatchSummary(nodeDiff.matches)
+                      }`}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+            <div className={styles.opyCopilotProposalColumn}>
+              <div className={styles.opyCopilotProposalHeader}>
+                <span>{`EDGES::${activeDiagramProposal.proposal.edges.length}`}</span>
+                <span>PREVIEW ONLY</span>
+              </div>
+              {(activeGroundedProposal?.edgeDiffs ?? activeDiagramProposal.proposal.edges.map((edge) => ({
+                edge,
+                status: "new" as const,
+                matches: [],
+                sourceNode: null,
+                targetNode: null,
+              }))).map((edgeDiff, index) => (
+                <article
+                  key={`${edgeDiff.edge.sourceKey}-${edgeDiff.edge.targetKey}-${index}`}
+                  className={styles.opyCopilotProposalItem}
+                >
+                  <div className={styles.opyCopilotProposalItemMeta}>
+                    <span>{`${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey}`}</span>
+                    <span
+                      className={`${styles.opyCopilotProposalBadge} ${
+                        edgeDiff.status === "new"
+                          ? styles.opyCopilotProposalBadgeNew
+                          : edgeDiff.status === "existing"
+                          ? styles.opyCopilotProposalBadgeExisting
+                          : styles.opyCopilotProposalBadgeAmbiguous
+                      }`}
+                    >
+                      {DIFF_STATUS_LABEL[edgeDiff.status]}
+                    </span>
+                  </div>
+                  <p>{edgeDiff.edge.label}</p>
+                  {edgeDiff.sourceNode && edgeDiff.targetNode && (
+                    <p className={styles.opyCopilotProposalHint}>
+                      {`LINK:: ${edgeDiff.sourceNode.label} -> ${edgeDiff.targetNode.label}`}
+                    </p>
+                  )}
+                  {edgeDiff.matches.length > 0 && (
+                    <p className={styles.opyCopilotProposalHint}>
+                      {`${edgeDiff.status === "existing" ? "MATCH" : "CANDIDATES"}:: ${
+                        formatEdgeMatchSummary(edgeDiff.matches)
+                      }`}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+          </div>
+          <div className={styles.opyCopilotProposalActions}>
+            {actionMode === "apply-with-confirmation"
+              ? activeProposalSummary
+                ? (
+                  <button
+                    type="button"
+                    className={styles.toolbarButton}
+                    onClick={() => {
+                      void handleApplyActiveProposal();
+                    }}
+                    disabled={isRunning || !activeProposalSummary.canApply || !activeProposalSummary.hasChanges}
+                  >
+                    {isRunning ? "APPLYING..." : "APPLY PROPOSAL"}
+                  </button>
+                )
+                : (
+                  <p className={styles.opyCopilotProposalHint}>
+                    {"GROUNDING DATA UNAVAILABLE FOR THIS PROPOSAL."}
+                  </p>
+                )
+              : (
+                <p className={styles.opyCopilotProposalHint}>
+                  {"SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE THIS PROPOSAL."}
+                </p>
+              )}
+          </div>
+        </section>
+      )}
       <CopilotChatConfigurationProvider
         agentId="opy-9000"
         labels={{
           chatInputPlaceholder: hasOpenAiApiKey
-            ? "Ask OPY Net about this architecture..."
+            ? "Ask OPY Net or use /diagram for a C4 proposal..."
             : "Configure OpenAI key in Settings to enable OPY Net",
         }}
       >
