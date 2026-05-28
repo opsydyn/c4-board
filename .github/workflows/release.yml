@@ -291,10 +291,84 @@ jobs:
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Validate Apple signing configuration
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_TEAM_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("${name}")
+            fi
+          done
+
+          has_api_key=true
+          for name in APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_P8; do
+            if [[ -z "${!name:-}" ]]; then
+              has_api_key=false
+            fi
+          done
+
+          has_apple_id=true
+          for name in APPLE_ID APPLE_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              has_apple_id=false
+            fi
+          done
+
+          if [[ "${has_api_key}" != "true" && "${has_apple_id}" != "true" ]]; then
+            missing+=("APPLE_API_KEY+APPLE_API_ISSUER+APPLE_API_KEY_P8 or APPLE_ID+APPLE_PASSWORD")
+          fi
+
+          if (( ${#missing[@]} > 0 )); then
+            printf '::error::Missing Apple signing/notarization secret(s): %s\n' "$(IFS=', '; echo "${missing[*]}")"
+            exit 1
+          fi
+
+      - name: Prepare App Store Connect API key
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${APPLE_API_KEY:-}" || -z "${APPLE_API_KEY_P8:-}" ]]; then
+            exit 0
+          fi
+
+          key_dir="${RUNNER_TEMP}/appstoreconnect"
+          key_path="${key_dir}/AuthKey_${APPLE_API_KEY}.p8"
+          mkdir -p "${key_dir}"
+          printf '%s' "${APPLE_API_KEY_P8}" > "${key_path}"
+          chmod 600 "${key_path}"
+          echo "APPLE_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
+
       - name: Build and upload Tauri bundles
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         with:
           assetNamePattern: "[name]_[version]_[platform]_[arch][ext]"
           releaseDraft: false

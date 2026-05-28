@@ -1,6 +1,6 @@
 {
   "productName": "c4-board",
-  "identifier": "com.tauri.devs",
+  "identifier": "com.opsydyn.c4board",
   "build": {
     "beforeDevCommand": "bun dev",
     "devUrl": "http://localhost:4321/",
