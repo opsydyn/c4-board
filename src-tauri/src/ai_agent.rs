@@ -15,6 +15,7 @@ const MIN_TEMPERATURE: f64 = 0.0;
 const MAX_TEMPERATURE: f64 = 2.0;
 const MIN_MAX_TOKENS: u64 = 64;
 const MAX_MAX_TOKENS: u64 = 32_768;
+const MAX_REVIEW_LIST_ITEMS: usize = 8;
 const OPENAI_API_KEY_SETTING_KEY: &str = "openAiApiKey";
 const OPENAI_KEY_ENV_KEYS: [&str; 2] = ["OPSYDYN_OPENAI_API_KEY", "OPENAI_API_KEY"];
 const KEY_RESOLUTION_ORDER: [&str; 3] = ["keychain", "settings-db", "env"];
@@ -50,6 +51,16 @@ pub struct RigC4DiagramPlanRequest {
     pub description: String,
     pub diagram_context: Option<String>,
     pub board_summary: Option<RigC4BoardSummary>,
+    pub model: Option<String>,
+    pub max_tokens: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4BoardReviewRequest {
+    pub focus: Option<String>,
+    pub diagram_context: Option<String>,
+    pub board_summary: RigC4BoardSummary,
     pub model: Option<String>,
     pub max_tokens: Option<u64>,
 }
@@ -129,6 +140,59 @@ pub struct RigC4DiagramProposalPayload {
 pub struct RigC4DiagramPlanResponse {
     #[serde(flatten)]
     pub proposal: RigC4DiagramProposalPayload,
+    pub provider: String,
+    pub model: String,
+    pub responded_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RigC4ReviewPriority {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4ReviewNote {
+    pub title: String,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4ReviewRisk {
+    pub title: String,
+    pub detail: String,
+    pub severity: RigC4ReviewPriority,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4RecommendedChange {
+    pub title: String,
+    pub rationale: String,
+    pub priority: RigC4ReviewPriority,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4BoardReviewPayload {
+    pub summary: String,
+    pub strengths: Vec<RigC4ReviewNote>,
+    pub risks: Vec<RigC4ReviewRisk>,
+    pub ambiguities: Vec<RigC4ReviewNote>,
+    pub missing_nodes: Vec<String>,
+    pub missing_edges: Vec<String>,
+    pub recommended_changes: Vec<RigC4RecommendedChange>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigC4BoardReviewResponse {
+    #[serde(flatten)]
+    pub review: RigC4BoardReviewPayload,
     pub provider: String,
     pub model: String,
     pub responded_at_ms: i64,
@@ -286,6 +350,19 @@ Prefer 2 to 8 nodes unless the operator explicitly asks for more detail.
 Treat this as preview mode only. No board mutation is being applied."
 }
 
+fn build_c4_board_review_preamble() -> &'static str {
+    "You are OPY Net, a read-only C4 architecture reviewer.
+Assess only what is visible or reasonably inferable from the current board snapshot.
+Focus on boundary clarity, actor/system coverage, relationship clarity, coupling signals, and architectural ambiguity.
+Use strengths for what is already clear and well-structured.
+Use risks for concrete architectural concerns that matter to comprehension or change safety.
+Use ambiguities for unclear naming, missing labels, or uncertain boundaries.
+Use missingNodes and missingEdges only when their absence materially hurts understanding of the architecture.
+Use recommendedChanges for concise, high-value next improvements.
+Do not propose implementation details, code-level refactors, database tables, or deployment infrastructure unless they are explicitly modeled on the board.
+This is review mode only. No board mutation is being applied."
+}
+
 fn build_c4_diagram_plan_text(description: &str) -> String {
     let normalized_description = description.trim();
     format!(
@@ -295,6 +372,21 @@ fn build_c4_diagram_plan_text(description: &str) -> String {
          Operator description:\n\
          {normalized_description}"
     )
+}
+
+fn build_c4_board_review_text(focus: Option<&str>) -> String {
+    match focus {
+        Some(focus) => format!(
+            "Review the current C4 board with emphasis on this focus area.\n\
+             Return only the structured fields requested by the extraction schema.\n\
+             \n\
+             Focus:\n\
+             {focus}"
+        ),
+        None => "Review the current C4 board holistically.\n\
+                 Return only the structured fields requested by the extraction schema."
+            .to_string(),
+    }
 }
 
 fn build_c4_board_summary_context(board_summary: &RigC4BoardSummary) -> Option<String> {
@@ -444,6 +536,129 @@ fn validate_c4_diagram_plan(proposal: &RigC4DiagramProposalPayload) -> Result<()
     Ok(())
 }
 
+fn validate_review_note(note: &RigC4ReviewNote, field_name: &str) -> Result<(), String> {
+    if note.title.trim().is_empty() {
+        return Err(format!(
+            "{field_name} contains an item with an empty title."
+        ));
+    }
+
+    if note.detail.trim().is_empty() {
+        return Err(format!(
+            "{field_name} contains an item with an empty detail."
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_c4_board_review(review: &RigC4BoardReviewPayload) -> Result<(), String> {
+    if review.summary.trim().is_empty() {
+        return Err("Board review summary cannot be empty.".to_string());
+    }
+
+    if review.strengths.len() > MAX_REVIEW_LIST_ITEMS {
+        return Err(format!(
+            "Board review exceeds the maximum supported strengths count ({}).",
+            MAX_REVIEW_LIST_ITEMS
+        ));
+    }
+
+    if review.risks.len() > MAX_REVIEW_LIST_ITEMS {
+        return Err(format!(
+            "Board review exceeds the maximum supported risks count ({}).",
+            MAX_REVIEW_LIST_ITEMS
+        ));
+    }
+
+    if review.ambiguities.len() > MAX_REVIEW_LIST_ITEMS {
+        return Err(format!(
+            "Board review exceeds the maximum supported ambiguities count ({}).",
+            MAX_REVIEW_LIST_ITEMS
+        ));
+    }
+
+    if review.missing_nodes.len() > MAX_REVIEW_LIST_ITEMS {
+        return Err(format!(
+            "Board review exceeds the maximum supported missing nodes count ({}).",
+            MAX_REVIEW_LIST_ITEMS
+        ));
+    }
+
+    if review.missing_edges.len() > MAX_REVIEW_LIST_ITEMS {
+        return Err(format!(
+            "Board review exceeds the maximum supported missing edges count ({}).",
+            MAX_REVIEW_LIST_ITEMS
+        ));
+    }
+
+    if review.recommended_changes.len() > MAX_REVIEW_LIST_ITEMS {
+        return Err(format!(
+            "Board review exceeds the maximum supported recommended changes count ({}).",
+            MAX_REVIEW_LIST_ITEMS
+        ));
+    }
+
+    if review.strengths.is_empty()
+        && review.risks.is_empty()
+        && review.ambiguities.is_empty()
+        && review.missing_nodes.is_empty()
+        && review.missing_edges.is_empty()
+        && review.recommended_changes.is_empty()
+    {
+        return Err(
+            "Board review must include at least one finding or recommendation.".to_string(),
+        );
+    }
+
+    for note in &review.strengths {
+        validate_review_note(note, "Board review strengths")?;
+    }
+
+    for note in &review.ambiguities {
+        validate_review_note(note, "Board review ambiguities")?;
+    }
+
+    for risk in &review.risks {
+        if risk.title.trim().is_empty() {
+            return Err("Board review risks contains an item with an empty title.".to_string());
+        }
+
+        if risk.detail.trim().is_empty() {
+            return Err("Board review risks contains an item with an empty detail.".to_string());
+        }
+    }
+
+    for missing_node in &review.missing_nodes {
+        if missing_node.trim().is_empty() {
+            return Err("Board review missingNodes contains an empty item.".to_string());
+        }
+    }
+
+    for missing_edge in &review.missing_edges {
+        if missing_edge.trim().is_empty() {
+            return Err("Board review missingEdges contains an empty item.".to_string());
+        }
+    }
+
+    for change in &review.recommended_changes {
+        if change.title.trim().is_empty() {
+            return Err(
+                "Board review recommendedChanges contains an item with an empty title.".to_string(),
+            );
+        }
+
+        if change.rationale.trim().is_empty() {
+            return Err(
+                "Board review recommendedChanges contains an item with an empty rationale."
+                    .to_string(),
+            );
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn rig_agent_secret_status(
     state: State<'_, AppDb>,
@@ -586,4 +801,129 @@ pub async fn rig_agent_plan_c4_diagram(
         model,
         responded_at_ms: now_unix_ms(),
     })
+}
+
+#[tauri::command]
+pub async fn rig_agent_review_c4_board(
+    state: State<'_, AppDb>,
+    input: RigC4BoardReviewRequest,
+) -> Result<RigC4BoardReviewResponse, String> {
+    let RigC4BoardReviewRequest {
+        focus,
+        diagram_context,
+        board_summary,
+        model,
+        max_tokens,
+    } = input;
+
+    if board_summary.nodes.is_empty() {
+        return Err("Board review requires at least one C4 node in the current board.".to_string());
+    }
+
+    let focus = normalize_optional_string(focus);
+    let prompt_text = build_c4_board_review_text(focus.as_deref());
+    let model = first_non_empty(model, DEFAULT_MODEL);
+    let max_tokens = normalize_max_tokens(max_tokens).unwrap_or(DEFAULT_MAX_TOKENS);
+    let mut context_sections = Vec::new();
+
+    if let Some(context) = normalize_optional_string(diagram_context) {
+        context_sections.push(format!("Current board context:\n{context}"));
+    }
+
+    if let Some(summary) = build_c4_board_summary_context(&board_summary) {
+        context_sections.push(summary);
+    }
+
+    let combined_context = if context_sections.is_empty() {
+        None
+    } else {
+        Some(context_sections.join("\n\n"))
+    };
+
+    let secret = resolve_openai_secret(&state).await.ok_or_else(|| {
+        "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
+    })?;
+
+    let client: openai::Client = openai::Client::builder()
+        .api_key(&secret.value)
+        .build()
+        .map_err(|error| format!("Failed to initialize OpenAI client: {error}"))?;
+
+    let mut extractor = client
+        .extractor::<RigC4BoardReviewPayload>(&model)
+        .preamble(build_c4_board_review_preamble())
+        .max_tokens(max_tokens)
+        .retries(1);
+
+    if let Some(ref context) = combined_context {
+        extractor = extractor.context(context);
+    }
+
+    let review = extractor
+        .build()
+        .extract(prompt_text)
+        .await
+        .map_err(|error| format!("rig_agent_review_c4_board failed: {error}"))?;
+
+    validate_c4_board_review(&review)?;
+
+    Ok(RigC4BoardReviewResponse {
+        review,
+        provider: "openai".to_string(),
+        model,
+        responded_at_ms: now_unix_ms(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_valid_review() -> RigC4BoardReviewPayload {
+        RigC4BoardReviewPayload {
+            summary: "Clear external actor coverage, but boundary naming is inconsistent."
+                .to_string(),
+            strengths: vec![RigC4ReviewNote {
+                title: "Primary actor is explicit".to_string(),
+                detail: "The board makes the Customer interaction path easy to follow.".to_string(),
+            }],
+            risks: vec![RigC4ReviewRisk {
+                title: "System boundary is overloaded".to_string(),
+                detail: "Payments API appears to absorb orchestration and domain responsibilities."
+                    .to_string(),
+                severity: RigC4ReviewPriority::High,
+            }],
+            ambiguities: vec![RigC4ReviewNote {
+                title: "Container intent is unclear".to_string(),
+                detail:
+                    "The label does not explain whether the node is an API, worker, or datastore."
+                        .to_string(),
+            }],
+            missing_nodes: vec!["External payment provider".to_string()],
+            missing_edges: vec![
+                "Payments API -> external payment provider (submits payment requests)".to_string(),
+            ],
+            recommended_changes: vec![RigC4RecommendedChange {
+                title: "Separate orchestration from core API".to_string(),
+                rationale: "This would make ownership and runtime responsibilities clearer."
+                    .to_string(),
+                priority: RigC4ReviewPriority::Medium,
+            }],
+        }
+    }
+
+    #[test]
+    fn validates_a_well_formed_c4_board_review() {
+        let review = create_valid_review();
+        assert!(validate_c4_board_review(&review).is_ok());
+    }
+
+    #[test]
+    fn rejects_empty_recommended_change_rationale() {
+        let mut review = create_valid_review();
+        review.recommended_changes[0].rationale = "   ".to_string();
+
+        let error = validate_c4_board_review(&review).expect_err("review should be invalid");
+        assert!(error.contains("recommendedChanges"));
+    }
 }

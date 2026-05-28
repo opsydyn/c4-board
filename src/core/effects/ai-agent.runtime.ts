@@ -86,6 +86,44 @@ export type RigC4BoardNode = Schema.Schema.Type<typeof RigC4BoardNodeSchema>;
 export type RigC4BoardEdge = Schema.Schema.Type<typeof RigC4BoardEdgeSchema>;
 export type RigC4BoardSummary = Schema.Schema.Type<typeof RigC4BoardSummarySchema>;
 
+const RigC4ReviewPrioritySchema = Schema.Literal("low", "medium", "high");
+export type RigC4ReviewPriority = Schema.Schema.Type<typeof RigC4ReviewPrioritySchema>;
+
+const RigC4ReviewNoteSchema = Schema.Struct({
+  title: Schema.String,
+  detail: Schema.String,
+});
+
+const RigC4ReviewRiskSchema = Schema.Struct({
+  title: Schema.String,
+  detail: Schema.String,
+  severity: RigC4ReviewPrioritySchema,
+});
+
+const RigC4RecommendedChangeSchema = Schema.Struct({
+  title: Schema.String,
+  rationale: Schema.String,
+  priority: RigC4ReviewPrioritySchema,
+});
+
+const RigC4BoardReviewSchema = Schema.Struct({
+  summary: Schema.String,
+  strengths: Schema.Array(RigC4ReviewNoteSchema),
+  risks: Schema.Array(RigC4ReviewRiskSchema),
+  ambiguities: Schema.Array(RigC4ReviewNoteSchema),
+  missingNodes: Schema.Array(Schema.String),
+  missingEdges: Schema.Array(Schema.String),
+  recommendedChanges: Schema.Array(RigC4RecommendedChangeSchema),
+  provider: Schema.String,
+  model: Schema.String,
+  respondedAtMs: Schema.Number,
+});
+
+export type RigC4ReviewNote = Schema.Schema.Type<typeof RigC4ReviewNoteSchema>;
+export type RigC4ReviewRisk = Schema.Schema.Type<typeof RigC4ReviewRiskSchema>;
+export type RigC4RecommendedChange = Schema.Schema.Type<typeof RigC4RecommendedChangeSchema>;
+export type RigC4BoardReview = Schema.Schema.Type<typeof RigC4BoardReviewSchema>;
+
 const RigSecretSourceSchema = Schema.Literal("keychain", "settings-db", "env", "none");
 export type RigSecretSource = Schema.Schema.Type<typeof RigSecretSourceSchema>;
 
@@ -112,6 +150,14 @@ export interface RigC4DiagramPlanInput {
   readonly maxTokens?: number;
 }
 
+export interface RigC4BoardReviewInput {
+  readonly focus?: string;
+  readonly diagramContext?: string;
+  readonly boardSummary: RigC4BoardSummary;
+  readonly model?: string;
+  readonly maxTokens?: number;
+}
+
 const toCauseMessage = (cause: unknown): string => {
   if (typeof cause === "string") {
     return cause;
@@ -134,6 +180,17 @@ const decodeRigC4DiagramProposal = (payload: unknown): RigC4DiagramProposal => {
   } catch (cause) {
     throw new AiAgentRuntimeError({
       message: "Invalid rig C4 diagram proposal payload",
+      cause,
+    });
+  }
+};
+
+const decodeRigC4BoardReview = (payload: unknown): RigC4BoardReview => {
+  try {
+    return Schema.decodeUnknownSync(RigC4BoardReviewSchema)(payload);
+  } catch (cause) {
+    throw new AiAgentRuntimeError({
+      message: "Invalid rig C4 board review payload",
       cause,
     });
   }
@@ -187,6 +244,21 @@ export const planRigC4Diagram = (
     catch: (cause) =>
       new AiAgentRuntimeError({
         message: `Rig C4 diagram proposal request failed: ${toCauseMessage(cause)}`,
+        cause,
+      }),
+  });
+
+export const reviewRigC4Board = (
+  input: RigC4BoardReviewInput,
+): Effect.Effect<RigC4BoardReview, AiAgentRuntimeError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const payload = await invoke("rig_agent_review_c4_board", { input });
+      return decodeRigC4BoardReview(payload);
+    },
+    catch: (cause) =>
+      new AiAgentRuntimeError({
+        message: `Rig C4 board review request failed: ${toCauseMessage(cause)}`,
         cause,
       }),
   });

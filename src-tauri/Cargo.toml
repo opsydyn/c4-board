@@ -8,6 +8,17 @@ license = "MIT"
 repository = "https://github.com/opsydyn/c4-board"
 homepage = "https://github.com/opsydyn/c4-board"
 publish = false
+include = [
+  "Cargo.toml",
+  "build.rs",
+  "src/**",
+  "migrations/**",
+  "icons/**",
+  "gen/schemas/**",
+  "tauri.conf.json",
+  "release-plz.toml",
+  "release-plz-surface.json",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

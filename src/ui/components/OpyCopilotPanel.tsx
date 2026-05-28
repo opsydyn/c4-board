@@ -2,8 +2,10 @@ import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   planRigC4Diagram,
+  reviewRigC4Board,
   type RigC4BoardEdge,
   type RigC4BoardNode,
+  type RigC4BoardReview,
   type RigC4BoardSummary,
   type RigC4DiagramProposal,
   runRigHello,
@@ -48,9 +50,19 @@ interface OpyDiagramProposalCommand {
   readonly description: string;
 }
 
+interface OpyBoardReviewCommand {
+  readonly kind: "review-c4-board";
+  readonly focus: string | null;
+}
+
 interface OpySessionDiagramProposal {
   readonly command: OpyDiagramProposalCommand;
   readonly proposal: RigC4DiagramProposal;
+}
+
+interface OpySessionBoardReview {
+  readonly command: OpyBoardReviewCommand;
+  readonly review: RigC4BoardReview;
 }
 
 interface OpyCopilotPanelProps {
@@ -124,7 +136,8 @@ type ParseOpyCommandResult =
   | { readonly type: "none" }
   | { readonly type: "invalid"; readonly reason: string }
   | { readonly type: "action"; readonly action: OpyBoardAddNodeAction }
-  | { readonly type: "diagram-proposal"; readonly proposal: OpyDiagramProposalCommand };
+  | { readonly type: "diagram-proposal"; readonly proposal: OpyDiagramProposalCommand }
+  | { readonly type: "board-review"; readonly review: OpyBoardReviewCommand };
 
 const normalizeNodeTypeToken = (value: string): string => value.trim().toLowerCase();
 
@@ -143,6 +156,17 @@ const parseOpyCommand = (value: string): ParseOpyCommandResult => {
   }
 
   const normalized = trimmed.toLowerCase();
+  if (normalized === "/review" || normalized.startsWith("/review ")) {
+    const focus = stripWrappingQuotes(trimmed.slice("/review".length).trim());
+    return {
+      type: "board-review",
+      review: {
+        kind: "review-c4-board",
+        focus: focus.length > 0 ? focus : null,
+      },
+    };
+  }
+
   if (normalized.startsWith("/diagram ") || normalized.startsWith("/plan ")) {
     const payload = normalized.startsWith("/diagram ")
       ? trimmed.slice("/diagram".length).trim()
@@ -168,7 +192,7 @@ const parseOpyCommand = (value: string): ParseOpyCommandResult => {
     return {
       type: "invalid",
       reason:
-        "UNKNOWN COMMAND. USE /add <person|system|external|container|component> <label> OR /diagram <description>.",
+        "UNKNOWN COMMAND. USE /add <person|system|external|container|component> <label>, /diagram <description>, OR /review [focus].",
     };
   }
 
@@ -209,16 +233,22 @@ const parseOpyCommand = (value: string): ParseOpyCommandResult => {
   };
 };
 
-const detectCommandToken = (value: string): "/add" | "/diagram" | null => {
+const detectCommandToken = (value: string): "/add" | "/diagram" | "/review" | null => {
   const trimmed = value.trimStart().toLowerCase();
   if (trimmed.startsWith("/add")) {
     return "/add";
+  }
+  if (trimmed.startsWith("/review")) {
+    return "/review";
   }
   if (trimmed.startsWith("/diagram") || trimmed.startsWith("/plan")) {
     return "/diagram";
   }
   return null;
 };
+
+const formatReviewFocus = (focus: string | null | undefined): string =>
+  focus && focus.trim().length > 0 ? focus.trim() : "WHOLE BOARD";
 
 const formatNodeMatchSummary = (matches: ReadonlyArray<RigC4BoardNode>): string =>
   matches
@@ -255,6 +285,9 @@ export function OpyCopilotPanel({
   const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
     Readonly<Record<string, OpySessionDiagramProposal | undefined>>
   >({});
+  const [boardReviewsBySessionId, setBoardReviewsBySessionId] = useState<
+    Readonly<Record<string, OpySessionBoardReview | undefined>>
+  >({});
   const selectedSessionIdRef = useRef<string>("");
 
   const promptContext = useMemo(() => {
@@ -271,6 +304,10 @@ export function OpyCopilotPanel({
   const activeDiagramProposal = useMemo(
     () => diagramProposalsBySessionId[selectedSessionId] ?? null,
     [diagramProposalsBySessionId, selectedSessionId],
+  );
+  const activeBoardReview = useMemo(
+    () => boardReviewsBySessionId[selectedSessionId] ?? null,
+    [boardReviewsBySessionId, selectedSessionId],
   );
   const activeGroundedProposal = useMemo(
     () =>
@@ -704,6 +741,71 @@ export function OpyCopilotPanel({
         return;
       }
 
+      if (opyCommand.type === "board-review") {
+        if (domain !== "c4") {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            "BOARD REVIEW IS CURRENTLY AVAILABLE IN C4 MODE ONLY.",
+          );
+          return;
+        }
+
+        if (!boardSummary || boardSummary.nodeCount === 0) {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            "BOARD REVIEW REQUIRES AT LEAST ONE C4 NODE IN THE CURRENT BOARD.",
+          );
+          return;
+        }
+
+        if (!hasOpenAiApiKey) {
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            "OPENAI KEY REQUIRED. Navigate to SETTINGS > AI AGENT and configure your key.",
+          );
+          return;
+        }
+
+        setIsRunning(true);
+        try {
+          const review = await runEffect(
+            reviewRigC4Board({
+              ...(opyCommand.review.focus ? { focus: opyCommand.review.focus } : {}),
+              diagramContext: promptContext,
+              boardSummary,
+            }),
+          );
+
+          setBoardReviewsBySessionId((current) => ({
+            ...current,
+            [sessionId]: {
+              command: opyCommand.review,
+              review,
+            },
+          }));
+
+          await appendAndPersistMessage(
+            sessionId,
+            "assistant",
+            `REVIEW READY:: ${review.summary}\nNO BOARD CHANGES WERE APPLIED.`,
+          );
+        } catch (error) {
+          const message = toErrorMessage(error);
+          setRuntimeError(message);
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            `BOARD REVIEW FAILED: ${message}`,
+          );
+        } finally {
+          setIsRunning(false);
+        }
+        return;
+      }
+
       if (!hasOpenAiApiKey) {
         await appendAndPersistMessage(
           sessionId,
@@ -862,6 +964,9 @@ export function OpyCopilotPanel({
       <p className={styles.ownershipLensHint}>
         {"COMMAND::/diagram <architecture description>"}
       </p>
+      <p className={styles.ownershipLensHint}>
+        {"COMMAND::/review [focus area]"}
+      </p>
       {activeCommandToken && (
         <p className={styles.ownershipLensHint}>
           {"TOOL TOKEN ACTIVE:: "}
@@ -961,6 +1066,166 @@ export function OpyCopilotPanel({
             );
           })}
       </div>
+      {activeBoardReview && (
+        <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
+          <div className={styles.opyCopilotProposalHeader}>
+            <span>REVIEW::C4</span>
+            <span>{formatClockTime(activeBoardReview.review.respondedAtMs)}</span>
+          </div>
+          <p className={styles.opyCopilotProposalSummary}>{activeBoardReview.review.summary}</p>
+          <p className={styles.ownershipLensHint}>
+            {`FOCUS:: ${formatReviewFocus(activeBoardReview.command.focus)}`}
+          </p>
+          {boardSummary && (
+            <div className={styles.opyCopilotProposalStats}>
+              <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
+              <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
+              <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
+              <span>{`AMBIGUITIES::${activeBoardReview.review.ambiguities.length}`}</span>
+              <span>{`RECOMMEND::${activeBoardReview.review.recommendedChanges.length}`}</span>
+            </div>
+          )}
+          <div className={styles.opyCopilotProposalColumns}>
+            <div className={styles.opyCopilotProposalColumn}>
+              <div className={styles.opyCopilotProposalHeader}>
+                <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
+                <span>READ ONLY</span>
+              </div>
+              {activeBoardReview.review.strengths.length > 0
+                ? activeBoardReview.review.strengths.map((strength, index) => (
+                  <article
+                    key={`${strength.title}-${index}`}
+                    className={styles.opyCopilotProposalItem}
+                  >
+                    <div className={styles.opyCopilotProposalItemMeta}>
+                      <span>STRENGTH</span>
+                    </div>
+                    <p>{strength.title}</p>
+                    <p className={styles.opyCopilotProposalHint}>{strength.detail}</p>
+                  </article>
+                ))
+                : (
+                  <article className={styles.opyCopilotProposalItem}>
+                    <p>NO MAJOR STRENGTHS CALLED OUT.</p>
+                  </article>
+                )}
+            </div>
+            <div className={styles.opyCopilotProposalColumn}>
+              <div className={styles.opyCopilotProposalHeader}>
+                <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
+                <span>{activeBoardReview.review.model}</span>
+              </div>
+              {activeBoardReview.review.risks.length > 0
+                ? activeBoardReview.review.risks.map((risk, index) => (
+                  <article
+                    key={`${risk.title}-${index}`}
+                    className={styles.opyCopilotProposalItem}
+                  >
+                    <div className={styles.opyCopilotProposalItemMeta}>
+                      <span>RISK</span>
+                      <span
+                        className={`${styles.opyCopilotProposalBadge} ${
+                          risk.severity === "high"
+                            ? styles.opyCopilotReviewBadgeHigh
+                            : risk.severity === "medium"
+                            ? styles.opyCopilotReviewBadgeMedium
+                            : styles.opyCopilotReviewBadgeLow
+                        }`}
+                      >
+                        {risk.severity.toUpperCase()}
+                      </span>
+                    </div>
+                    <p>{risk.title}</p>
+                    <p className={styles.opyCopilotProposalHint}>{risk.detail}</p>
+                  </article>
+                ))
+                : (
+                  <article className={styles.opyCopilotProposalItem}>
+                    <p>NO MATERIAL RISKS IDENTIFIED.</p>
+                  </article>
+                )}
+            </div>
+            <div className={styles.opyCopilotProposalColumn}>
+              <div className={styles.opyCopilotProposalHeader}>
+                <span>{`AMBIGUITIES::${activeBoardReview.review.ambiguities.length}`}</span>
+                <span>GAPS</span>
+              </div>
+              {activeBoardReview.review.ambiguities.length > 0
+                ? activeBoardReview.review.ambiguities.map((ambiguity, index) => (
+                  <article
+                    key={`${ambiguity.title}-${index}`}
+                    className={styles.opyCopilotProposalItem}
+                  >
+                    <div className={styles.opyCopilotProposalItemMeta}>
+                      <span>AMBIGUITY</span>
+                    </div>
+                    <p>{ambiguity.title}</p>
+                    <p className={styles.opyCopilotProposalHint}>{ambiguity.detail}</p>
+                  </article>
+                ))
+                : (
+                  <article className={styles.opyCopilotProposalItem}>
+                    <p>NO MAJOR AMBIGUITIES IDENTIFIED.</p>
+                  </article>
+                )}
+              {activeBoardReview.review.missingNodes.length > 0 && (
+                <div className={styles.opyCopilotProposalWarnings}>
+                  {activeBoardReview.review.missingNodes.map((node, index) => (
+                    <p key={`${node}-${index}`}>{`MISSING NODE:: ${node}`}</p>
+                  ))}
+                </div>
+              )}
+              {activeBoardReview.review.missingEdges.length > 0 && (
+                <div className={styles.opyCopilotProposalWarnings}>
+                  {activeBoardReview.review.missingEdges.map((edge, index) => (
+                    <p key={`${edge}-${index}`}>{`MISSING EDGE:: ${edge}`}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className={styles.opyCopilotProposalColumn}>
+              <div className={styles.opyCopilotProposalHeader}>
+                <span>{`RECOMMEND::${activeBoardReview.review.recommendedChanges.length}`}</span>
+                <span>NEXT</span>
+              </div>
+              {activeBoardReview.review.recommendedChanges.length > 0
+                ? activeBoardReview.review.recommendedChanges.map((change, index) => (
+                  <article
+                    key={`${change.title}-${index}`}
+                    className={styles.opyCopilotProposalItem}
+                  >
+                    <div className={styles.opyCopilotProposalItemMeta}>
+                      <span>CHANGE</span>
+                      <span
+                        className={`${styles.opyCopilotProposalBadge} ${
+                          change.priority === "high"
+                            ? styles.opyCopilotReviewBadgeHigh
+                            : change.priority === "medium"
+                            ? styles.opyCopilotReviewBadgeMedium
+                            : styles.opyCopilotReviewBadgeLow
+                        }`}
+                      >
+                        {change.priority.toUpperCase()}
+                      </span>
+                    </div>
+                    <p>{change.title}</p>
+                    <p className={styles.opyCopilotProposalHint}>{change.rationale}</p>
+                  </article>
+                ))
+                : (
+                  <article className={styles.opyCopilotProposalItem}>
+                    <p>NO IMMEDIATE STRUCTURAL CHANGES RECOMMENDED.</p>
+                  </article>
+                )}
+            </div>
+          </div>
+          <div className={styles.opyCopilotProposalActions}>
+            <p className={styles.opyCopilotProposalHint}>
+              {"REVIEW MODE ONLY. USE /diagram TO REQUEST A TARGETED C4 CHANGE PROPOSAL."}
+            </p>
+          </div>
+        </section>
+      )}
       {activeDiagramProposal && (
         <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">
           <div className={styles.opyCopilotProposalHeader}>
@@ -1117,7 +1382,7 @@ export function OpyCopilotPanel({
         agentId="opy-9000"
         labels={{
           chatInputPlaceholder: hasOpenAiApiKey
-            ? "Ask OPY Net or use /diagram for a C4 proposal..."
+            ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
             : "Configure OpenAI key in Settings to enable OPY Net",
         }}
       >

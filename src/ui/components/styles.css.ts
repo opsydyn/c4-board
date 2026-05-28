@@ -620,9 +620,9 @@ export const opyCopilotProposalCard = style({
   gap: theme.spacing["2"],
   clipPath: theme.clipPath.base,
   border: `${theme.border.width.thin} solid ${theme.color.interactive.primary}`,
+  boxShadow: theme.effect.glow.sm,
   backgroundColor: "rgba(9, 17, 14, 0.94)",
   padding: theme.spacing["2"],
-  boxShadow: theme.effect.glow.sm,
 });
 
 export const opyCopilotProposalHeader = style({
@@ -639,18 +639,18 @@ export const opyCopilotProposalHeader = style({
 
 export const opyCopilotProposalSummary = style({
   margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
-  lineHeight: theme.typography.lineHeight.normal,
 });
 
 export const opyCopilotProposalRationale = style({
   margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
-  lineHeight: theme.typography.lineHeight.normal,
 });
 
 export const opyCopilotProposalWarnings = style({
@@ -665,10 +665,10 @@ export const opyCopilotProposalWarnings = style({
 
 globalStyle(`${opyCopilotProposalWarnings} p`, {
   margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.normal,
 });
 
 export const opyCopilotProposalStats = style({
@@ -743,12 +743,27 @@ export const opyCopilotProposalBadgeAmbiguous = style({
   color: theme.color.status.critical,
 });
 
+export const opyCopilotReviewBadgeLow = style({
+  borderColor: theme.color.status.selected,
+  color: theme.color.status.selected,
+});
+
+export const opyCopilotReviewBadgeMedium = style({
+  borderColor: theme.color.interactive.primary,
+  color: theme.color.interactive.primary,
+});
+
+export const opyCopilotReviewBadgeHigh = style({
+  borderColor: theme.color.status.critical,
+  color: theme.color.status.critical,
+});
+
 export const opyCopilotProposalHint = style({
   margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.normal,
 });
 
 export const opyCopilotProposalActions = style({
