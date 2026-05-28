@@ -24,8 +24,10 @@ jobs:
   release-dry-run:
     name: release-plz dry run
     if: ${{ github.repository_owner == 'opsydyn' }}
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    # Keep the dry-run host aligned with the release-plz PR job. Tauri's packaging
+    # surface is stable here and avoids Linux-specific schema regeneration noise.
+    runs-on: macos-14
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +50,10 @@ jobs:
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
+
+      - name: Verify cargo package surface
+        working-directory: src-tauri
+        run: cargo package --allow-dirty
 
       - name: Run release-plz release dry run
         id: release-plz

@@ -1,9 +1,13 @@
 [package]
 name = "c4-board"
 version = "0.0.1"
-description = "A Tauri App"
-authors = ["you"]
+description = "OPSYDYN C4 Board desktop application"
+authors = ["OPSYDYN"]
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/opsydyn/c4-board"
+homepage = "https://github.com/opsydyn/c4-board"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -36,4 +40,3 @@ governor = "0.7"
 futures = "0.3"
 bytes = "1.7"
 rig-core = "0.30"
-

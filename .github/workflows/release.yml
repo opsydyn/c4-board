@@ -72,8 +72,11 @@ jobs:
     name: Release-plz PR
     if: ${{ github.event_name == 'push' && github.repository_owner == 'opsydyn' }}
     needs: release-gate
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    # Tauri v2 writes ACL/schema artifacts under src-tauri/gen during cargo package --verify.
+    # Our committed schema surface is stable on macOS, while Ubuntu regenerates Linux-specific
+    # files during release-plz's packaging analysis and fails the release PR job.
+    runs-on: macos-14
+    timeout-minutes: 25
     permissions:
       contents: write
       pull-requests: write
@@ -105,16 +108,15 @@ jobs:
             echo "Prepared src-tauri/release-plz-surface.json for app changes outside src-tauri/."
           fi
 
-      - name: Install Linux Tauri dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
+
+      - name: Verify cargo package surface
+        working-directory: src-tauri
+        run: cargo package --allow-dirty
 
       - name: Run release-plz release-pr
         id: release-plz
