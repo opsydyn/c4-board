@@ -36,3 +36,11 @@ pnpm tauri build
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+
+## Release installs
+
+Desktop release install notes live in [docs/release-installation.md](docs/release-installation.md).
+
+If you are testing an unsigned macOS build and Gatekeeper blocks launch with "developer cannot be verified", see the macOS section there for the local quarantine-removal workaround.
+
+Maintainers: Apple signing and notarization setup is documented in [.github/apple-signing.md](.github/apple-signing.md).
