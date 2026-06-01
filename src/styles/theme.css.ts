@@ -36,8 +36,8 @@ export const defaultTheme = darkTheme;
  * Export for theme switcher
  */
 export const themes = {
-	dark: darkTheme,
-	light: lightTheme,
+  dark: darkTheme,
+  light: lightTheme,
 } as const;
 
 export type ThemeName = keyof typeof themes;

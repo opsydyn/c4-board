@@ -14,7 +14,7 @@ import { theme } from "../../styles/theme.css";
 export const workspace = style({
   display: "grid",
   gridTemplateRows: "1fr",
-  gridTemplateColumns: "minmax(260px, 320px) 1fr minmax(300px, 360px)",
+  gridTemplateColumns: "minmax(260px, 320px) 1fr minmax(340px, 420px)",
   backgroundColor: theme.color.background.base,
   width: "100vw",
   height: "100vh",
@@ -23,7 +23,7 @@ export const workspace = style({
 
   "@media": {
     "(max-width: 1440px)": {
-      gridTemplateColumns: "minmax(240px, 300px) 1fr minmax(280px, 340px)",
+      gridTemplateColumns: "minmax(240px, 300px) 1fr minmax(320px, 390px)",
     },
     "(max-width: 1200px)": {
       gridTemplateColumns: "minmax(240px, 320px) 1fr",
@@ -523,8 +523,10 @@ export const ownershipLensStats = style({
 
 export const opyCopilotShell = style({
   display: "flex",
+  flex: 1,
   flexDirection: "column",
   gap: theme.spacing["2"],
+  minHeight: 0,
 });
 
 const opyAvatarPulse = keyframes({
@@ -941,6 +943,137 @@ export const opyCopilotError = style({
   color: theme.color.status.critical,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
+});
+
+export const opyFlyoutLauncher = style({
+  position: "absolute",
+  zIndex: theme.zIndex.overlay,
+  top: theme.spacing["5"],
+  right: theme.spacing["4"],
+  display: "inline-flex",
+  alignItems: "center",
+  gap: theme.spacing["1"],
+  transition: theme.transition.base,
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  boxShadow: theme.effect.glow.md,
+  backgroundColor: "rgba(10, 18, 14, 0.97)",
+  cursor: "pointer",
+  padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+
+  selectors: {
+    "&:hover": {
+      borderColor: theme.color.status.selected,
+      boxShadow: theme.effect.glow.lg,
+      backgroundColor: "rgba(14, 24, 19, 0.99)",
+    },
+  },
+});
+
+export const opyFlyoutPanel = style({
+  position: "absolute",
+  zIndex: theme.zIndex.overlay,
+  top: theme.spacing["5"],
+  right: theme.spacing["4"],
+  bottom: theme.spacing["5"],
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["3"],
+  clipPath: theme.clipPath.lg,
+  border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
+  boxShadow: theme.effect.glow.lg,
+  background:
+    "linear-gradient(180deg, rgba(9, 17, 13, 0.985) 0%, rgba(6, 12, 9, 0.97) 100%)",
+  padding: theme.spacing["4"],
+  width: "min(38rem, calc(100% - 2rem))",
+  maxWidth: "calc(100% - 2rem)",
+  minWidth: "20rem",
+  minHeight: 0,
+  overflow: "hidden",
+  backdropFilter: "blur(12px)",
+
+  "@media": {
+    "(max-width: 960px)": {
+      left: theme.spacing["4"],
+      width: "auto",
+      maxWidth: "none",
+    },
+  },
+});
+
+export const opyFlyoutHeader = style({
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: theme.spacing["3"],
+  borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  paddingBottom: theme.spacing["3"],
+});
+
+export const opyFlyoutIdentity = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  minWidth: 0,
+});
+
+export const opyFlyoutMeta = style({
+  margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyFlyoutMenu = style({
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: theme.spacing["2"],
+});
+
+export const opyFlyoutPill = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(12, 20, 16, 0.92)",
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyFlyoutMenuButton = style([
+  ownershipLensToggleButton,
+  {
+    backgroundColor: "rgba(14, 24, 19, 0.96)",
+    color: theme.color.interactive.primary,
+  },
+]);
+
+export const opyFlyoutBody = style({
+  display: "flex",
+  flex: 1,
+  minHeight: 0,
+  overflow: "hidden",
+});
+
+globalStyle(`${opyFlyoutBody} > *`, {
+  flex: 1,
+  minHeight: 0,
+  overflow: "hidden",
 });
 
 /**

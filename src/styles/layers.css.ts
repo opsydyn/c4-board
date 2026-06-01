@@ -7,7 +7,7 @@
  * @see https://developer.mozilla.org/en-US/docs/Web/CSS/@layer
  */
 
-import { layer, globalLayer } from "@vanilla-extract/css";
+import { globalLayer, layer } from "@vanilla-extract/css";
 
 /**
  * Global layer definition

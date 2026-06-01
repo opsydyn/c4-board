@@ -1949,7 +1949,7 @@ export function C4CanvasContainer() {
   }, []);
 
   const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
-  const rightTrack = !isCompactLayout && isDetailsOpen ? "minmax(300px, 360px)" : "0px";
+  const rightTrack = !isCompactLayout && isDetailsOpen ? "minmax(340px, 420px)" : "0px";
   const rowTrack = isDataBarOpen ? "1fr auto" : "1fr";
   const canvasAmbientTone = useMemo<"c4" | "ddd" | "azure">(() => {
     if (isAzurePanelOpen) {
@@ -1986,6 +1986,32 @@ export function C4CanvasContainer() {
     state.context.edges,
     state.context.nodes,
   ]);
+  const opyFlyoutDiagramName = useMemo(() => {
+    const normalized = state.context.diagramName.trim();
+    return normalized.length > 0 ? normalized : "UNTITLED BOARD";
+  }, [state.context.diagramName]);
+  const opyFlyoutDomainLabel = state.context.currentDomain.toUpperCase();
+  const opyFlyoutStatsLabel = `NODES::${state.context.nodes.length} · EDGES::${state.context.edges.length}`;
+
+  useEffect(() => {
+    if (!isOpy9000Open || typeof window === "undefined") {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
+
+      event.preventDefault();
+      toggleOpyCopilot();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpy9000Open, toggleOpyCopilot]);
 
   return (
     <div
@@ -2160,32 +2186,6 @@ export function C4CanvasContainer() {
               onApply={handleApplyAzureSync}
             />
           )}
-          {isOpy9000Open && (
-            <section className={styles.ownershipLensCard} aria-label="OPY Net assistant panel">
-              <h3 className={styles.ownershipLensTitle}>
-                <span className={styles.opyHeaderRow}>
-                  <OpyAvatar />
-                  <span>OPY Net</span>
-                </span>
-              </h3>
-              <p className={styles.ownershipLensHint}>
-                HAL-inspired architecture copilot. Operator prompts are scoped to this board.
-              </p>
-              <OpyCopilotPanel
-                domain={state.context.currentDomain}
-                diagramId={state.context.currentDiagramId}
-                diagramName={state.context.diagramName}
-                nodeCount={state.context.nodes.length}
-                edgeCount={state.context.edges.length}
-                boardSummary={opyBoardSummary}
-                actionMode={appSettings.aiSettings.actionMode}
-                onApplyBoardAction={handleApplyOpyBoardAction}
-                onOpenAiSettings={() => {
-                  void navigateWithSave("/settings");
-                }}
-              />
-            </section>
-          )}
           {state.context.currentDomain === "c4"
             ? (
               <Toolbar
@@ -2286,6 +2286,73 @@ export function C4CanvasContainer() {
           animationsEnabled={state.context.animationsEnabled}
           ambientTone={canvasAmbientTone}
         />
+        {!isOpy9000Open && (
+          <button
+            type="button"
+            className={styles.opyFlyoutLauncher}
+            aria-label="Open OPY Net console"
+            onClick={toggleOpyCopilot}
+          >
+            <RobotIcon size={16} weight="duotone" />
+            OPY NET
+          </button>
+        )}
+        {isOpy9000Open && (
+          <section className={styles.opyFlyoutPanel} aria-label="OPY Net assistant console" role="dialog">
+            <header className={styles.opyFlyoutHeader}>
+              <div className={styles.opyFlyoutIdentity}>
+                <h3 className={styles.ownershipLensTitle}>
+                  <span className={styles.opyHeaderRow}>
+                    <OpyAvatar />
+                    <span>OPY NET::UNSHACKLED</span>
+                  </span>
+                </h3>
+                <p className={styles.opyFlyoutMeta}>
+                  {`${opyFlyoutDomainLabel} BOARD · ${opyFlyoutDiagramName}`}
+                </p>
+                <p className={styles.opyFlyoutMeta}>
+                  {opyFlyoutStatsLabel}
+                </p>
+              </div>
+              <div className={styles.opyFlyoutMenu}>
+                <span className={styles.opyFlyoutPill}>SCOPED TO CURRENT BOARD</span>
+                <button
+                  type="button"
+                  className={styles.opyFlyoutMenuButton}
+                  onClick={() => {
+                    void navigateWithSave("/settings");
+                  }}
+                >
+                  AI SETTINGS
+                </button>
+                <button
+                  type="button"
+                  className={styles.collapseToggle}
+                  onClick={toggleOpyCopilot}
+                  aria-label="Close OPY Net console"
+                >
+                  <CaretRightIcon size={16} weight="bold" />
+                  ESC
+                </button>
+              </div>
+            </header>
+            <div className={styles.opyFlyoutBody}>
+              <OpyCopilotPanel
+                domain={state.context.currentDomain}
+                diagramId={state.context.currentDiagramId}
+                diagramName={state.context.diagramName}
+                nodeCount={state.context.nodes.length}
+                edgeCount={state.context.edges.length}
+                boardSummary={opyBoardSummary}
+                actionMode={appSettings.aiSettings.actionMode}
+                onApplyBoardAction={handleApplyOpyBoardAction}
+                onOpenAiSettings={() => {
+                  void navigateWithSave("/settings");
+                }}
+              />
+            </div>
+          </section>
+        )}
         {!isSidebarOpen && (
           <ToggleButton
             isSelected={isSidebarOpen}
