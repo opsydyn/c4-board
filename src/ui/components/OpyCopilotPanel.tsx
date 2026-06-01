@@ -2,15 +2,21 @@ import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  formatAgentError,
   getRigSecretStatus,
+  makeAgentConfigError,
+  makeAgentPolicyError,
+  makeAgentRuntimeError,
   planRigC4Diagram,
   reviewRigC4Board,
+  summarizeAgentError,
   type RigC4BoardEdge,
   type RigC4BoardNode,
   type RigC4BoardReview,
   type RigC4BoardSummary,
   type RigC4DiagramProposal,
   runRigHello,
+  withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
 import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
 import {
@@ -557,6 +563,16 @@ export function OpyCopilotPanel({
     [runEffect],
   );
 
+  const appendAgentNotice = useCallback(
+    async (
+      sessionId: string,
+      error: ReturnType<typeof makeAgentConfigError> | ReturnType<typeof makeAgentPolicyError>,
+    ) => {
+      await appendAndPersistMessage(sessionId, "system", summarizeAgentError(error));
+    },
+    [appendAndPersistMessage],
+  );
+
   const executeRigRun = useCallback(
     async <T,>(
       input: {
@@ -573,12 +589,17 @@ export function OpyCopilotPanel({
       try {
         run = await beginAgentRun(input.sessionId, input.intent);
       } catch (error) {
-        const message = toErrorMessage(error);
-        setRuntimeError(`RUN ENVELOPE FAILED: ${message}`);
+        const envelopeError = makeAgentRuntimeError({
+          message: `Run envelope persistence failed: ${toErrorMessage(error)}`,
+          stage: "persist",
+          recommendedAction: "Check local database runtime status and retry.",
+          cause: error,
+        });
+        setRuntimeError(formatAgentError(envelopeError));
         await appendAndPersistMessage(
           input.sessionId,
           "system",
-          `RUN ENVELOPE FAILED: ${message}`,
+          summarizeAgentError(envelopeError),
         );
         setIsRunning(false);
         return null;
@@ -598,14 +619,18 @@ export function OpyCopilotPanel({
         );
 
         if (!persistedMessage) {
+          const persistError = makeAgentRuntimeError({
+            message: "Assistant response could not be persisted.",
+            runId: currentRun.id,
+            stage: "persist",
+            recommendedAction: "Check local database runtime status and retry.",
+          });
           currentRun = await transitionAgentRun(currentRun, {
             status: "failed",
             completedAt: Date.now(),
-            errorSummary: "ASSISTANT RESPONSE COULD NOT BE PERSISTED.",
+            errorSummary: summarizeAgentError(persistError),
           });
-          setRuntimeError(
-            `RUN ${currentRun.id} FAILED DURING ${RUN_STAGE_LABEL[currentRun.stage]}: ${currentRun.errorSummary}`,
-          );
+          setRuntimeError(formatAgentError(persistError));
           return null;
         }
 
@@ -618,17 +643,21 @@ export function OpyCopilotPanel({
         });
         return result;
       } catch (error) {
-        const message = toErrorMessage(error);
-        setRuntimeError(message);
+        const agentError = withAgentErrorContext(error, {
+          runId: currentRun.id,
+          stage: currentRun.stage,
+        });
+        const errorSummary = summarizeAgentError(agentError);
+        setRuntimeError(formatAgentError(agentError));
         await appendAndPersistMessage(
           input.sessionId,
           "system",
-          `${input.failurePrefix}: ${message}`,
+          `${input.failurePrefix}: ${errorSummary}`,
         );
         await transitionAgentRun(currentRun, {
           status: "failed",
           completedAt: Date.now(),
-          errorSummary: message,
+          errorSummary,
         });
         return null;
       } finally {
@@ -871,19 +900,23 @@ export function OpyCopilotPanel({
 
       if (opyCommand.type === "action") {
         if (domain !== "c4") {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            "BOARD COMMANDS ARE CURRENTLY AVAILABLE IN C4 MODE ONLY.",
+            makeAgentPolicyError({
+              message: "Board commands are currently available in C4 mode only.",
+              recommendedAction: "Switch to the C4 board and retry.",
+            }),
           );
           return;
         }
 
         if (actionMode === "disabled" || actionMode === "read-only") {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            `ACTION BLOCKED BY MODE::${actionMode.toUpperCase()}. SWITCH TO APPLY-WITH-CONFIRMATION TO EXECUTE.`,
+            makeAgentPolicyError({
+              message: `Action blocked by mode ${actionMode.toUpperCase()}.`,
+              recommendedAction: "Switch to APPLY-WITH-CONFIRMATION to execute board actions.",
+            }),
           );
           return;
         }
@@ -931,28 +964,34 @@ export function OpyCopilotPanel({
 
       if (opyCommand.type === "diagram-proposal") {
         if (domain !== "c4") {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            "DIAGRAM PROPOSALS ARE CURRENTLY AVAILABLE IN C4 MODE ONLY.",
+            makeAgentPolicyError({
+              message: "Diagram proposals are currently available in C4 mode only.",
+              recommendedAction: "Switch to the C4 board and retry.",
+            }),
           );
           return;
         }
 
         if (actionMode === "disabled" || actionMode === "read-only") {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            `PROPOSAL BLOCKED BY MODE::${actionMode.toUpperCase()}. SWITCH TO PROPOSE OR APPLY-WITH-CONFIRMATION.`,
+            makeAgentPolicyError({
+              message: `Diagram proposal blocked by mode ${actionMode.toUpperCase()}.`,
+              recommendedAction: "Switch to PROPOSE or APPLY-WITH-CONFIRMATION.",
+            }),
           );
           return;
         }
 
         if (!hasOpenAiApiKey) {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            "OPENAI KEY REQUIRED. Navigate to SETTINGS > AI AGENT and configure your key.",
+            makeAgentConfigError({
+              message: "OpenAI key required for diagram proposals.",
+              recommendedAction: "Navigate to Settings > AI Agent and configure your key.",
+            }),
           );
           return;
         }
@@ -986,28 +1025,34 @@ export function OpyCopilotPanel({
 
       if (opyCommand.type === "board-review") {
         if (domain !== "c4") {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            "BOARD REVIEW IS CURRENTLY AVAILABLE IN C4 MODE ONLY.",
+            makeAgentPolicyError({
+              message: "Board review is currently available in C4 mode only.",
+              recommendedAction: "Switch to the C4 board and retry.",
+            }),
           );
           return;
         }
 
         if (!boardSummary || boardSummary.nodeCount === 0) {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            "BOARD REVIEW REQUIRES AT LEAST ONE C4 NODE IN THE CURRENT BOARD.",
+            makeAgentPolicyError({
+              message: "Board review requires at least one C4 node in the current board.",
+              recommendedAction: "Add or load a C4 node and retry.",
+            }),
           );
           return;
         }
 
         if (!hasOpenAiApiKey) {
-          await appendAndPersistMessage(
+          await appendAgentNotice(
             sessionId,
-            "system",
-            "OPENAI KEY REQUIRED. Navigate to SETTINGS > AI AGENT and configure your key.",
+            makeAgentConfigError({
+              message: "OpenAI key required for board review.",
+              recommendedAction: "Navigate to Settings > AI Agent and configure your key.",
+            }),
           );
           return;
         }
@@ -1040,10 +1085,12 @@ export function OpyCopilotPanel({
       }
 
       if (!hasOpenAiApiKey) {
-        await appendAndPersistMessage(
+        await appendAgentNotice(
           sessionId,
-          "system",
-          "OPENAI KEY REQUIRED. Navigate to SETTINGS > AI AGENT and configure your key.",
+          makeAgentConfigError({
+            message: "OpenAI key required for OPY Net chat.",
+            recommendedAction: "Navigate to Settings > AI Agent and configure your key.",
+          }),
         );
         return;
       }
@@ -1069,6 +1116,7 @@ export function OpyCopilotPanel({
     [
       actionMode,
       appendAndPersistMessage,
+      appendAgentNotice,
       boardSummary,
       domain,
       executeRigRun,
@@ -1093,19 +1141,23 @@ export function OpyCopilotPanel({
     }
 
     if (actionMode !== "apply-with-confirmation") {
-      await appendAndPersistMessage(
+      await appendAgentNotice(
         sessionId,
-        "system",
-        `PROPOSAL APPLY BLOCKED BY MODE::${actionMode.toUpperCase()}. SWITCH TO APPLY-WITH-CONFIRMATION.`,
+        makeAgentPolicyError({
+          message: `Proposal apply blocked by mode ${actionMode.toUpperCase()}.`,
+          recommendedAction: "Switch to APPLY-WITH-CONFIRMATION.",
+        }),
       );
       return;
     }
 
     if (!activeProposalSummary.canApply) {
-      await appendAndPersistMessage(
+      await appendAgentNotice(
         sessionId,
-        "system",
-        `PROPOSAL APPLY BLOCKED:: ${activeProposalSummary.ambiguousNodes} AMBIGUOUS NODE(S), ${activeProposalSummary.ambiguousEdges} AMBIGUOUS EDGE(S).`,
+        makeAgentPolicyError({
+          message: `Proposal apply blocked by ${activeProposalSummary.ambiguousNodes} ambiguous node(s) and ${activeProposalSummary.ambiguousEdges} ambiguous edge(s).`,
+          recommendedAction: "Resolve proposal ambiguity before applying.",
+        }),
       );
       return;
     }
@@ -1165,6 +1217,7 @@ export function OpyCopilotPanel({
     activeDiagramProposal,
     activeGroundedProposal,
     activeProposalSummary,
+    appendAgentNotice,
     appendAndPersistMessage,
     isRunning,
     onApplyBoardAction,

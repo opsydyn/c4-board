@@ -1,10 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Data, Effect, Schema } from "effect";
 
-export class AiAgentRuntimeError extends Data.TaggedError("AiAgentRuntimeError")<{
+export type AgentRunStage = "invoke" | "persist" | "complete";
+
+interface AgentErrorShape {
   readonly message: string;
+  readonly runId: string | null;
+  readonly stage: AgentRunStage;
+  readonly recoverable: boolean;
+  readonly recommendedAction: string;
   readonly cause?: unknown;
-}> {}
+}
+
+export class AgentConfigError extends Data.TaggedError("AgentConfigError")<AgentErrorShape> {}
+export class AgentRuntimeError extends Data.TaggedError("AgentRuntimeError")<AgentErrorShape> {}
+export class AgentPolicyError extends Data.TaggedError("AgentPolicyError")<AgentErrorShape> {}
+
+export type AgentError = AgentConfigError | AgentRuntimeError | AgentPolicyError;
 
 const RigHelloResponseSchema = Schema.Struct({
   message: Schema.String,
@@ -158,6 +170,12 @@ export interface RigC4BoardReviewInput {
   readonly maxTokens?: number;
 }
 
+const DEFAULT_CONFIG_RECOMMENDED_ACTION = "Configure the AI agent in Settings and retry.";
+const DEFAULT_RUNTIME_RECOMMENDED_ACTION = "Retry the request. If it keeps failing, inspect provider and runtime logs.";
+const DEFAULT_POLICY_RECOMMENDED_ACTION = "Adjust the current mode or request scope and retry.";
+const OPENAI_KEY_RECOMMENDED_ACTION =
+  "Configure an OpenAI key in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.";
+
 const toCauseMessage = (cause: unknown): string => {
   if (typeof cause === "string") {
     return cause;
@@ -174,12 +192,166 @@ const toCauseMessage = (cause: unknown): string => {
   return String(cause);
 };
 
+const toAgentMessage = (message: string): string => message.trim().replace(/\s+/g, " ");
+
+const isAgentError = (error: unknown): error is AgentError =>
+  typeof error === "object"
+  && error !== null
+  && "_tag" in error
+  && (
+    (error as { _tag: unknown })._tag === "AgentConfigError"
+    || (error as { _tag: unknown })._tag === "AgentRuntimeError"
+    || (error as { _tag: unknown })._tag === "AgentPolicyError"
+  );
+
+const isConfigFailureMessage = (message: string): boolean => {
+  const normalized = message.toLowerCase();
+  return normalized.includes("requires an openai key")
+    || normalized.includes("openai key cannot be empty")
+    || normalized.includes("configure your key")
+    || normalized.includes("settings > ai agent");
+};
+
+const buildAgentConfigError = (input: {
+  readonly message: string;
+  readonly runId?: string | null;
+  readonly stage?: AgentRunStage;
+  readonly recoverable?: boolean;
+  readonly recommendedAction?: string;
+  readonly cause?: unknown;
+}): AgentConfigError =>
+  new AgentConfigError({
+    message: toAgentMessage(input.message),
+    runId: input.runId ?? null,
+    stage: input.stage ?? "invoke",
+    recoverable: input.recoverable ?? true,
+    recommendedAction: input.recommendedAction ?? DEFAULT_CONFIG_RECOMMENDED_ACTION,
+    cause: input.cause,
+  });
+
+const buildAgentRuntimeError = (input: {
+  readonly message: string;
+  readonly runId?: string | null;
+  readonly stage?: AgentRunStage;
+  readonly recoverable?: boolean;
+  readonly recommendedAction?: string;
+  readonly cause?: unknown;
+}): AgentRuntimeError =>
+  new AgentRuntimeError({
+    message: toAgentMessage(input.message),
+    runId: input.runId ?? null,
+    stage: input.stage ?? "invoke",
+    recoverable: input.recoverable ?? true,
+    recommendedAction: input.recommendedAction ?? DEFAULT_RUNTIME_RECOMMENDED_ACTION,
+    cause: input.cause,
+  });
+
+const buildAgentPolicyError = (input: {
+  readonly message: string;
+  readonly runId?: string | null;
+  readonly stage?: AgentRunStage;
+  readonly recoverable?: boolean;
+  readonly recommendedAction?: string;
+  readonly cause?: unknown;
+}): AgentPolicyError =>
+  new AgentPolicyError({
+    message: toAgentMessage(input.message),
+    runId: input.runId ?? null,
+    stage: input.stage ?? "invoke",
+    recoverable: input.recoverable ?? true,
+    recommendedAction: input.recommendedAction ?? DEFAULT_POLICY_RECOMMENDED_ACTION,
+    cause: input.cause,
+  });
+
+const classifyAgentInvokeFailure = (input: {
+  readonly message: string;
+  readonly cause?: unknown;
+}): AgentError => {
+  if (isConfigFailureMessage(input.message)) {
+    return buildAgentConfigError({
+      message: input.message,
+      stage: "invoke",
+      recommendedAction: OPENAI_KEY_RECOMMENDED_ACTION,
+      cause: input.cause,
+    });
+  }
+
+  return buildAgentRuntimeError({
+    message: input.message,
+    stage: "invoke",
+    recommendedAction: DEFAULT_RUNTIME_RECOMMENDED_ACTION,
+    cause: input.cause,
+  });
+};
+
+const rebuildAgentError = (
+  error: AgentError,
+  overrides: Partial<Omit<AgentErrorShape, "message">> = {},
+): AgentError => {
+  const nextShape = {
+    message: error.message,
+    runId: overrides.runId ?? error.runId,
+    stage: overrides.stage ?? error.stage,
+    recoverable: overrides.recoverable ?? error.recoverable,
+    recommendedAction: overrides.recommendedAction ?? error.recommendedAction,
+    cause: overrides.cause ?? error.cause,
+  };
+
+  switch (error._tag) {
+    case "AgentConfigError":
+      return new AgentConfigError(nextShape);
+    case "AgentRuntimeError":
+      return new AgentRuntimeError(nextShape);
+    case "AgentPolicyError":
+      return new AgentPolicyError(nextShape);
+  }
+};
+
+export const makeAgentConfigError = buildAgentConfigError;
+export const makeAgentRuntimeError = buildAgentRuntimeError;
+export const makeAgentPolicyError = buildAgentPolicyError;
+
+export const withAgentErrorContext = (
+  error: unknown,
+  overrides: Partial<Omit<AgentErrorShape, "message">> = {},
+): AgentError => {
+  if (isAgentError(error)) {
+    return rebuildAgentError(error, overrides);
+  }
+
+  return rebuildAgentError(classifyAgentInvokeFailure({
+    message: toCauseMessage(error),
+    cause: error,
+  }), overrides);
+};
+
+const AGENT_ERROR_KIND_LABEL: Record<AgentError["_tag"], string> = {
+  AgentConfigError: "CONFIG",
+  AgentRuntimeError: "RUNTIME",
+  AgentPolicyError: "POLICY",
+};
+
+export const summarizeAgentError = (error: AgentError): string => {
+  const label = AGENT_ERROR_KIND_LABEL[error._tag];
+  return `${label}::${error.stage.toUpperCase()}::${error.message} ACTION::${error.recommendedAction}`;
+};
+
+export const formatAgentError = (error: AgentError): string => {
+  const label = AGENT_ERROR_KIND_LABEL[error._tag];
+  const runLabel = error.runId ? `::RUN ${error.runId.slice(0, 8)}` : "";
+  const recoverableLabel = error.recoverable ? "RECOVERABLE" : "TERMINAL";
+  return `${label}::${error.stage.toUpperCase()}${runLabel}::${recoverableLabel}::${error.message} ACTION::${error.recommendedAction}`;
+};
+
 const decodeRigC4DiagramProposal = (payload: unknown): RigC4DiagramProposal => {
   try {
     return Schema.decodeUnknownSync(RigC4DiagramProposalSchema)(payload);
   } catch (cause) {
-    throw new AiAgentRuntimeError({
+    throw buildAgentRuntimeError({
       message: "Invalid rig C4 diagram proposal payload",
+      stage: "complete",
+      recoverable: false,
+      recommendedAction: "Check the Rig diagram proposal response contract.",
       cause,
     });
   }
@@ -189,8 +361,11 @@ const decodeRigC4BoardReview = (payload: unknown): RigC4BoardReview => {
   try {
     return Schema.decodeUnknownSync(RigC4BoardReviewSchema)(payload);
   } catch (cause) {
-    throw new AiAgentRuntimeError({
+    throw buildAgentRuntimeError({
       message: "Invalid rig C4 board review payload",
+      stage: "complete",
+      recoverable: false,
+      recommendedAction: "Check the Rig board review response contract.",
       cause,
     });
   }
@@ -200,8 +375,11 @@ const decodeRigHelloResponse = (payload: unknown): RigHelloResponse => {
   try {
     return Schema.decodeUnknownSync(RigHelloResponseSchema)(payload);
   } catch (cause) {
-    throw new AiAgentRuntimeError({
+    throw buildAgentRuntimeError({
       message: "Invalid rig hello response payload",
+      stage: "complete",
+      recoverable: false,
+      recommendedAction: "Check the Rig hello response contract.",
       cause,
     });
   }
@@ -211,8 +389,11 @@ const decodeRigSecretStatusResponse = (payload: unknown): RigSecretStatusRespons
   try {
     return Schema.decodeUnknownSync(RigSecretStatusResponseSchema)(payload);
   } catch (cause) {
-    throw new AiAgentRuntimeError({
+    throw buildAgentRuntimeError({
       message: "Invalid rig secret status payload",
+      stage: "complete",
+      recoverable: false,
+      recommendedAction: "Check the Rig secret status response contract.",
       cause,
     });
   }
@@ -220,89 +401,123 @@ const decodeRigSecretStatusResponse = (payload: unknown): RigSecretStatusRespons
 
 export const runRigHello = (
   input: RigHelloInput,
-): Effect.Effect<RigHelloResponse, AiAgentRuntimeError> =>
+): Effect.Effect<RigHelloResponse, AgentError> =>
   Effect.tryPromise({
     try: async () => {
       const payload = await invoke("rig_agent_hello", { input });
       return decodeRigHelloResponse(payload);
     },
-    catch: (cause) =>
-      new AiAgentRuntimeError({
+    catch: (cause) => {
+      if (isAgentError(cause)) {
+        return cause;
+      }
+
+      return classifyAgentInvokeFailure({
         message: `Rig hello request failed: ${toCauseMessage(cause)}`,
         cause,
-      }),
+      });
+    },
   });
 
 export const planRigC4Diagram = (
   input: RigC4DiagramPlanInput,
-): Effect.Effect<RigC4DiagramProposal, AiAgentRuntimeError> =>
+): Effect.Effect<RigC4DiagramProposal, AgentError> =>
   Effect.tryPromise({
     try: async () => {
       const payload = await invoke("rig_agent_plan_c4_diagram", { input });
       return decodeRigC4DiagramProposal(payload);
     },
-    catch: (cause) =>
-      new AiAgentRuntimeError({
+    catch: (cause) => {
+      if (isAgentError(cause)) {
+        return cause;
+      }
+
+      return classifyAgentInvokeFailure({
         message: `Rig C4 diagram proposal request failed: ${toCauseMessage(cause)}`,
         cause,
-      }),
+      });
+    },
   });
 
 export const reviewRigC4Board = (
   input: RigC4BoardReviewInput,
-): Effect.Effect<RigC4BoardReview, AiAgentRuntimeError> =>
+): Effect.Effect<RigC4BoardReview, AgentError> =>
   Effect.tryPromise({
     try: async () => {
       const payload = await invoke("rig_agent_review_c4_board", { input });
       return decodeRigC4BoardReview(payload);
     },
-    catch: (cause) =>
-      new AiAgentRuntimeError({
+    catch: (cause) => {
+      if (isAgentError(cause)) {
+        return cause;
+      }
+
+      return classifyAgentInvokeFailure({
         message: `Rig C4 board review request failed: ${toCauseMessage(cause)}`,
         cause,
-      }),
+      });
+    },
   });
 
-export const getRigSecretStatus = (): Effect.Effect<RigSecretStatusResponse, AiAgentRuntimeError> =>
+export const getRigSecretStatus = (): Effect.Effect<RigSecretStatusResponse, AgentError> =>
   Effect.tryPromise({
     try: async () => {
       const payload = await invoke("rig_agent_secret_status");
       return decodeRigSecretStatusResponse(payload);
     },
-    catch: (cause) =>
-      new AiAgentRuntimeError({
+    catch: (cause) => {
+      if (isAgentError(cause)) {
+        return cause;
+      }
+
+      return buildAgentRuntimeError({
         message: `Rig secret status request failed: ${toCauseMessage(cause)}`,
+        stage: "invoke",
+        recommendedAction: "Retry the secret status check. If it keeps failing, inspect keychain/runtime access.",
         cause,
-      }),
+      });
+    },
   });
 
 export const storeRigOpenAiApiKey = (
   secret: string,
-): Effect.Effect<RigSecretStatusResponse, AiAgentRuntimeError> =>
+): Effect.Effect<RigSecretStatusResponse, AgentError> =>
   Effect.tryPromise({
     try: async () => {
       const payload = await invoke("rig_agent_store_openai_api_key", { secret });
       return decodeRigSecretStatusResponse(payload);
     },
-    catch: (cause) =>
-      new AiAgentRuntimeError({
+    catch: (cause) => {
+      if (isAgentError(cause)) {
+        return cause;
+      }
+
+      return classifyAgentInvokeFailure({
         message: `Rig secret store request failed: ${toCauseMessage(cause)}`,
         cause,
-      }),
+      });
+    },
   });
 
 export const clearRigOpenAiApiKey = (): Effect.Effect<
   RigSecretStatusResponse,
-  AiAgentRuntimeError
+  AgentError
 > =>
   Effect.tryPromise({
     try: async () => {
       const payload = await invoke("rig_agent_clear_openai_api_key");
       return decodeRigSecretStatusResponse(payload);
     },
-    catch: (cause) =>
-      new AiAgentRuntimeError({
+    catch: (cause) => {
+      if (isAgentError(cause)) {
+        return cause;
+      }
+
+      return buildAgentRuntimeError({
         message: `Rig secret clear request failed: ${toCauseMessage(cause)}`,
+        stage: "invoke",
+        recommendedAction: "Retry the secret clear request. If it keeps failing, inspect keychain/runtime access.",
         cause,
-      }),
+      });
+    },
   });
