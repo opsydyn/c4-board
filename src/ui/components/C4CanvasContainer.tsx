@@ -71,7 +71,7 @@ import { DDDToolbar } from "./DDDToolbar";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
-import { OpyAvatar } from "./OpyAvatar";
+import { OpyFloatingWidget } from "./OpyFloatingWidget";
 import { type OpyBoardAction, OpyCopilotPanel } from "./OpyCopilotPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
@@ -222,6 +222,7 @@ export function C4CanvasContainer() {
     isLoading: isSettingsLoading,
     settingsV1Enabled,
   } = useAppSettings();
+  const canvasRegionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<C4CanvasRef>(null);
   const lastDiagramIdRef = useRef<string | null>(null);
   const lastPersistedFingerprintRef = useRef<string | null>(null);
@@ -267,6 +268,20 @@ export function C4CanvasContainer() {
       console.warn("⚠️ Failed to persist panel preference", event.patch, event.message);
     },
     [],
+  );
+
+  const persistOpyWidgetLayout = useCallback(
+    async (layout: typeof appSettings.opyWidgetLayout): Promise<void> => {
+      if (!settingsV1Enabled) {
+        return;
+      }
+      await runEffect(
+        patchSettings({
+          opyWidgetLayout: layout,
+        }),
+      );
+    },
+    [runEffect, settingsV1Enabled],
   );
 
   const {
@@ -1986,12 +2001,6 @@ export function C4CanvasContainer() {
     state.context.edges,
     state.context.nodes,
   ]);
-  const opyFlyoutDiagramName = useMemo(() => {
-    const normalized = state.context.diagramName.trim();
-    return normalized.length > 0 ? normalized : "UNTITLED BOARD";
-  }, [state.context.diagramName]);
-  const opyFlyoutDomainLabel = state.context.currentDomain.toUpperCase();
-  const opyFlyoutStatsLabel = `NODES::${state.context.nodes.length} · EDGES::${state.context.edges.length}`;
 
   useEffect(() => {
     if (!isOpy9000Open || typeof window === "undefined") {
@@ -2264,7 +2273,7 @@ export function C4CanvasContainer() {
         </aside>
       )}
 
-      <section className={styles.canvasRegion}>
+      <section className={styles.canvasRegion} ref={canvasRegionRef}>
         <C4Canvas
           ref={canvasRef}
           nodes={filteredCanvas.nodes}
@@ -2286,73 +2295,43 @@ export function C4CanvasContainer() {
           animationsEnabled={state.context.animationsEnabled}
           ambientTone={canvasAmbientTone}
         />
-        {!isOpy9000Open && (
-          <button
-            type="button"
-            className={styles.opyFlyoutLauncher}
-            aria-label="Open OPY Net console"
-            onClick={toggleOpyCopilot}
-          >
-            <RobotIcon size={16} weight="duotone" />
-            OPY NET
-          </button>
-        )}
-        {isOpy9000Open && (
-          <section className={styles.opyFlyoutPanel} aria-label="OPY Net assistant console" role="dialog">
-            <header className={styles.opyFlyoutHeader}>
-              <div className={styles.opyFlyoutIdentity}>
-                <h3 className={styles.ownershipLensTitle}>
-                  <span className={styles.opyHeaderRow}>
-                    <OpyAvatar />
-                    <span>OPY NET::UNSHACKLED</span>
-                  </span>
-                </h3>
-                <p className={styles.opyFlyoutMeta}>
-                  {`${opyFlyoutDomainLabel} BOARD · ${opyFlyoutDiagramName}`}
-                </p>
-                <p className={styles.opyFlyoutMeta}>
-                  {opyFlyoutStatsLabel}
-                </p>
-              </div>
-              <div className={styles.opyFlyoutMenu}>
-                <span className={styles.opyFlyoutPill}>SCOPED TO CURRENT BOARD</span>
-                <button
-                  type="button"
-                  className={styles.opyFlyoutMenuButton}
-                  onClick={() => {
-                    void navigateWithSave("/settings");
-                  }}
-                >
-                  AI SETTINGS
-                </button>
-                <button
-                  type="button"
-                  className={styles.collapseToggle}
-                  onClick={toggleOpyCopilot}
-                  aria-label="Close OPY Net console"
-                >
-                  <CaretRightIcon size={16} weight="bold" />
-                  ESC
-                </button>
-              </div>
-            </header>
-            <div className={styles.opyFlyoutBody}>
-              <OpyCopilotPanel
-                domain={state.context.currentDomain}
-                diagramId={state.context.currentDiagramId}
-                diagramName={state.context.diagramName}
-                nodeCount={state.context.nodes.length}
-                edgeCount={state.context.edges.length}
-                boardSummary={opyBoardSummary}
-                actionMode={appSettings.aiSettings.actionMode}
-                onApplyBoardAction={handleApplyOpyBoardAction}
-                onOpenAiSettings={() => {
-                  void navigateWithSave("/settings");
-                }}
-              />
-            </div>
-          </section>
-        )}
+        <OpyFloatingWidget
+          visible={isOpy9000Open}
+          domain={state.context.currentDomain}
+          diagramName={state.context.diagramName}
+          nodeCount={state.context.nodes.length}
+          edgeCount={state.context.edges.length}
+          layout={appSettings.opyWidgetLayout}
+          containerRef={canvasRegionRef}
+          onOpen={toggleOpyCopilot}
+          onClose={toggleOpyCopilot}
+          onLayoutCommit={(layout) => {
+            void persistOpyWidgetLayout(layout);
+          }}
+          onOpenSettings={() => {
+            void navigateWithSave("/settings");
+          }}
+          onOpenSavedDiagrams={() => {
+            void navigateWithSave("/saved-diagrams");
+          }}
+          onOpenPostee={() => {
+            void navigateWithSave("/postee");
+          }}
+        >
+          <OpyCopilotPanel
+            domain={state.context.currentDomain}
+            diagramId={state.context.currentDiagramId}
+            diagramName={state.context.diagramName}
+            nodeCount={state.context.nodes.length}
+            edgeCount={state.context.edges.length}
+            boardSummary={opyBoardSummary}
+            actionMode={appSettings.aiSettings.actionMode}
+            onApplyBoardAction={handleApplyOpyBoardAction}
+            onOpenAiSettings={() => {
+              void navigateWithSave("/settings");
+            }}
+          />
+        </OpyFloatingWidget>
         {!isSidebarOpen && (
           <ToggleButton
             isSelected={isSidebarOpen}

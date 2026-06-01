@@ -104,6 +104,49 @@ export const AiSettingsSchema = Schema.Struct({
 
 export type AiSettings = Schema.Schema.Type<typeof AiSettingsSchema>;
 
+const OpyWidgetPlacementSchema = Schema.Literal("centered", "custom");
+export type OpyWidgetPlacement = Schema.Schema.Type<typeof OpyWidgetPlacementSchema>;
+
+const OpyWidgetWidthSchema = pipe(
+  Schema.Number,
+  Schema.filter(
+    (value) => Number.isFinite(value) && value >= 360 && value <= 960,
+    {
+      message: () => "opyWidgetLayout.width must be between 360 and 960",
+    },
+  ),
+);
+
+const OpyWidgetHeightSchema = pipe(
+  Schema.Number,
+  Schema.filter(
+    (value) => Number.isFinite(value) && value >= 420 && value <= 960,
+    {
+      message: () => "opyWidgetLayout.height must be between 420 and 960",
+    },
+  ),
+);
+
+const OpyWidgetCoordinateSchema = pipe(
+  Schema.Number,
+  Schema.filter(
+    (value) => Number.isFinite(value) && value >= 0 && value <= 16_384,
+    {
+      message: () => "opyWidgetLayout coordinates must be between 0 and 16384",
+    },
+  ),
+);
+
+export const OpyWidgetLayoutSchema = Schema.Struct({
+  placement: OpyWidgetPlacementSchema,
+  x: OpyWidgetCoordinateSchema,
+  y: OpyWidgetCoordinateSchema,
+  width: OpyWidgetWidthSchema,
+  height: OpyWidgetHeightSchema,
+});
+
+export type OpyWidgetLayout = Schema.Schema.Type<typeof OpyWidgetLayoutSchema>;
+
 export const AppSettingsSchema = Schema.Struct({
   animationsEnabled: Schema.Boolean,
   transitionIntensity: TransitionIntensitySchema,
@@ -114,6 +157,7 @@ export const AppSettingsSchema = Schema.Struct({
   ownershipLensVisible: Schema.Boolean,
   couplingExplainabilityVisible: Schema.Boolean,
   opyCopilotVisible: Schema.Boolean,
+  opyWidgetLayout: OpyWidgetLayoutSchema,
   masterVolume: MasterVolumeSchema,
   autosaveEnabled: Schema.Boolean,
   autosaveIntervalMs: AutosaveIntervalMsSchema,
@@ -140,6 +184,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   ownershipLensVisible: false,
   couplingExplainabilityVisible: false,
   opyCopilotVisible: false,
+  opyWidgetLayout: {
+    placement: "centered",
+    x: 0,
+    y: 0,
+    width: 560,
+    height: 720,
+  },
   masterVolume: 0.8,
   autosaveEnabled: true,
   autosaveIntervalMs: 1_500,
