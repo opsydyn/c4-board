@@ -275,3 +275,34 @@ export const getRigSecretStatus = (): Effect.Effect<RigSecretStatusResponse, AiA
         cause,
       }),
   });
+
+export const storeRigOpenAiApiKey = (
+  secret: string,
+): Effect.Effect<RigSecretStatusResponse, AiAgentRuntimeError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const payload = await invoke("rig_agent_store_openai_api_key", { secret });
+      return decodeRigSecretStatusResponse(payload);
+    },
+    catch: (cause) =>
+      new AiAgentRuntimeError({
+        message: `Rig secret store request failed: ${toCauseMessage(cause)}`,
+        cause,
+      }),
+  });
+
+export const clearRigOpenAiApiKey = (): Effect.Effect<
+  RigSecretStatusResponse,
+  AiAgentRuntimeError
+> =>
+  Effect.tryPromise({
+    try: async () => {
+      const payload = await invoke("rig_agent_clear_openai_api_key");
+      return decodeRigSecretStatusResponse(payload);
+    },
+    catch: (cause) =>
+      new AiAgentRuntimeError({
+        message: `Rig secret clear request failed: ${toCauseMessage(cause)}`,
+        cause,
+      }),
+  });

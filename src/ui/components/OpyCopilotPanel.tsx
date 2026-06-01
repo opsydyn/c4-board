@@ -1,6 +1,8 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
+import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  getRigSecretStatus,
   planRigC4Diagram,
   reviewRigC4Board,
   type RigC4BoardEdge,
@@ -66,7 +68,6 @@ interface OpySessionBoardReview {
 }
 
 interface OpyCopilotPanelProps {
-  readonly hasOpenAiApiKey: boolean;
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
   readonly diagramName: string;
@@ -261,7 +262,6 @@ const formatEdgeMatchSummary = (matches: ReadonlyArray<RigC4BoardEdge>): string 
     .join(" | ");
 
 export function OpyCopilotPanel({
-  hasOpenAiApiKey,
   domain,
   diagramId,
   diagramName,
@@ -277,6 +277,8 @@ export function OpyCopilotPanel({
   const [isRunning, setIsRunning] = useState(false);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   const [isMessageLoading, setIsMessageLoading] = useState(false);
+  const [agentSecretStatus, setAgentSecretStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [hasOpenAiApiKey, setHasOpenAiApiKey] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ReadonlyArray<OpyChatSession>>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
@@ -324,6 +326,32 @@ export function OpyCopilotPanel({
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId;
   }, [selectedSessionId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void Effect.runPromise(getRigSecretStatus())
+      .then((status) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setHasOpenAiApiKey(status.configured);
+        setAgentSecretStatus("ready");
+      })
+      .catch(() => {
+        if (isCancelled) {
+          return;
+        }
+
+        setHasOpenAiApiKey(false);
+        setAgentSecretStatus("error");
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSessionTitleDraft(selectedSession?.title ?? "");
@@ -438,6 +466,10 @@ export function OpyCopilotPanel({
     let isCancelled = false;
 
     const hydrate = async () => {
+      if (agentSecretStatus === "loading") {
+        return;
+      }
+
       setIsSessionLoading(true);
       setRuntimeError(null);
 
@@ -520,7 +552,7 @@ export function OpyCopilotPanel({
     return () => {
       isCancelled = true;
     };
-  }, [diagramId, domain, hasOpenAiApiKey, hydrateMessagesForSession, runEffect]);
+  }, [agentSecretStatus, diagramId, domain, hasOpenAiApiKey, hydrateMessagesForSession, runEffect]);
 
   const handleCreateSession = useCallback(() => {
     if (isRunning || isSessionLoading) {
@@ -945,7 +977,14 @@ export function OpyCopilotPanel({
     selectedSessionId,
   ]);
 
-  const statusText = hasOpenAiApiKey ? "KEY::CONFIGURED" : "KEY::MISSING";
+  const statusText =
+    agentSecretStatus === "loading"
+      ? "KEY::CHECKING"
+      : agentSecretStatus === "error"
+        ? "KEY::ERROR"
+        : hasOpenAiApiKey
+          ? "KEY::CONFIGURED"
+          : "KEY::MISSING";
   const actionModeText = `ACTION::${actionMode.toUpperCase()}`;
   const activeCommandToken = detectCommandToken(draftPrompt);
 
@@ -1381,9 +1420,12 @@ export function OpyCopilotPanel({
       <CopilotChatConfigurationProvider
         agentId="opy-9000"
         labels={{
-          chatInputPlaceholder: hasOpenAiApiKey
-            ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
-            : "Configure OpenAI key in Settings to enable OPY Net",
+          chatInputPlaceholder:
+            agentSecretStatus === "loading"
+              ? "Checking OPY Net secret resolver..."
+              : hasOpenAiApiKey
+                ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
+                : "Configure OpenAI key in Settings to enable OPY Net",
         }}
       >
         <CopilotChatInput

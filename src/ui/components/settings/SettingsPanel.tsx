@@ -2,7 +2,13 @@ import { useMachine } from "@xstate/react";
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tone from "tone";
-import { getRigSecretStatus, type RigSecretSource, runRigHello } from "../../../core/effects/ai-agent.runtime";
+import {
+  clearRigOpenAiApiKey,
+  getRigSecretStatus,
+  type RigSecretSource,
+  runRigHello,
+  storeRigOpenAiApiKey,
+} from "../../../core/effects/ai-agent.runtime";
 import { getSettingsV1Flag } from "../../../core/effects/feature-flags";
 import type {
   AiActionMode,
@@ -20,6 +26,7 @@ import { TacticalSelect } from "../TacticalSelect";
 type SaveState = "disabled" | "loading" | "saving" | "saved" | "error";
 type AgentHelloState = "idle" | "running" | "success" | "error";
 type AgentSecretStatus = "idle" | "loading" | "ready" | "error";
+type AgentSecretCommandState = "idle" | "saving" | "clearing";
 type RuntimeConfigMismatch = {
   key: string;
   expected: string;
@@ -164,6 +171,9 @@ export function SettingsPanel() {
   const [agentSecretWarning, setAgentSecretWarning] = useState<string | null>(null);
   const [agentSecretStatusError, setAgentSecretStatusError] = useState<string | null>(null);
   const [agentSecretResolutionOrder, setAgentSecretResolutionOrder] = useState<ReadonlyArray<string>>([]);
+  const [agentSecretCommandState, setAgentSecretCommandState] =
+    useState<AgentSecretCommandState>("idle");
+  const [agentSecretActionMessage, setAgentSecretActionMessage] = useState<string | null>(null);
   const hasOpenAiRuntimeProvider = settings.aiSettings.provider === "openai";
   const hasPendingProviderSupport = settings.aiSettings.provider !== "openai";
   const runtimeProviderText = hasOpenAiRuntimeProvider
@@ -398,6 +408,80 @@ export function SettingsPanel() {
         setAgentSecretStatusError(toErrorMessage(error));
       });
   }, []);
+  const applyPatch = useCallback(
+    (patch: AppSettingsPatch) => {
+      if (!settingsV1Enabled) {
+        return;
+      }
+      send({ type: "PATCH", patch });
+    },
+    [send, settingsV1Enabled],
+  );
+  const clearLegacyOpenAiFallback = useCallback(() => {
+    if (settings.openAiApiKey.trim().length === 0) {
+      return;
+    }
+
+    applyPatch({ openAiApiKey: "" });
+  }, [applyPatch, settings.openAiApiKey]);
+  const handleStoreOpenAiApiKey = useCallback(() => {
+    const normalized = openAiApiKeyDraft.trim();
+    if (normalized.length === 0) {
+      setAgentSecretActionMessage("OPENAI KEY CANNOT BE EMPTY.");
+      return;
+    }
+
+    setAgentSecretCommandState("saving");
+    setAgentSecretActionMessage(null);
+    setAgentSecretStatusError(null);
+
+    void Effect.runPromise(storeRigOpenAiApiKey(normalized))
+      .then((status) => {
+        setAgentSecretStatus("ready");
+        setAgentSecretSource(status.source);
+        setAgentSecretWarning(status.warning);
+        setAgentSecretResolutionOrder(status.resolutionOrder);
+        setOpenAiApiKeyDraft("");
+        clearLegacyOpenAiFallback();
+        setAgentSecretActionMessage("OPENAI KEY STORED IN KEYCHAIN.");
+      })
+      .catch((error: unknown) => {
+        setAgentSecretStatus("error");
+        setAgentSecretStatusError(toErrorMessage(error));
+        setAgentSecretActionMessage(null);
+      })
+      .finally(() => {
+        setAgentSecretCommandState("idle");
+      });
+  }, [clearLegacyOpenAiFallback, openAiApiKeyDraft]);
+  const canClearManagedAgentSecret = useMemo(
+    () => agentSecretSource === "keychain" || agentSecretSource === "settings-db",
+    [agentSecretSource],
+  );
+  const handleClearOpenAiApiKey = useCallback(() => {
+    setAgentSecretCommandState("clearing");
+    setAgentSecretActionMessage(null);
+    setAgentSecretStatusError(null);
+
+    void Effect.runPromise(clearRigOpenAiApiKey())
+      .then((status) => {
+        setAgentSecretStatus("ready");
+        setAgentSecretSource(status.source);
+        setAgentSecretWarning(status.warning);
+        setAgentSecretResolutionOrder(status.resolutionOrder);
+        setOpenAiApiKeyDraft("");
+        clearLegacyOpenAiFallback();
+        setAgentSecretActionMessage("MANAGED OPENAI KEY CLEARED.");
+      })
+      .catch((error: unknown) => {
+        setAgentSecretStatus("error");
+        setAgentSecretStatusError(toErrorMessage(error));
+        setAgentSecretActionMessage(null);
+      })
+      .finally(() => {
+        setAgentSecretCommandState("idle");
+      });
+  }, [clearLegacyOpenAiFallback]);
   const hasConfiguredAgentSecret = useMemo(
     () => agentSecretSource !== "none",
     [agentSecretSource],
@@ -415,6 +499,14 @@ export function SettingsPanel() {
     }
   }, [agentSecretSource]);
   const agentSecretStatusText = useMemo(() => {
+    if (agentSecretCommandState === "saving") {
+      return "SAVING";
+    }
+
+    if (agentSecretCommandState === "clearing") {
+      return "CLEARING";
+    }
+
     switch (agentSecretStatus) {
       case "idle":
         return "IDLE";
@@ -425,7 +517,7 @@ export function SettingsPanel() {
       case "error":
         return "STATUS ERROR";
     }
-  }, [agentSecretStatus, hasConfiguredAgentSecret]);
+  }, [agentSecretCommandState, agentSecretStatus, hasConfiguredAgentSecret]);
   const agentHelloStatusText = useMemo(() => {
     switch (agentHelloState) {
       case "idle":
@@ -526,16 +618,6 @@ export function SettingsPanel() {
     }
     return "saved";
   }, [state]);
-
-  const applyPatch = useCallback(
-    (patch: AppSettingsPatch) => {
-      if (!settingsV1Enabled) {
-        return;
-      }
-      send({ type: "PATCH", patch });
-    },
-    [send, settingsV1Enabled],
-  );
 
   const handleResetToDefaults = useCallback(() => {
     if (!settingsV1Enabled) {
@@ -657,14 +739,6 @@ export function SettingsPanel() {
     send,
     settings.bigBallOfMudAlertThreshold,
   ]);
-  const commitOpenAiApiKey = useCallback(() => {
-    const normalized = openAiApiKeyDraft.trim();
-    if (normalized === settings.openAiApiKey.trim()) {
-      return;
-    }
-    applyPatch({ openAiApiKey: normalized });
-  }, [applyPatch, openAiApiKeyDraft, settings.openAiApiKey]);
-
   const commitAiTemperature = useCallback(() => {
     const parsed = Number(aiTemperatureDraft);
     if (!Number.isFinite(parsed)) {
@@ -708,7 +782,9 @@ export function SettingsPanel() {
   }, [aiMaxTokensDraft, applyPatch, settings.aiSettings]);
 
   useEffect(() => {
-    setOpenAiApiKeyDraft(settings.openAiApiKey);
+    if (settings.openAiApiKey.trim().length > 0) {
+      setOpenAiApiKeyDraft(settings.openAiApiKey);
+    }
   }, [settings.openAiApiKey]);
   useEffect(() => {
     setAiTemperatureDraft(settings.aiSettings.temperature.toFixed(2));
@@ -718,7 +794,7 @@ export function SettingsPanel() {
   }, [settings.aiSettings.maxTokens]);
   useEffect(() => {
     refreshAgentSecretStatus();
-  }, [refreshAgentSecretStatus, settings.openAiApiKey]);
+  }, [refreshAgentSecretStatus]);
 
   useEffect(() => {
     refreshAudioContextStatus();
@@ -1230,17 +1306,36 @@ export function SettingsPanel() {
                     className={styles.settingsNumberControl}
                     value={openAiApiKeyDraft}
                     onChange={(event) => setOpenAiApiKeyDraft(event.currentTarget.value)}
-                    onBlur={commitOpenAiApiKey}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
-                        commitOpenAiApiKey();
+                        handleStoreOpenAiApiKey();
                       }
                     }}
                     autoComplete="off"
                     spellCheck={false}
-                    placeholder="sk-..."
+                    placeholder={
+                      hasConfiguredAgentSecret && openAiApiKeyDraft.trim().length === 0
+                        ? "stored in secure resolver"
+                        : "sk-..."
+                    }
                     aria-label="OpenAI API key"
                   />
+                  <button
+                    type="button"
+                    className={styles.settingsActionButton}
+                    onClick={handleStoreOpenAiApiKey}
+                    disabled={agentSecretCommandState !== "idle" || openAiApiKeyDraft.trim().length === 0}
+                  >
+                    Save Key
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.settingsActionButton} ${styles.settingsActionButtonDanger}`}
+                    onClick={handleClearOpenAiApiKey}
+                    disabled={agentSecretCommandState !== "idle" || !canClearManagedAgentSecret}
+                  >
+                    Clear Managed Key
+                  </button>
                 </div>
               </div>
               <div className={styles.settingsRow}>
@@ -1259,6 +1354,7 @@ export function SettingsPanel() {
                   {agentSecretStatusText}
                 </span>
               </div>
+              {agentSecretActionMessage && <p className={styles.settingsNotice}>{agentSecretActionMessage}</p>}
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
                   <span>Provider</span>

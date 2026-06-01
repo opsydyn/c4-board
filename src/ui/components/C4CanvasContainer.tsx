@@ -2172,7 +2172,6 @@ export function C4CanvasContainer() {
                 HAL-inspired architecture copilot. Operator prompts are scoped to this board.
               </p>
               <OpyCopilotPanel
-                hasOpenAiApiKey={appSettings.openAiApiKey.trim().length > 0}
                 domain={state.context.currentDomain}
                 diagramId={state.context.currentDiagramId}
                 diagramName={state.context.diagramName}

@@ -1,4 +1,5 @@
 use crate::db::AppDb;
+use keyring::Entry;
 use rig::{client::CompletionClient, completion::Prompt, providers::openai};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -6,6 +7,7 @@ use sqlx::Row;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
+use tokio::task::spawn_blocking;
 
 const DEFAULT_MODEL: &str = "gpt-4o-mini";
 const DEFAULT_PROMPT: &str = "Say hello to OPSYDYN // PRECISION TOOLS and keep it short.";
@@ -19,6 +21,8 @@ const MAX_REVIEW_LIST_ITEMS: usize = 8;
 const OPENAI_API_KEY_SETTING_KEY: &str = "openAiApiKey";
 const OPENAI_KEY_ENV_KEYS: [&str; 2] = ["OPSYDYN_OPENAI_API_KEY", "OPENAI_API_KEY"];
 const KEY_RESOLUTION_ORDER: [&str; 3] = ["keychain", "settings-db", "env"];
+const KEYCHAIN_SERVICE_NAME: &str = "com.opsydyn.c4board";
+const OPENAI_KEYCHAIN_ACCOUNT_NAME: &str = "openai-api-key";
 const SETTINGS_DB_STORAGE_WARNING: &str =
     "OpenAI key currently resolves from app settings (fallback). Keychain-first storage is recommended.";
 const ENV_STORAGE_WARNING: &str =
@@ -266,11 +270,52 @@ fn normalize_max_tokens(value: Option<u64>) -> Option<u64> {
     }
 }
 
-fn resolve_openai_api_key_from_keychain() -> Option<String> {
-    // Keychain provider is intentionally a no-op placeholder for now.
-    // This keeps resolver ordering stable while the native keychain backend
-    // is introduced in a follow-up phase.
-    None
+fn create_openai_keychain_entry() -> Result<Entry, String> {
+    Entry::new(KEYCHAIN_SERVICE_NAME, OPENAI_KEYCHAIN_ACCOUNT_NAME)
+        .map_err(|error| format!("Unable to create OpenAI keychain entry: {error}"))
+}
+
+fn is_missing_keyring_entry(error: &keyring::Error) -> bool {
+    let normalized = error.to_string().to_lowercase();
+    normalized.contains("no entry")
+        || normalized.contains("no matching entry")
+        || normalized.contains("password not found")
+        || normalized.contains("credential not found")
+}
+
+async fn resolve_openai_api_key_from_keychain() -> Option<String> {
+    spawn_blocking(|| {
+        let entry = create_openai_keychain_entry().ok()?;
+        let value = entry.get_password().ok()?;
+        normalize_secret(&value)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+async fn store_openai_api_key_in_keychain(secret: String) -> Result<(), String> {
+    spawn_blocking(move || {
+        let entry = create_openai_keychain_entry()?;
+        entry
+            .set_password(&secret)
+            .map_err(|error| format!("Unable to store OpenAI key in keychain: {error}"))
+    })
+    .await
+    .map_err(|error| format!("OpenAI keychain write task failed: {error}"))?
+}
+
+async fn clear_openai_api_key_from_keychain() -> Result<(), String> {
+    spawn_blocking(|| {
+        let entry = create_openai_keychain_entry()?;
+        match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(error) if is_missing_keyring_entry(&error) => Ok(()),
+            Err(error) => Err(format!("Unable to clear OpenAI key from keychain: {error}")),
+        }
+    })
+    .await
+    .map_err(|error| format!("OpenAI keychain delete task failed: {error}"))?
 }
 
 fn resolve_openai_api_key_from_env() -> Option<String> {
@@ -302,8 +347,20 @@ async fn resolve_openai_api_key_from_settings(state: &State<'_, AppDb>) -> Optio
     parse_stored_setting_value(&raw)
 }
 
+async fn clear_openai_api_key_from_settings(state: &State<'_, AppDb>) -> Result<(), String> {
+    sqlx::query("DELETE FROM app_settings WHERE key = ?")
+        .bind(OPENAI_API_KEY_SETTING_KEY)
+        .execute(&state.0)
+        .await
+        .map_err(|error| {
+            format!("Unable to clear OpenAI key from app settings fallback: {error}")
+        })?;
+
+    Ok(())
+}
+
 async fn resolve_openai_secret(state: &State<'_, AppDb>) -> Option<ResolvedSecret> {
-    if let Some(from_keychain) = resolve_openai_api_key_from_keychain() {
+    if let Some(from_keychain) = resolve_openai_api_key_from_keychain().await {
         return Some(ResolvedSecret {
             value: from_keychain,
             source: RigAgentSecretSource::Keychain,
@@ -685,6 +742,28 @@ pub async fn rig_agent_secret_status(
                 .collect(),
         },
     })
+}
+
+#[tauri::command]
+pub async fn rig_agent_store_openai_api_key(
+    state: State<'_, AppDb>,
+    secret: String,
+) -> Result<RigAgentSecretStatusResponse, String> {
+    let normalized =
+        normalize_secret(&secret).ok_or_else(|| "OpenAI key cannot be empty.".to_string())?;
+
+    store_openai_api_key_in_keychain(normalized).await?;
+    clear_openai_api_key_from_settings(&state).await?;
+    rig_agent_secret_status(state).await
+}
+
+#[tauri::command]
+pub async fn rig_agent_clear_openai_api_key(
+    state: State<'_, AppDb>,
+) -> Result<RigAgentSecretStatusResponse, String> {
+    clear_openai_api_key_from_keychain().await?;
+    clear_openai_api_key_from_settings(&state).await?;
+    rig_agent_secret_status(state).await
 }
 
 #[tauri::command]
