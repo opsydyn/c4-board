@@ -1,7 +1,11 @@
 {
   "managedBy": "github-actions/release-plz",
   "purpose": "Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
-  "base": null,
-  "head": null,
-  "paths": []
+  "base": "baea8f67948ad8f92407321691cdf6d200257133",
+  "head": "379e3b7ce0c6e115416fe2c48617bf6398c123b8",
+  "paths": [
+    "src/core/effects/opy-agent.telemetry.ts",
+    "src/core/effects/opy-chat.persistence.ts",
+    "src/ui/components/OpyCopilotPanel.tsx"
+  ]
 }
