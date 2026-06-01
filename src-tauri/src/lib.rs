@@ -505,6 +505,12 @@ pub fn run() {
             sql: include_str!("../migrations/020_add_ai_settings_default.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 21,
+            description: "create_opy_agent_runs",
+            sql: include_str!("../migrations/021_create_opy_agent_runs.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

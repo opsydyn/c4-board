@@ -12,6 +12,7 @@ import {
   type RigC4DiagramProposal,
   runRigHello,
 } from "../../core/effects/ai-agent.runtime";
+import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
 import {
   buildGroundedProposalDiff,
   type OpyProposalDiffStatus,
@@ -19,13 +20,19 @@ import {
 } from "../../core/effects/opy-c4-proposals";
 import {
   appendOpyChatMessage,
+  createOpyAgentRun,
   createOpyChatSession,
+  finalizeInterruptedOpyAgentRuns,
+  listOpyAgentRuns,
   listOpyChatMessages,
   listOpyChatSessions,
+  type OpyAgentRun,
+  type OpyAgentRunIntent,
   type OpyChatMessage,
   type OpyChatRole,
   type OpyChatSession,
   renameOpyChatSession,
+  updateOpyAgentRun,
 } from "../../core/effects/opy-chat.persistence";
 import type { AiActionMode } from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
@@ -86,6 +93,13 @@ const createMessageId = (): string => {
   return `opy-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
+const createRunId = (): string => {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `opy-run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
 const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
 const formatClockTime = (timestamp: number): string =>
@@ -107,6 +121,37 @@ const DIFF_STATUS_LABEL: Record<OpyProposalDiffStatus, string> = {
   existing: "MATCH",
   ambiguous: "AMBIG",
 };
+
+const RUN_INTENT_LABEL: Record<OpyAgentRunIntent, string> = {
+  chat: "CHAT",
+  "plan-c4-diagram": "DIAGRAM",
+  "review-c4-board": "REVIEW",
+};
+
+const RUN_STAGE_LABEL: Record<OpyAgentRun["stage"], string> = {
+  invoke: "INVOKE",
+  persist: "PERSIST",
+  complete: "COMPLETE",
+};
+
+const RUN_STATUS_LABEL: Record<OpyAgentRun["status"], string> = {
+  running: "RUNNING",
+  completed: "COMPLETE",
+  failed: "FAILED",
+  cancelled: "CANCELLED",
+};
+
+const sortRunsByRecency = (runs: readonly OpyAgentRun[]): OpyAgentRun[] =>
+  [...runs].sort((left, right) => right.startedAt - left.startedAt);
+
+const upsertSessionRun = (
+  runs: readonly OpyAgentRun[],
+  nextRun: OpyAgentRun,
+): ReadonlyArray<OpyAgentRun> =>
+  sortRunsByRecency([
+    nextRun,
+    ...runs.filter((run) => run.id !== nextRun.id),
+  ]);
 
 const buildBootstrapMessage = (hasOpenAiApiKey: boolean): { role: OpyChatRole; content: string } =>
   hasOpenAiApiKey
@@ -284,6 +329,9 @@ export function OpyCopilotPanel({
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
   const [sessionTitleDraft, setSessionTitleDraft] = useState("");
   const [messages, setMessages] = useState<ReadonlyArray<OpyChatMessage>>([]);
+  const [runsBySessionId, setRunsBySessionId] = useState<
+    Readonly<Record<string, ReadonlyArray<OpyAgentRun> | undefined>>
+  >({});
   const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
     Readonly<Record<string, OpySessionDiagramProposal | undefined>>
   >({});
@@ -310,6 +358,18 @@ export function OpyCopilotPanel({
   const activeBoardReview = useMemo(
     () => boardReviewsBySessionId[selectedSessionId] ?? null,
     [boardReviewsBySessionId, selectedSessionId],
+  );
+  const activeRuns = useMemo(
+    () => runsBySessionId[selectedSessionId] ?? [],
+    [runsBySessionId, selectedSessionId],
+  );
+  const activeRun = useMemo(
+    () => activeRuns.find((run) => run.status === "running") ?? null,
+    [activeRuns],
+  );
+  const latestRun = useMemo(
+    () => activeRuns[0] ?? null,
+    [activeRuns],
   );
   const activeGroundedProposal = useMemo(
     () =>
@@ -370,14 +430,84 @@ export function OpyCopilotPanel({
     async (sessionId: string) => {
       setIsMessageLoading(true);
       try {
+        const interruptedRuns = await runEffect(
+          finalizeInterruptedOpyAgentRuns({
+            sessionId,
+            errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+          }),
+        );
+        interruptedRuns.forEach(emitOpyAgentRunTelemetry);
         const loadedMessages = await runEffect(listOpyChatMessages(sessionId));
+        const loadedRuns = await runEffect(listOpyAgentRuns(sessionId));
         setMessages(loadedMessages);
+        setRunsBySessionId((current) => ({
+          ...current,
+          [sessionId]: loadedRuns,
+        }));
       } catch (error) {
         setRuntimeError(`FAILED TO LOAD TRANSCRIPT: ${toErrorMessage(error)}`);
         setMessages([]);
+        setRunsBySessionId((current) => ({
+          ...current,
+          [sessionId]: [],
+        }));
       } finally {
         setIsMessageLoading(false);
       }
+    },
+    [runEffect],
+  );
+
+  const beginAgentRun = useCallback(
+    async (
+      sessionId: string,
+      intent: OpyAgentRunIntent,
+    ): Promise<OpyAgentRun> => {
+      const run = await runEffect(
+        createOpyAgentRun({
+          id: createRunId(),
+          sessionId,
+          agent: "opy-net",
+          intent,
+          stage: "invoke",
+          status: "running",
+          startedAt: Date.now(),
+          completedAt: null,
+          errorSummary: null,
+        }),
+      );
+
+      setRunsBySessionId((current) => ({
+        ...current,
+        [sessionId]: upsertSessionRun(current[sessionId] ?? [], run),
+      }));
+
+      return run;
+    },
+    [runEffect],
+  );
+
+  const transitionAgentRun = useCallback(
+    async (
+      currentRun: OpyAgentRun,
+      patch: Partial<Pick<OpyAgentRun, "stage" | "status" | "completedAt" | "errorSummary">>,
+    ): Promise<OpyAgentRun> => {
+      const nextRun: OpyAgentRun = {
+        ...currentRun,
+        ...patch,
+      };
+
+      await runEffect(updateOpyAgentRun(nextRun));
+      setRunsBySessionId((current) => ({
+        ...current,
+        [nextRun.sessionId]: upsertSessionRun(current[nextRun.sessionId] ?? [], nextRun),
+      }));
+
+      if (nextRun.status !== "running") {
+        emitOpyAgentRunTelemetry(nextRun);
+      }
+
+      return nextRun;
     },
     [runEffect],
   );
@@ -427,6 +557,87 @@ export function OpyCopilotPanel({
     [runEffect],
   );
 
+  const executeRigRun = useCallback(
+    async <T,>(
+      input: {
+        readonly sessionId: string;
+        readonly intent: OpyAgentRunIntent;
+        readonly invoke: () => Promise<T>;
+        readonly assistantMessage: (result: T) => string;
+        readonly failurePrefix: string;
+        readonly onAfterPersisted?: (result: T) => void;
+      },
+    ): Promise<T | null> => {
+      setIsRunning(true);
+      let run: OpyAgentRun;
+      try {
+        run = await beginAgentRun(input.sessionId, input.intent);
+      } catch (error) {
+        const message = toErrorMessage(error);
+        setRuntimeError(`RUN ENVELOPE FAILED: ${message}`);
+        await appendAndPersistMessage(
+          input.sessionId,
+          "system",
+          `RUN ENVELOPE FAILED: ${message}`,
+        );
+        setIsRunning(false);
+        return null;
+      }
+
+      let currentRun = run;
+      try {
+        const result = await input.invoke();
+        currentRun = await transitionAgentRun(currentRun, {
+          stage: "persist",
+        });
+
+        const persistedMessage = await appendAndPersistMessage(
+          input.sessionId,
+          "assistant",
+          input.assistantMessage(result),
+        );
+
+        if (!persistedMessage) {
+          currentRun = await transitionAgentRun(currentRun, {
+            status: "failed",
+            completedAt: Date.now(),
+            errorSummary: "ASSISTANT RESPONSE COULD NOT BE PERSISTED.",
+          });
+          setRuntimeError(
+            `RUN ${currentRun.id} FAILED DURING ${RUN_STAGE_LABEL[currentRun.stage]}: ${currentRun.errorSummary}`,
+          );
+          return null;
+        }
+
+        input.onAfterPersisted?.(result);
+        await transitionAgentRun(currentRun, {
+          stage: "complete",
+          status: "completed",
+          completedAt: Date.now(),
+          errorSummary: null,
+        });
+        return result;
+      } catch (error) {
+        const message = toErrorMessage(error);
+        setRuntimeError(message);
+        await appendAndPersistMessage(
+          input.sessionId,
+          "system",
+          `${input.failurePrefix}: ${message}`,
+        );
+        await transitionAgentRun(currentRun, {
+          status: "failed",
+          completedAt: Date.now(),
+          errorSummary: message,
+        });
+        return null;
+      } finally {
+        setIsRunning(false);
+      }
+    },
+    [appendAndPersistMessage, beginAgentRun, transitionAgentRun],
+  );
+
   const createAndActivateSession = useCallback(async (): Promise<void> => {
     const createdAt = Date.now();
     const sessionId = createMessageId();
@@ -460,6 +671,10 @@ export function OpyCopilotPanel({
     setSessions((current) => sortSessionsByRecency([createdSession, ...current]));
     setSelectedSessionId(createdSession.id);
     setMessages([seededMessage]);
+    setRunsBySessionId((current) => ({
+      ...current,
+      [createdSession.id]: [],
+    }));
   }, [diagramId, domain, hasOpenAiApiKey, runEffect]);
 
   useEffect(() => {
@@ -520,6 +735,10 @@ export function OpyCopilotPanel({
               createdAt,
             },
           ]);
+          setRunsBySessionId((current) => ({
+            ...current,
+            [createdSession.id]: [],
+          }));
           return;
         }
 
@@ -532,6 +751,7 @@ export function OpyCopilotPanel({
           await hydrateMessagesForSession(resumeSessionId);
         } else {
           setMessages([]);
+          setRunsBySessionId({});
         }
       } catch (error) {
         if (!isCancelled) {
@@ -539,6 +759,7 @@ export function OpyCopilotPanel({
           setSessions([]);
           setSelectedSessionId("");
           setMessages([]);
+          setRunsBySessionId({});
         }
       } finally {
         if (!isCancelled) {
@@ -736,40 +957,30 @@ export function OpyCopilotPanel({
           return;
         }
 
-        setIsRunning(true);
-        try {
-          const proposal = await runEffect(
-            planRigC4Diagram({
-              description: opyCommand.proposal.description,
-              diagramContext: promptContext,
-              ...(boardSummary ? { boardSummary } : {}),
-            }),
-          );
-
-          setDiagramProposalsBySessionId((current) => ({
-            ...current,
-            [sessionId]: {
-              command: opyCommand.proposal,
-              proposal,
-            },
-          }));
-
-          await appendAndPersistMessage(
-            sessionId,
-            "assistant",
+        await executeRigRun({
+          sessionId,
+          intent: "plan-c4-diagram",
+          invoke: () =>
+            runEffect(
+              planRigC4Diagram({
+                description: opyCommand.proposal.description,
+                diagramContext: promptContext,
+                ...(boardSummary ? { boardSummary } : {}),
+              }),
+            ),
+          assistantMessage: (proposal) =>
             `PROPOSAL READY:: ${proposal.summary}\nNO BOARD CHANGES WERE APPLIED.`,
-          );
-        } catch (error) {
-          const message = toErrorMessage(error);
-          setRuntimeError(message);
-          await appendAndPersistMessage(
-            sessionId,
-            "system",
-            `DIAGRAM PROPOSAL FAILED: ${message}`,
-          );
-        } finally {
-          setIsRunning(false);
-        }
+          failurePrefix: "DIAGRAM PROPOSAL FAILED",
+          onAfterPersisted: (proposal) => {
+            setDiagramProposalsBySessionId((current) => ({
+              ...current,
+              [sessionId]: {
+                command: opyCommand.proposal,
+                proposal,
+              },
+            }));
+          },
+        });
         return;
       }
 
@@ -801,40 +1012,30 @@ export function OpyCopilotPanel({
           return;
         }
 
-        setIsRunning(true);
-        try {
-          const review = await runEffect(
-            reviewRigC4Board({
-              ...(opyCommand.review.focus ? { focus: opyCommand.review.focus } : {}),
-              diagramContext: promptContext,
-              boardSummary,
-            }),
-          );
-
-          setBoardReviewsBySessionId((current) => ({
-            ...current,
-            [sessionId]: {
-              command: opyCommand.review,
-              review,
-            },
-          }));
-
-          await appendAndPersistMessage(
-            sessionId,
-            "assistant",
+        await executeRigRun({
+          sessionId,
+          intent: "review-c4-board",
+          invoke: () =>
+            runEffect(
+              reviewRigC4Board({
+                ...(opyCommand.review.focus ? { focus: opyCommand.review.focus } : {}),
+                diagramContext: promptContext,
+                boardSummary,
+              }),
+            ),
+          assistantMessage: (review) =>
             `REVIEW READY:: ${review.summary}\nNO BOARD CHANGES WERE APPLIED.`,
-          );
-        } catch (error) {
-          const message = toErrorMessage(error);
-          setRuntimeError(message);
-          await appendAndPersistMessage(
-            sessionId,
-            "system",
-            `BOARD REVIEW FAILED: ${message}`,
-          );
-        } finally {
-          setIsRunning(false);
-        }
+          failurePrefix: "BOARD REVIEW FAILED",
+          onAfterPersisted: (review) => {
+            setBoardReviewsBySessionId((current) => ({
+              ...current,
+              [sessionId]: {
+                command: opyCommand.review,
+                review,
+              },
+            }));
+          },
+        });
         return;
       }
 
@@ -847,41 +1048,34 @@ export function OpyCopilotPanel({
         return;
       }
 
-      setIsRunning(true);
-      try {
-        const response = await runEffect(
-          runRigHello({
-            prompt: [
-              "You are OPY Net, an architecture copilot for OPSYDYN.",
-              "Respond with concise, actionable architecture guidance.",
-              `Board context: ${promptContext}.`,
-              `Operator request: ${trimmed}`,
-            ].join("\n"),
-          }),
-        );
-        await appendAndPersistMessage(sessionId, "assistant", response.message);
-      } catch (error) {
-        const message = toErrorMessage(error);
-        setRuntimeError(message);
-        await appendAndPersistMessage(
-          sessionId,
-          "system",
-          `AGENT RUNTIME ERROR: ${message}`,
-        );
-      } finally {
-        setIsRunning(false);
-      }
+      await executeRigRun({
+        sessionId,
+        intent: "chat",
+        invoke: () =>
+          runEffect(
+            runRigHello({
+              prompt: [
+                "You are OPY Net, an architecture copilot for OPSYDYN.",
+                "Respond with concise, actionable architecture guidance.",
+                `Board context: ${promptContext}.`,
+                `Operator request: ${trimmed}`,
+              ].join("\n"),
+            }),
+          ),
+        assistantMessage: (response) => response.message,
+        failurePrefix: "AGENT RUNTIME ERROR",
+      });
     },
     [
       actionMode,
       appendAndPersistMessage,
       boardSummary,
       domain,
+      executeRigRun,
       hasOpenAiApiKey,
       isRunning,
       onApplyBoardAction,
       promptContext,
-      runEffect,
       selectedSessionId,
     ],
   );
@@ -985,6 +1179,11 @@ export function OpyCopilotPanel({
         : hasOpenAiApiKey
           ? "KEY::CONFIGURED"
           : "KEY::MISSING";
+  const runText = activeRun
+    ? `RUN::${RUN_INTENT_LABEL[activeRun.intent]}::${RUN_STAGE_LABEL[activeRun.stage]}`
+    : latestRun
+      ? `LAST::${RUN_STATUS_LABEL[latestRun.status]}::${RUN_STAGE_LABEL[latestRun.stage]}`
+      : "RUN::IDLE";
   const actionModeText = `ACTION::${actionMode.toUpperCase()}`;
   const activeCommandToken = detectCommandToken(draftPrompt);
 
@@ -993,6 +1192,7 @@ export function OpyCopilotPanel({
       <div className={styles.ownershipLensStats}>
         <span>MODE::ASSIST</span>
         <span>{statusText}</span>
+        <span>{runText}</span>
         <span>{actionModeText}</span>
         <span>{`SESSIONS::${sessions.length}`}</span>
         <span>{`ACTIVE::${selectedSession ? "ONLINE" : "NONE"}`}</span>
@@ -1010,6 +1210,16 @@ export function OpyCopilotPanel({
         <p className={styles.ownershipLensHint}>
           {"TOOL TOKEN ACTIVE:: "}
           <span className={styles.opyCopilotCommandToken}>{activeCommandToken}</span>
+        </p>
+      )}
+      {activeRun && (
+        <p className={styles.ownershipLensHint}>
+          {`ACTIVE RUN::${activeRun.id.slice(0, 8)} · ${RUN_INTENT_LABEL[activeRun.intent]} · ${RUN_STAGE_LABEL[activeRun.stage]} · ${formatClockTime(activeRun.startedAt)}`}
+        </p>
+      )}
+      {!activeRun && latestRun?.status === "failed" && latestRun.errorSummary && (
+        <p className={styles.ownershipLensHint}>
+          {`LAST FAILURE::${RUN_STAGE_LABEL[latestRun.stage]} · ${latestRun.errorSummary}`}
         </p>
       )}
       <div className={styles.formGroup}>
