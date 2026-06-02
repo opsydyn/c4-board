@@ -685,6 +685,22 @@ export const opyCopilotProposalStats = style({
   fontSize: theme.typography.size.xs,
 });
 
+export const opyCopilotEvidenceList = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotEvidenceItem = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(7, 12, 10, 0.88)",
+  padding: theme.spacing["2"],
+});
+
 export const opyCopilotProposalColumns = style({
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",

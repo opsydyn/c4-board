@@ -2,6 +2,11 @@ import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  assembleRigAgentContext,
+  formatRigAgentCitationBlock,
+  type RigAgentContextBundle,
+} from "../../core/effects/agent-context";
+import {
   formatAgentError,
   getRigSecretStatus,
   makeAgentConfigError,
@@ -9,22 +14,23 @@ import {
   makeAgentRuntimeError,
   planRigC4Diagram,
   reviewRigC4Board,
-  summarizeAgentError,
   type RigC4BoardEdge,
   type RigC4BoardNode,
   type RigC4BoardReview,
   type RigC4BoardSummary,
   type RigC4DiagramProposal,
+  type RigHelloResponse,
   runRigHello,
+  summarizeAgentError,
   withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
 import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
+import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import {
   buildGroundedProposalDiff,
   type OpyProposalDiffStatus,
   summarizeGroundedProposalDiff,
 } from "../../core/effects/opy-c4-proposals";
-import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import {
   appendOpyChatMessage,
   createOpyAgentRun,
@@ -74,11 +80,28 @@ interface OpyBoardReviewCommand {
 interface OpySessionDiagramProposal {
   readonly command: OpyDiagramProposalCommand;
   readonly proposal: RigC4DiagramProposal;
+  readonly context: RigAgentContextBundle;
 }
 
 interface OpySessionBoardReview {
   readonly command: OpyBoardReviewCommand;
   readonly review: RigC4BoardReview;
+  readonly context: RigAgentContextBundle;
+}
+
+interface OpyGroundedChatResponse {
+  readonly response: RigHelloResponse;
+  readonly context: RigAgentContextBundle;
+}
+
+interface OpyGroundedDiagramProposal {
+  readonly proposal: RigC4DiagramProposal;
+  readonly context: RigAgentContextBundle;
+}
+
+interface OpyGroundedBoardReview {
+  readonly review: RigC4BoardReview;
+  readonly context: RigAgentContextBundle;
 }
 
 interface OpyCopilotPanelProps {
@@ -304,6 +327,8 @@ const detectCommandToken = (value: string): "/add" | "/diagram" | "/review" | nu
 const formatReviewFocus = (focus: string | null | undefined): string =>
   focus && focus.trim().length > 0 ? focus.trim() : "WHOLE BOARD";
 
+const formatConfidence = (confidence: RigAgentContextBundle["confidence"]): string => confidence.toUpperCase();
+
 const formatNodeMatchSummary = (matches: ReadonlyArray<RigC4BoardNode>): string =>
   matches
     .map((match) => `${match.nodeType.toUpperCase()} ${match.label}`)
@@ -349,16 +374,6 @@ export function OpyCopilotPanel({
   >({});
   const selectedSessionIdRef = useRef<string>("");
 
-  const promptContext = useMemo(() => {
-    if (boardContext) {
-      return boardContext.promptContext;
-    }
-
-    const diagramLabel = diagramId ?? "unsaved";
-    const normalizedDiagramName = diagramName.trim().length > 0 ? diagramName.trim() : "untitled";
-    return `DOMAIN=${domain.toUpperCase()} | DIAGRAM=${diagramLabel} | NAME=${normalizedDiagramName} | NODES=${nodeCount} | EDGES=${edgeCount}`;
-  }, [boardContext, diagramId, diagramName, domain, edgeCount, nodeCount]);
-
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
     [selectedSessionId, sessions],
@@ -394,6 +409,18 @@ export function OpyCopilotPanel({
   const activeProposalSummary = useMemo(
     () => activeGroundedProposal ? summarizeGroundedProposalDiff(activeGroundedProposal) : null,
     [activeGroundedProposal],
+  );
+
+  const resolveRigAgentContext = useCallback(
+    async (focus: string | null): Promise<RigAgentContextBundle> =>
+      runEffect(
+        assembleRigAgentContext({
+          boardSummary,
+          boardContext,
+          focus,
+        }),
+      ),
+    [boardContext, boardSummary, runEffect],
   );
 
   useEffect(() => {
@@ -1006,23 +1033,32 @@ export function OpyCopilotPanel({
         await executeRigRun({
           sessionId,
           intent: "plan-c4-diagram",
-          invoke: () =>
-            runEffect(
+          invoke: async () => {
+            const context = await resolveRigAgentContext(opyCommand.proposal.description);
+            const proposal = await runEffect(
               planRigC4Diagram({
                 description: opyCommand.proposal.description,
-                diagramContext: promptContext,
+                diagramContext: context.promptContext,
                 ...(boardSummary ? { boardSummary } : {}),
               }),
-            ),
-          assistantMessage: (proposal) =>
-            `PROPOSAL READY:: ${proposal.summary}\nNO BOARD CHANGES WERE APPLIED.`,
+            );
+            return {
+              proposal,
+              context,
+            } satisfies OpyGroundedDiagramProposal;
+          },
+          assistantMessage: (groundedProposal) =>
+            `PROPOSAL READY:: ${groundedProposal.proposal.summary}\nNO BOARD CHANGES WERE APPLIED.\n${
+              formatRigAgentCitationBlock(groundedProposal.context)
+            }`,
           failurePrefix: "DIAGRAM PROPOSAL FAILED",
-          onAfterPersisted: (proposal) => {
+          onAfterPersisted: (groundedProposal) => {
             setDiagramProposalsBySessionId((current) => ({
               ...current,
               [sessionId]: {
                 command: opyCommand.proposal,
-                proposal,
+                proposal: groundedProposal.proposal,
+                context: groundedProposal.context,
               },
             }));
           },
@@ -1068,23 +1104,32 @@ export function OpyCopilotPanel({
         await executeRigRun({
           sessionId,
           intent: "review-c4-board",
-          invoke: () =>
-            runEffect(
+          invoke: async () => {
+            const context = await resolveRigAgentContext(reviewFocus ?? null);
+            const review = await runEffect(
               reviewRigC4Board({
                 ...(reviewFocus ? { focus: reviewFocus } : {}),
-                diagramContext: promptContext,
+                diagramContext: context.promptContext,
                 boardSummary,
               }),
-            ),
-          assistantMessage: (review) =>
-            `REVIEW READY:: ${review.summary}\nNO BOARD CHANGES WERE APPLIED.`,
+            );
+            return {
+              review,
+              context,
+            } satisfies OpyGroundedBoardReview;
+          },
+          assistantMessage: (groundedReview) =>
+            `REVIEW READY:: ${groundedReview.review.summary}\nNO BOARD CHANGES WERE APPLIED.\n${
+              formatRigAgentCitationBlock(groundedReview.context)
+            }`,
           failurePrefix: "BOARD REVIEW FAILED",
-          onAfterPersisted: (review) => {
+          onAfterPersisted: (groundedReview) => {
             setBoardReviewsBySessionId((current) => ({
               ...current,
               [sessionId]: {
                 command: opyCommand.review,
-                review,
+                review: groundedReview.review,
+                context: groundedReview.context,
               },
             }));
           },
@@ -1106,18 +1151,26 @@ export function OpyCopilotPanel({
       await executeRigRun({
         sessionId,
         intent: "chat",
-        invoke: () =>
-          runEffect(
+        invoke: async () => {
+          const context = await resolveRigAgentContext(trimmed);
+          const response = await runEffect(
             runRigHello({
               prompt: [
                 "You are OPY Net, an architecture copilot for OPSYDYN.",
                 "Respond with concise, actionable architecture guidance.",
-                `Board context: ${promptContext}.`,
+                "Ground every recommendation in the supplied board evidence and be explicit when confidence is limited.",
+                `Board evidence:\n${context.promptContext}`,
                 `Operator request: ${trimmed}`,
               ].join("\n"),
             }),
-          ),
-        assistantMessage: (response) => response.message,
+          );
+          return {
+            response,
+            context,
+          } satisfies OpyGroundedChatResponse;
+        },
+        assistantMessage: (groundedChat) =>
+          `${groundedChat.response.message}\n${formatRigAgentCitationBlock(groundedChat.context)}`,
         failurePrefix: "AGENT RUNTIME ERROR",
       });
     },
@@ -1132,7 +1185,8 @@ export function OpyCopilotPanel({
       hasOpenAiApiKey,
       isRunning,
       onApplyBoardAction,
-      promptContext,
+      resolveRigAgentContext,
+      runEffect,
       selectedSessionId,
     ],
   );
@@ -1164,7 +1218,8 @@ export function OpyCopilotPanel({
       await appendAgentNotice(
         sessionId,
         makeAgentPolicyError({
-          message: `Proposal apply blocked by ${activeProposalSummary.ambiguousNodes} ambiguous node(s) and ${activeProposalSummary.ambiguousEdges} ambiguous edge(s).`,
+          message:
+            `Proposal apply blocked by ${activeProposalSummary.ambiguousNodes} ambiguous node(s) and ${activeProposalSummary.ambiguousEdges} ambiguous edge(s).`,
           recommendedAction: "Resolve proposal ambiguity before applying.",
         }),
       );
@@ -1233,22 +1288,22 @@ export function OpyCopilotPanel({
     selectedSessionId,
   ]);
 
-  const statusText =
-    agentSecretStatus === "loading"
-      ? "KEY::CHECKING"
-      : agentSecretStatus === "error"
-        ? "KEY::ERROR"
-        : hasOpenAiApiKey
-          ? "KEY::CONFIGURED"
-          : "KEY::MISSING";
+  const statusText = agentSecretStatus === "loading"
+    ? "KEY::CHECKING"
+    : agentSecretStatus === "error"
+    ? "KEY::ERROR"
+    : hasOpenAiApiKey
+    ? "KEY::CONFIGURED"
+    : "KEY::MISSING";
   const runText = activeRun
     ? `RUN::${RUN_INTENT_LABEL[activeRun.intent]}::${RUN_STAGE_LABEL[activeRun.stage]}`
     : latestRun
-      ? `LAST::${RUN_STATUS_LABEL[latestRun.status]}::${RUN_STAGE_LABEL[latestRun.stage]}`
-      : "RUN::IDLE";
+    ? `LAST::${RUN_STATUS_LABEL[latestRun.status]}::${RUN_STAGE_LABEL[latestRun.stage]}`
+    : "RUN::IDLE";
   const actionModeText = `ACTION::${actionMode.toUpperCase()}`;
   const activeCommandToken = detectCommandToken(draftPrompt);
   const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
+  const currentBoardLabel = diagramName.trim().length > 0 ? diagramName.trim() : "UNTITLED BOARD";
 
   return (
     <div className={styles.opyCopilotShell}>
@@ -1269,6 +1324,9 @@ export function OpyCopilotPanel({
       <p className={styles.ownershipLensHint}>
         {"COMMAND::/review [focus area]"}
       </p>
+      <p className={styles.ownershipLensHint}>
+        {`BOARD::${currentBoardLabel}`}
+      </p>
       {boardContextHints.map((scope) => (
         <p key={scope.id} className={styles.ownershipLensHint}>
           {`CONTEXT::${scope.label} · ${scope.hint}`}
@@ -1282,7 +1340,9 @@ export function OpyCopilotPanel({
       )}
       {activeRun && (
         <p className={styles.ownershipLensHint}>
-          {`ACTIVE RUN::${activeRun.id.slice(0, 8)} · ${RUN_INTENT_LABEL[activeRun.intent]} · ${RUN_STAGE_LABEL[activeRun.stage]} · ${formatClockTime(activeRun.startedAt)}`}
+          {`ACTIVE RUN::${activeRun.id.slice(0, 8)} · ${RUN_INTENT_LABEL[activeRun.intent]} · ${
+            RUN_STAGE_LABEL[activeRun.stage]
+          } · ${formatClockTime(activeRun.startedAt)}`}
         </p>
       )}
       {!activeRun && latestRun?.status === "failed" && latestRun.errorSummary && (
@@ -1390,6 +1450,11 @@ export function OpyCopilotPanel({
             <span>{formatClockTime(activeBoardReview.review.respondedAtMs)}</span>
           </div>
           <p className={styles.opyCopilotProposalSummary}>{activeBoardReview.review.summary}</p>
+          <p className={styles.opyCopilotProposalHint}>
+            {`CONFIDENCE:: ${
+              formatConfidence(activeBoardReview.context.confidence)
+            } · ${activeBoardReview.context.confidenceReason}`}
+          </p>
           <p className={styles.ownershipLensHint}>
             {`FOCUS:: ${formatReviewFocus(activeBoardReview.command.focus)}`}
           </p>
@@ -1402,6 +1467,17 @@ export function OpyCopilotPanel({
               <span>{`RECOMMEND::${activeBoardReview.review.recommendedChanges.length}`}</span>
             </div>
           )}
+          <div className={styles.opyCopilotEvidenceList}>
+            {activeBoardReview.context.citations.map((citation) => (
+              <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
+                <div className={styles.opyCopilotProposalItemMeta}>
+                  <span>{citation.tool.toUpperCase()}</span>
+                  <span>{citation.label}</span>
+                </div>
+                <p className={styles.opyCopilotProposalHint}>{citation.detail}</p>
+              </article>
+            ))}
+          </div>
           <div className={styles.opyCopilotProposalColumns}>
             <div className={styles.opyCopilotProposalColumn}>
               <div className={styles.opyCopilotProposalHeader}>
@@ -1551,6 +1627,11 @@ export function OpyCopilotPanel({
           </div>
           <p className={styles.opyCopilotProposalSummary}>{activeDiagramProposal.proposal.summary}</p>
           <p className={styles.opyCopilotProposalRationale}>{activeDiagramProposal.proposal.rationale}</p>
+          <p className={styles.opyCopilotProposalHint}>
+            {`CONFIDENCE:: ${
+              formatConfidence(activeDiagramProposal.context.confidence)
+            } · ${activeDiagramProposal.context.confidenceReason}`}
+          </p>
           <p className={styles.ownershipLensHint}>
             {`SOURCE:: ${activeDiagramProposal.command.description}`}
           </p>
@@ -1581,6 +1662,17 @@ export function OpyCopilotPanel({
               ))}
             </div>
           )}
+          <div className={styles.opyCopilotEvidenceList}>
+            {activeDiagramProposal.context.citations.map((citation) => (
+              <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
+                <div className={styles.opyCopilotProposalItemMeta}>
+                  <span>{citation.tool.toUpperCase()}</span>
+                  <span>{citation.label}</span>
+                </div>
+                <p className={styles.opyCopilotProposalHint}>{citation.detail}</p>
+              </article>
+            ))}
+          </div>
           <div className={styles.opyCopilotProposalColumns}>
             <div className={styles.opyCopilotProposalColumn}>
               <div className={styles.opyCopilotProposalHeader}>
@@ -1698,12 +1790,11 @@ export function OpyCopilotPanel({
       <CopilotChatConfigurationProvider
         agentId="opy-9000"
         labels={{
-          chatInputPlaceholder:
-            agentSecretStatus === "loading"
-              ? "Checking OPY Net secret resolver..."
-              : hasOpenAiApiKey
-                ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
-                : "Configure OpenAI key in Settings to enable OPY Net",
+          chatInputPlaceholder: agentSecretStatus === "loading"
+            ? "Checking OPY Net secret resolver..."
+            : hasOpenAiApiKey
+            ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
+            : "Configure OpenAI key in Settings to enable OPY Net",
         }}
       >
         <CopilotChatInput
