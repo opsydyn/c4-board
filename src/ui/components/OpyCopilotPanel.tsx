@@ -104,6 +104,30 @@ interface OpyGroundedBoardReview {
   readonly context: RigAgentContextBundle;
 }
 
+interface OpyTranscriptDiagnostics {
+  readonly body: string;
+  readonly confidence: string | null;
+  readonly citations: ReadonlyArray<string>;
+}
+
+interface OpyDiagnosticsSurface {
+  readonly kind: "chat" | "diagram" | "review";
+  readonly title: string;
+  readonly summary: string;
+  readonly detail: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly respondedAtMs: number;
+  readonly context: RigAgentContextBundle;
+  readonly run: OpyAgentRun | null;
+}
+
+interface OpyActionModeSurface {
+  readonly tone: "critical" | "warning" | "ready";
+  readonly label: string;
+  readonly detail: string;
+}
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -339,6 +363,64 @@ const formatEdgeMatchSummary = (matches: ReadonlyArray<RigC4BoardEdge>): string 
     .map((match) => `${match.sourceLabel} -> ${match.targetLabel}${match.label ? ` (${match.label})` : ""}`)
     .join(" | ");
 
+const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostics => {
+  const bodyLines: string[] = [];
+  const citations: string[] = [];
+  let confidence: string | null = null;
+
+  content.split("\n").forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("CONFIDENCE::")) {
+      confidence = trimmed.slice("CONFIDENCE::".length).trim();
+      return;
+    }
+
+    if (trimmed.startsWith("CITATION::")) {
+      citations.push(trimmed.slice("CITATION::".length).trim());
+      return;
+    }
+
+    bodyLines.push(line);
+  });
+
+  const body = bodyLines.join("\n").trim();
+
+  return {
+    body: body.length > 0 ? body : content.trim(),
+    confidence,
+    citations,
+  };
+};
+
+const describeActionMode = (actionMode: AiActionMode): OpyActionModeSurface => {
+  switch (actionMode) {
+    case "disabled":
+      return {
+        tone: "critical",
+        label: "MUTATION ROUTES OFFLINE",
+        detail: "Board writes and proposal generation are blocked. Chat and board review remain read-only.",
+      };
+    case "read-only":
+      return {
+        tone: "critical",
+        label: "READ-ONLY BOUNDARY ACTIVE",
+        detail: "Use chat and /review for inspection. /add, /diagram, and apply paths are blocked in this mode.",
+      };
+    case "propose":
+      return {
+        tone: "warning",
+        label: "PROPOSAL BOUNDARY ACTIVE",
+        detail: "OPY can prepare changes, but apply paths stay blocked until APPLY-WITH-CONFIRMATION is enabled.",
+      };
+    case "apply-with-confirmation":
+      return {
+        tone: "ready",
+        label: "CONFIRMED APPLY BOUNDARY",
+        detail: "Mutations still require operator confirmation before the board is changed.",
+      };
+  }
+};
+
 export function OpyCopilotPanel({
   domain,
   diagramId,
@@ -366,6 +448,9 @@ export function OpyCopilotPanel({
   const [runsBySessionId, setRunsBySessionId] = useState<
     Readonly<Record<string, ReadonlyArray<OpyAgentRun> | undefined>>
   >({});
+  const [groundedChatsBySessionId, setGroundedChatsBySessionId] = useState<
+    Readonly<Record<string, OpyGroundedChatResponse | undefined>>
+  >({});
   const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
     Readonly<Record<string, OpySessionDiagramProposal | undefined>>
   >({});
@@ -383,6 +468,10 @@ export function OpyCopilotPanel({
     () => diagramProposalsBySessionId[selectedSessionId] ?? null,
     [diagramProposalsBySessionId, selectedSessionId],
   );
+  const activeGroundedChat = useMemo(
+    () => groundedChatsBySessionId[selectedSessionId] ?? null,
+    [groundedChatsBySessionId, selectedSessionId],
+  );
   const activeBoardReview = useMemo(
     () => boardReviewsBySessionId[selectedSessionId] ?? null,
     [boardReviewsBySessionId, selectedSessionId],
@@ -399,6 +488,18 @@ export function OpyCopilotPanel({
     () => activeRuns[0] ?? null,
     [activeRuns],
   );
+  const latestChatRun = useMemo(
+    () => activeRuns.find((run) => run.intent === "chat") ?? null,
+    [activeRuns],
+  );
+  const latestDiagramRun = useMemo(
+    () => activeRuns.find((run) => run.intent === "plan-c4-diagram") ?? null,
+    [activeRuns],
+  );
+  const latestReviewRun = useMemo(
+    () => activeRuns.find((run) => run.intent === "review-c4-board") ?? null,
+    [activeRuns],
+  );
   const activeGroundedProposal = useMemo(
     () =>
       activeDiagramProposal
@@ -410,6 +511,64 @@ export function OpyCopilotPanel({
     () => activeGroundedProposal ? summarizeGroundedProposalDiff(activeGroundedProposal) : null,
     [activeGroundedProposal],
   );
+  const actionModeSurface = useMemo(
+    () => describeActionMode(actionMode),
+    [actionMode],
+  );
+  const latestDiagnosticsSurface = useMemo(() => {
+    const surfaces: OpyDiagnosticsSurface[] = [];
+
+    if (activeGroundedChat) {
+      surfaces.push({
+        kind: "chat",
+        title: "CHAT",
+        summary: activeGroundedChat.response.message,
+        detail: "Grounded OPY response based on current board evidence.",
+        provider: activeGroundedChat.response.provider,
+        model: activeGroundedChat.response.model,
+        respondedAtMs: activeGroundedChat.response.respondedAtMs,
+        context: activeGroundedChat.context,
+        run: latestChatRun,
+      });
+    }
+
+    if (activeDiagramProposal) {
+      surfaces.push({
+        kind: "diagram",
+        title: "PROPOSAL",
+        summary: activeDiagramProposal.proposal.summary,
+        detail: activeDiagramProposal.proposal.rationale,
+        provider: activeDiagramProposal.proposal.provider,
+        model: activeDiagramProposal.proposal.model,
+        respondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
+        context: activeDiagramProposal.context,
+        run: latestDiagramRun,
+      });
+    }
+
+    if (activeBoardReview) {
+      surfaces.push({
+        kind: "review",
+        title: "REVIEW",
+        summary: activeBoardReview.review.summary,
+        detail: `Focus: ${formatReviewFocus(activeBoardReview.command.focus)}`,
+        provider: activeBoardReview.review.provider,
+        model: activeBoardReview.review.model,
+        respondedAtMs: activeBoardReview.review.respondedAtMs,
+        context: activeBoardReview.context,
+        run: latestReviewRun,
+      });
+    }
+
+    return surfaces.sort((left, right) => right.respondedAtMs - left.respondedAtMs)[0] ?? null;
+  }, [
+    activeBoardReview,
+    activeDiagramProposal,
+    activeGroundedChat,
+    latestChatRun,
+    latestDiagramRun,
+    latestReviewRun,
+  ]);
 
   const resolveRigAgentContext = useCallback(
     async (focus: string | null): Promise<RigAgentContextBundle> =>
@@ -1172,6 +1331,12 @@ export function OpyCopilotPanel({
         assistantMessage: (groundedChat) =>
           `${groundedChat.response.message}\n${formatRigAgentCitationBlock(groundedChat.context)}`,
         failurePrefix: "AGENT RUNTIME ERROR",
+        onAfterPersisted: (groundedChat) => {
+          setGroundedChatsBySessionId((current) => ({
+            ...current,
+            [sessionId]: groundedChat,
+          }));
+        },
       });
     },
     [
@@ -1422,6 +1587,95 @@ export function OpyCopilotPanel({
         </div>
       </div>
       {runtimeError && <p className={styles.opyCopilotError}>{`ERROR:: ${runtimeError}`}</p>}
+      <section
+        className={`${styles.opyCopilotModeBanner} ${
+          actionModeSurface.tone === "critical"
+            ? styles.opyCopilotModeBannerCritical
+            : actionModeSurface.tone === "warning"
+            ? styles.opyCopilotModeBannerWarning
+            : styles.opyCopilotModeBannerReady
+        }`}
+        aria-label="OPY action mode boundary"
+      >
+        <div className={styles.opyCopilotProposalHeader}>
+          <span>{`MODE POLICY::${actionMode.toUpperCase()}`}</span>
+          <span>{actionModeSurface.label}</span>
+        </div>
+        <p className={styles.opyCopilotProposalHint}>{actionModeSurface.detail}</p>
+      </section>
+      {latestDiagnosticsSurface && (
+        <section className={styles.opyCopilotDiagnosticsCard} aria-label="Latest OPY diagnostics">
+          <div className={styles.opyCopilotProposalHeader}>
+            <span>{`DIAGNOSTICS::${latestDiagnosticsSurface.title}`}</span>
+            <span>{formatClockTime(latestDiagnosticsSurface.respondedAtMs)}</span>
+          </div>
+          <p className={styles.opyCopilotProposalSummary}>{latestDiagnosticsSurface.summary}</p>
+          <p className={styles.opyCopilotProposalHint}>{latestDiagnosticsSurface.detail}</p>
+          <div className={styles.opyCopilotProposalStats}>
+            <span>{`CONFIDENCE::${formatConfidence(latestDiagnosticsSurface.context.confidence)}`}</span>
+            <span>{`SOURCES::${latestDiagnosticsSurface.context.citations.length}`}</span>
+            <span>{`MODEL::${latestDiagnosticsSurface.model}`}</span>
+            <span>{`PROVIDER::${latestDiagnosticsSurface.provider}`}</span>
+            <span>
+              {latestDiagnosticsSurface.run
+                ? `RUN::${RUN_STATUS_LABEL[latestDiagnosticsSurface.run.status]}`
+                : "RUN::UNTRACKED"}
+            </span>
+            <span>
+              {latestDiagnosticsSurface.run
+                ? `STAGE::${RUN_STAGE_LABEL[latestDiagnosticsSurface.run.stage]}`
+                : "STAGE::N/A"}
+            </span>
+          </div>
+          <details className={styles.opyCopilotDiagnosticsDisclosure}>
+            <summary className={styles.opyCopilotDiagnosticsSummary}>
+              {`PROVENANCE::${latestDiagnosticsSurface.context.citations.length} SOURCE(S)`}
+            </summary>
+            <p className={styles.opyCopilotProposalHint}>
+              {`CONFIDENCE REASON:: ${latestDiagnosticsSurface.context.confidenceReason}`}
+            </p>
+            <div className={styles.opyCopilotEvidenceList}>
+              {latestDiagnosticsSurface.context.citations.map((citation) => (
+                <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
+                  <div className={styles.opyCopilotProposalItemMeta}>
+                    <span>{citation.tool.toUpperCase()}</span>
+                    <span>{citation.label}</span>
+                  </div>
+                  <p className={styles.opyCopilotProposalHint}>{citation.detail}</p>
+                </article>
+              ))}
+            </div>
+          </details>
+          <details className={styles.opyCopilotDiagnosticsDisclosure}>
+            <summary className={styles.opyCopilotDiagnosticsSummary}>RUN DIAGNOSTICS</summary>
+            {latestDiagnosticsSurface.run
+              ? (
+                <div className={styles.opyCopilotDiagnosticsMetaGrid}>
+                  <span>{`RUN ID::${latestDiagnosticsSurface.run.id.slice(0, 8)}`}</span>
+                  <span>{`INTENT::${RUN_INTENT_LABEL[latestDiagnosticsSurface.run.intent]}`}</span>
+                  <span>{`STATUS::${RUN_STATUS_LABEL[latestDiagnosticsSurface.run.status]}`}</span>
+                  <span>{`STAGE::${RUN_STAGE_LABEL[latestDiagnosticsSurface.run.stage]}`}</span>
+                  <span>{`STARTED::${formatClockTime(latestDiagnosticsSurface.run.startedAt)}`}</span>
+                  <span>
+                    {latestDiagnosticsSurface.run.completedAt
+                      ? `ENDED::${formatClockTime(latestDiagnosticsSurface.run.completedAt)}`
+                      : "ENDED::PENDING"}
+                  </span>
+                </div>
+              )
+              : (
+                <p className={styles.opyCopilotProposalHint}>
+                  RUN ENVELOPE UNAVAILABLE FOR THIS RESPONSE.
+                </p>
+              )}
+            {latestDiagnosticsSurface.run?.errorSummary && (
+              <p className={styles.opyCopilotProposalHint}>
+                {`ERROR:: ${latestDiagnosticsSurface.run.errorSummary}`}
+              </p>
+            )}
+          </details>
+        </section>
+      )}
       <div className={styles.opyCopilotTranscript} role="log" aria-live="polite">
         {isMessageLoading
           ? <p className={styles.ownershipLensHint}>LOADING SESSION TRANSCRIPT...</p>
@@ -1431,6 +1685,14 @@ export function OpyCopilotPanel({
               : message.role === "assistant"
               ? styles.opyCopilotMessageAssistant
               : styles.opyCopilotMessageSystem;
+            const parsedDiagnostics = message.role === "assistant"
+              ? parseOpyTranscriptDiagnostics(message.content)
+              : null;
+            const messageBody = parsedDiagnostics?.body ?? message.content;
+            const hasDiagnostics = Boolean(
+              parsedDiagnostics
+              && (parsedDiagnostics.confidence !== null || parsedDiagnostics.citations.length > 0),
+            );
 
             return (
               <article key={message.id} className={`${styles.opyCopilotMessage} ${roleClassName}`}>
@@ -1438,7 +1700,30 @@ export function OpyCopilotPanel({
                   <span>{ROLE_LABEL[message.role]}</span>
                   <span>{formatClockTime(message.createdAt)}</span>
                 </div>
-                <p>{message.content}</p>
+                <p>{messageBody}</p>
+                {hasDiagnostics && parsedDiagnostics && (
+                  <details className={styles.opyCopilotMessageDiagnostics}>
+                    <summary className={styles.opyCopilotDiagnosticsSummary}>
+                      {`SOURCES::${parsedDiagnostics.citations.length} · ${
+                        parsedDiagnostics.confidence
+                          ? `CONF::${parsedDiagnostics.confidence.split("·")[0]?.trim()}`
+                          : "CONF::UNKNOWN"
+                      }`}
+                    </summary>
+                    {parsedDiagnostics.confidence && (
+                      <p className={styles.opyCopilotProposalHint}>
+                        {`CONFIDENCE:: ${parsedDiagnostics.confidence}`}
+                      </p>
+                    )}
+                    <div className={styles.opyCopilotDiagnosticsCitationStack}>
+                      {parsedDiagnostics.citations.map((citation, index) => (
+                        <p key={`${message.id}-citation-${index}`} className={styles.opyCopilotProposalHint}>
+                          {citation}
+                        </p>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </article>
             );
           })}

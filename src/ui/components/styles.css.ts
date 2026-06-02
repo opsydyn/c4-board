@@ -627,6 +627,36 @@ export const opyCopilotProposalCard = style({
   padding: theme.spacing["2"],
 });
 
+export const opyCopilotDiagnosticsCard = style([
+  opyCopilotProposalCard,
+  {
+    borderColor: theme.color.border.primary,
+    backgroundColor: "rgba(8, 15, 13, 0.96)",
+  },
+]);
+
+export const opyCopilotModeBanner = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(10, 17, 14, 0.94)",
+  padding: theme.spacing["2"],
+});
+
+export const opyCopilotModeBannerCritical = style({
+  borderColor: theme.color.status.critical,
+});
+
+export const opyCopilotModeBannerWarning = style({
+  borderColor: theme.color.interactive.primary,
+});
+
+export const opyCopilotModeBannerReady = style({
+  borderColor: theme.color.status.selected,
+});
+
 export const opyCopilotProposalHeader = style({
   display: "flex",
   alignItems: "center",
@@ -791,6 +821,50 @@ export const opyCopilotProposalActions = style({
   gap: theme.spacing["2"],
 });
 
+export const opyCopilotDiagnosticsDisclosure = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(7, 12, 10, 0.9)",
+  padding: theme.spacing["2"],
+});
+
+export const opyCopilotMessageDiagnostics = style([
+  opyCopilotDiagnosticsDisclosure,
+  {
+    marginTop: theme.spacing["1"],
+  },
+]);
+
+export const opyCopilotDiagnosticsSummary = style({
+  cursor: "pointer",
+  listStyle: "none",
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotDiagnosticsMetaGrid = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(11rem, 1fr))",
+  gap: theme.spacing["2"],
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotDiagnosticsCitationStack = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+});
+
 globalStyle(`${opyCopilotMessage} p`, {
   margin: 0,
   lineHeight: theme.typography.lineHeight.normal,
@@ -807,6 +881,10 @@ globalStyle(`${opyCopilotProposalItem} p`, {
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
+});
+
+globalStyle(`${opyCopilotDiagnosticsSummary}::-webkit-details-marker`, {
+  display: "none",
 });
 
 export const opyCopilotInput = style({
