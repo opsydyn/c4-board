@@ -69,7 +69,7 @@ pub struct RigC4BoardReviewRequest {
     pub max_tokens: Option<u64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RigC4BoardSummaryNode {
     pub id: String,
@@ -80,7 +80,7 @@ pub struct RigC4BoardSummaryNode {
     pub team_ownership: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RigC4BoardSummaryEdge {
     pub id: String,
@@ -91,7 +91,7 @@ pub struct RigC4BoardSummaryEdge {
     pub label: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RigC4BoardSummary {
     pub diagram_id: Option<String>,
@@ -200,6 +200,75 @@ pub struct RigC4BoardReviewResponse {
     pub provider: String,
     pub model: String,
     pub responded_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RigReadToolName {
+    BoardSummary,
+    NodeLookup,
+    EdgeLookup,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadBoardSummaryInput {}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadNodeLookupInput {
+    pub node_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadEdgeLookupInput {
+    pub edge_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadBoardSummaryResult {
+    pub diagram_id: Option<String>,
+    pub diagram_name: Option<String>,
+    pub node_count: i64,
+    pub edge_count: i64,
+    pub ownership_teams: Vec<String>,
+    pub nodes: Vec<RigC4BoardSummaryNode>,
+    pub edges: Vec<RigC4BoardSummaryEdge>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadNodeLookupResult {
+    pub found: bool,
+    pub node: Option<RigC4BoardSummaryNode>,
+    pub relationship_count: i64,
+    pub connected_edges: Vec<RigC4BoardSummaryEdge>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadEdgeLookupResult {
+    pub found: bool,
+    pub edge: Option<RigC4BoardSummaryEdge>,
+    pub source_node: Option<RigC4BoardSummaryNode>,
+    pub target_node: Option<RigC4BoardSummaryNode>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadToolRequest {
+    pub tool: RigReadToolName,
+    pub input: serde_json::Value,
+    pub board_summary: RigC4BoardSummary,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigReadToolResponse {
+    pub tool: RigReadToolName,
+    pub result: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -523,6 +592,181 @@ fn build_c4_board_summary_context(board_summary: &RigC4BoardSummary) -> Option<S
     Some(sections.join("\n\n"))
 }
 
+fn normalize_read_tool_lookup_id(
+    tool: RigReadToolName,
+    field_name: &str,
+    value: &str,
+) -> Result<String, String> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(format!(
+            "{tool:?} requires a non-empty {field_name}."
+        ));
+    }
+    Ok(normalized.to_string())
+}
+
+fn sorted_board_nodes(board_summary: &RigC4BoardSummary) -> Vec<RigC4BoardSummaryNode> {
+    let mut nodes = board_summary.nodes.clone();
+    nodes.sort_by(|left, right| left.label.cmp(&right.label).then(left.id.cmp(&right.id)));
+    nodes
+}
+
+fn sorted_board_edges(board_summary: &RigC4BoardSummary) -> Vec<RigC4BoardSummaryEdge> {
+    let mut edges = board_summary.edges.clone();
+    edges.sort_by(|left, right| left.id.cmp(&right.id));
+    edges
+}
+
+fn collect_ownership_teams(board_summary: &RigC4BoardSummary) -> Vec<String> {
+    let mut teams = board_summary
+        .nodes
+        .iter()
+        .filter_map(|node| normalize_secret(node.team_ownership.as_deref().unwrap_or("")))
+        .collect::<Vec<_>>();
+    teams.sort();
+    teams.dedup();
+    teams
+}
+
+fn execute_read_board_summary_tool(
+    _input: RigReadBoardSummaryInput,
+    board_summary: &RigC4BoardSummary,
+) -> RigReadBoardSummaryResult {
+    RigReadBoardSummaryResult {
+        diagram_id: board_summary.diagram_id.clone(),
+        diagram_name: board_summary.diagram_name.clone(),
+        node_count: board_summary.node_count,
+        edge_count: board_summary.edge_count,
+        ownership_teams: collect_ownership_teams(board_summary),
+        nodes: sorted_board_nodes(board_summary),
+        edges: sorted_board_edges(board_summary),
+    }
+}
+
+fn execute_read_edge_lookup_tool(
+    input: RigReadEdgeLookupInput,
+    board_summary: &RigC4BoardSummary,
+) -> Result<RigReadEdgeLookupResult, String> {
+    let edge_id = normalize_read_tool_lookup_id(RigReadToolName::EdgeLookup, "edgeId", &input.edge_id)?;
+    let edge = board_summary
+        .edges
+        .iter()
+        .find(|candidate| candidate.id == edge_id)
+        .cloned();
+
+    let Some(edge) = edge else {
+        return Ok(RigReadEdgeLookupResult {
+            found: false,
+            edge: None,
+            source_node: None,
+            target_node: None,
+        });
+    };
+
+    let source_node = board_summary
+        .nodes
+        .iter()
+        .find(|candidate| candidate.id == edge.source_id)
+        .cloned();
+    let target_node = board_summary
+        .nodes
+        .iter()
+        .find(|candidate| candidate.id == edge.target_id)
+        .cloned();
+
+    Ok(RigReadEdgeLookupResult {
+        found: true,
+        edge: Some(edge),
+        source_node,
+        target_node,
+    })
+}
+
+fn execute_read_node_lookup_tool(
+    input: RigReadNodeLookupInput,
+    board_summary: &RigC4BoardSummary,
+) -> Result<RigReadNodeLookupResult, String> {
+    let node_id = normalize_read_tool_lookup_id(RigReadToolName::NodeLookup, "nodeId", &input.node_id)?;
+    let node = board_summary
+        .nodes
+        .iter()
+        .find(|candidate| candidate.id == node_id)
+        .cloned();
+
+    let Some(node) = node else {
+        return Ok(RigReadNodeLookupResult {
+            found: false,
+            node: None,
+            relationship_count: 0,
+            connected_edges: Vec::new(),
+        });
+    };
+
+    let mut connected_edges = board_summary
+        .edges
+        .iter()
+        .filter(|edge| edge.source_id == node.id || edge.target_id == node.id)
+        .map(|edge| {
+            execute_read_edge_lookup_tool(
+                RigReadEdgeLookupInput {
+                    edge_id: edge.id.clone(),
+                },
+                board_summary,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter_map(|lookup| lookup.edge)
+        .collect::<Vec<_>>();
+    connected_edges.sort_by(|left, right| left.id.cmp(&right.id));
+
+    Ok(RigReadNodeLookupResult {
+        found: true,
+        node: Some(node),
+        relationship_count: connected_edges.len() as i64,
+        connected_edges,
+    })
+}
+
+fn execute_rig_read_tool(input: RigReadToolRequest) -> Result<RigReadToolResponse, String> {
+    match input.tool {
+        RigReadToolName::BoardSummary => {
+            let decoded = serde_json::from_value::<RigReadBoardSummaryInput>(input.input)
+                .map_err(|error| format!("Invalid board_summary input payload: {error}"))?;
+            let result = execute_read_board_summary_tool(decoded, &input.board_summary);
+            let result = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize board_summary result: {error}"))?;
+            Ok(RigReadToolResponse {
+                tool: RigReadToolName::BoardSummary,
+                result,
+            })
+        }
+        RigReadToolName::NodeLookup => {
+            let decoded = serde_json::from_value::<RigReadNodeLookupInput>(input.input)
+                .map_err(|error| format!("Invalid node_lookup input payload: {error}"))?;
+            let result = execute_read_node_lookup_tool(decoded, &input.board_summary)?;
+            let result = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize node_lookup result: {error}"))?;
+            Ok(RigReadToolResponse {
+                tool: RigReadToolName::NodeLookup,
+                result,
+            })
+        }
+        RigReadToolName::EdgeLookup => {
+            let decoded = serde_json::from_value::<RigReadEdgeLookupInput>(input.input)
+                .map_err(|error| format!("Invalid edge_lookup input payload: {error}"))?;
+            let result = execute_read_edge_lookup_tool(decoded, &input.board_summary)?;
+            let result = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize edge_lookup result: {error}"))?;
+            Ok(RigReadToolResponse {
+                tool: RigReadToolName::EdgeLookup,
+                result,
+            })
+        }
+    }
+}
+
 fn validate_c4_diagram_plan(proposal: &RigC4DiagramProposalPayload) -> Result<(), String> {
     if proposal.summary.trim().is_empty() {
         return Err("Proposal summary cannot be empty.".to_string());
@@ -742,6 +986,13 @@ pub async fn rig_agent_secret_status(
                 .collect(),
         },
     })
+}
+
+#[tauri::command]
+pub async fn rig_agent_run_read_tool(
+    input: RigReadToolRequest,
+) -> Result<RigReadToolResponse, String> {
+    execute_rig_read_tool(input)
 }
 
 #[tauri::command]
@@ -1004,5 +1255,81 @@ mod tests {
 
         let error = validate_c4_board_review(&review).expect_err("review should be invalid");
         assert!(error.contains("recommendedChanges"));
+    }
+
+    fn create_board_summary() -> RigC4BoardSummary {
+        RigC4BoardSummary {
+            diagram_id: Some("diagram-1".to_string()),
+            diagram_name: Some("Payments Context".to_string()),
+            node_count: 2,
+            edge_count: 1,
+            nodes: vec![
+                RigC4BoardSummaryNode {
+                    id: "person-customer".to_string(),
+                    label: "Customer".to_string(),
+                    node_type: RigC4ProposalNodeType::Person,
+                    description: None,
+                    technology: None,
+                    team_ownership: None,
+                },
+                RigC4BoardSummaryNode {
+                    id: "system-payments".to_string(),
+                    label: "Payments API".to_string(),
+                    node_type: RigC4ProposalNodeType::System,
+                    description: Some("Accepts payment requests".to_string()),
+                    technology: Some("Rust".to_string()),
+                    team_ownership: Some("Core Platform".to_string()),
+                },
+            ],
+            edges: vec![RigC4BoardSummaryEdge {
+                id: "edge-customer-payments".to_string(),
+                source_id: "person-customer".to_string(),
+                target_id: "system-payments".to_string(),
+                source_label: "Customer".to_string(),
+                target_label: "Payments API".to_string(),
+                label: Some("uses".to_string()),
+            }],
+        }
+    }
+
+    #[test]
+    fn read_board_summary_tool_returns_sorted_ownership_and_snapshot() {
+        let board_summary = create_board_summary();
+        let result = execute_read_board_summary_tool(RigReadBoardSummaryInput::default(), &board_summary);
+
+        assert_eq!(result.node_count, 2);
+        assert_eq!(result.edge_count, 1);
+        assert_eq!(result.ownership_teams, vec!["Core Platform".to_string()]);
+        assert_eq!(result.nodes[0].label, "Customer");
+    }
+
+    #[test]
+    fn read_node_lookup_tool_returns_connected_edges() {
+        let board_summary = create_board_summary();
+        let result = execute_read_node_lookup_tool(
+            RigReadNodeLookupInput {
+                node_id: "system-payments".to_string(),
+            },
+            &board_summary,
+        )
+        .expect("node lookup should succeed");
+
+        assert!(result.found);
+        assert_eq!(result.relationship_count, 1);
+        assert_eq!(result.connected_edges[0].id, "edge-customer-payments");
+    }
+
+    #[test]
+    fn read_tool_rejects_empty_lookup_identifiers() {
+        let board_summary = create_board_summary();
+        let error = execute_read_edge_lookup_tool(
+            RigReadEdgeLookupInput {
+                edge_id: "   ".to_string(),
+            },
+            &board_summary,
+        )
+        .expect_err("edge lookup should reject blank ids");
+
+        assert!(error.contains("edgeId"));
     }
 }

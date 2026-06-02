@@ -1,5 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Data, Effect, Schema } from "effect";
+import {
+  RigC4BoardNodeTypeSchema,
+  RigReadBoardSummaryResultSchema,
+  RigReadEdgeLookupResultSchema,
+  RigReadNodeLookupResultSchema,
+  RigReadToolNameSchema,
+  type RigC4BoardEdge,
+  type RigC4BoardNode,
+  type RigC4BoardNodeType,
+  type RigC4BoardSummary,
+  type RigReadToolInputByName,
+  type RigReadToolName,
+  type RigReadToolResultByName,
+} from "./agent-tools/contracts";
 
 export type AgentRunStage = "invoke" | "persist" | "complete";
 
@@ -30,42 +44,8 @@ const RigHelloResponseSchema = Schema.Struct({
 
 export type RigHelloResponse = Schema.Schema.Type<typeof RigHelloResponseSchema>;
 
-const RigC4ProposalNodeTypeSchema = Schema.Literal(
-  "person",
-  "system",
-  "externalSystem",
-  "container",
-  "component",
-);
-export type RigC4ProposalNodeType = Schema.Schema.Type<typeof RigC4ProposalNodeTypeSchema>;
-export type RigC4BoardNodeType = RigC4ProposalNodeType;
-
-const RigC4BoardNodeSchema = Schema.Struct({
-  id: Schema.String,
-  label: Schema.String,
-  nodeType: RigC4ProposalNodeTypeSchema,
-  description: Schema.NullOr(Schema.String),
-  technology: Schema.NullOr(Schema.String),
-  teamOwnership: Schema.NullOr(Schema.String),
-});
-
-const RigC4BoardEdgeSchema = Schema.Struct({
-  id: Schema.String,
-  sourceId: Schema.String,
-  targetId: Schema.String,
-  sourceLabel: Schema.String,
-  targetLabel: Schema.String,
-  label: Schema.NullOr(Schema.String),
-});
-
-const RigC4BoardSummarySchema = Schema.Struct({
-  diagramId: Schema.NullOr(Schema.String),
-  diagramName: Schema.NullOr(Schema.String),
-  nodeCount: Schema.Number,
-  edgeCount: Schema.Number,
-  nodes: Schema.Array(RigC4BoardNodeSchema),
-  edges: Schema.Array(RigC4BoardEdgeSchema),
-});
+export const RigC4ProposalNodeTypeSchema = RigC4BoardNodeTypeSchema;
+export type RigC4ProposalNodeType = RigC4BoardNodeType;
 
 const RigC4ProposalNodeSchema = Schema.Struct({
   key: Schema.String,
@@ -94,9 +74,8 @@ const RigC4DiagramProposalSchema = Schema.Struct({
 export type RigC4ProposalNode = Schema.Schema.Type<typeof RigC4ProposalNodeSchema>;
 export type RigC4ProposalEdge = Schema.Schema.Type<typeof RigC4ProposalEdgeSchema>;
 export type RigC4DiagramProposal = Schema.Schema.Type<typeof RigC4DiagramProposalSchema>;
-export type RigC4BoardNode = Schema.Schema.Type<typeof RigC4BoardNodeSchema>;
-export type RigC4BoardEdge = Schema.Schema.Type<typeof RigC4BoardEdgeSchema>;
-export type RigC4BoardSummary = Schema.Schema.Type<typeof RigC4BoardSummarySchema>;
+export type { RigC4BoardNode, RigC4BoardEdge, RigC4BoardSummary, RigC4BoardNodeType };
+export type { RigReadToolName, RigReadToolInputByName, RigReadToolResultByName };
 
 const RigC4ReviewPrioritySchema = Schema.Literal("low", "medium", "high");
 export type RigC4ReviewPriority = Schema.Schema.Type<typeof RigC4ReviewPrioritySchema>;
@@ -169,6 +148,13 @@ export interface RigC4BoardReviewInput {
   readonly model?: string;
   readonly maxTokens?: number;
 }
+
+const RigReadToolResponseSchema = Schema.Struct({
+  tool: RigReadToolNameSchema,
+  result: Schema.Unknown,
+});
+
+type RigReadToolResponse = Schema.Schema.Type<typeof RigReadToolResponseSchema>;
 
 const DEFAULT_CONFIG_RECOMMENDED_ACTION = "Configure the AI agent in Settings and retry.";
 const DEFAULT_RUNTIME_RECOMMENDED_ACTION = "Retry the request. If it keeps failing, inspect provider and runtime logs.";
@@ -399,6 +385,44 @@ const decodeRigSecretStatusResponse = (payload: unknown): RigSecretStatusRespons
   }
 };
 
+const decodeRigReadToolResponse = (payload: unknown): RigReadToolResponse => {
+  try {
+    return Schema.decodeUnknownSync(RigReadToolResponseSchema)(payload);
+  } catch (cause) {
+    throw buildAgentRuntimeError({
+      message: "Invalid rig read tool response payload",
+      stage: "complete",
+      recoverable: false,
+      recommendedAction: "Check the Rig read tool response contract.",
+      cause,
+    });
+  }
+};
+
+const decodeRigReadToolResult = <TTool extends RigReadToolName>(
+  tool: TTool,
+  payload: unknown,
+): RigReadToolResultByName[TTool] => {
+  try {
+    switch (tool) {
+      case "board_summary":
+        return Schema.decodeUnknownSync(RigReadBoardSummaryResultSchema)(payload) as RigReadToolResultByName[TTool];
+      case "node_lookup":
+        return Schema.decodeUnknownSync(RigReadNodeLookupResultSchema)(payload) as RigReadToolResultByName[TTool];
+      case "edge_lookup":
+        return Schema.decodeUnknownSync(RigReadEdgeLookupResultSchema)(payload) as RigReadToolResultByName[TTool];
+    }
+  } catch (cause) {
+    throw buildAgentRuntimeError({
+      message: `Invalid rig read tool result payload for ${tool}`,
+      stage: "complete",
+      recoverable: false,
+      recommendedAction: "Check the Rig read tool contracts and output schema alignment.",
+      cause,
+    });
+  }
+};
+
 export const runRigHello = (
   input: RigHelloInput,
 ): Effect.Effect<RigHelloResponse, AgentError> =>
@@ -454,6 +478,45 @@ export const reviewRigC4Board = (
 
       return classifyAgentInvokeFailure({
         message: `Rig C4 board review request failed: ${toCauseMessage(cause)}`,
+        cause,
+      });
+    },
+  });
+
+export const runRigReadTool = <TTool extends RigReadToolName>(
+  tool: TTool,
+  input: RigReadToolInputByName[TTool],
+  boardSummary: RigC4BoardSummary,
+): Effect.Effect<RigReadToolResultByName[TTool], AgentError> =>
+  Effect.tryPromise({
+    try: async () => {
+      const payload = await invoke("rig_agent_run_read_tool", {
+        input: {
+          tool,
+          input,
+          boardSummary,
+        },
+      });
+      const response = decodeRigReadToolResponse(payload);
+      if (response.tool !== tool) {
+        throw buildAgentRuntimeError({
+          message: `Rig read tool response mismatch: expected ${tool} but received ${response.tool}`,
+          stage: "complete",
+          recoverable: false,
+          recommendedAction: "Check the Rig read tool dispatcher response envelope.",
+        });
+      }
+      return decodeRigReadToolResult(tool, response.result);
+    },
+    catch: (cause) => {
+      if (isAgentError(cause)) {
+        return cause;
+      }
+
+      return buildAgentRuntimeError({
+        message: `Rig read tool request failed for ${tool}: ${toCauseMessage(cause)}`,
+        stage: "invoke",
+        recommendedAction: "Retry the read tool request. If it keeps failing, inspect the board snapshot and tool contract.",
         cause,
       });
     },

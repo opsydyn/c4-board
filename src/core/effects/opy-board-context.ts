@@ -1,4 +1,10 @@
 import type { RigC4BoardNode, RigC4BoardSummary } from "./ai-agent.runtime";
+import type {
+  RigReadBoardSummaryResult,
+  RigReadEdgeLookupResult,
+  RigReadNodeLookupResult,
+} from "./agent-tools/contracts";
+import { executeRigReadTool } from "./agent-tools/read-tools";
 
 export interface OpyBoardContextNodeSnapshot {
   readonly id: string;
@@ -40,30 +46,16 @@ const normalizeLabel = (value: string | null | undefined): string => {
   return trimmed.length > 0 ? trimmed : "UNTITLED BOARD";
 };
 
-const countRelationshipsByNodeId = (
-  boardSummary: RigC4BoardSummary,
-): ReadonlyMap<string, number> => {
-  const counts = new Map<string, number>();
-
-  for (const edge of boardSummary.edges) {
-    counts.set(edge.sourceId, (counts.get(edge.sourceId) ?? 0) + 1);
-    counts.set(edge.targetId, (counts.get(edge.targetId) ?? 0) + 1);
-  }
-
-  return counts;
-};
-
 const toNodeSnapshot = (
-  node: RigC4BoardNode,
-  relationshipCounts: ReadonlyMap<string, number>,
+  lookup: RigReadNodeLookupResult,
 ): OpyBoardContextNodeSnapshot => ({
-  id: node.id,
-  label: node.label,
-  nodeType: node.nodeType,
-  relationshipCount: relationshipCounts.get(node.id) ?? 0,
-  teamOwnership: node.teamOwnership,
-  description: node.description,
-  technology: node.technology,
+  id: lookup.node!.id,
+  label: lookup.node!.label,
+  nodeType: lookup.node!.nodeType,
+  relationshipCount: lookup.relationshipCount,
+  teamOwnership: lookup.node!.teamOwnership,
+  description: lookup.node!.description,
+  technology: lookup.node!.technology,
 });
 
 const formatNodeScopeLabel = (prefix: string, node: OpyBoardContextNodeSnapshot): string =>
@@ -84,23 +76,22 @@ const formatNodeScopeHint = (
 };
 
 const formatBoardScopeHint = (
-  boardSummary: RigC4BoardSummary,
-  ownershipTeamCount: number,
+  boardSummary: RigReadBoardSummaryResult,
 ): string => {
   const metadata = [
     `${boardSummary.nodeCount} nodes`,
     `${boardSummary.edgeCount} edges`,
-    ownershipTeamCount > 0 ? `${ownershipTeamCount} teams` : null,
+    boardSummary.ownershipTeams.length > 0 ? `${boardSummary.ownershipTeams.length} teams` : null,
   ].filter((value): value is string => value !== null);
 
   return metadata.join(" · ");
 };
 
 const buildPromptContext = (
-  boardSummary: RigC4BoardSummary,
+  boardSummary: RigReadBoardSummaryResult,
   selectedNode: OpyBoardContextNodeSnapshot | null,
   hotspotNode: OpyBoardContextNodeSnapshot | null,
-  ownershipTeamCount: number,
+  selectedEdge: RigReadEdgeLookupResult | null,
 ): string => {
   const parts = [
     `DOMAIN=C4`,
@@ -108,13 +99,20 @@ const buildPromptContext = (
     `NAME=${normalizeLabel(boardSummary.diagramName)}`,
     `NODES=${boardSummary.nodeCount}`,
     `EDGES=${boardSummary.edgeCount}`,
-    `TEAMS=${ownershipTeamCount}`,
+    `TEAMS=${boardSummary.ownershipTeams.length}`,
   ];
 
   if (selectedNode) {
     parts.push(
       `SELECTED=${selectedNode.nodeType.toUpperCase()} ${selectedNode.label}`,
       `SELECTED_LINKS=${selectedNode.relationshipCount}`,
+    );
+  }
+
+  if (selectedEdge?.found && selectedEdge.edge) {
+    parts.push(
+      `SELECTED_EDGE=${selectedEdge.edge.sourceLabel}->${selectedEdge.edge.targetLabel}`,
+      `SELECTED_EDGE_LABEL=${selectedEdge.edge.label ?? "(no label)"}`,
     );
   }
 
@@ -136,27 +134,31 @@ export const buildOpyBoardContextRegistry = (
     return null;
   }
 
-  const relationshipCounts = countRelationshipsByNodeId(boardSummary);
-  const ownershipTeamCount = new Set(
-    boardSummary.nodes
-      .map((node) => node.teamOwnership?.trim())
-      .filter((value): value is string => Boolean(value)),
-  ).size;
-
-  const nodesById = new Map(
-    boardSummary.nodes.map((node) => [node.id, toNodeSnapshot(node, relationshipCounts)] as const),
-  );
-  const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) ?? null : null;
-  const hotspotNode = [...nodesById.values()]
-    .sort((left, right) => right.relationshipCount - left.relationshipCount || left.label.localeCompare(right.label))[0]
+  const boardSummaryResult = executeRigReadTool("board_summary", {}, boardSummary);
+  const selectedNodeLookup = selectedNodeId
+    ? executeRigReadTool("node_lookup", { nodeId: selectedNodeId }, boardSummary)
+    : null;
+  const selectedNode = selectedNodeLookup?.found ? toNodeSnapshot(selectedNodeLookup) : null;
+  const selectedEdge = selectedNodeLookup?.found && selectedNodeLookup.connectedEdges[0]
+    ? executeRigReadTool(
+      "edge_lookup",
+      { edgeId: selectedNodeLookup.connectedEdges[0].id },
+      boardSummary,
+    )
+    : null;
+  const hotspotNodeLookup = boardSummaryResult.nodes
+    .map((node) => executeRigReadTool("node_lookup", { nodeId: node.id }, boardSummary))
+    .filter((lookup): lookup is RigReadNodeLookupResult => lookup.found)
+    .sort((left, right) => right.relationshipCount - left.relationshipCount || left.node!.label.localeCompare(right.node!.label))[0]
     ?? null;
+  const hotspotNode = hotspotNodeLookup?.found ? toNodeSnapshot(hotspotNodeLookup) : null;
 
   const scopes: OpyBoardContextScope[] = [
     {
       id: "whole-board",
-      label: `BOARD · ${normalizeLabel(boardSummary.diagramName)}`,
-      hint: formatBoardScopeHint(boardSummary, ownershipTeamCount),
-      focus: `Review the whole board ${normalizeLabel(boardSummary.diagramName)} and its systemic structure.`,
+      label: `BOARD · ${normalizeLabel(boardSummaryResult.diagramName)}`,
+      hint: formatBoardScopeHint(boardSummaryResult),
+      focus: `Review the whole board ${normalizeLabel(boardSummaryResult.diagramName)} and its systemic structure.`,
       node: null,
     },
   ];
@@ -182,14 +184,14 @@ export const buildOpyBoardContextRegistry = (
   }
 
   return {
-    diagramId: boardSummary.diagramId,
-    diagramName: normalizeLabel(boardSummary.diagramName),
-    nodeCount: boardSummary.nodeCount,
-    edgeCount: boardSummary.edgeCount,
-    ownershipTeamCount,
+    diagramId: boardSummaryResult.diagramId,
+    diagramName: normalizeLabel(boardSummaryResult.diagramName),
+    nodeCount: boardSummaryResult.nodeCount,
+    edgeCount: boardSummaryResult.edgeCount,
+    ownershipTeamCount: boardSummaryResult.ownershipTeams.length,
     selectedNode,
     hotspotNode,
     scopes,
-    promptContext: buildPromptContext(boardSummary, selectedNode, hotspotNode, ownershipTeamCount),
+    promptContext: buildPromptContext(boardSummaryResult, selectedNode, hotspotNode, selectedEdge),
   };
 };

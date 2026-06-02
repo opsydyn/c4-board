@@ -13,7 +13,8 @@ mod load_test;
 
 use ai_agent::{
     rig_agent_clear_openai_api_key, rig_agent_hello, rig_agent_plan_c4_diagram,
-    rig_agent_review_c4_board, rig_agent_secret_status, rig_agent_store_openai_api_key,
+    rig_agent_review_c4_board, rig_agent_run_read_tool, rig_agent_secret_status,
+    rig_agent_store_openai_api_key,
 };
 use azure_sync::{azure_graph_query, azure_graph_validate_auth};
 use db::{db_runtime_probe, sql_execute, sql_query};
@@ -536,6 +537,7 @@ pub fn run() {
             rig_agent_hello,
             rig_agent_plan_c4_diagram,
             rig_agent_review_c4_board,
+            rig_agent_run_read_tool,
             rig_agent_secret_status,
             rig_agent_store_openai_api_key
         ])
