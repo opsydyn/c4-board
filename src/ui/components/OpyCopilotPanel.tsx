@@ -1,12 +1,20 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
 import {
   assembleRigAgentContext,
   formatRigAgentCitationBlock,
   type RigAgentContextBundle,
 } from "../../core/effects/agent-context";
+import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
+import { summarizeRigToolPolicy } from "../../core/effects/agent-policy";
+import type {
+  RigApplyLayoutValidationSummary,
+  RigCreateEdgesValidationSummary,
+  RigCreateNodesValidationSummary,
+  RigUpdateNodesValidationSummary,
+  RigValidatedMutationAction,
+} from "../../core/effects/agent-tools/mutation-tools";
 import {
   formatAgentError,
   getRigSecretStatus,
@@ -32,23 +40,15 @@ import {
   type OpyProposalDiffStatus,
   summarizeGroundedProposalDiff,
 } from "../../core/effects/opy-c4-proposals";
-import { summarizeRigToolPolicy } from "../../core/effects/agent-policy";
-import type {
-  RigApplyLayoutValidationSummary,
-  RigCreateEdgesValidationSummary,
-  RigCreateNodesValidationSummary,
-  RigUpdateNodesValidationSummary,
-  RigValidatedMutationAction,
-} from "../../core/effects/agent-tools/mutation-tools";
 import {
   appendOpyChatMessage,
   createOpyAgentRun,
   createOpyChatSession,
   finalizeInterruptedOpyAgentRuns,
-  listOpyDiagramProposals,
   listOpyAgentRuns,
   listOpyChatMessages,
   listOpyChatSessions,
+  listOpyDiagramProposals,
   type OpyAgentRun,
   type OpyAgentRunIntent,
   type OpyChatMessage,
@@ -57,8 +57,8 @@ import {
   type OpyPersistedDiagramProposal,
   type OpyPlanDecisionStatus,
   renameOpyChatSession,
-  upsertOpyDiagramProposal,
   updateOpyAgentRun,
+  upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
 import type { AiActionMode } from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
@@ -75,6 +75,8 @@ export interface OpyBoardAddNodeAction {
 
 export interface OpyBoardApplyC4ProposalAction {
   readonly kind: "apply-c4-proposal";
+  readonly sessionId: string;
+  readonly proposalRespondedAtMs: number;
   readonly proposal: RigC4DiagramProposal;
 }
 
@@ -590,7 +592,8 @@ export function OpyCopilotPanel({
     [activeGroundedProposal],
   );
   const activeMutationPlan = useMemo(
-    () => activeDiagramProposal ? buildRigMutationPlanDiff(activeDiagramProposal.proposal, activeGroundedProposal) : null,
+    () =>
+      activeDiagramProposal ? buildRigMutationPlanDiff(activeDiagramProposal.proposal, activeGroundedProposal) : null,
     [activeDiagramProposal, activeGroundedProposal],
   );
   const activePlanDecision = useMemo(() => {
@@ -1630,6 +1633,8 @@ export function OpyCopilotPanel({
     try {
       const actionResult = await onApplyBoardAction({
         kind: "apply-c4-proposal",
+        sessionId,
+        proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
         proposal: activeDiagramProposal.proposal,
       });
       await appendAndPersistMessage(sessionId, "assistant", actionResult);
@@ -1896,7 +1901,7 @@ export function OpyCopilotPanel({
             const messageBody = parsedDiagnostics?.body ?? message.content;
             const hasDiagnostics = Boolean(
               parsedDiagnostics
-              && (parsedDiagnostics.confidence !== null || parsedDiagnostics.citations.length > 0),
+                && (parsedDiagnostics.confidence !== null || parsedDiagnostics.citations.length > 0),
             );
 
             return (
@@ -2168,7 +2173,9 @@ export function OpyCopilotPanel({
                     <article key={issue.id} className={styles.opyCopilotProposalItem}>
                       <div className={styles.opyCopilotProposalItemMeta}>
                         <span>{issue.kind.toUpperCase()}</span>
-                        <span className={`${styles.opyCopilotProposalBadge} ${styles.opyCopilotProposalBadgeAmbiguous}`}>
+                        <span
+                          className={`${styles.opyCopilotProposalBadge} ${styles.opyCopilotProposalBadgeAmbiguous}`}
+                        >
                           BLOCKED
                         </span>
                       </div>
@@ -2367,13 +2374,11 @@ export function OpyCopilotPanel({
                       onClick={() => {
                         void handleApplyActiveProposal();
                       }}
-                      disabled={
-                        isRunning
+                      disabled={isRunning
                         || !activeProposalSummary.canApply
                         || !activeProposalSummary.hasChanges
                         || !activeMutationPlan.canApprove
-                        || activePlanDecision.status !== "approved"
-                      }
+                        || activePlanDecision.status !== "approved"}
                     >
                       {isRunning ? "APPLYING..." : "APPLY PROPOSAL"}
                     </button>

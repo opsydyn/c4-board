@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { RigAgentContextBundle, RigAgentCitation } from "./agent-context";
 import type { RigC4DiagramProposal } from "./ai-agent.runtime";
+import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService } from "./database.base";
 
 export type OpyChatRole = "assistant" | "user" | "system";
@@ -50,6 +51,22 @@ export interface OpyPersistedDiagramProposal {
   readonly context: RigAgentContextBundle;
   readonly decisionStatus: OpyPlanDecisionStatus;
   readonly decidedAt: number;
+}
+
+export type OpyAgentCheckpointType = "pre-apply";
+
+export interface OpyAgentCheckpointSnapshot extends SaveDiagramInput {
+  readonly savedAt: number | null;
+}
+
+export interface OpyAgentCheckpoint {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly diagramId: string;
+  readonly proposalRespondedAtMs: number;
+  readonly checkpointType: OpyAgentCheckpointType;
+  readonly snapshot: OpyAgentCheckpointSnapshot;
+  readonly createdAt: number;
 }
 
 export interface ListOpyChatSessionsInput {
@@ -187,6 +204,20 @@ const LIST_DIAGRAM_PROPOSALS_SQL = `
   ORDER BY decided_at DESC, proposal_responded_at DESC
 `;
 
+const LIST_AGENT_CHECKPOINTS_SQL = `
+  SELECT
+    id,
+    session_id AS sessionId,
+    diagram_id AS diagramId,
+    proposal_responded_at AS proposalRespondedAtMs,
+    checkpoint_type AS checkpointType,
+    snapshot_json AS snapshotJson,
+    created_at AS createdAt
+  FROM opy_agent_checkpoints
+  WHERE session_id = ?
+  ORDER BY created_at DESC
+`;
+
 const LIST_ACTIVE_RUNS_SQL = `
   SELECT
     id,
@@ -259,6 +290,19 @@ const UPSERT_DIAGRAM_PROPOSAL_SQL = `
     decided_at = excluded.decided_at
 `;
 
+const INSERT_AGENT_CHECKPOINT_SQL = `
+  INSERT INTO opy_agent_checkpoints (
+    id,
+    session_id,
+    diagram_id,
+    proposal_responded_at,
+    checkpoint_type,
+    snapshot_json,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`;
+
 const isOpyChatRole = (value: unknown): value is OpyChatRole =>
   value === "assistant" || value === "user" || value === "system";
 
@@ -275,6 +319,9 @@ const isOpyAgentRunStatus = (value: unknown): value is OpyAgentRunStatus =>
 
 const isOpyPlanDecisionStatus = (value: unknown): value is OpyPlanDecisionStatus =>
   value === "pending" || value === "approved" || value === "rejected";
+
+const isOpyAgentCheckpointType = (value: unknown): value is OpyAgentCheckpointType =>
+  value === "pre-apply";
 
 const toTimestamp = (value: unknown, fallback = Date.now()): number =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -322,6 +369,16 @@ type DiagramProposalRow = {
   contextJson: string;
   decisionStatus: string;
   decidedAt: number;
+};
+
+type AgentCheckpointRow = {
+  id: string;
+  sessionId: string;
+  diagramId: string;
+  proposalRespondedAtMs: number;
+  checkpointType: string;
+  snapshotJson: string;
+  createdAt: number;
 };
 
 const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
@@ -400,6 +457,20 @@ const isRigC4DiagramProposal = (value: unknown): value is RigC4DiagramProposal =
     && Number.isFinite(candidate.respondedAtMs);
 };
 
+const isOpyAgentCheckpointSnapshot = (value: unknown): value is OpyAgentCheckpointSnapshot => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.id === "string"
+    && typeof candidate.name === "string"
+    && (candidate.description === undefined || candidate.description === null || typeof candidate.description === "string")
+    && Array.isArray(candidate.nodes)
+    && Array.isArray(candidate.edges)
+    && (candidate.savedAt === null || (typeof candidate.savedAt === "number" && Number.isFinite(candidate.savedAt)));
+};
+
 const decodeSessionRow = (row: SessionRow): OpyChatSession => ({
   id: row.id,
   title: row.title,
@@ -465,6 +536,27 @@ const decodeDiagramProposalRow = (row: DiagramProposalRow): OpyPersistedDiagramP
     context,
     decisionStatus: row.decisionStatus,
     decidedAt: toTimestamp(row.decidedAt, proposal.respondedAtMs),
+  };
+};
+
+const decodeAgentCheckpointRow = (row: AgentCheckpointRow): OpyAgentCheckpoint | null => {
+  if (!isOpyAgentCheckpointType(row.checkpointType)) {
+    return null;
+  }
+
+  const snapshot = parseJsonObject(row.snapshotJson);
+  if (!isOpyAgentCheckpointSnapshot(snapshot)) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    diagramId: row.diagramId,
+    proposalRespondedAtMs: toTimestamp(row.proposalRespondedAtMs),
+    checkpointType: row.checkpointType,
+    snapshot,
+    createdAt: toTimestamp(row.createdAt),
   };
 };
 
@@ -553,6 +645,16 @@ export const listOpyDiagramProposals = (sessionId: string) =>
       .sort((left, right) => right.proposal.respondedAtMs - left.proposal.respondedAtMs);
   });
 
+export const listOpyAgentCheckpoints = (sessionId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentCheckpointRow>(LIST_AGENT_CHECKPOINTS_SQL, [sessionId]);
+    return rows
+      .map(decodeAgentCheckpointRow)
+      .filter((row): row is OpyAgentCheckpoint => row !== null)
+      .sort((left, right) => right.createdAt - left.createdAt);
+  });
+
 export const createOpyAgentRun = (run: OpyAgentRun) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -585,6 +687,22 @@ export const upsertOpyDiagramProposal = (proposal: OpyPersistedDiagramProposal) 
     ]);
 
     return proposal;
+  });
+
+export const createOpyAgentCheckpoint = (checkpoint: OpyAgentCheckpoint) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(INSERT_AGENT_CHECKPOINT_SQL, [
+      checkpoint.id,
+      checkpoint.sessionId,
+      checkpoint.diagramId,
+      checkpoint.proposalRespondedAtMs,
+      checkpoint.checkpointType,
+      JSON.stringify(checkpoint.snapshot),
+      checkpoint.createdAt,
+    ]);
+
+    return checkpoint;
   });
 
 export const updateOpyAgentRun = (run: OpyAgentRun) =>

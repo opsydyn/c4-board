@@ -32,6 +32,11 @@ import { waitFor } from "xstate";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import {
+  buildOpyCheckpointRecord,
+  buildOpyCheckpointSnapshot,
+  checkpointSnapshotToLoadedDiagram,
+} from "../../core/effects/agent-apply.runtime";
+import {
   createNewDiagram,
   listAllDiagrams,
   loadDiagram,
@@ -43,6 +48,7 @@ import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../.
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import type { LayoutPresetName } from "../../core/effects/layout";
+import { createOpyAgentCheckpoint } from "../../core/effects/opy-chat.persistence";
 import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
@@ -796,6 +802,26 @@ export function C4CanvasContainer() {
     [cancelAutosave, createSaveFingerprint, sendSaveEvent],
   );
 
+  const restoreCheckpointSnapshot = useCallback(
+    (snapshot: ReturnType<typeof buildOpyCheckpointSnapshot>) => {
+      const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
+        type: "LOAD_DIAGRAM_SUCCESS",
+        diagram: checkpointSnapshotToLoadedDiagram(snapshot),
+      };
+
+      send(loadEvent);
+      seedPersistedFingerprintFromDiagram({
+        id: snapshot.id,
+        name: snapshot.name,
+        description: snapshot.description,
+        nodes: snapshot.nodes,
+        edges: snapshot.edges,
+        ...(snapshot.savedAt !== null ? { savedAt: snapshot.savedAt } : {}),
+      });
+    },
+    [seedPersistedFingerprintFromDiagram, send],
+  );
+
   // Initialize: Load most recent diagram or create new one
   useEffect(() => {
     const initializeDiagram = async () => {
@@ -1115,6 +1141,22 @@ export function C4CanvasContainer() {
           return "NO CHANGES APPLIED:: PROPOSAL ALREADY MATCHES THE CURRENT BOARD.";
         }
 
+        const checkpointSnapshot = buildOpyCheckpointSnapshot({
+          diagramId: currentDiagramId,
+          diagramName: state.context.diagramName,
+          diagramDescription: state.context.diagramDescription,
+          nodes: state.context.nodes,
+          edges: state.context.edges,
+          savedAt: saveSnapshot.context.lastSavedAt ?? state.context.lastSaved ?? null,
+        });
+        const checkpointRecord = buildOpyCheckpointRecord({
+          sessionId: action.sessionId,
+          diagramId: currentDiagramId,
+          proposalRespondedAtMs: action.proposalRespondedAtMs,
+          snapshot: checkpointSnapshot,
+        });
+        await runEffect(createOpyAgentCheckpoint(checkpointRecord));
+
         let nextNodes = [...state.context.nodes];
         let nextEdges = [...state.context.edges];
         let nextNodeCounter = state.context.nodeCounter;
@@ -1219,26 +1261,42 @@ export function C4CanvasContainer() {
               : {}),
           },
         };
-        send(loadEvent);
+        let didHydrateMutatedBoard = false;
 
-        const didSave = await requestSave("manual", {
-          overrideInput: saveInput,
-        });
+        try {
+          cancelAutosave();
+          send(loadEvent);
+          didHydrateMutatedBoard = true;
 
-        if (!didSave) {
-          const saveError = saveActorRef.getSnapshot().context.errorMessage;
-          const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
-          throw new Error(`OPY proposal apply save failed: ${detail}`);
+          const didSave = await requestSave("manual", {
+            overrideInput: saveInput,
+          });
+
+          if (!didSave) {
+            const saveError = saveActorRef.getSnapshot().context.errorMessage;
+            const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+            throw new Error(`OPY proposal apply save failed: ${detail}`);
+          }
+
+          cancelAutosave();
+        } catch (error) {
+          if (didHydrateMutatedBoard) {
+            restoreCheckpointSnapshot(checkpointSnapshot);
+          }
+          throw error;
         }
 
-        return `PROPOSAL APPLIED:: +${summary.newNodes} NODE(S) · +${summary.newEdges} EDGE(S) · REUSED ${summary.existingNodes} NODE(S) / ${summary.existingEdges} EDGE(S).`;
+        return `PROPOSAL APPLIED:: +${summary.newNodes} NODE(S) · +${summary.newEdges} EDGE(S) · REUSED ${summary.existingNodes} NODE(S) / ${summary.existingEdges} EDGE(S) · CHECKPOINT::${checkpointRecord.id.slice(0, 8)}.`;
       }
 
       return "NO ACTION APPLIED.";
     },
     [
       flushPendingInlineEdits,
+      cancelAutosave,
       requestSave,
+      restoreCheckpointSnapshot,
+      runEffect,
       saveActorRef,
       saveSnapshot.context.lastSavedAt,
       send,

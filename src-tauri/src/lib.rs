@@ -518,6 +518,12 @@ pub fn run() {
             sql: include_str!("../migrations/022_create_opy_diagram_proposals.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 23,
+            description: "create_opy_agent_checkpoints",
+            sql: include_str!("../migrations/023_create_opy_agent_checkpoints.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
