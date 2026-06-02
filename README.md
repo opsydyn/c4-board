@@ -44,3 +44,14 @@ Desktop release install notes live in [docs/release-installation.md](docs/releas
 If you are testing an unsigned macOS build and Gatekeeper blocks launch with "developer cannot be verified", see the macOS section there for the local quarantine-removal workaround.
 
 Maintainers: Apple signing and notarization setup is documented in [.github/apple-signing.md](.github/apple-signing.md).
+
+## OPY
+
+OPY documentation lives in [docs/opy/README.md](docs/opy/README.md).
+
+That handbook covers:
+
+- floating widget modes, snapping, and orb controls
+- commands like `/add`, `/diagram`, and `/review`
+- action modes and policy boundaries
+- grounded diagnostics, citations, plans, apply, checkpoints, and restore

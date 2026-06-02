@@ -925,17 +925,50 @@ globalStyle(`${opyCopilotDiagnosticsSummary}::-webkit-details-marker`, {
 export const opyCopilotInput = style({
   display: "flex",
   flexDirection: "column",
+  alignItems: "stretch",
+  width: "100%",
+  maxWidth: "100%",
   gap: theme.spacing["2"],
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "rgba(10, 16, 13, 0.92)",
   padding: theme.spacing["2"],
 });
 
+globalStyle(`${opyCopilotInput} *`, {
+  boxSizing: "border-box",
+});
+
+globalStyle(`${opyCopilotInput} > *`, {
+  width: "100%",
+  maxWidth: "100%",
+});
+
+globalStyle(`${opyCopilotInput} form`, {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "stretch",
+  minWidth: 0,
+  width: "100%",
+  maxWidth: "100%",
+  gap: theme.spacing["2"],
+});
+
+globalStyle(`${opyCopilotInput} form > *`, {
+  width: "100%",
+  maxWidth: "100%",
+});
+
 globalStyle(`${opyCopilotInput} textarea`, {
+  display: "block",
+  flex: 1,
+  minWidth: 0,
+  width: "100%",
+  maxWidth: "100%",
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "rgba(8, 13, 11, 0.96)",
   padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
   minHeight: "4.5rem",
+  resize: "vertical",
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
