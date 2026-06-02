@@ -312,6 +312,8 @@ OPY depends on an OpenAI-compatible model configuration.
 ### Key Handling
 
 - secure key resolution boundary
+- keychain writes are read-back verified before the UI reports success
+- keychain read failures surface as runtime diagnostics instead of collapsing to “missing key”
 - UI shows configured/not configured diagnostics
 - runtime keeps raw secrets out of transcript and telemetry surfaces
 

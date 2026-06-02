@@ -352,15 +352,17 @@ fn is_missing_keyring_entry(error: &keyring::Error) -> bool {
         || normalized.contains("credential not found")
 }
 
-async fn resolve_openai_api_key_from_keychain() -> Option<String> {
+async fn resolve_openai_api_key_from_keychain() -> Result<Option<String>, String> {
     spawn_blocking(|| {
-        let entry = create_openai_keychain_entry().ok()?;
-        let value = entry.get_password().ok()?;
-        normalize_secret(&value)
+        let entry = create_openai_keychain_entry()?;
+        match entry.get_password() {
+            Ok(value) => Ok(normalize_secret(&value)),
+            Err(error) if is_missing_keyring_entry(&error) => Ok(None),
+            Err(error) => Err(format!("Unable to read OpenAI key from keychain: {error}")),
+        }
     })
     .await
-    .ok()
-    .flatten()
+    .map_err(|error| format!("OpenAI keychain read task failed: {error}"))?
 }
 
 async fn store_openai_api_key_in_keychain(secret: String) -> Result<(), String> {
@@ -428,32 +430,32 @@ async fn clear_openai_api_key_from_settings(state: &State<'_, AppDb>) -> Result<
     Ok(())
 }
 
-async fn resolve_openai_secret(state: &State<'_, AppDb>) -> Option<ResolvedSecret> {
-    if let Some(from_keychain) = resolve_openai_api_key_from_keychain().await {
-        return Some(ResolvedSecret {
+async fn resolve_openai_secret(state: &State<'_, AppDb>) -> Result<Option<ResolvedSecret>, String> {
+    if let Some(from_keychain) = resolve_openai_api_key_from_keychain().await? {
+        return Ok(Some(ResolvedSecret {
             value: from_keychain,
             source: RigAgentSecretSource::Keychain,
             warning: None,
-        });
+        }));
     }
 
     if let Some(from_settings) = resolve_openai_api_key_from_settings(state).await {
-        return Some(ResolvedSecret {
+        return Ok(Some(ResolvedSecret {
             value: from_settings,
             source: RigAgentSecretSource::SettingsDb,
             warning: Some(SETTINGS_DB_STORAGE_WARNING.to_string()),
-        });
+        }));
     }
 
     if let Some(from_env) = resolve_openai_api_key_from_env() {
-        return Some(ResolvedSecret {
+        return Ok(Some(ResolvedSecret {
             value: from_env,
             source: RigAgentSecretSource::Env,
             warning: Some(ENV_STORAGE_WARNING.to_string()),
-        });
+        }));
     }
 
-    None
+    Ok(None)
 }
 
 fn now_unix_ms() -> i64 {
@@ -599,9 +601,7 @@ fn normalize_read_tool_lookup_id(
 ) -> Result<String, String> {
     let normalized = value.trim();
     if normalized.is_empty() {
-        return Err(format!(
-            "{tool:?} requires a non-empty {field_name}."
-        ));
+        return Err(format!("{tool:?} requires a non-empty {field_name}."));
     }
     Ok(normalized.to_string())
 }
@@ -648,7 +648,8 @@ fn execute_read_edge_lookup_tool(
     input: RigReadEdgeLookupInput,
     board_summary: &RigC4BoardSummary,
 ) -> Result<RigReadEdgeLookupResult, String> {
-    let edge_id = normalize_read_tool_lookup_id(RigReadToolName::EdgeLookup, "edgeId", &input.edge_id)?;
+    let edge_id =
+        normalize_read_tool_lookup_id(RigReadToolName::EdgeLookup, "edgeId", &input.edge_id)?;
     let edge = board_summary
         .edges
         .iter()
@@ -687,7 +688,8 @@ fn execute_read_node_lookup_tool(
     input: RigReadNodeLookupInput,
     board_summary: &RigC4BoardSummary,
 ) -> Result<RigReadNodeLookupResult, String> {
-    let node_id = normalize_read_tool_lookup_id(RigReadToolName::NodeLookup, "nodeId", &input.node_id)?;
+    let node_id =
+        normalize_read_tool_lookup_id(RigReadToolName::NodeLookup, "nodeId", &input.node_id)?;
     let node = board_summary
         .nodes
         .iter()
@@ -964,7 +966,7 @@ fn validate_c4_board_review(review: &RigC4BoardReviewPayload) -> Result<(), Stri
 pub async fn rig_agent_secret_status(
     state: State<'_, AppDb>,
 ) -> Result<RigAgentSecretStatusResponse, String> {
-    let resolved = resolve_openai_secret(&state).await;
+    let resolved = resolve_openai_secret(&state).await?;
 
     Ok(match resolved {
         Some(secret) => RigAgentSecretStatusResponse {
@@ -1004,6 +1006,13 @@ pub async fn rig_agent_store_openai_api_key(
         normalize_secret(&secret).ok_or_else(|| "OpenAI key cannot be empty.".to_string())?;
 
     store_openai_api_key_in_keychain(normalized).await?;
+    let stored = resolve_openai_api_key_from_keychain().await?;
+    if stored.is_none() {
+        return Err(
+            "OpenAI key was written, but the dev/runtime process could not read it back from keychain. Inspect local keychain access for the Tauri dev app."
+                .to_string(),
+        );
+    }
     clear_openai_api_key_from_settings(&state).await?;
     rig_agent_secret_status(state).await
 }
@@ -1027,7 +1036,7 @@ pub async fn rig_agent_hello(
     let temperature = normalize_temperature(input.temperature).unwrap_or(DEFAULT_TEMPERATURE);
     let max_tokens = normalize_max_tokens(input.max_tokens).unwrap_or(DEFAULT_MAX_TOKENS);
 
-    let secret = resolve_openai_secret(&state).await.ok_or_else(|| {
+    let secret = resolve_openai_secret(&state).await?.ok_or_else(|| {
         "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
     })?;
 
@@ -1098,7 +1107,7 @@ pub async fn rig_agent_plan_c4_diagram(
         Some(context_sections.join("\n\n"))
     };
 
-    let secret = resolve_openai_secret(&state).await.ok_or_else(|| {
+    let secret = resolve_openai_secret(&state).await?.ok_or_else(|| {
         "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
     })?;
 
@@ -1170,7 +1179,7 @@ pub async fn rig_agent_review_c4_board(
         Some(context_sections.join("\n\n"))
     };
 
-    let secret = resolve_openai_secret(&state).await.ok_or_else(|| {
+    let secret = resolve_openai_secret(&state).await?.ok_or_else(|| {
         "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
     })?;
 
@@ -1295,7 +1304,8 @@ mod tests {
     #[test]
     fn read_board_summary_tool_returns_sorted_ownership_and_snapshot() {
         let board_summary = create_board_summary();
-        let result = execute_read_board_summary_tool(RigReadBoardSummaryInput::default(), &board_summary);
+        let result =
+            execute_read_board_summary_tool(RigReadBoardSummaryInput::default(), &board_summary);
 
         assert_eq!(result.node_count, 2);
         assert_eq!(result.edge_count, 1);
