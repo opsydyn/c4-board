@@ -455,6 +455,26 @@ const toPersistedDiagramProposal = (
   decidedAt: proposal.decidedAtMs,
 });
 
+const sortSessionDiagramProposalsByRecency = (
+  proposals: ReadonlyArray<OpySessionDiagramProposal>,
+): OpySessionDiagramProposal[] =>
+  [...proposals].sort((left, right) => right.proposal.respondedAtMs - left.proposal.respondedAtMs);
+
+const upsertSessionDiagramProposalHistory = (
+  proposals: ReadonlyArray<OpySessionDiagramProposal>,
+  nextProposal: OpySessionDiagramProposal,
+): OpySessionDiagramProposal[] =>
+  sortSessionDiagramProposalsByRecency([
+    nextProposal,
+    ...proposals.filter((proposal) => proposal.proposal.respondedAtMs !== nextProposal.proposal.respondedAtMs),
+  ]);
+
+const findProposalForCheckpoint = (
+  checkpoint: OpyAgentCheckpoint,
+  proposals: ReadonlyArray<OpySessionDiagramProposal>,
+): OpySessionDiagramProposal | null =>
+  proposals.find((proposal) => proposal.proposal.respondedAtMs === checkpoint.proposalRespondedAtMs) ?? null;
+
 const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostics => {
   const bodyLines: string[] = [];
   const citations: string[] = [];
@@ -543,8 +563,8 @@ export function OpyCopilotPanel({
   const [groundedChatsBySessionId, setGroundedChatsBySessionId] = useState<
     Readonly<Record<string, OpyGroundedChatResponse | undefined>>
   >({});
-  const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
-    Readonly<Record<string, OpySessionDiagramProposal | undefined>>
+  const [diagramProposalHistoryBySessionId, setDiagramProposalHistoryBySessionId] = useState<
+    Readonly<Record<string, ReadonlyArray<OpySessionDiagramProposal> | undefined>>
   >({});
   const [checkpointsBySessionId, setCheckpointsBySessionId] = useState<
     Readonly<Record<string, ReadonlyArray<OpyAgentCheckpoint> | undefined>>
@@ -559,9 +579,13 @@ export function OpyCopilotPanel({
     [selectedSessionId, sessions],
   );
 
+  const activeProposalHistory = useMemo(
+    () => diagramProposalHistoryBySessionId[selectedSessionId] ?? [],
+    [diagramProposalHistoryBySessionId, selectedSessionId],
+  );
   const activeDiagramProposal = useMemo(
-    () => diagramProposalsBySessionId[selectedSessionId] ?? null,
-    [diagramProposalsBySessionId, selectedSessionId],
+    () => activeProposalHistory[0] ?? null,
+    [activeProposalHistory],
   );
   const activeGroundedChat = useMemo(
     () => groundedChatsBySessionId[selectedSessionId] ?? null,
@@ -764,9 +788,9 @@ export function OpyCopilotPanel({
           ...current,
           [sessionId]: loadedRuns,
         }));
-        setDiagramProposalsBySessionId((current) => ({
+        setDiagramProposalHistoryBySessionId((current) => ({
           ...current,
-          [sessionId]: loadedProposals[0] ? toSessionDiagramProposal(loadedProposals[0]) : undefined,
+          [sessionId]: loadedProposals.map(toSessionDiagramProposal),
         }));
         setCheckpointsBySessionId((current) => ({
           ...current,
@@ -779,9 +803,9 @@ export function OpyCopilotPanel({
           ...current,
           [sessionId]: [],
         }));
-        setDiagramProposalsBySessionId((current) => ({
+        setDiagramProposalHistoryBySessionId((current) => ({
           ...current,
-          [sessionId]: undefined,
+          [sessionId]: [],
         }));
         setCheckpointsBySessionId((current) => ({
           ...current,
@@ -790,6 +814,17 @@ export function OpyCopilotPanel({
       } finally {
         setIsMessageLoading(false);
       }
+    },
+    [runEffect],
+  );
+
+  const refreshCheckpointsForSession = useCallback(
+    async (sessionId: string) => {
+      const loadedCheckpoints = await runEffect(listOpyAgentCheckpoints(sessionId));
+      setCheckpointsBySessionId((current) => ({
+        ...current,
+        [sessionId]: loadedCheckpoints,
+      }));
     },
     [runEffect],
   );
@@ -1034,6 +1069,10 @@ export function OpyCopilotPanel({
       ...current,
       [createdSession.id]: [],
     }));
+    setDiagramProposalHistoryBySessionId((current) => ({
+      ...current,
+      [createdSession.id]: [],
+    }));
     setCheckpointsBySessionId((current) => ({
       ...current,
       [createdSession.id]: [],
@@ -1102,6 +1141,10 @@ export function OpyCopilotPanel({
             ...current,
             [createdSession.id]: [],
           }));
+          setDiagramProposalHistoryBySessionId((current) => ({
+            ...current,
+            [createdSession.id]: [],
+          }));
           setCheckpointsBySessionId((current) => ({
             ...current,
             [createdSession.id]: [],
@@ -1119,6 +1162,7 @@ export function OpyCopilotPanel({
         } else {
           setMessages([]);
           setRunsBySessionId({});
+          setDiagramProposalHistoryBySessionId({});
           setCheckpointsBySessionId({});
         }
       } catch (error) {
@@ -1128,6 +1172,7 @@ export function OpyCopilotPanel({
           setSelectedSessionId("");
           setMessages([]);
           setRunsBySessionId({});
+          setDiagramProposalHistoryBySessionId({});
           setCheckpointsBySessionId({});
         }
       } finally {
@@ -1372,9 +1417,12 @@ export function OpyCopilotPanel({
                 toPersistedDiagramProposal(sessionId, persistedProposal),
               ),
             );
-            setDiagramProposalsBySessionId((current) => ({
+            setDiagramProposalHistoryBySessionId((current) => ({
               ...current,
-              [sessionId]: persistedProposal,
+              [sessionId]: upsertSessionDiagramProposalHistory(
+                current[sessionId] ?? [],
+                persistedProposal,
+              ),
             }));
           },
         });
@@ -1547,9 +1595,12 @@ export function OpyCopilotPanel({
             toPersistedDiagramProposal(sessionId, nextProposal),
           ),
         );
-        setDiagramProposalsBySessionId((current) => ({
+        setDiagramProposalHistoryBySessionId((current) => ({
           ...current,
-          [sessionId]: nextProposal,
+          [sessionId]: upsertSessionDiagramProposalHistory(
+            current[sessionId] ?? [],
+            nextProposal,
+          ),
         }));
 
         await appendAndPersistMessage(
@@ -1679,6 +1730,7 @@ export function OpyCopilotPanel({
         proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
         proposal: activeDiagramProposal.proposal,
       });
+      await refreshCheckpointsForSession(sessionId);
       await appendAndPersistMessage(sessionId, "assistant", actionResult);
     } catch (error) {
       const message = toErrorMessage(error);
@@ -1702,12 +1754,13 @@ export function OpyCopilotPanel({
     appendAndPersistMessage,
     isRunning,
     onApplyBoardAction,
+    refreshCheckpointsForSession,
     selectedSessionId,
   ]);
 
-  const handleRollbackLatestCheckpoint = useCallback(async () => {
+  const handleRestoreCheckpoint = useCallback(async (checkpoint: OpyAgentCheckpoint) => {
     const sessionId = selectedSessionId;
-    if (sessionId.length === 0 || !latestCheckpoint || isRunning) {
+    if (sessionId.length === 0 || isRunning) {
       return;
     }
 
@@ -1727,8 +1780,8 @@ export function OpyCopilotPanel({
         [
           "Rollback to OPY checkpoint?",
           "",
-          formatOpyRollbackSummary(latestCheckpoint),
-          `Created ${formatClockTime(latestCheckpoint.createdAt)}`,
+          formatOpyRollbackSummary(checkpoint),
+          `Created ${formatClockTime(checkpoint.createdAt)}`,
           "",
           "This will restore the board to the checkpoint snapshot and save it.",
         ].join("\n"),
@@ -1748,8 +1801,9 @@ export function OpyCopilotPanel({
       const actionResult = await onApplyBoardAction({
         kind: "rollback-checkpoint",
         sessionId,
-        checkpointId: latestCheckpoint.id,
+        checkpointId: checkpoint.id,
       });
+      await refreshCheckpointsForSession(sessionId);
       await appendAndPersistMessage(sessionId, "assistant", actionResult);
     } catch (error) {
       const message = toErrorMessage(error);
@@ -1767,8 +1821,8 @@ export function OpyCopilotPanel({
     appendAgentNotice,
     appendAndPersistMessage,
     isRunning,
-    latestCheckpoint,
     onApplyBoardAction,
+    refreshCheckpointsForSession,
     selectedSessionId,
   ]);
 
@@ -1995,38 +2049,86 @@ export function OpyCopilotPanel({
           </details>
         </section>
       )}
-      {latestCheckpoint && (
-        <section className={styles.opyCopilotPlanCard} aria-label="Latest OPY checkpoint">
+      {activeCheckpoints.length > 0 && latestCheckpoint && (
+        <section className={styles.opyCopilotPlanCard} aria-label="OPY checkpoint history">
           <div className={styles.opyCopilotProposalHeader}>
-            <span>{`CHECKPOINT::${latestCheckpoint.id.slice(0, 8)}`}</span>
-            <span>{latestCheckpoint.checkpointType.toUpperCase()}</span>
+            <span>{`CHECKPOINTS::${activeCheckpoints.length}`}</span>
+            <span>{`LATEST::${latestCheckpoint.id.slice(0, 8)}`}</span>
           </div>
           <p className={styles.opyCopilotProposalHint}>
-            {formatOpyRollbackSummary(latestCheckpoint)}
+            RESTORABLE PRE-APPLY SNAPSHOTS CAPTURED BEFORE CONFIRMED OPY BOARD MUTATIONS.
           </p>
           <div className={styles.opyCopilotProposalStats}>
-            <span>{`CREATED::${formatClockTime(latestCheckpoint.createdAt)}`}</span>
-            <span>{`NODES::${latestCheckpoint.snapshot.nodes.length}`}</span>
-            <span>{`EDGES::${latestCheckpoint.snapshot.edges.length}`}</span>
-            <span>{`PROPOSAL::${formatClockTime(latestCheckpoint.proposalRespondedAtMs)}`}</span>
+            <span>{`LATEST BOARD::${latestCheckpoint.snapshot.name}`}</span>
+            <span>{`LATEST CREATED::${formatClockTime(latestCheckpoint.createdAt)}`}</span>
+            <span>{`LATEST PROPOSAL::${formatClockTime(latestCheckpoint.proposalRespondedAtMs)}`}</span>
           </div>
-          <div className={styles.opyCopilotPlanDecisionRow}>
-            <button
-              type="button"
-              className={styles.toolbarButton}
-              onClick={() => {
-                void handleRollbackLatestCheckpoint();
-              }}
-              disabled={isRunning || actionMode !== "apply-with-confirmation"}
-            >
-              {isRunning ? "ROLLING BACK..." : "ROLLBACK LAST APPLY"}
-            </button>
-            <p className={styles.opyCopilotProposalHint}>
-              {actionMode === "apply-with-confirmation"
-                ? "RESTORE THE LAST CONFIRMED OPY CHECKPOINT THROUGH THE SAVE BOUNDARY."
-                : "SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE ROLLBACK."}
-            </p>
-          </div>
+          <details className={styles.opyCopilotDiagnosticsDisclosure}>
+            <summary className={styles.opyCopilotDiagnosticsSummary}>
+              {`RESTORE TARGETS::${activeCheckpoints.length}`}
+            </summary>
+            <div className={styles.opyCopilotPlanActionList}>
+              {activeCheckpoints.map((checkpoint, index) => {
+                const checkpointProposal = findProposalForCheckpoint(checkpoint, activeProposalHistory);
+                return (
+                  <article key={checkpoint.id} className={styles.opyCopilotProposalItem}>
+                    <div className={styles.opyCopilotProposalItemMeta}>
+                      <span>{`CHECKPOINT::${checkpoint.id.slice(0, 8)}`}</span>
+                      <span>{index === 0 ? "LATEST" : checkpoint.checkpointType.toUpperCase()}</span>
+                    </div>
+                    <p>{formatOpyRollbackSummary(checkpoint)}</p>
+                    <div className={styles.opyCopilotProposalStats}>
+                      <span>{`BOARD::${checkpoint.snapshot.name}`}</span>
+                      <span>{`CREATED::${formatClockTime(checkpoint.createdAt)}`}</span>
+                      <span>{`PROPOSAL::${formatClockTime(checkpoint.proposalRespondedAtMs)}`}</span>
+                      <span>{`NODES::${checkpoint.snapshot.nodes.length}`}</span>
+                      <span>{`EDGES::${checkpoint.snapshot.edges.length}`}</span>
+                    </div>
+                    {checkpointProposal
+                      ? (
+                        <>
+                          <p className={styles.opyCopilotProposalSummary}>
+                            {`PROPOSAL:: ${checkpointProposal.proposal.summary}`}
+                          </p>
+                          <p className={styles.opyCopilotProposalHint}>
+                            {`SOURCE:: ${checkpointProposal.command.description}`}
+                          </p>
+                          <p className={styles.opyCopilotProposalHint}>
+                            {`PLAN::${PLAN_DECISION_LABEL[checkpointProposal.decisionStatus]} · CONFIDENCE::${
+                              formatConfidence(checkpointProposal.context.confidence)
+                            }`}
+                          </p>
+                        </>
+                      )
+                      : (
+                        <p className={styles.opyCopilotProposalHint}>
+                          PROPOSAL PROVENANCE UNAVAILABLE FOR THIS CHECKPOINT IN CURRENT SESSION HISTORY.
+                        </p>
+                      )}
+                    <div className={styles.opyCopilotPlanDecisionRow}>
+                      <button
+                        type="button"
+                        className={styles.toolbarButton}
+                        onClick={() => {
+                          void handleRestoreCheckpoint(checkpoint);
+                        }}
+                        disabled={isRunning || actionMode !== "apply-with-confirmation"}
+                      >
+                        {isRunning ? "RESTORING..." : index === 0 ? "ROLLBACK LATEST" : "RESTORE CHECKPOINT"}
+                      </button>
+                      <p className={styles.opyCopilotProposalHint}>
+                        {actionMode === "apply-with-confirmation"
+                          ? index === 0
+                            ? "RESTORE THE MOST RECENT CONFIRMED OPY CHECKPOINT THROUGH THE SAVE BOUNDARY."
+                            : "RESTORE THIS HISTORICAL CHECKPOINT DELIBERATELY THROUGH THE SAVE BOUNDARY."
+                          : "SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE RESTORE."}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </details>
         </section>
       )}
       <div className={styles.opyCopilotTranscript} role="log" aria-live="polite">

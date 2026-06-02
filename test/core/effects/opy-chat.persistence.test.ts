@@ -296,14 +296,16 @@ describe("opy-chat.persistence", () => {
     );
 
     expect(exit._tag).toBe("Failure");
-    const failure = Cause.failureOption(exit.cause);
-    expect(Option.isSome(failure)).toBe(true);
-    if (Option.isSome(failure)) {
-      expect(failure.value).toMatchObject({
-        _tag: "NotFoundError",
-        entity: "opy_agent_checkpoint",
-        id: "missing",
-      });
+    if (exit._tag === "Failure") {
+      const failure = Cause.failureOption(exit.cause);
+      expect(Option.isSome(failure)).toBe(true);
+      if (Option.isSome(failure)) {
+        expect(failure.value).toMatchObject({
+          _tag: "NotFoundError",
+          entity: "opy_agent_checkpoint",
+          id: "missing",
+        });
+      }
     }
   });
 });
