@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
+use sqlx::migrate::Migrator;
 use std::{fs, io::Write, path::Path, time::Duration};
 use tauri::async_runtime::spawn;
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Listener, Manager};
-use tauri_plugin_sql::{Migration, MigrationKind};
 use tokio::time::sleep;
 
 mod ai_agent;
@@ -19,6 +19,31 @@ use ai_agent::{
 use azure_sync::{azure_graph_query, azure_graph_validate_auth};
 use db::{db_runtime_probe, sql_execute, sql_query};
 use load_test::{LoadTestConfig, LoadTestEngine};
+
+const APP_STORAGE_IDENTIFIER: &str = "com.opsydyn.c4board";
+static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
+
+fn resolve_persistent_app_storage_dir<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+) -> Result<std::path::PathBuf, String> {
+    let resolved = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|err| format!("Could not resolve app data directory: {err}"))?;
+
+    if resolved
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value == APP_STORAGE_IDENTIFIER)
+    {
+        return Ok(resolved);
+    }
+
+    match resolved.parent() {
+        Some(parent) => Ok(parent.join(APP_STORAGE_IDENTIFIER)),
+        None => Ok(resolved),
+    }
+}
 
 // ============================================================================
 // Domain Models (Functional Core)
@@ -170,10 +195,7 @@ fn save_custom_icon(
         return Err("Icon file too large (max 512KB)".into());
     }
 
-    let mut icon_dir = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|err| format!("Could not resolve app data directory: {err}"))?;
+    let mut icon_dir = resolve_persistent_app_storage_dir(&app)?;
     icon_dir.push("icons");
 
     fs::create_dir_all(&icon_dir)
@@ -384,157 +406,10 @@ fn build_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu<tauri::Wry>, t
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Define database migrations
-    let migrations = vec![
-        Migration {
-            version: 1,
-            description: "create_initial_tables",
-            sql: include_str!("../migrations/001_initial.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "create_history_table",
-            sql: include_str!("../migrations/002_history.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 3,
-            description: "update_node_types",
-            sql: include_str!("../migrations/003_update_node_types.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 4,
-            description: "add_node_dimensions",
-            sql: include_str!("../migrations/004_add_node_dimensions.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 5,
-            description: "add_node_parent_fields",
-            sql: include_str!("../migrations/005_add_node_parent_fields.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 6,
-            description: "add_node_icons",
-            sql: include_str!("../migrations/006_add_node_icons.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 7,
-            description: "create_custom_icons_table",
-            sql: include_str!("../migrations/007_create_custom_icons_table.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 8,
-            description: "create_postee_tables",
-            sql: include_str!("../migrations/008_create_postee_tables.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 9,
-            description: "seed_postee_environments",
-            sql: include_str!("../migrations/009_seed_postee_environments.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 10,
-            description: "add_response_body_json",
-            sql: include_str!("../migrations/010_add_response_body_json.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 11,
-            description: "add_ddd_support",
-            sql: include_str!("../migrations/011_add_ddd_support.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 12,
-            description: "add_edge_metadata",
-            sql: include_str!("../migrations/012_add_edge_metadata.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 13,
-            description: "create_request_spans",
-            sql: include_str!("../migrations/013_create_request_spans.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 14,
-            description: "enhance_request_spans",
-            sql: include_str!("../migrations/014_enhance_request_spans.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 15,
-            description: "rollback_request_spans",
-            sql: include_str!("../migrations/015_rollback_request_spans.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 16,
-            description: "create_app_settings",
-            sql: include_str!("../migrations/016_create_app_settings.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 17,
-            description: "add_node_coupling_state",
-            sql: include_str!("../migrations/017_add_node_coupling_state.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 18,
-            description: "normalize_team_ownership",
-            sql: include_str!("../migrations/018_normalize_team_ownership.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 19,
-            description: "create_opy_chat_tables",
-            sql: include_str!("../migrations/019_create_opy_chat_tables.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 20,
-            description: "add_ai_settings_default",
-            sql: include_str!("../migrations/020_add_ai_settings_default.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 21,
-            description: "create_opy_agent_runs",
-            sql: include_str!("../migrations/021_create_opy_agent_runs.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 22,
-            description: "create_opy_diagram_proposals",
-            sql: include_str!("../migrations/022_create_opy_diagram_proposals.sql"),
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 23,
-            description: "create_opy_agent_checkpoints",
-            sql: include_str!("../migrations/023_create_opy_agent_checkpoints.sql"),
-            kind: MigrationKind::Up,
-        },
-    ];
-
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:c4board.db", migrations)
-                .build(),
-        )
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -555,12 +430,14 @@ pub fn run() {
         ])
         .setup(|app| {
             // Create a properly configured SQLite pool (single connection, busy_timeout, WAL)
-            // The plugin's pool is only used for migrations; this pool handles all runtime queries.
-            let db_dir = app.path().app_config_dir()?;
+            // Migrations and runtime queries share one stable storage root across dev and installed builds.
+            let db_dir =
+                resolve_persistent_app_storage_dir(app.handle()).map_err(std::io::Error::other)?;
             fs::create_dir_all(&db_dir)?;
             let db_path = db_dir.join("c4board.db");
 
             let pool = db::create_pool(&db_path)?;
+            tauri::async_runtime::block_on(MIGRATOR.run(&pool))?;
             app.manage(db::AppDb(pool));
 
             // Build and set the native menu

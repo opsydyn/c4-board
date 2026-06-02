@@ -89,6 +89,7 @@ Each OPY session persists:
 - rename sessions
 - resume prior sessions
 - restore the latest transcript and artifact context
+- dev and installed runtimes share the same persistent app storage root
 
 ## Action Modes
 
