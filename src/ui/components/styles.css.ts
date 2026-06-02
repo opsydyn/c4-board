@@ -821,6 +821,41 @@ export const opyCopilotProposalActions = style({
   gap: theme.spacing["2"],
 });
 
+export const opyCopilotPlanCard = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  backgroundColor: "rgba(7, 13, 10, 0.92)",
+  padding: theme.spacing["2"],
+});
+
+export const opyCopilotPlanIssueList = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotPlanImpactList = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotPlanActionList = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(14rem, 1fr))",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotPlanDecisionRow = style({
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+});
+
 export const opyCopilotDiagnosticsDisclosure = style({
   display: "flex",
   flexDirection: "column",

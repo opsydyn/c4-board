@@ -1,6 +1,7 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
 import {
   assembleRigAgentContext,
   formatRigAgentCitationBlock,
@@ -31,6 +32,14 @@ import {
   type OpyProposalDiffStatus,
   summarizeGroundedProposalDiff,
 } from "../../core/effects/opy-c4-proposals";
+import { summarizeRigToolPolicy } from "../../core/effects/agent-policy";
+import type {
+  RigApplyLayoutValidationSummary,
+  RigCreateEdgesValidationSummary,
+  RigCreateNodesValidationSummary,
+  RigUpdateNodesValidationSummary,
+  RigValidatedMutationAction,
+} from "../../core/effects/agent-tools/mutation-tools";
 import {
   appendOpyChatMessage,
   createOpyAgentRun,
@@ -128,6 +137,14 @@ interface OpyActionModeSurface {
   readonly detail: string;
 }
 
+type OpyPlanDecisionStatus = "pending" | "approved" | "rejected";
+
+interface OpySessionPlanDecision {
+  readonly proposalRespondedAtMs: number;
+  readonly status: OpyPlanDecisionStatus;
+  readonly decidedAtMs: number;
+}
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -175,6 +192,12 @@ const DIFF_STATUS_LABEL: Record<OpyProposalDiffStatus, string> = {
   new: "NEW",
   existing: "MATCH",
   ambiguous: "AMBIG",
+};
+
+const PLAN_DECISION_LABEL: Record<OpyPlanDecisionStatus, string> = {
+  pending: "PENDING",
+  approved: "APPROVED",
+  rejected: "REJECTED",
 };
 
 const RUN_INTENT_LABEL: Record<OpyAgentRunIntent, string> = {
@@ -363,6 +386,38 @@ const formatEdgeMatchSummary = (matches: ReadonlyArray<RigC4BoardEdge>): string 
     .map((match) => `${match.sourceLabel} -> ${match.targetLabel}${match.label ? ` (${match.label})` : ""}`)
     .join(" | ");
 
+const formatPlanDecisionHint = (status: OpyPlanDecisionStatus): string => {
+  switch (status) {
+    case "approved":
+      return "Plan approved. Apply stays gated by action mode and confirmation.";
+    case "rejected":
+      return "Plan rejected. Generate a new proposal or approve this one before apply.";
+    case "pending":
+      return "Inspect the typed mutation plan before approving or rejecting it.";
+  }
+};
+
+const formatMutationActionSummary = (action: RigValidatedMutationAction): string => {
+  switch (action.tool) {
+    case "create_nodes": {
+      const summary = action.summary as RigCreateNodesValidationSummary;
+      return `${summary.nodeCount} NODE(S) · ${summary.labels.join(" | ")}`;
+    }
+    case "update_nodes": {
+      const summary = action.summary as RigUpdateNodesValidationSummary;
+      return `${summary.nodeCount} NODE PATCH(ES) · ${summary.fieldCount} FIELD UPDATE(S)`;
+    }
+    case "create_edges": {
+      const summary = action.summary as RigCreateEdgesValidationSummary;
+      return `${summary.edgeCount} EDGE(S) · ${summary.connectionRefs.join(" | ")}`;
+    }
+    case "apply_layout": {
+      const summary = action.summary as RigApplyLayoutValidationSummary;
+      return `${summary.preset.toUpperCase()} · ${summary.target.toUpperCase()}`;
+    }
+  }
+};
+
 const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostics => {
   const bodyLines: string[] = [];
   const citations: string[] = [];
@@ -451,6 +506,9 @@ export function OpyCopilotPanel({
   const [groundedChatsBySessionId, setGroundedChatsBySessionId] = useState<
     Readonly<Record<string, OpyGroundedChatResponse | undefined>>
   >({});
+  const [planDecisionsBySessionId, setPlanDecisionsBySessionId] = useState<
+    Readonly<Record<string, OpySessionPlanDecision | undefined>>
+  >({});
   const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
     Readonly<Record<string, OpySessionDiagramProposal | undefined>>
   >({});
@@ -511,6 +569,26 @@ export function OpyCopilotPanel({
     () => activeGroundedProposal ? summarizeGroundedProposalDiff(activeGroundedProposal) : null,
     [activeGroundedProposal],
   );
+  const activeMutationPlan = useMemo(
+    () => activeDiagramProposal ? buildRigMutationPlanDiff(activeDiagramProposal.proposal, activeGroundedProposal) : null,
+    [activeDiagramProposal, activeGroundedProposal],
+  );
+  const activePlanDecision = useMemo(() => {
+    if (!activeDiagramProposal) {
+      return null;
+    }
+
+    const decision = planDecisionsBySessionId[selectedSessionId];
+    if (!decision || decision.proposalRespondedAtMs !== activeDiagramProposal.proposal.respondedAtMs) {
+      return {
+        proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
+        status: "pending" as const,
+        decidedAtMs: activeDiagramProposal.proposal.respondedAtMs,
+      };
+    }
+
+    return decision;
+  }, [activeDiagramProposal, planDecisionsBySessionId, selectedSessionId]);
   const actionModeSurface = useMemo(
     () => describeActionMode(actionMode),
     [actionMode],
@@ -1220,6 +1298,14 @@ export function OpyCopilotPanel({
                 context: groundedProposal.context,
               },
             }));
+            setPlanDecisionsBySessionId((current) => ({
+              ...current,
+              [sessionId]: {
+                proposalRespondedAtMs: groundedProposal.proposal.respondedAtMs,
+                status: "pending",
+                decidedAtMs: Date.now(),
+              },
+            }));
           },
         });
         return;
@@ -1356,11 +1442,66 @@ export function OpyCopilotPanel({
     ],
   );
 
+  const handleSetPlanDecision = useCallback(
+    async (status: OpyPlanDecisionStatus) => {
+      const sessionId = selectedSessionId;
+      if (
+        sessionId.length === 0
+        || !activeDiagramProposal
+        || !activeMutationPlan
+        || isRunning
+      ) {
+        return;
+      }
+
+      if (status === "approved" && !activeMutationPlan.canApprove) {
+        await appendAgentNotice(
+          sessionId,
+          makeAgentPolicyError({
+            message: `Plan approval blocked by ${activeMutationPlan.issues.length} unresolved issue(s).`,
+            recommendedAction: "Inspect the blockers or generate a new proposal.",
+          }),
+        );
+        return;
+      }
+
+      const decidedAtMs = Date.now();
+      setPlanDecisionsBySessionId((current) => ({
+        ...current,
+        [sessionId]: {
+          proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
+          status,
+          decidedAtMs,
+        },
+      }));
+
+      await appendAndPersistMessage(
+        sessionId,
+        "system",
+        `PLAN ${PLAN_DECISION_LABEL[status]}:: ${
+          status === "approved"
+            ? `READY ${activeMutationPlan.plan.totalActions} ACTION(S) FOR CONFIRMED APPLY.`
+            : "CURRENT PLAN HELD. NO BOARD CHANGES WILL BE APPLIED."
+        }`,
+      );
+    },
+    [
+      activeDiagramProposal,
+      activeMutationPlan,
+      appendAgentNotice,
+      appendAndPersistMessage,
+      isRunning,
+      selectedSessionId,
+    ],
+  );
+
   const handleApplyActiveProposal = useCallback(async () => {
     const sessionId = selectedSessionId;
     if (
       sessionId.length === 0
       || !activeDiagramProposal
+      || !activeMutationPlan
+      || !activePlanDecision
       || !activeGroundedProposal
       || !activeProposalSummary
       || isRunning
@@ -1374,6 +1515,30 @@ export function OpyCopilotPanel({
         makeAgentPolicyError({
           message: `Proposal apply blocked by mode ${actionMode.toUpperCase()}.`,
           recommendedAction: "Switch to APPLY-WITH-CONFIRMATION.",
+        }),
+      );
+      return;
+    }
+
+    if (activePlanDecision.status !== "approved") {
+      await appendAgentNotice(
+        sessionId,
+        makeAgentPolicyError({
+          message: `Plan apply blocked while decision is ${PLAN_DECISION_LABEL[activePlanDecision.status]}.`,
+          recommendedAction: activePlanDecision.status === "rejected"
+            ? "Review the rejected plan or generate a new proposal."
+            : "Approve the current plan before applying it.",
+        }),
+      );
+      return;
+    }
+
+    if (!activeMutationPlan.canApprove) {
+      await appendAgentNotice(
+        sessionId,
+        makeAgentPolicyError({
+          message: `Plan apply blocked by ${activeMutationPlan.issues.length} unresolved issue(s).`,
+          recommendedAction: "Resolve or regenerate the blocked plan before apply.",
         }),
       );
       return;
@@ -1405,8 +1570,9 @@ export function OpyCopilotPanel({
         [
           "Apply OPY diagram proposal?",
           "",
-          `Create ${activeProposalSummary.newNodes} node(s)`,
-          `Create ${activeProposalSummary.newEdges} edge(s)`,
+          `Plan actions ${activeMutationPlan.plan.totalActions}`,
+          `Create ${activeMutationPlan.plan.totalNodesCreated} node(s)`,
+          `Create ${activeMutationPlan.plan.totalEdgesCreated} edge(s)`,
           `Reuse ${activeProposalSummary.existingNodes} node(s)`,
           `Reuse ${activeProposalSummary.existingEdges} edge(s)`,
           "",
@@ -1444,6 +1610,8 @@ export function OpyCopilotPanel({
   }, [
     actionMode,
     activeDiagramProposal,
+    activeMutationPlan,
+    activePlanDecision,
     activeGroundedProposal,
     activeProposalSummary,
     appendAgentNotice,
@@ -1940,6 +2108,113 @@ export function OpyCopilotPanel({
               </span>
             </div>
           )}
+          {activeMutationPlan && activePlanDecision && (
+            <section className={styles.opyCopilotPlanCard} aria-label="Typed mutation plan">
+              <div className={styles.opyCopilotProposalHeader}>
+                <span>{`PLAN::${PLAN_DECISION_LABEL[activePlanDecision.status]}`}</span>
+                <span>{activeMutationPlan.canApprove ? "SAFE TO APPROVE" : "BLOCKED"}</span>
+              </div>
+              <p className={styles.opyCopilotProposalHint}>
+                {formatPlanDecisionHint(activePlanDecision.status)}
+              </p>
+              <div className={styles.opyCopilotProposalStats}>
+                <span>{`ACTIONS::${activeMutationPlan.plan.totalActions}`}</span>
+                <span>{`CREATE NODES::${activeMutationPlan.plan.totalNodesCreated}`}</span>
+                <span>{`CREATE EDGES::${activeMutationPlan.plan.totalEdgesCreated}`}</span>
+                <span>{`LAYOUT::${activeMutationPlan.plan.totalLayoutOperations}`}</span>
+                <span>{`RISK::${activeMutationPlan.plan.highestRisk.toUpperCase()}`}</span>
+                <span>{`ISSUES::${activeMutationPlan.issues.length}`}</span>
+              </div>
+              {activeMutationPlan.issues.length > 0 && (
+                <div className={styles.opyCopilotPlanIssueList}>
+                  {activeMutationPlan.issues.map((issue) => (
+                    <article key={issue.id} className={styles.opyCopilotProposalItem}>
+                      <div className={styles.opyCopilotProposalItemMeta}>
+                        <span>{issue.kind.toUpperCase()}</span>
+                        <span className={`${styles.opyCopilotProposalBadge} ${styles.opyCopilotProposalBadgeAmbiguous}`}>
+                          BLOCKED
+                        </span>
+                      </div>
+                      <p>{issue.title}</p>
+                      <p className={styles.opyCopilotProposalHint}>{issue.detail}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                <summary className={styles.opyCopilotDiagnosticsSummary}>
+                  {`IMPACTED ENTITIES::${activeMutationPlan.impactedEntities.length}`}
+                </summary>
+                <div className={styles.opyCopilotPlanImpactList}>
+                  {activeMutationPlan.impactedEntities.map((entity) => (
+                    <article key={entity.id} className={styles.opyCopilotProposalItem}>
+                      <div className={styles.opyCopilotProposalItemMeta}>
+                        <span>{`${entity.category.toUpperCase()} · ${entity.status.toUpperCase()}`}</span>
+                        <span
+                          className={`${styles.opyCopilotProposalBadge} ${
+                            entity.status === "create"
+                              ? styles.opyCopilotProposalBadgeNew
+                              : entity.status === "reuse"
+                              ? styles.opyCopilotProposalBadgeExisting
+                              : styles.opyCopilotProposalBadgeAmbiguous
+                          }`}
+                        >
+                          {entity.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <p>{entity.title}</p>
+                      <p className={styles.opyCopilotProposalHint}>{entity.detail}</p>
+                    </article>
+                  ))}
+                </div>
+              </details>
+              <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                <summary className={styles.opyCopilotDiagnosticsSummary}>
+                  {`MUTATION ACTIONS::${activeMutationPlan.plan.actions.length}`}
+                </summary>
+                <div className={styles.opyCopilotPlanActionList}>
+                  {activeMutationPlan.plan.actions.map((action, index) => (
+                    <article key={`${action.tool}-${index}`} className={styles.opyCopilotProposalItem}>
+                      <div className={styles.opyCopilotProposalItemMeta}>
+                        <span>{action.tool.toUpperCase()}</span>
+                        <span>{summarizeRigToolPolicy(action.policy)}</span>
+                      </div>
+                      <p>{formatMutationActionSummary(action)}</p>
+                    </article>
+                  ))}
+                </div>
+              </details>
+              <div className={styles.opyCopilotPlanDecisionRow}>
+                <button
+                  type="button"
+                  className={styles.ownershipLensToggleButton}
+                  data-selected={activePlanDecision.status === "approved" ? "true" : undefined}
+                  onClick={() => {
+                    void handleSetPlanDecision("approved");
+                  }}
+                  disabled={isRunning || !activeMutationPlan.canApprove || !activeMutationPlan.hasChanges}
+                >
+                  APPROVE PLAN
+                </button>
+                <button
+                  type="button"
+                  className={styles.ownershipLensToggleButton}
+                  data-selected={activePlanDecision.status === "rejected" ? "true" : undefined}
+                  onClick={() => {
+                    void handleSetPlanDecision("rejected");
+                  }}
+                  disabled={isRunning || !activeMutationPlan.hasChanges}
+                >
+                  REJECT PLAN
+                </button>
+                <p className={styles.opyCopilotProposalHint}>
+                  {`DECISION::${PLAN_DECISION_LABEL[activePlanDecision.status]} · ${
+                    activeMutationPlan.canApprove ? "READY FOR REVIEW" : "BLOCKERS PRESENT"
+                  }`}
+                </p>
+              </div>
+            </section>
+          )}
           {activeDiagramProposal.proposal.warnings.length > 0 && (
             <div className={styles.opyCopilotProposalWarnings}>
               {activeDiagramProposal.proposal.warnings.map((warning, index) => (
@@ -2046,22 +2321,37 @@ export function OpyCopilotPanel({
           </div>
           <div className={styles.opyCopilotProposalActions}>
             {actionMode === "apply-with-confirmation"
-              ? activeProposalSummary
+              ? activeProposalSummary && activeMutationPlan && activePlanDecision
                 ? (
-                  <button
-                    type="button"
-                    className={styles.toolbarButton}
-                    onClick={() => {
-                      void handleApplyActiveProposal();
-                    }}
-                    disabled={isRunning || !activeProposalSummary.canApply || !activeProposalSummary.hasChanges}
-                  >
-                    {isRunning ? "APPLYING..." : "APPLY PROPOSAL"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className={styles.toolbarButton}
+                      onClick={() => {
+                        void handleApplyActiveProposal();
+                      }}
+                      disabled={
+                        isRunning
+                        || !activeProposalSummary.canApply
+                        || !activeProposalSummary.hasChanges
+                        || !activeMutationPlan.canApprove
+                        || activePlanDecision.status !== "approved"
+                      }
+                    >
+                      {isRunning ? "APPLYING..." : "APPLY PROPOSAL"}
+                    </button>
+                    <p className={styles.opyCopilotProposalHint}>
+                      {activePlanDecision.status === "approved"
+                        ? "APPROVED PLAN READY FOR CONFIRMED APPLY."
+                        : activePlanDecision.status === "rejected"
+                        ? "PLAN REJECTED. APPROVE A NEW OR UPDATED PLAN TO APPLY."
+                        : "APPROVE PLAN TO ENABLE APPLY."}
+                    </p>
+                  </>
                 )
                 : (
                   <p className={styles.opyCopilotProposalHint}>
-                    {"GROUNDING DATA UNAVAILABLE FOR THIS PROPOSAL."}
+                    {"GROUNDING OR PLAN DATA UNAVAILABLE FOR THIS PROPOSAL."}
                   </p>
                 )
               : (
