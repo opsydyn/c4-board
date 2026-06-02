@@ -1,4 +1,6 @@
 import { Effect } from "effect";
+import type { RigAgentContextBundle, RigAgentCitation } from "./agent-context";
+import type { RigC4DiagramProposal } from "./ai-agent.runtime";
 import { DatabaseService } from "./database.base";
 
 export type OpyChatRole = "assistant" | "user" | "system";
@@ -37,6 +39,17 @@ export interface OpyAgentRun {
   readonly startedAt: number;
   readonly completedAt: number | null;
   readonly errorSummary: string | null;
+}
+
+export type OpyPlanDecisionStatus = "pending" | "approved" | "rejected";
+
+export interface OpyPersistedDiagramProposal {
+  readonly sessionId: string;
+  readonly commandDescription: string;
+  readonly proposal: RigC4DiagramProposal;
+  readonly context: RigAgentContextBundle;
+  readonly decisionStatus: OpyPlanDecisionStatus;
+  readonly decidedAt: number;
 }
 
 export interface ListOpyChatSessionsInput {
@@ -161,6 +174,19 @@ const LIST_RUNS_SQL = `
   ORDER BY started_at DESC
 `;
 
+const LIST_DIAGRAM_PROPOSALS_SQL = `
+  SELECT
+    session_id AS sessionId,
+    command_description AS commandDescription,
+    proposal_json AS proposalJson,
+    context_json AS contextJson,
+    decision_status AS decisionStatus,
+    decided_at AS decidedAt
+  FROM opy_diagram_proposals
+  WHERE session_id = ?
+  ORDER BY decided_at DESC, proposal_responded_at DESC
+`;
+
 const LIST_ACTIVE_RUNS_SQL = `
   SELECT
     id,
@@ -214,6 +240,25 @@ const FAIL_INTERRUPTED_RUNS_SQL = `
     AND status = 'running'
 `;
 
+const UPSERT_DIAGRAM_PROPOSAL_SQL = `
+  INSERT INTO opy_diagram_proposals (
+    session_id,
+    proposal_responded_at,
+    command_description,
+    proposal_json,
+    context_json,
+    decision_status,
+    decided_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(session_id, proposal_responded_at) DO UPDATE SET
+    command_description = excluded.command_description,
+    proposal_json = excluded.proposal_json,
+    context_json = excluded.context_json,
+    decision_status = excluded.decision_status,
+    decided_at = excluded.decided_at
+`;
+
 const isOpyChatRole = (value: unknown): value is OpyChatRole =>
   value === "assistant" || value === "user" || value === "system";
 
@@ -227,6 +272,9 @@ const isOpyAgentRunStage = (value: unknown): value is OpyAgentRunStage =>
 
 const isOpyAgentRunStatus = (value: unknown): value is OpyAgentRunStatus =>
   value === "running" || value === "completed" || value === "failed" || value === "cancelled";
+
+const isOpyPlanDecisionStatus = (value: unknown): value is OpyPlanDecisionStatus =>
+  value === "pending" || value === "approved" || value === "rejected";
 
 const toTimestamp = (value: unknown, fallback = Date.now()): number =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -265,6 +313,91 @@ type AgentRunRow = {
   startedAt: number;
   completedAt: number | null;
   errorSummary: string | null;
+};
+
+type DiagramProposalRow = {
+  sessionId: string;
+  commandDescription: string;
+  proposalJson: string;
+  contextJson: string;
+  decisionStatus: string;
+  decidedAt: number;
+};
+
+const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+};
+
+const isRigAgentCitation = (value: unknown): value is RigAgentCitation => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.id === "string"
+    && typeof candidate.tool === "string"
+    && typeof candidate.label === "string"
+    && typeof candidate.detail === "string"
+    && (candidate.sourceId === null || typeof candidate.sourceId === "string");
+};
+
+const isRigAgentContextBundle = (value: unknown): value is RigAgentContextBundle => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.promptContext === "string"
+    && Array.isArray(candidate.citations)
+    && candidate.citations.every(isRigAgentCitation)
+    && (candidate.confidence === "high" || candidate.confidence === "medium" || candidate.confidence === "low")
+    && typeof candidate.confidenceReason === "string";
+};
+
+const isRigC4DiagramProposal = (value: unknown): value is RigC4DiagramProposal => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.summary === "string"
+    && typeof candidate.rationale === "string"
+    && Array.isArray(candidate.warnings)
+    && candidate.warnings.every((warning) => typeof warning === "string")
+    && Array.isArray(candidate.nodes)
+    && candidate.nodes.every((node) => {
+      if (typeof node !== "object" || node === null) {
+        return false;
+      }
+      const nodeCandidate = node as Record<string, unknown>;
+      return typeof nodeCandidate.key === "string"
+        && typeof nodeCandidate.nodeType === "string"
+        && typeof nodeCandidate.label === "string"
+        && (nodeCandidate.description === null || typeof nodeCandidate.description === "string");
+    })
+    && Array.isArray(candidate.edges)
+    && candidate.edges.every((edge) => {
+      if (typeof edge !== "object" || edge === null) {
+        return false;
+      }
+      const edgeCandidate = edge as Record<string, unknown>;
+      return typeof edgeCandidate.sourceKey === "string"
+        && typeof edgeCandidate.targetKey === "string"
+        && typeof edgeCandidate.label === "string";
+    })
+    && typeof candidate.provider === "string"
+    && typeof candidate.model === "string"
+    && typeof candidate.respondedAtMs === "number"
+    && Number.isFinite(candidate.respondedAtMs);
 };
 
 const decodeSessionRow = (row: SessionRow): OpyChatSession => ({
@@ -311,6 +444,27 @@ const decodeAgentRunRow = (row: AgentRunRow): OpyAgentRun | null => {
     startedAt: toTimestamp(row.startedAt),
     completedAt: toNullableTimestamp(row.completedAt),
     errorSummary: toNullableText(row.errorSummary),
+  };
+};
+
+const decodeDiagramProposalRow = (row: DiagramProposalRow): OpyPersistedDiagramProposal | null => {
+  if (!isOpyPlanDecisionStatus(row.decisionStatus) || typeof row.commandDescription !== "string") {
+    return null;
+  }
+
+  const proposal = parseJsonObject(row.proposalJson);
+  const context = parseJsonObject(row.contextJson);
+  if (!isRigC4DiagramProposal(proposal) || !isRigAgentContextBundle(context)) {
+    return null;
+  }
+
+  return {
+    sessionId: row.sessionId,
+    commandDescription: row.commandDescription,
+    proposal,
+    context,
+    decisionStatus: row.decisionStatus,
+    decidedAt: toTimestamp(row.decidedAt, proposal.respondedAtMs),
   };
 };
 
@@ -389,6 +543,16 @@ export const listOpyAgentRuns = (sessionId: string) =>
     );
   });
 
+export const listOpyDiagramProposals = (sessionId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<DiagramProposalRow>(LIST_DIAGRAM_PROPOSALS_SQL, [sessionId]);
+    return rows
+      .map(decodeDiagramProposalRow)
+      .filter((row): row is OpyPersistedDiagramProposal => row !== null)
+      .sort((left, right) => right.proposal.respondedAtMs - left.proposal.respondedAtMs);
+  });
+
 export const createOpyAgentRun = (run: OpyAgentRun) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -405,6 +569,22 @@ export const createOpyAgentRun = (run: OpyAgentRun) =>
     ]);
 
     return run;
+  });
+
+export const upsertOpyDiagramProposal = (proposal: OpyPersistedDiagramProposal) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(UPSERT_DIAGRAM_PROPOSAL_SQL, [
+      proposal.sessionId,
+      proposal.proposal.respondedAtMs,
+      proposal.commandDescription.trim(),
+      JSON.stringify(proposal.proposal),
+      JSON.stringify(proposal.context),
+      proposal.decisionStatus,
+      proposal.decidedAt,
+    ]);
+
+    return proposal;
   });
 
 export const updateOpyAgentRun = (run: OpyAgentRun) =>

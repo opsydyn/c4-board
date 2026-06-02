@@ -512,6 +512,12 @@ pub fn run() {
             sql: include_str!("../migrations/021_create_opy_agent_runs.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 22,
+            description: "create_opy_diagram_proposals",
+            sql: include_str!("../migrations/022_create_opy_diagram_proposals.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -45,6 +45,7 @@ import {
   createOpyAgentRun,
   createOpyChatSession,
   finalizeInterruptedOpyAgentRuns,
+  listOpyDiagramProposals,
   listOpyAgentRuns,
   listOpyChatMessages,
   listOpyChatSessions,
@@ -53,7 +54,10 @@ import {
   type OpyChatMessage,
   type OpyChatRole,
   type OpyChatSession,
+  type OpyPersistedDiagramProposal,
+  type OpyPlanDecisionStatus,
   renameOpyChatSession,
+  upsertOpyDiagramProposal,
   updateOpyAgentRun,
 } from "../../core/effects/opy-chat.persistence";
 import type { AiActionMode } from "../../core/effects/settings.types";
@@ -90,6 +94,8 @@ interface OpySessionDiagramProposal {
   readonly command: OpyDiagramProposalCommand;
   readonly proposal: RigC4DiagramProposal;
   readonly context: RigAgentContextBundle;
+  readonly decisionStatus: OpyPlanDecisionStatus;
+  readonly decidedAtMs: number;
 }
 
 interface OpySessionBoardReview {
@@ -135,14 +141,6 @@ interface OpyActionModeSurface {
   readonly tone: "critical" | "warning" | "ready";
   readonly label: string;
   readonly detail: string;
-}
-
-type OpyPlanDecisionStatus = "pending" | "approved" | "rejected";
-
-interface OpySessionPlanDecision {
-  readonly proposalRespondedAtMs: number;
-  readonly status: OpyPlanDecisionStatus;
-  readonly decidedAtMs: number;
 }
 
 interface OpyCopilotPanelProps {
@@ -418,6 +416,31 @@ const formatMutationActionSummary = (action: RigValidatedMutationAction): string
   }
 };
 
+const toSessionDiagramProposal = (
+  persisted: OpyPersistedDiagramProposal,
+): OpySessionDiagramProposal => ({
+  command: {
+    kind: "plan-c4-diagram",
+    description: persisted.commandDescription,
+  },
+  proposal: persisted.proposal,
+  context: persisted.context,
+  decisionStatus: persisted.decisionStatus,
+  decidedAtMs: persisted.decidedAt,
+});
+
+const toPersistedDiagramProposal = (
+  sessionId: string,
+  proposal: OpySessionDiagramProposal,
+): OpyPersistedDiagramProposal => ({
+  sessionId,
+  commandDescription: proposal.command.description,
+  proposal: proposal.proposal,
+  context: proposal.context,
+  decisionStatus: proposal.decisionStatus,
+  decidedAt: proposal.decidedAtMs,
+});
+
 const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostics => {
   const bodyLines: string[] = [];
   const citations: string[] = [];
@@ -506,9 +529,6 @@ export function OpyCopilotPanel({
   const [groundedChatsBySessionId, setGroundedChatsBySessionId] = useState<
     Readonly<Record<string, OpyGroundedChatResponse | undefined>>
   >({});
-  const [planDecisionsBySessionId, setPlanDecisionsBySessionId] = useState<
-    Readonly<Record<string, OpySessionPlanDecision | undefined>>
-  >({});
   const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
     Readonly<Record<string, OpySessionDiagramProposal | undefined>>
   >({});
@@ -578,17 +598,12 @@ export function OpyCopilotPanel({
       return null;
     }
 
-    const decision = planDecisionsBySessionId[selectedSessionId];
-    if (!decision || decision.proposalRespondedAtMs !== activeDiagramProposal.proposal.respondedAtMs) {
-      return {
-        proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
-        status: "pending" as const,
-        decidedAtMs: activeDiagramProposal.proposal.respondedAtMs,
-      };
-    }
-
-    return decision;
-  }, [activeDiagramProposal, planDecisionsBySessionId, selectedSessionId]);
+    return {
+      proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
+      status: activeDiagramProposal.decisionStatus,
+      decidedAtMs: activeDiagramProposal.decidedAtMs,
+    };
+  }, [activeDiagramProposal]);
   const actionModeSurface = useMemo(
     () => describeActionMode(actionMode),
     [actionMode],
@@ -716,10 +731,15 @@ export function OpyCopilotPanel({
         interruptedRuns.forEach(emitOpyAgentRunTelemetry);
         const loadedMessages = await runEffect(listOpyChatMessages(sessionId));
         const loadedRuns = await runEffect(listOpyAgentRuns(sessionId));
+        const loadedProposals = await runEffect(listOpyDiagramProposals(sessionId));
         setMessages(loadedMessages);
         setRunsBySessionId((current) => ({
           ...current,
           [sessionId]: loadedRuns,
+        }));
+        setDiagramProposalsBySessionId((current) => ({
+          ...current,
+          [sessionId]: loadedProposals[0] ? toSessionDiagramProposal(loadedProposals[0]) : undefined,
         }));
       } catch (error) {
         setRuntimeError(`FAILED TO LOAD TRANSCRIPT: ${toErrorMessage(error)}`);
@@ -727,6 +747,10 @@ export function OpyCopilotPanel({
         setRunsBySessionId((current) => ({
           ...current,
           [sessionId]: [],
+        }));
+        setDiagramProposalsBySessionId((current) => ({
+          ...current,
+          [sessionId]: undefined,
         }));
       } finally {
         setIsMessageLoading(false);
@@ -852,7 +876,7 @@ export function OpyCopilotPanel({
         readonly invoke: () => Promise<T>;
         readonly assistantMessage: (result: T) => string;
         readonly failurePrefix: string;
-        readonly onAfterPersisted?: (result: T) => void;
+        readonly onAfterPersisted?: (result: T) => void | Promise<void>;
       },
     ): Promise<T | null> => {
       setIsRunning(true);
@@ -905,7 +929,7 @@ export function OpyCopilotPanel({
           return null;
         }
 
-        input.onAfterPersisted?.(result);
+        await input.onAfterPersisted?.(result);
         await transitionAgentRun(currentRun, {
           stage: "complete",
           status: "completed",
@@ -1289,22 +1313,23 @@ export function OpyCopilotPanel({
               formatRigAgentCitationBlock(groundedProposal.context)
             }`,
           failurePrefix: "DIAGRAM PROPOSAL FAILED",
-          onAfterPersisted: (groundedProposal) => {
+          onAfterPersisted: async (groundedProposal) => {
+            const persistedProposal: OpySessionDiagramProposal = {
+              command: opyCommand.proposal,
+              proposal: groundedProposal.proposal,
+              context: groundedProposal.context,
+              decisionStatus: "pending",
+              decidedAtMs: Date.now(),
+            };
+
+            await runEffect(
+              upsertOpyDiagramProposal(
+                toPersistedDiagramProposal(sessionId, persistedProposal),
+              ),
+            );
             setDiagramProposalsBySessionId((current) => ({
               ...current,
-              [sessionId]: {
-                command: opyCommand.proposal,
-                proposal: groundedProposal.proposal,
-                context: groundedProposal.context,
-              },
-            }));
-            setPlanDecisionsBySessionId((current) => ({
-              ...current,
-              [sessionId]: {
-                proposalRespondedAtMs: groundedProposal.proposal.respondedAtMs,
-                status: "pending",
-                decidedAtMs: Date.now(),
-              },
+              [sessionId]: persistedProposal,
             }));
           },
         });
@@ -1465,25 +1490,35 @@ export function OpyCopilotPanel({
         return;
       }
 
-      const decidedAtMs = Date.now();
-      setPlanDecisionsBySessionId((current) => ({
-        ...current,
-        [sessionId]: {
-          proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
-          status,
+      try {
+        const decidedAtMs = Date.now();
+        const nextProposal: OpySessionDiagramProposal = {
+          ...activeDiagramProposal,
+          decisionStatus: status,
           decidedAtMs,
-        },
-      }));
+        };
+        await runEffect(
+          upsertOpyDiagramProposal(
+            toPersistedDiagramProposal(sessionId, nextProposal),
+          ),
+        );
+        setDiagramProposalsBySessionId((current) => ({
+          ...current,
+          [sessionId]: nextProposal,
+        }));
 
-      await appendAndPersistMessage(
-        sessionId,
-        "system",
-        `PLAN ${PLAN_DECISION_LABEL[status]}:: ${
-          status === "approved"
-            ? `READY ${activeMutationPlan.plan.totalActions} ACTION(S) FOR CONFIRMED APPLY.`
-            : "CURRENT PLAN HELD. NO BOARD CHANGES WILL BE APPLIED."
-        }`,
-      );
+        await appendAndPersistMessage(
+          sessionId,
+          "system",
+          `PLAN ${PLAN_DECISION_LABEL[status]}:: ${
+            status === "approved"
+              ? `READY ${activeMutationPlan.plan.totalActions} ACTION(S) FOR CONFIRMED APPLY.`
+              : "CURRENT PLAN HELD. NO BOARD CHANGES WILL BE APPLIED."
+          }`,
+        );
+      } catch (error) {
+        setRuntimeError(`PLAN REVIEW SAVE FAILED: ${toErrorMessage(error)}`);
+      }
     },
     [
       activeDiagramProposal,
@@ -1491,7 +1526,9 @@ export function OpyCopilotPanel({
       appendAgentNotice,
       appendAndPersistMessage,
       isRunning,
+      runEffect,
       selectedSessionId,
+      setRuntimeError,
     ],
   );
 
