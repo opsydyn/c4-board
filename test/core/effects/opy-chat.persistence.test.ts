@@ -1,13 +1,14 @@
 import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
 import {
   createOpyAgentCheckpoint,
+  getOpyAgentCheckpoint,
   listOpyAgentCheckpoints,
   listOpyDiagramProposals,
   type OpyAgentCheckpoint,
   type OpyPersistedDiagramProposal,
   upsertOpyDiagramProposal,
 } from "@/core/effects/opy-chat.persistence";
-import { Effect, Layer } from "effect";
+import { Cause, Effect, Layer, Option } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 const createPersistedProposal = (
@@ -101,6 +102,32 @@ const runWithDatabaseService = async <A, E>(
   });
 
   return Effect.runPromise(effect.pipe(Effect.provide(layer)));
+};
+
+const runExitWithDatabaseService = async <A, E>(
+  effect: Effect.Effect<A, E, DatabaseService>,
+  handlers: {
+    readonly query?: (sql: string, bindValues?: unknown[]) => unknown[];
+    readonly execute?: (sql: string, bindValues?: unknown[]) => void;
+  },
+) => {
+  const layer = Layer.succeed(DatabaseService, {
+    query: <T>(sql: string, bindValues?: unknown[]) =>
+      Effect.try({
+        try: () => (handlers.query?.(sql, bindValues) ?? []) as T[],
+        catch: (cause) => new DatabaseError({ message: String(cause), cause }),
+      }),
+    execute: (sql: string, bindValues?: unknown[]) =>
+      Effect.try({
+        try: () => {
+          handlers.execute?.(sql, bindValues);
+        },
+        catch: (cause) => new DatabaseError({ message: String(cause), cause }),
+      }),
+    transaction: <R, A2, E2>(inner: Effect.Effect<A2, E2, R>) => inner,
+  });
+
+  return Effect.runPromiseExit(effect.pipe(Effect.provide(layer)));
 };
 
 describe("opy-chat.persistence", () => {
@@ -237,5 +264,46 @@ describe("opy-chat.persistence", () => {
     expect(listed[0]?.id).toBe("checkpoint-1");
     expect(listed[0]?.snapshot.name).toBe("Payments Context");
     expect(listed[1]?.id).toBe("checkpoint-older");
+  });
+
+  it("loads a checkpoint by id and rejects when it is missing", async () => {
+    const checkpoint = createCheckpoint();
+
+    const loaded = await runWithDatabaseService(
+      getOpyAgentCheckpoint("checkpoint-1"),
+      {
+        query: () => [
+          {
+            id: checkpoint.id,
+            sessionId: checkpoint.sessionId,
+            diagramId: checkpoint.diagramId,
+            proposalRespondedAtMs: checkpoint.proposalRespondedAtMs,
+            checkpointType: checkpoint.checkpointType,
+            snapshotJson: JSON.stringify(checkpoint.snapshot),
+            createdAt: checkpoint.createdAt,
+          },
+        ],
+      },
+    );
+
+    expect(loaded).toEqual(checkpoint);
+
+    const exit = await runExitWithDatabaseService(
+      getOpyAgentCheckpoint("missing"),
+      {
+        query: () => [],
+      },
+    );
+
+    expect(exit._tag).toBe("Failure");
+    const failure = Cause.failureOption(exit.cause);
+    expect(Option.isSome(failure)).toBe(true);
+    if (Option.isSome(failure)) {
+      expect(failure.value).toMatchObject({
+        _tag: "NotFoundError",
+        entity: "opy_agent_checkpoint",
+        id: "missing",
+      });
+    }
   });
 });

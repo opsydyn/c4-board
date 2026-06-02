@@ -8,6 +8,7 @@ import {
 } from "../../core/effects/agent-context";
 import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
 import { summarizeRigToolPolicy } from "../../core/effects/agent-policy";
+import { formatOpyRollbackSummary, selectLatestOpyAgentCheckpoint } from "../../core/effects/agent-rollback.runtime";
 import type {
   RigApplyLayoutValidationSummary,
   RigCreateEdgesValidationSummary,
@@ -45,10 +46,12 @@ import {
   createOpyAgentRun,
   createOpyChatSession,
   finalizeInterruptedOpyAgentRuns,
+  listOpyAgentCheckpoints,
   listOpyAgentRuns,
   listOpyChatMessages,
   listOpyChatSessions,
   listOpyDiagramProposals,
+  type OpyAgentCheckpoint,
   type OpyAgentRun,
   type OpyAgentRunIntent,
   type OpyChatMessage,
@@ -80,7 +83,16 @@ export interface OpyBoardApplyC4ProposalAction {
   readonly proposal: RigC4DiagramProposal;
 }
 
-export type OpyBoardAction = OpyBoardAddNodeAction | OpyBoardApplyC4ProposalAction;
+export interface OpyBoardRollbackCheckpointAction {
+  readonly kind: "rollback-checkpoint";
+  readonly sessionId: string;
+  readonly checkpointId: string;
+}
+
+export type OpyBoardAction =
+  | OpyBoardAddNodeAction
+  | OpyBoardApplyC4ProposalAction
+  | OpyBoardRollbackCheckpointAction;
 
 interface OpyDiagramProposalCommand {
   readonly kind: "plan-c4-diagram";
@@ -534,6 +546,9 @@ export function OpyCopilotPanel({
   const [diagramProposalsBySessionId, setDiagramProposalsBySessionId] = useState<
     Readonly<Record<string, OpySessionDiagramProposal | undefined>>
   >({});
+  const [checkpointsBySessionId, setCheckpointsBySessionId] = useState<
+    Readonly<Record<string, ReadonlyArray<OpyAgentCheckpoint> | undefined>>
+  >({});
   const [boardReviewsBySessionId, setBoardReviewsBySessionId] = useState<
     Readonly<Record<string, OpySessionBoardReview | undefined>>
   >({});
@@ -559,6 +574,14 @@ export function OpyCopilotPanel({
   const activeRuns = useMemo(
     () => runsBySessionId[selectedSessionId] ?? [],
     [runsBySessionId, selectedSessionId],
+  );
+  const activeCheckpoints = useMemo(
+    () => checkpointsBySessionId[selectedSessionId] ?? [],
+    [checkpointsBySessionId, selectedSessionId],
+  );
+  const latestCheckpoint = useMemo(
+    () => selectLatestOpyAgentCheckpoint(activeCheckpoints),
+    [activeCheckpoints],
   );
   const activeRun = useMemo(
     () => activeRuns.find((run) => run.status === "running") ?? null,
@@ -735,6 +758,7 @@ export function OpyCopilotPanel({
         const loadedMessages = await runEffect(listOpyChatMessages(sessionId));
         const loadedRuns = await runEffect(listOpyAgentRuns(sessionId));
         const loadedProposals = await runEffect(listOpyDiagramProposals(sessionId));
+        const loadedCheckpoints = await runEffect(listOpyAgentCheckpoints(sessionId));
         setMessages(loadedMessages);
         setRunsBySessionId((current) => ({
           ...current,
@@ -743,6 +767,10 @@ export function OpyCopilotPanel({
         setDiagramProposalsBySessionId((current) => ({
           ...current,
           [sessionId]: loadedProposals[0] ? toSessionDiagramProposal(loadedProposals[0]) : undefined,
+        }));
+        setCheckpointsBySessionId((current) => ({
+          ...current,
+          [sessionId]: loadedCheckpoints,
         }));
       } catch (error) {
         setRuntimeError(`FAILED TO LOAD TRANSCRIPT: ${toErrorMessage(error)}`);
@@ -754,6 +782,10 @@ export function OpyCopilotPanel({
         setDiagramProposalsBySessionId((current) => ({
           ...current,
           [sessionId]: undefined,
+        }));
+        setCheckpointsBySessionId((current) => ({
+          ...current,
+          [sessionId]: [],
         }));
       } finally {
         setIsMessageLoading(false);
@@ -1002,6 +1034,10 @@ export function OpyCopilotPanel({
       ...current,
       [createdSession.id]: [],
     }));
+    setCheckpointsBySessionId((current) => ({
+      ...current,
+      [createdSession.id]: [],
+    }));
   }, [diagramId, domain, hasOpenAiApiKey, runEffect]);
 
   useEffect(() => {
@@ -1066,6 +1102,10 @@ export function OpyCopilotPanel({
             ...current,
             [createdSession.id]: [],
           }));
+          setCheckpointsBySessionId((current) => ({
+            ...current,
+            [createdSession.id]: [],
+          }));
           return;
         }
 
@@ -1079,6 +1119,7 @@ export function OpyCopilotPanel({
         } else {
           setMessages([]);
           setRunsBySessionId({});
+          setCheckpointsBySessionId({});
         }
       } catch (error) {
         if (!isCancelled) {
@@ -1087,6 +1128,7 @@ export function OpyCopilotPanel({
           setSelectedSessionId("");
           setMessages([]);
           setRunsBySessionId({});
+          setCheckpointsBySessionId({});
         }
       } finally {
         if (!isCancelled) {
@@ -1663,6 +1705,73 @@ export function OpyCopilotPanel({
     selectedSessionId,
   ]);
 
+  const handleRollbackLatestCheckpoint = useCallback(async () => {
+    const sessionId = selectedSessionId;
+    if (sessionId.length === 0 || !latestCheckpoint || isRunning) {
+      return;
+    }
+
+    if (actionMode !== "apply-with-confirmation") {
+      await appendAgentNotice(
+        sessionId,
+        makeAgentPolicyError({
+          message: `Rollback blocked by mode ${actionMode.toUpperCase()}.`,
+          recommendedAction: "Switch to APPLY-WITH-CONFIRMATION.",
+        }),
+      );
+      return;
+    }
+
+    if (
+      !window.confirm(
+        [
+          "Rollback to OPY checkpoint?",
+          "",
+          formatOpyRollbackSummary(latestCheckpoint),
+          `Created ${formatClockTime(latestCheckpoint.createdAt)}`,
+          "",
+          "This will restore the board to the checkpoint snapshot and save it.",
+        ].join("\n"),
+      )
+    ) {
+      await appendAndPersistMessage(
+        sessionId,
+        "system",
+        "ROLLBACK CANCELLED BY OPERATOR.",
+      );
+      return;
+    }
+
+    setRuntimeError(null);
+    setIsRunning(true);
+    try {
+      const actionResult = await onApplyBoardAction({
+        kind: "rollback-checkpoint",
+        sessionId,
+        checkpointId: latestCheckpoint.id,
+      });
+      await appendAndPersistMessage(sessionId, "assistant", actionResult);
+    } catch (error) {
+      const message = toErrorMessage(error);
+      setRuntimeError(message);
+      await appendAndPersistMessage(
+        sessionId,
+        "system",
+        `ROLLBACK FAILED: ${message}`,
+      );
+    } finally {
+      setIsRunning(false);
+    }
+  }, [
+    actionMode,
+    appendAgentNotice,
+    appendAndPersistMessage,
+    isRunning,
+    latestCheckpoint,
+    onApplyBoardAction,
+    selectedSessionId,
+  ]);
+
   const statusText = agentSecretStatus === "loading"
     ? "KEY::CHECKING"
     : agentSecretStatus === "error"
@@ -1884,6 +1993,40 @@ export function OpyCopilotPanel({
               </p>
             )}
           </details>
+        </section>
+      )}
+      {latestCheckpoint && (
+        <section className={styles.opyCopilotPlanCard} aria-label="Latest OPY checkpoint">
+          <div className={styles.opyCopilotProposalHeader}>
+            <span>{`CHECKPOINT::${latestCheckpoint.id.slice(0, 8)}`}</span>
+            <span>{latestCheckpoint.checkpointType.toUpperCase()}</span>
+          </div>
+          <p className={styles.opyCopilotProposalHint}>
+            {formatOpyRollbackSummary(latestCheckpoint)}
+          </p>
+          <div className={styles.opyCopilotProposalStats}>
+            <span>{`CREATED::${formatClockTime(latestCheckpoint.createdAt)}`}</span>
+            <span>{`NODES::${latestCheckpoint.snapshot.nodes.length}`}</span>
+            <span>{`EDGES::${latestCheckpoint.snapshot.edges.length}`}</span>
+            <span>{`PROPOSAL::${formatClockTime(latestCheckpoint.proposalRespondedAtMs)}`}</span>
+          </div>
+          <div className={styles.opyCopilotPlanDecisionRow}>
+            <button
+              type="button"
+              className={styles.toolbarButton}
+              onClick={() => {
+                void handleRollbackLatestCheckpoint();
+              }}
+              disabled={isRunning || actionMode !== "apply-with-confirmation"}
+            >
+              {isRunning ? "ROLLING BACK..." : "ROLLBACK LAST APPLY"}
+            </button>
+            <p className={styles.opyCopilotProposalHint}>
+              {actionMode === "apply-with-confirmation"
+                ? "RESTORE THE LAST CONFIRMED OPY CHECKPOINT THROUGH THE SAVE BOUNDARY."
+                : "SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE ROLLBACK."}
+            </p>
+          </div>
         </section>
       )}
       <div className={styles.opyCopilotTranscript} role="log" aria-live="polite">

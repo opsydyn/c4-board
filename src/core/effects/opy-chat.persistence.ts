@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { RigAgentContextBundle, RigAgentCitation } from "./agent-context";
 import type { RigC4DiagramProposal } from "./ai-agent.runtime";
 import type { SaveDiagramInput } from "./canvas-persistence";
-import { DatabaseService } from "./database.base";
+import { DatabaseService, NotFoundError } from "./database.base";
 
 export type OpyChatRole = "assistant" | "user" | "system";
 export type OpyChatDomain = "c4" | "ddd";
@@ -216,6 +216,20 @@ const LIST_AGENT_CHECKPOINTS_SQL = `
   FROM opy_agent_checkpoints
   WHERE session_id = ?
   ORDER BY created_at DESC
+`;
+
+const GET_AGENT_CHECKPOINT_SQL = `
+  SELECT
+    id,
+    session_id AS sessionId,
+    diagram_id AS diagramId,
+    proposal_responded_at AS proposalRespondedAtMs,
+    checkpoint_type AS checkpointType,
+    snapshot_json AS snapshotJson,
+    created_at AS createdAt
+  FROM opy_agent_checkpoints
+  WHERE id = ?
+  LIMIT 1
 `;
 
 const LIST_ACTIVE_RUNS_SQL = `
@@ -653,6 +667,24 @@ export const listOpyAgentCheckpoints = (sessionId: string) =>
       .map(decodeAgentCheckpointRow)
       .filter((row): row is OpyAgentCheckpoint => row !== null)
       .sort((left, right) => right.createdAt - left.createdAt);
+  });
+
+export const getOpyAgentCheckpoint = (checkpointId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentCheckpointRow>(GET_AGENT_CHECKPOINT_SQL, [checkpointId]);
+    const checkpoint = rows
+      .map(decodeAgentCheckpointRow)
+      .find((row): row is OpyAgentCheckpoint => row !== null);
+
+    if (!checkpoint) {
+      return yield* Effect.fail(new NotFoundError({
+        entity: "opy_agent_checkpoint",
+        id: checkpointId,
+      }));
+    }
+
+    return checkpoint;
   });
 
 export const createOpyAgentRun = (run: OpyAgentRun) =>

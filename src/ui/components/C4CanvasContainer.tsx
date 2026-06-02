@@ -48,7 +48,7 @@ import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../.
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import type { LayoutPresetName } from "../../core/effects/layout";
-import { createOpyAgentCheckpoint } from "../../core/effects/opy-chat.persistence";
+import { createOpyAgentCheckpoint, getOpyAgentCheckpoint } from "../../core/effects/opy-chat.persistence";
 import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
@@ -1287,6 +1287,65 @@ export function C4CanvasContainer() {
         }
 
         return `PROPOSAL APPLIED:: +${summary.newNodes} NODE(S) · +${summary.newEdges} EDGE(S) · REUSED ${summary.existingNodes} NODE(S) / ${summary.existingEdges} EDGE(S) · CHECKPOINT::${checkpointRecord.id.slice(0, 8)}.`;
+      }
+
+      if (action.kind === "rollback-checkpoint") {
+        if (state.context.currentDomain !== "c4") {
+          throw new Error("OPY checkpoint rollback is currently available in C4 mode only.");
+        }
+
+        const currentDiagramId = state.context.currentDiagramId;
+        if (!currentDiagramId) {
+          throw new Error("No active diagram loaded for OPY checkpoint rollback.");
+        }
+
+        await flushPendingInlineEdits();
+
+        const checkpoint = await runEffect(getOpyAgentCheckpoint(action.checkpointId));
+        if (checkpoint.sessionId !== action.sessionId) {
+          throw new Error("Checkpoint session mismatch. Refresh the OPY session list and retry.");
+        }
+        if (checkpoint.diagramId !== currentDiagramId || checkpoint.snapshot.id !== currentDiagramId) {
+          throw new Error("Checkpoint targets a different diagram than the active board.");
+        }
+
+        const fallbackSnapshot = buildOpyCheckpointSnapshot({
+          diagramId: currentDiagramId,
+          diagramName: state.context.diagramName,
+          diagramDescription: state.context.diagramDescription,
+          nodes: state.context.nodes,
+          edges: state.context.edges,
+          savedAt: saveSnapshot.context.lastSavedAt ?? state.context.lastSaved ?? null,
+        });
+        const rollbackSaveInput: SaveDiagramPayload = {
+          id: checkpoint.snapshot.id,
+          name: checkpoint.snapshot.name,
+          description: checkpoint.snapshot.description ?? "",
+          nodes: [...checkpoint.snapshot.nodes],
+          edges: [...checkpoint.snapshot.edges],
+        };
+
+        try {
+          cancelAutosave();
+          restoreCheckpointSnapshot(checkpoint.snapshot);
+
+          const didSave = await requestSave("manual", {
+            overrideInput: rollbackSaveInput,
+          });
+
+          if (!didSave) {
+            const saveError = saveActorRef.getSnapshot().context.errorMessage;
+            const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+            throw new Error(`OPY checkpoint rollback save failed: ${detail}`);
+          }
+
+          cancelAutosave();
+        } catch (error) {
+          restoreCheckpointSnapshot(fallbackSnapshot);
+          throw error;
+        }
+
+        return `ROLLBACK APPLIED:: CHECKPOINT::${checkpoint.id.slice(0, 8)} · ${checkpoint.snapshot.nodes.length} NODE(S) · ${checkpoint.snapshot.edges.length} EDGE(S).`;
       }
 
       return "NO ACTION APPLIED.";
