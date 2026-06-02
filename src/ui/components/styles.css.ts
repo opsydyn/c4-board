@@ -791,6 +791,21 @@ export const opyCopilotProposalBadgeAmbiguous = style({
   color: theme.color.status.critical,
 });
 
+export const opyCopilotRestoreBadgeRestore = style({
+  borderColor: theme.color.status.selected,
+  color: theme.color.status.selected,
+});
+
+export const opyCopilotRestoreBadgeRevert = style({
+  borderColor: theme.color.interactive.primary,
+  color: theme.color.interactive.primary,
+});
+
+export const opyCopilotRestoreBadgeRemove = style({
+  borderColor: theme.color.status.critical,
+  color: theme.color.status.critical,
+});
+
 export const opyCopilotReviewBadgeLow = style({
   borderColor: theme.color.status.selected,
   color: theme.color.status.selected,

@@ -8,7 +8,12 @@ import {
 } from "../../core/effects/agent-context";
 import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
 import { summarizeRigToolPolicy } from "../../core/effects/agent-policy";
-import { formatOpyRollbackSummary, selectLatestOpyAgentCheckpoint } from "../../core/effects/agent-rollback.runtime";
+import {
+  buildOpyCheckpointRestorePreview,
+  formatOpyRollbackSummary,
+  type OpyCheckpointRestoreImpactStatus,
+  selectLatestOpyAgentCheckpoint,
+} from "../../core/effects/agent-rollback.runtime";
 import type {
   RigApplyLayoutValidationSummary,
   RigCreateEdgesValidationSummary,
@@ -210,6 +215,12 @@ const PLAN_DECISION_LABEL: Record<OpyPlanDecisionStatus, string> = {
   pending: "PENDING",
   approved: "APPROVED",
   rejected: "REJECTED",
+};
+
+const RESTORE_IMPACT_LABEL: Record<OpyCheckpointRestoreImpactStatus, string> = {
+  restore: "RESTORE",
+  revert: "REVERT",
+  remove: "REMOVE",
 };
 
 const RUN_INTENT_LABEL: Record<OpyAgentRunIntent, string> = {
@@ -475,6 +486,17 @@ const findProposalForCheckpoint = (
 ): OpySessionDiagramProposal | null =>
   proposals.find((proposal) => proposal.proposal.respondedAtMs === checkpoint.proposalRespondedAtMs) ?? null;
 
+const restoreImpactBadgeClassName = (status: OpyCheckpointRestoreImpactStatus): string => {
+  switch (status) {
+    case "restore":
+      return `${styles.opyCopilotProposalBadge} ${styles.opyCopilotRestoreBadgeRestore}`;
+    case "revert":
+      return `${styles.opyCopilotProposalBadge} ${styles.opyCopilotRestoreBadgeRevert}`;
+    case "remove":
+      return `${styles.opyCopilotProposalBadge} ${styles.opyCopilotRestoreBadgeRemove}`;
+  }
+};
+
 const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostics => {
   const bodyLines: string[] = [];
   const citations: string[] = [];
@@ -606,6 +628,16 @@ export function OpyCopilotPanel({
   const latestCheckpoint = useMemo(
     () => selectLatestOpyAgentCheckpoint(activeCheckpoints),
     [activeCheckpoints],
+  );
+  const checkpointRestorePreviewById = useMemo(
+    () =>
+      new Map(
+        activeCheckpoints.map((checkpoint) => [
+          checkpoint.id,
+          buildOpyCheckpointRestorePreview(checkpoint, boardSummary),
+        ] as const),
+      ),
+    [activeCheckpoints, boardSummary],
   );
   const activeRun = useMemo(
     () => activeRuns.find((run) => run.status === "running") ?? null,
@@ -2070,6 +2102,7 @@ export function OpyCopilotPanel({
             <div className={styles.opyCopilotPlanActionList}>
               {activeCheckpoints.map((checkpoint, index) => {
                 const checkpointProposal = findProposalForCheckpoint(checkpoint, activeProposalHistory);
+                const checkpointPreview = checkpointRestorePreviewById.get(checkpoint.id) ?? null;
                 return (
                   <article key={checkpoint.id} className={styles.opyCopilotProposalItem}>
                     <div className={styles.opyCopilotProposalItemMeta}>
@@ -2084,6 +2117,53 @@ export function OpyCopilotPanel({
                       <span>{`NODES::${checkpoint.snapshot.nodes.length}`}</span>
                       <span>{`EDGES::${checkpoint.snapshot.edges.length}`}</span>
                     </div>
+                    {checkpointPreview
+                      ? (
+                        <>
+                          <div className={styles.opyCopilotProposalStats}>
+                            <span>{`RESTORE NODES::${checkpointPreview.counts.restoreNodes}`}</span>
+                            <span>{`REVERT NODES::${checkpointPreview.counts.revertNodes}`}</span>
+                            <span>{`REMOVE NODES::${checkpointPreview.counts.removeNodes}`}</span>
+                            <span>{`RESTORE EDGES::${checkpointPreview.counts.restoreEdges}`}</span>
+                            <span>{`REVERT EDGES::${checkpointPreview.counts.revertEdges}`}</span>
+                            <span>{`REMOVE EDGES::${checkpointPreview.counts.removeEdges}`}</span>
+                          </div>
+                          <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                            <summary className={styles.opyCopilotDiagnosticsSummary}>
+                              {checkpointPreview.hasChanges
+                                ? `RESTORE DIFF::${checkpointPreview.impactedEntities.length} CHANGE(S)`
+                                : "RESTORE DIFF::NO CHANGES"}
+                            </summary>
+                            {checkpointPreview.hasChanges
+                              ? (
+                                <div className={styles.opyCopilotPlanImpactList}>
+                                  {checkpointPreview.impactedEntities.map((impact) => (
+                                    <article key={impact.id} className={styles.opyCopilotProposalItem}>
+                                      <div className={styles.opyCopilotProposalItemMeta}>
+                                        <span>{impact.category.toUpperCase()}</span>
+                                        <span className={restoreImpactBadgeClassName(impact.status)}>
+                                          {RESTORE_IMPACT_LABEL[impact.status]}
+                                        </span>
+                                      </div>
+                                      <p>{impact.title}</p>
+                                      <p className={styles.opyCopilotProposalHint}>{impact.detail}</p>
+                                    </article>
+                                  ))}
+                                </div>
+                              )
+                              : (
+                                <p className={styles.opyCopilotProposalHint}>
+                                  CHECKPOINT SNAPSHOT ALREADY MATCHES THE CURRENT BOARD STATE.
+                                </p>
+                              )}
+                          </details>
+                        </>
+                      )
+                      : (
+                        <p className={styles.opyCopilotProposalHint}>
+                          RESTORE DIFF PREVIEW UNAVAILABLE UNTIL A NORMALIZED BOARD SUMMARY IS ACTIVE.
+                        </p>
+                      )}
                     {checkpointProposal
                       ? (
                         <>

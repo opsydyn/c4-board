@@ -279,6 +279,7 @@ Every confirmed OPY apply creates a pre-apply checkpoint artifact.
 
 - restore latest checkpoint
 - restore any checkpoint from history
+- restore diff preview against current board state before confirm
 - proposal provenance shown when available
 - restore runs through the same save boundary
 - failed restore rehydrates the pre-restore board
@@ -288,6 +289,8 @@ Every confirmed OPY apply creates a pre-apply checkpoint artifact.
 - latest checkpoint summary
 - historical restore targets
 - node/edge counts per checkpoint
+- restore/revert/remove counts before confirm
+- impacted node/edge list for each restore target
 - linked proposal summary and command source when matched
 
 ## Widget Persistence
@@ -330,7 +333,6 @@ Current practical scope:
 
 Not implemented yet:
 
-- checkpoint diff preview before restore
 - broader write tool families beyond current typed set
 - full multi-stage orchestration machine from later Rig phases
 - resumable long-running tasks/artifacts from the later roadmap phases
@@ -345,7 +347,8 @@ The current happy path is:
 4. For proposals, inspect the typed plan and blockers.
 5. Approve the plan.
 6. Apply in `apply-with-confirmation`.
-7. Use checkpoint history to restore if needed.
+7. Inspect the restore diff preview if you need to recover.
+8. Use checkpoint history to restore deliberately through the save boundary.
 
 ## Key Files
 
@@ -372,4 +375,4 @@ Planning references:
 
 ## Status Snapshot
 
-As of this handbook, OPY has completed the practical foundation/read/proposal/apply/restore slices required to function as a controlled architecture copilot inside the board surface.
+As of this handbook, OPY has completed the practical foundation/read/proposal/apply/restore slices required to function as a controlled architecture copilot inside the board surface, including targeted checkpoint restore with previewable board deltas.

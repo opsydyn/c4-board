@@ -1,6 +1,6 @@
 # Rig Agent Task Breakdown (Execution Plan)
 
-**Last Updated**: 2026-02-15
+**Last Updated**: 2026-06-02
 **Source ADR**: `docs/adr/008-rig-agent-platform-orchestration.md`
 **Delivery Horizon**: 6 phases across 2026-Q1/Q2
 
@@ -177,6 +177,8 @@
 - Deliverables:
   - Rollback endpoint by checkpoint/task.
   - UI action to rollback last applied task.
+  - Historical checkpoint restore targets with proposal provenance.
+  - Restore diff preview against the current board before confirm.
 - Primary files:
   - `src/core/effects/agent-rollback.runtime.ts`
   - `src/ui/components/OpyCopilotPanel.tsx`
@@ -184,6 +186,7 @@
 - Acceptance:
   - Rollback restores previous snapshot deterministically.
   - Rollback action is logged in run artifacts.
+  - Operator can inspect restore/revert/remove deltas before executing restore.
 
 ## 6) Phase 4: Multi-Stage Orchestration
 
