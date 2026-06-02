@@ -9,6 +9,7 @@ import type {
   OpyWidgetPresence,
   OpyWidgetSnapTarget,
 } from "../../core/effects/settings.types";
+import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import { OpyAvatar } from "./OpyAvatar";
 import * as styles from "./OpyFloatingWidget.css";
 
@@ -60,6 +61,7 @@ interface OpyFloatingWidgetProps {
   readonly diagramName: string;
   readonly nodeCount: number;
   readonly edgeCount: number;
+  readonly boardContext: OpyBoardContextRegistry | null;
   readonly presence: OpyWidgetPresence;
   readonly layout: OpyWidgetLayout;
   readonly modeLayouts: OpyWidgetModeLayouts;
@@ -398,6 +400,7 @@ export function OpyFloatingWidget({
   diagramName,
   nodeCount,
   edgeCount,
+  boardContext,
   presence,
   layout,
   modeLayouts,
@@ -589,40 +592,54 @@ export function OpyFloatingWidget({
   );
 
   const contextActions = useMemo<ReadonlyArray<OrbMenuAction>>(
-    () => [
-      {
-        id: "snap:center",
-        label: "Center Lock",
-        hint: "Hold OPY in the middle of the current board.",
-      },
-      {
-        id: "snap:left",
-        label: "Left Rail",
-        hint: "Pin OPY to the left inspection rail.",
-      },
-      {
-        id: "snap:right",
-        label: "Right Rail",
-        hint: "Hold OPY on the right analysis rail.",
-      },
-      {
-        id: "snap:bottom",
-        label: "Bottom Dock",
-        hint: "Anchor OPY to the lower command deck.",
-      },
-      {
-        id: "snap:free",
-        label: "Free Drift",
-        hint: "Release all anchors and float the widget freely.",
-      },
-      {
-        id: "context:board",
-        label: `${domain.toUpperCase()} · ${normalizedDiagramName}`,
-        hint: `Board footprint ${nodeCount} nodes / ${edgeCount} edges.`,
-        disabled: true,
-      },
-    ],
-    [domain, edgeCount, nodeCount, normalizedDiagramName],
+    () => {
+      const layoutActions: OrbMenuAction[] = [
+        {
+          id: "snap:center",
+          label: "Center Lock",
+          hint: "Hold OPY in the middle of the current board.",
+        },
+        {
+          id: "snap:left",
+          label: "Left Rail",
+          hint: "Pin OPY to the left inspection rail.",
+        },
+        {
+          id: "snap:right",
+          label: "Right Rail",
+          hint: "Hold OPY on the right analysis rail.",
+        },
+        {
+          id: "snap:bottom",
+          label: "Bottom Dock",
+          hint: "Anchor OPY to the lower command deck.",
+        },
+        {
+          id: "snap:free",
+          label: "Free Drift",
+          hint: "Release all anchors and float the widget freely.",
+        },
+      ];
+
+      const contextScopeActions = boardContext
+        ? boardContext.scopes.map<OrbMenuAction>((scope) => ({
+            id: `context:${scope.id}`,
+            label: scope.label,
+            hint: scope.hint,
+            disabled: true,
+          }))
+        : [
+            {
+              id: "context:board",
+              label: `${domain.toUpperCase()} · ${normalizedDiagramName}`,
+              hint: `Board footprint ${nodeCount} nodes / ${edgeCount} edges.`,
+              disabled: true,
+            },
+          ];
+
+      return [...layoutActions, ...contextScopeActions];
+    },
+    [boardContext, domain, edgeCount, nodeCount, normalizedDiagramName],
   );
 
   const routeActions = useMemo<ReadonlyArray<OrbMenuAction>>(

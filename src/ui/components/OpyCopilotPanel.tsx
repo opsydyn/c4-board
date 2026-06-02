@@ -24,6 +24,7 @@ import {
   type OpyProposalDiffStatus,
   summarizeGroundedProposalDiff,
 } from "../../core/effects/opy-c4-proposals";
+import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import {
   appendOpyChatMessage,
   createOpyAgentRun,
@@ -87,6 +88,7 @@ interface OpyCopilotPanelProps {
   readonly nodeCount: number;
   readonly edgeCount: number;
   readonly boardSummary: RigC4BoardSummary | null;
+  readonly boardContext: OpyBoardContextRegistry | null;
   readonly actionMode: AiActionMode;
   readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
@@ -319,6 +321,7 @@ export function OpyCopilotPanel({
   nodeCount,
   edgeCount,
   boardSummary,
+  boardContext,
   actionMode,
   onApplyBoardAction,
   onOpenAiSettings,
@@ -347,10 +350,14 @@ export function OpyCopilotPanel({
   const selectedSessionIdRef = useRef<string>("");
 
   const promptContext = useMemo(() => {
+    if (boardContext) {
+      return boardContext.promptContext;
+    }
+
     const diagramLabel = diagramId ?? "unsaved";
     const normalizedDiagramName = diagramName.trim().length > 0 ? diagramName.trim() : "untitled";
     return `DOMAIN=${domain.toUpperCase()} | DIAGRAM=${diagramLabel} | NAME=${normalizedDiagramName} | NODES=${nodeCount} | EDGES=${edgeCount}`;
-  }, [diagramId, diagramName, domain, edgeCount, nodeCount]);
+  }, [boardContext, diagramId, diagramName, domain, edgeCount, nodeCount]);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -1057,13 +1064,14 @@ export function OpyCopilotPanel({
           return;
         }
 
+        const reviewFocus = opyCommand.review.focus ?? boardContext?.selectedNode?.label;
         await executeRigRun({
           sessionId,
           intent: "review-c4-board",
           invoke: () =>
             runEffect(
               reviewRigC4Board({
-                ...(opyCommand.review.focus ? { focus: opyCommand.review.focus } : {}),
+                ...(reviewFocus ? { focus: reviewFocus } : {}),
                 diagramContext: promptContext,
                 boardSummary,
               }),
@@ -1117,6 +1125,7 @@ export function OpyCopilotPanel({
       actionMode,
       appendAndPersistMessage,
       appendAgentNotice,
+      boardContext,
       boardSummary,
       domain,
       executeRigRun,
@@ -1239,6 +1248,7 @@ export function OpyCopilotPanel({
       : "RUN::IDLE";
   const actionModeText = `ACTION::${actionMode.toUpperCase()}`;
   const activeCommandToken = detectCommandToken(draftPrompt);
+  const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
 
   return (
     <div className={styles.opyCopilotShell}>
@@ -1259,6 +1269,11 @@ export function OpyCopilotPanel({
       <p className={styles.ownershipLensHint}>
         {"COMMAND::/review [focus area]"}
       </p>
+      {boardContextHints.map((scope) => (
+        <p key={scope.id} className={styles.ownershipLensHint}>
+          {`CONTEXT::${scope.label} · ${scope.hint}`}
+        </p>
+      ))}
       {activeCommandToken && (
         <p className={styles.ownershipLensHint}>
           {"TOOL TOKEN ACTIVE:: "}

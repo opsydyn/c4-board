@@ -43,6 +43,7 @@ import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../.
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import type { LayoutPresetName } from "../../core/effects/layout";
+import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
 import { buildGroundedProposalDiff, summarizeGroundedProposalDiff } from "../../core/effects/opy-c4-proposals";
@@ -2026,6 +2027,14 @@ export function C4CanvasContainer() {
     state.context.edges,
     state.context.nodes,
   ]);
+  const opyBoardContext = useMemo(
+    () =>
+      buildOpyBoardContextRegistry({
+        boardSummary: opyBoardSummary,
+        selectedNodeId: state.context.selectedNodeId,
+      }),
+    [opyBoardSummary, state.context.selectedNodeId],
+  );
 
   return (
     <div
@@ -2306,6 +2315,7 @@ export function C4CanvasContainer() {
           diagramName={state.context.diagramName}
           nodeCount={state.context.nodes.length}
           edgeCount={state.context.edges.length}
+          boardContext={opyBoardContext}
           presence={appSettings.opyWidgetPresence}
           layout={appSettings.opyWidgetLayout}
           modeLayouts={appSettings.opyWidgetModeLayouts}
@@ -2331,6 +2341,7 @@ export function C4CanvasContainer() {
             nodeCount={state.context.nodes.length}
             edgeCount={state.context.edges.length}
             boardSummary={opyBoardSummary}
+            boardContext={opyBoardContext}
             actionMode={appSettings.aiSettings.actionMode}
             onApplyBoardAction={handleApplyOpyBoardAction}
             onOpenAiSettings={() => {
