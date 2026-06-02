@@ -107,6 +107,21 @@ export type AiSettings = Schema.Schema.Type<typeof AiSettingsSchema>;
 const OpyWidgetPlacementSchema = Schema.Literal("centered", "custom");
 export type OpyWidgetPlacement = Schema.Schema.Type<typeof OpyWidgetPlacementSchema>;
 
+export const OpyWidgetModeSchema = Schema.Literal("field", "mission");
+export type OpyWidgetMode = Schema.Schema.Type<typeof OpyWidgetModeSchema>;
+
+export const OpyWidgetPresenceSchema = Schema.Literal("orb", "field", "mission");
+export type OpyWidgetPresence = Schema.Schema.Type<typeof OpyWidgetPresenceSchema>;
+
+export const OpyWidgetSnapTargetSchema = Schema.Literal(
+  "free",
+  "center",
+  "left-rail",
+  "right-rail",
+  "bottom-dock",
+);
+export type OpyWidgetSnapTarget = Schema.Schema.Type<typeof OpyWidgetSnapTargetSchema>;
+
 const OpyWidgetWidthSchema = pipe(
   Schema.Number,
   Schema.filter(
@@ -139,6 +154,12 @@ const OpyWidgetCoordinateSchema = pipe(
 
 export const OpyWidgetLayoutSchema = Schema.Struct({
   placement: OpyWidgetPlacementSchema,
+  mode: Schema.optionalWith(OpyWidgetModeSchema, {
+    default: () => "field" as const,
+  }),
+  snapTarget: Schema.optionalWith(OpyWidgetSnapTargetSchema, {
+    default: () => "free" as const,
+  }),
   x: OpyWidgetCoordinateSchema,
   y: OpyWidgetCoordinateSchema,
   width: OpyWidgetWidthSchema,
@@ -146,6 +167,13 @@ export const OpyWidgetLayoutSchema = Schema.Struct({
 });
 
 export type OpyWidgetLayout = Schema.Schema.Type<typeof OpyWidgetLayoutSchema>;
+
+export const OpyWidgetModeLayoutsSchema = Schema.Struct({
+  field: OpyWidgetLayoutSchema,
+  mission: OpyWidgetLayoutSchema,
+});
+
+export type OpyWidgetModeLayouts = Schema.Schema.Type<typeof OpyWidgetModeLayoutsSchema>;
 
 export const AppSettingsSchema = Schema.Struct({
   animationsEnabled: Schema.Boolean,
@@ -157,7 +185,9 @@ export const AppSettingsSchema = Schema.Struct({
   ownershipLensVisible: Schema.Boolean,
   couplingExplainabilityVisible: Schema.Boolean,
   opyCopilotVisible: Schema.Boolean,
+  opyWidgetPresence: OpyWidgetPresenceSchema,
   opyWidgetLayout: OpyWidgetLayoutSchema,
+  opyWidgetModeLayouts: OpyWidgetModeLayoutsSchema,
   masterVolume: MasterVolumeSchema,
   autosaveEnabled: Schema.Boolean,
   autosaveIntervalMs: AutosaveIntervalMsSchema,
@@ -184,12 +214,35 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   ownershipLensVisible: false,
   couplingExplainabilityVisible: false,
   opyCopilotVisible: false,
+  opyWidgetPresence: "field",
   opyWidgetLayout: {
     placement: "centered",
+    mode: "field",
+    snapTarget: "center",
     x: 0,
     y: 0,
     width: 560,
     height: 720,
+  },
+  opyWidgetModeLayouts: {
+    field: {
+      placement: "centered",
+      mode: "field",
+      snapTarget: "center",
+      x: 0,
+      y: 0,
+      width: 560,
+      height: 720,
+    },
+    mission: {
+      placement: "centered",
+      mode: "mission",
+      snapTarget: "center",
+      x: 0,
+      y: 0,
+      width: 860,
+      height: 900,
+    },
   },
   masterVolume: 0.8,
   autosaveEnabled: true,

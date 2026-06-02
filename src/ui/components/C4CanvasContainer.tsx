@@ -270,14 +270,20 @@ export function C4CanvasContainer() {
     [],
   );
 
-  const persistOpyWidgetLayout = useCallback(
-    async (layout: typeof appSettings.opyWidgetLayout): Promise<void> => {
+  const persistOpyWidgetState = useCallback(
+    async (state: {
+      layout: typeof appSettings.opyWidgetLayout;
+      modeLayouts: typeof appSettings.opyWidgetModeLayouts;
+      presence: typeof appSettings.opyWidgetPresence;
+    }): Promise<void> => {
       if (!settingsV1Enabled) {
         return;
       }
       await runEffect(
         patchSettings({
-          opyWidgetLayout: layout,
+          opyWidgetLayout: state.layout,
+          opyWidgetModeLayouts: state.modeLayouts,
+          opyWidgetPresence: state.presence,
         }),
       );
     },
@@ -304,6 +310,25 @@ export function C4CanvasContainer() {
     persistPatch: persistPanelPreferencePatch,
     onPersistFailure: handlePanelPreferencePersistFailure,
   });
+
+  const revealOpyPresence = useCallback(() => {
+    if (!isOpy9000Open && appSettings.opyWidgetPresence === "orb") {
+      void persistOpyWidgetState({
+        layout: appSettings.opyWidgetLayout,
+        modeLayouts: appSettings.opyWidgetModeLayouts,
+        presence: appSettings.opyWidgetLayout.mode,
+      });
+    }
+
+    toggleOpyCopilot();
+  }, [
+    appSettings.opyWidgetLayout,
+    appSettings.opyWidgetModeLayouts,
+    appSettings.opyWidgetPresence,
+    isOpy9000Open,
+    persistOpyWidgetState,
+    toggleOpyCopilot,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -2002,26 +2027,6 @@ export function C4CanvasContainer() {
     state.context.nodes,
   ]);
 
-  useEffect(() => {
-    if (!isOpy9000Open || typeof window === "undefined") {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) {
-        return;
-      }
-
-      event.preventDefault();
-      toggleOpyCopilot();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpy9000Open, toggleOpyCopilot]);
-
   return (
     <div
       className={styles.workspace}
@@ -2073,7 +2078,7 @@ export function C4CanvasContainer() {
                 aria-label={isOpy9000Open ? "Hide OPY Net assistant panel" : "Show OPY Net assistant panel"}
                 aria-pressed={isOpy9000Open}
                 title={isOpy9000Open ? "Hide OPY Net assistant panel" : "Show OPY Net assistant panel"}
-                onClick={toggleOpyCopilot}
+                onClick={revealOpyPresence}
               >
                 <RobotIcon size={16} weight="duotone" />
               </button>
@@ -2301,12 +2306,13 @@ export function C4CanvasContainer() {
           diagramName={state.context.diagramName}
           nodeCount={state.context.nodes.length}
           edgeCount={state.context.edges.length}
+          presence={appSettings.opyWidgetPresence}
           layout={appSettings.opyWidgetLayout}
+          modeLayouts={appSettings.opyWidgetModeLayouts}
           containerRef={canvasRegionRef}
           onOpen={toggleOpyCopilot}
-          onClose={toggleOpyCopilot}
-          onLayoutCommit={(layout) => {
-            void persistOpyWidgetLayout(layout);
+          onStateCommit={(nextState) => {
+            void persistOpyWidgetState(nextState);
           }}
           onOpenSettings={() => {
             void navigateWithSave("/settings");
