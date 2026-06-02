@@ -27,6 +27,8 @@ const SETTINGS_DB_STORAGE_WARNING: &str =
     "OpenAI key currently resolves from app settings (fallback). Keychain-first storage is recommended.";
 const ENV_STORAGE_WARNING: &str =
     "OpenAI key currently resolves from environment variable fallback.";
+const DEV_KEYCHAIN_FALLBACK_WARNING: &str =
+    "Keychain access is unavailable in this runtime. Using app settings fallback.";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -407,6 +409,10 @@ fn parse_stored_setting_value(raw: &str) -> Option<String> {
     normalize_secret(raw.trim_matches('"'))
 }
 
+fn compose_secret_warning(base: &str, detail: &str) -> String {
+    format!("{base} {detail}")
+}
+
 async fn resolve_openai_api_key_from_settings(state: &State<'_, AppDb>) -> Option<String> {
     let row = sqlx::query("SELECT value FROM app_settings WHERE key = ? LIMIT 1")
         .bind(OPENAI_API_KEY_SETTING_KEY)
@@ -430,20 +436,50 @@ async fn clear_openai_api_key_from_settings(state: &State<'_, AppDb>) -> Result<
     Ok(())
 }
 
+async fn store_openai_api_key_in_settings(
+    state: &State<'_, AppDb>,
+    secret: &str,
+) -> Result<(), String> {
+    let encoded_secret = serde_json::to_string(secret).map_err(|error| {
+        format!("Unable to encode OpenAI key for app settings fallback: {error}")
+    })?;
+
+    sqlx::query(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+    )
+    .bind(OPENAI_API_KEY_SETTING_KEY)
+    .bind(encoded_secret)
+    .bind(now_unix_ms())
+    .execute(&state.0)
+    .await
+    .map_err(|error| format!("Unable to store OpenAI key in app settings fallback: {error}"))?;
+
+    Ok(())
+}
+
 async fn resolve_openai_secret(state: &State<'_, AppDb>) -> Result<Option<ResolvedSecret>, String> {
-    if let Some(from_keychain) = resolve_openai_api_key_from_keychain().await? {
-        return Ok(Some(ResolvedSecret {
-            value: from_keychain,
-            source: RigAgentSecretSource::Keychain,
-            warning: None,
-        }));
-    }
+    let keychain_result = resolve_openai_api_key_from_keychain().await;
+    let keychain_read_error = match keychain_result {
+        Ok(Some(from_keychain)) => {
+            return Ok(Some(ResolvedSecret {
+                value: from_keychain,
+                source: RigAgentSecretSource::Keychain,
+                warning: None,
+            }))
+        }
+        Ok(None) => None,
+        Err(error) => Some(error),
+    };
 
     if let Some(from_settings) = resolve_openai_api_key_from_settings(state).await {
         return Ok(Some(ResolvedSecret {
             value: from_settings,
             source: RigAgentSecretSource::SettingsDb,
-            warning: Some(SETTINGS_DB_STORAGE_WARNING.to_string()),
+            warning: Some(match keychain_read_error {
+                Some(ref error) => compose_secret_warning(DEV_KEYCHAIN_FALLBACK_WARNING, error),
+                None => SETTINGS_DB_STORAGE_WARNING.to_string(),
+            }),
         }));
     }
 
@@ -451,11 +487,17 @@ async fn resolve_openai_secret(state: &State<'_, AppDb>) -> Result<Option<Resolv
         return Ok(Some(ResolvedSecret {
             value: from_env,
             source: RigAgentSecretSource::Env,
-            warning: Some(ENV_STORAGE_WARNING.to_string()),
+            warning: Some(match keychain_read_error {
+                Some(ref error) => compose_secret_warning(ENV_STORAGE_WARNING, error),
+                None => ENV_STORAGE_WARNING.to_string(),
+            }),
         }));
     }
 
-    Ok(None)
+    match keychain_read_error {
+        Some(error) => Err(error),
+        None => Ok(None),
+    }
 }
 
 fn now_unix_ms() -> i64 {
