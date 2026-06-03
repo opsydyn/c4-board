@@ -119,7 +119,7 @@ export const widgetHandleMission = style({
 export const widgetTitleBlock = style({
   display: "flex",
   flexDirection: "column",
-  gap: theme.spacing["1"],
+  gap: theme.spacing["2"],
   minWidth: 0,
 });
 
@@ -129,28 +129,18 @@ export const widgetEyebrow = style({
   letterSpacing: theme.typography.letterSpacing.wide,
   color: theme.color.status.selected,
   fontFamily: theme.typography.family.mono,
-  fontSize: theme.typography.size.xs,
+  fontSize: theme.typography.size.sm,
+  lineHeight: theme.typography.lineHeight.normal,
 });
 
 export const widgetEyebrowMission = style({
-  color: theme.color.foreground.secondary,
+  color: theme.color.status.selected,
 });
 
-export const widgetTitle = style({
-  display: "flex",
+export const widgetLensRow = style({
+  display: "inline-flex",
   alignItems: "center",
-  gap: theme.spacing["2"],
-  margin: 0,
-  textTransform: theme.typography.textTransform.uppercase,
-  letterSpacing: theme.typography.letterSpacing.engineering,
-  color: theme.color.foreground.primary,
-  fontFamily: theme.typography.family.mono,
-  fontSize: theme.typography.size["2xl"],
-  fontWeight: theme.typography.weight.bold,
-});
-
-export const widgetTitleMission = style({
-  fontSize: theme.typography.size["2xl"],
+  minHeight: "3.25rem",
 });
 
 export const widgetMeta = style({

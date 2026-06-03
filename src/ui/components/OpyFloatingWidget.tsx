@@ -1153,12 +1153,13 @@ export function OpyFloatingWidget({
                 >
                   <div className={styles.widgetTitleBlock}>
                     <p className={`${styles.widgetEyebrow} ${currentMode === "mission" ? styles.widgetEyebrowMission : ""}`}>
-                      {currentMode === "mission" ? "Mission Analysis Surface" : "Engineering Presence Standby"}
+                      {currentMode === "mission"
+                        ? "Mission Analysis Surface · OPY Mission Surface"
+                        : "Engineering Presence Field · OPY Presence Field"}
                     </p>
-                    <h3 className={`${styles.widgetTitle} ${currentMode === "mission" ? styles.widgetTitleMission : ""}`}>
-                      <OpyAvatar />
-                      <span>{currentMode === "mission" ? "OPY MISSION SURFACE" : "OPY PRESENCE FIELD"}</span>
-                    </h3>
+                    <div className={styles.widgetLensRow}>
+                      <OpyAvatar size={48} />
+                    </div>
                     <p className={styles.widgetMeta}>{`${domain.toUpperCase()} BOARD · ${normalizedDiagramName}`}</p>
                   </div>
                   <div className={styles.widgetTelemetry}>
