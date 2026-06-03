@@ -287,8 +287,11 @@ export const widgetTelemetryPill = style({
 export const widgetSignalPill = style([
   widgetTelemetryPill,
   {
+    appearance: "none",
     justifyContent: "center",
+    cursor: "pointer",
     color: theme.color.foreground.primary,
+    transition: theme.transition.base,
     selectors: {
       '&[data-tone="neutral"]': {
         borderColor: theme.color.border.secondary,
@@ -311,6 +314,14 @@ export const widgetSignalPill = style([
       },
       '&[data-fresh="true"]': {
         boxShadow: theme.effect.glow.sm,
+      },
+      "&:hover": {
+        transform: "translateY(-1px)",
+        boxShadow: theme.effect.glow.sm,
+      },
+      "&:focus-visible": {
+        outline: `${theme.border.width.thin} solid ${theme.color.border.focus}`,
+        outlineOffset: "1px",
       },
     },
   },

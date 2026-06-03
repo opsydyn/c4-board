@@ -68,20 +68,17 @@ import {
   updateOpyAgentRun,
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
-import type {
-  AiActionMode,
-  OpyViewportSectionKey,
-  OpyViewportSections,
-} from "../../core/effects/settings.types";
+import type { AiActionMode, OpyViewportSectionKey, OpyViewportSections } from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
-import * as styles from "./styles.css";
 import {
   compareOpyWidgetChromeTone,
-  pickHigherOpyWidgetChromeTone,
+  type OpyWidgetChromeFocusRequest,
   type OpyWidgetChromeSignal,
   type OpyWidgetChromeStatus,
   type OpyWidgetChromeTone,
+  pickHigherOpyWidgetChromeTone,
 } from "./opyChromeStatus";
+import * as styles from "./styles.css";
 import { TacticalSelect } from "./TacticalSelect";
 
 type OpyC4NodeType = "person" | "system" | "externalSystem" | "container" | "component";
@@ -202,6 +199,7 @@ interface OpyCopilotPanelProps {
   readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
   readonly onChromeStatusChange: (status: OpyWidgetChromeStatus) => void;
+  readonly chromeSectionRequest: OpyWidgetChromeFocusRequest | null;
 }
 
 const createMessageId = (): string => {
@@ -593,8 +591,8 @@ const toProposalChromeTone = (risk: "low" | "medium" | "high"): OpyWidgetChromeT
   risk === "high"
     ? "critical"
     : risk === "medium"
-      ? "caution"
-      : "ready";
+    ? "caution"
+    : "ready";
 
 export function OpyCopilotPanel({
   domain,
@@ -610,6 +608,7 @@ export function OpyCopilotPanel({
   onApplyBoardAction,
   onOpenAiSettings,
   onChromeStatusChange,
+  chromeSectionRequest,
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
@@ -649,6 +648,7 @@ export function OpyCopilotPanel({
     Readonly<Record<string, OpySessionBoardReview | undefined>>
   >({});
   const selectedSessionIdRef = useRef<string>("");
+  const viewportSectionRefs = useRef<Partial<Record<OpyViewportSectionKey, HTMLElement | null>>>({});
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const [viewportSectionsOpen, setViewportSectionsOpen] = useState<OpyViewportSections>(
     viewportSections,
@@ -693,10 +693,12 @@ export function OpyCopilotPanel({
   const checkpointRestorePreviewById = useMemo(
     () =>
       new Map(
-        activeCheckpoints.map((checkpoint) => [
-          checkpoint.id,
-          buildOpyCheckpointRestorePreview(checkpoint, boardSummary),
-        ] as const),
+        activeCheckpoints.map((checkpoint) =>
+          [
+            checkpoint.id,
+            buildOpyCheckpointRestorePreview(checkpoint, boardSummary),
+          ] as const
+        ),
       ),
     [activeCheckpoints, boardSummary],
   );
@@ -823,6 +825,7 @@ export function OpyCopilotPanel({
 
     return {
       key: "policy",
+      targetSection: "control",
       label: `POLICY::${actionMode.toUpperCase()}`,
       detail: actionModeSurface.label,
       tone: toOpyChromeTone(actionModeSurface.tone),
@@ -841,6 +844,7 @@ export function OpyCopilotPanel({
     if (highRiskCount > 0) {
       return {
         key: "review",
+        targetSection: "review",
         label: `REVIEW::HIGH ${highRiskCount}H${mediumRiskCount > 0 ? `/${mediumRiskCount}M` : ""}`,
         detail: activeBoardReview.review.summary,
         tone: "critical",
@@ -851,6 +855,7 @@ export function OpyCopilotPanel({
     if (totalRiskCount > 0 || activeBoardReview.review.ambiguities.length > 0) {
       return {
         key: "review",
+        targetSection: "review",
         label: `REVIEW::${totalRiskCount} RISK${totalRiskCount === 1 ? "" : "S"}`,
         detail: activeBoardReview.review.summary,
         tone: "caution",
@@ -861,6 +866,7 @@ export function OpyCopilotPanel({
     if (activeBoardReview.review.recommendedChanges.length > 0) {
       return {
         key: "review",
+        targetSection: "review",
         label: `REVIEW::NEXT ${activeBoardReview.review.recommendedChanges.length}`,
         detail: activeBoardReview.review.summary,
         tone: "caution",
@@ -870,6 +876,7 @@ export function OpyCopilotPanel({
 
     return {
       key: "review",
+      targetSection: "review",
       label: "REVIEW::CLEAR",
       detail: activeBoardReview.review.summary,
       tone: "ready",
@@ -884,6 +891,7 @@ export function OpyCopilotPanel({
     if (activePlanDecision?.status === "rejected") {
       return {
         key: "proposal",
+        targetSection: "proposal",
         label: "PLAN::REJECTED",
         detail: activeDiagramProposal.proposal.summary,
         tone: "caution",
@@ -898,6 +906,7 @@ export function OpyCopilotPanel({
     if (warningCount > 0 && !activeMutationPlan) {
       return {
         key: "proposal",
+        targetSection: "proposal",
         label: `PLAN::WARN ${warningCount}`,
         detail: activeDiagramProposal.proposal.summary,
         tone: "caution",
@@ -907,6 +916,7 @@ export function OpyCopilotPanel({
 
     return {
       key: "proposal",
+      targetSection: "proposal",
       label: activeMutationPlan
         ? `PLAN::${highestRisk.toUpperCase()} ${activeMutationPlan.plan.totalActions}A`
         : `PLAN::${highestRisk.toUpperCase()}`,
@@ -932,6 +942,7 @@ export function OpyCopilotPanel({
 
     return {
       key: "checkpoint",
+      targetSection: "checkpoints",
       label: preview
         ? preview.hasChanges
           ? `RESTORE::${preview.impactedEntities.length}Δ`
@@ -987,10 +998,10 @@ export function OpyCopilotPanel({
   const diagnosticsSectionTone = latestRun?.status === "failed"
     ? "critical"
     : latestDiagnosticsSurface?.context.confidence === "low"
-      ? "caution"
-      : latestDiagnosticsSurface
-        ? "ready"
-        : "neutral";
+    ? "caution"
+    : latestDiagnosticsSurface
+    ? "ready"
+    : "neutral";
   const checkpointsSectionTone = checkpointChromeSignal?.tone ?? "neutral";
   const reviewSectionTone = reviewChromeSignal?.tone ?? "neutral";
   const proposalSectionTone = proposalChromeSignal?.tone ?? "neutral";
@@ -2177,6 +2188,43 @@ export function OpyCopilotPanel({
       [key]: !current[key],
     }));
   }, [clearViewportSectionUnseen, commitViewportSections, viewportSectionsOpen]);
+  useEffect(() => {
+    if (!chromeSectionRequest) {
+      return;
+    }
+
+    const targetSection = chromeSectionRequest.section;
+    if (!viewportSectionsOpen[targetSection]) {
+      clearViewportSectionUnseen(targetSection);
+      commitViewportSections((current) => ({
+        ...current,
+        [targetSection]: true,
+      }));
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const node = viewportSectionRefs.current[targetSection];
+        if (!node) {
+          return;
+        }
+
+        node.scrollIntoView({
+          block: "start",
+          behavior: "smooth",
+        });
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [
+    chromeSectionRequest,
+    clearViewportSectionUnseen,
+    commitViewportSections,
+    viewportSectionsOpen,
+  ]);
   const renderViewportSection = useCallback((input: {
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;
@@ -2191,6 +2239,9 @@ export function OpyCopilotPanel({
 
     return (
       <section
+        ref={(node) => {
+          viewportSectionRefs.current[input.keyId] = node;
+        }}
         className={styles.opyCopilotViewportSection}
         data-open={isOpen ? "true" : "false"}
         data-tone={input.tone ?? "neutral"}
@@ -2211,9 +2262,7 @@ export function OpyCopilotPanel({
           </span>
           <span className={styles.opyCopilotViewportSectionSummaryAside}>
             <span className={styles.opyCopilotViewportSectionSummaryMetaGroup}>
-              {showUnseen && (
-                <span className={styles.opyCopilotViewportSectionSummaryFlag}>NEW</span>
-              )}
+              {showUnseen && <span className={styles.opyCopilotViewportSectionSummaryFlag}>NEW</span>}
               <span className={styles.opyCopilotViewportSectionSummaryMeta}>
                 {`${isOpen ? "COLLAPSE" : "EXPAND"} :: ${input.meta}`}
               </span>
@@ -2240,9 +2289,7 @@ export function OpyCopilotPanel({
     ? `${activeDiagramProposal.proposal.nodes.length} NODE(S) · ${activeDiagramProposal.proposal.edges.length} EDGE(S)`
     : "UNAVAILABLE";
   const controlSectionSummary = summarizeInlineText(
-    `BOARD::${currentBoardLabel} · SESSION::${
-      selectedSession?.title ?? "NONE"
-    } · ACTION::${actionMode.toUpperCase()}`,
+    `BOARD::${currentBoardLabel} · SESSION::${selectedSession?.title ?? "NONE"} · ACTION::${actionMode.toUpperCase()}`,
     "CONTROL SURFACE READY.",
   );
   const diagnosticsSectionSummary = latestDiagnosticsSurface
@@ -2263,9 +2310,9 @@ export function OpyCopilotPanel({
 
       return summarizeInlineText(
         preview.hasChanges
-          ? `LATEST::${latestCheckpoint.snapshot.name} · Δ::${
-            preview.impactedEntities.length
-          } CHANGE(S) · RESTORE::${preview.counts.restoreNodes + preview.counts.restoreEdges}`
+          ? `LATEST::${latestCheckpoint.snapshot.name} · Δ::${preview.impactedEntities.length} CHANGE(S) · RESTORE::${
+            preview.counts.restoreNodes + preview.counts.restoreEdges
+          }`
           : `LATEST::${latestCheckpoint.snapshot.name} · CURRENT BOARD ALREADY MATCHES SNAPSHOT`,
         "CHECKPOINTS READY.",
       );
@@ -2273,18 +2320,16 @@ export function OpyCopilotPanel({
     : "NO CHECKPOINTS CAPTURED.";
   const reviewSectionSummary = activeBoardReview
     ? summarizeInlineText(
-      `FOCUS::${formatReviewFocus(activeBoardReview.command.focus)} · RISKS::${
-        activeBoardReview.review.risks.length
-      } · NEXT::${activeBoardReview.review.recommendedChanges.length}`,
+      `FOCUS::${
+        formatReviewFocus(activeBoardReview.command.focus)
+      } · RISKS::${activeBoardReview.review.risks.length} · NEXT::${activeBoardReview.review.recommendedChanges.length}`,
       activeBoardReview.review.summary,
     )
     : "NO BOARD REVIEW YET.";
   const proposalSectionSummary = activeDiagramProposal
     ? summarizeInlineText(
       activeMutationPlan
-        ? `PLAN::${activeMutationPlan.plan.totalActions} ACTION(S) · CREATE::${
-          activeMutationPlan.plan.totalNodesCreated
-        }N/${activeMutationPlan.plan.totalEdgesCreated}E · RISK::${activeMutationPlan.plan.highestRisk.toUpperCase()}`
+        ? `PLAN::${activeMutationPlan.plan.totalActions} ACTION(S) · CREATE::${activeMutationPlan.plan.totalNodesCreated}N/${activeMutationPlan.plan.totalEdgesCreated}E · RISK::${activeMutationPlan.plan.highestRisk.toUpperCase()}`
         : activeDiagramProposal.proposal.summary,
       "PROPOSAL READY.",
     )
@@ -2344,10 +2389,10 @@ export function OpyCopilotPanel({
         };
 
         return (
-          next.proposal === current.proposal
-          && next.review === current.review
-          && next.checkpoints === current.checkpoints
-        )
+            next.proposal === current.proposal
+            && next.review === current.review
+            && next.checkpoints === current.checkpoints
+          )
           ? current
           : next;
       });
@@ -2372,190 +2417,406 @@ export function OpyCopilotPanel({
   return (
     <div className={styles.opyCopilotShell}>
       <div className={styles.opyCopilotViewport}>
-      <div className={styles.ownershipLensStats}>
-        <span>MODE::ASSIST</span>
-        <span>{statusText}</span>
-        <span>{runText}</span>
-        <span>{actionModeText}</span>
-        <span>{`SESSIONS::${sessions.length}`}</span>
-        <span>{`ACTIVE::${selectedSession ? "ONLINE" : "NONE"}`}</span>
-      </div>
-      {runtimeError && <p className={styles.opyCopilotError}>{`ERROR:: ${runtimeError}`}</p>}
-      {renderViewportSection({
-        keyId: "control",
-        title: "CONTROL FIELD",
-        meta: controlSectionMeta,
-        summary: controlSectionSummary,
-        tone: controlSectionTone,
-        isUnseen: viewportSectionsUnseen.control,
-        children: (
-          <>
-            <p className={styles.ownershipLensHint}>
-              {"COMMAND::/add person|system|external|container|component <label>"}
-            </p>
-            <p className={styles.ownershipLensHint}>
-              {"COMMAND::/diagram <architecture description>"}
-            </p>
-            <p className={styles.ownershipLensHint}>
-              {"COMMAND::/review [focus area]"}
-            </p>
-            <p className={styles.ownershipLensHint}>
-              {`BOARD::${currentBoardLabel}`}
-            </p>
-            {boardContextHints.map((scope) => (
-              <p key={scope.id} className={styles.ownershipLensHint}>
-                {`CONTEXT::${scope.label} · ${scope.hint}`}
-              </p>
-            ))}
-            {activeCommandToken && (
+        <div className={styles.ownershipLensStats}>
+          <span>MODE::ASSIST</span>
+          <span>{statusText}</span>
+          <span>{runText}</span>
+          <span>{actionModeText}</span>
+          <span>{`SESSIONS::${sessions.length}`}</span>
+          <span>{`ACTIVE::${selectedSession ? "ONLINE" : "NONE"}`}</span>
+        </div>
+        {runtimeError && <p className={styles.opyCopilotError}>{`ERROR:: ${runtimeError}`}</p>}
+        {renderViewportSection({
+          keyId: "control",
+          title: "CONTROL FIELD",
+          meta: controlSectionMeta,
+          summary: controlSectionSummary,
+          tone: controlSectionTone,
+          isUnseen: viewportSectionsUnseen.control,
+          children: (
+            <>
               <p className={styles.ownershipLensHint}>
-                {"TOOL TOKEN ACTIVE:: "}
-                <span className={styles.opyCopilotCommandToken}>{activeCommandToken}</span>
+                {"COMMAND::/add person|system|external|container|component <label>"}
               </p>
-            )}
-            {activeRun && (
               <p className={styles.ownershipLensHint}>
-                {`ACTIVE RUN::${activeRun.id.slice(0, 8)} · ${RUN_INTENT_LABEL[activeRun.intent]} · ${
-                  RUN_STAGE_LABEL[activeRun.stage]
-                } · ${formatClockTime(activeRun.startedAt)}`}
+                {"COMMAND::/diagram <architecture description>"}
               </p>
-            )}
-            {!activeRun && latestRun?.status === "failed" && latestRun.errorSummary && (
               <p className={styles.ownershipLensHint}>
-                {`LAST FAILURE::${RUN_STAGE_LABEL[latestRun.stage]} · ${latestRun.errorSummary}`}
+                {"COMMAND::/review [focus area]"}
               </p>
-            )}
-            <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="opy-session-select">
-                Session
-              </label>
-              <div className={styles.formInlineRow}>
-                <div className={styles.inputGrow}>
-                  <TacticalSelect
-                    id="opy-session-select"
-                    ariaLabel="Select OPY chat session"
-                    value={selectedSessionId}
-                    options={sessionOptions}
-                    disabled={isSessionLoading || sessionOptions.length === 0}
-                    onChange={handleSelectSession}
-                  />
-                </div>
-              </div>
-              {selectedSession && (
+              <p className={styles.ownershipLensHint}>
+                {`BOARD::${currentBoardLabel}`}
+              </p>
+              {boardContextHints.map((scope) => (
+                <p key={scope.id} className={styles.ownershipLensHint}>
+                  {`CONTEXT::${scope.label} · ${scope.hint}`}
+                </p>
+              ))}
+              {activeCommandToken && (
                 <p className={styles.ownershipLensHint}>
-                  {`RESUME::${
-                    formatClockTime(
-                      selectedSession.lastMessageAt ?? selectedSession.updatedAt,
-                    )
-                  } · NODES::${nodeCount} · EDGES::${edgeCount}`}
+                  {"TOOL TOKEN ACTIVE:: "}
+                  <span className={styles.opyCopilotCommandToken}>{activeCommandToken}</span>
                 </p>
               )}
-              <div className={styles.ownershipLensToggleRow}>
-                <button
-                  type="button"
-                  className={styles.ownershipLensToggleButton}
-                  onClick={handleCreateSession}
-                  disabled={isRunning || isSessionLoading}
-                >
-                  NEW SESSION
-                </button>
-              </div>
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.label} htmlFor="opy-session-title">
-                Session Name
-              </label>
-              <div className={styles.formInlineRow}>
-                <input
-                  id="opy-session-title"
-                  type="text"
-                  className={`${styles.input} ${styles.inputGrow}`}
-                  value={sessionTitleDraft}
-                  onChange={(event) => {
-                    setSessionTitleDraft(event.target.value);
-                    if (runtimeError) {
-                      setRuntimeError(null);
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      handleRenameSession();
-                    }
-                  }}
-                  disabled={isSessionLoading || selectedSessionId.length === 0}
-                  placeholder="Session title"
-                />
-                <button
-                  type="button"
-                  className={styles.ownershipLensToggleButton}
-                  onClick={handleRenameSession}
-                  disabled={isRunning || isSessionLoading || selectedSessionId.length === 0}
-                >
-                  SAVE NAME
-                </button>
-              </div>
-            </div>
-            <section
-              className={`${styles.opyCopilotModeBanner} ${
-                actionModeSurface.tone === "critical"
-                  ? styles.opyCopilotModeBannerCritical
-                  : actionModeSurface.tone === "warning"
-                  ? styles.opyCopilotModeBannerWarning
-                  : styles.opyCopilotModeBannerReady
-              }`}
-              aria-label="OPY action mode boundary"
-            >
-              <div className={styles.opyCopilotProposalHeader}>
-                <span>{`MODE POLICY::${actionMode.toUpperCase()}`}</span>
-                <span>{actionModeSurface.label}</span>
-              </div>
-              <p className={styles.opyCopilotProposalHint}>{actionModeSurface.detail}</p>
-            </section>
-          </>
-        ),
-      })}
-      {latestDiagnosticsSurface && (
-        renderViewportSection({
-          keyId: "diagnostics",
-          title: `DIAGNOSTICS::${latestDiagnosticsSurface.title}`,
-          meta: diagnosticsSectionMeta,
-          summary: diagnosticsSectionSummary,
-          tone: diagnosticsSectionTone,
-          isUnseen: viewportSectionsUnseen.diagnostics,
-          children: (
-            <section className={styles.opyCopilotDiagnosticsCard} aria-label="Latest OPY diagnostics">
-              <div className={styles.opyCopilotProposalHeader}>
-                <span>{`DIAGNOSTICS::${latestDiagnosticsSurface.title}`}</span>
-                <span>{formatClockTime(latestDiagnosticsSurface.respondedAtMs)}</span>
-              </div>
-              <p className={styles.opyCopilotProposalSummary}>{latestDiagnosticsSurface.summary}</p>
-              <p className={styles.opyCopilotProposalHint}>{latestDiagnosticsSurface.detail}</p>
-              <div className={styles.opyCopilotProposalStats}>
-                <span>{`CONFIDENCE::${formatConfidence(latestDiagnosticsSurface.context.confidence)}`}</span>
-                <span>{`SOURCES::${latestDiagnosticsSurface.context.citations.length}`}</span>
-                <span>{`MODEL::${latestDiagnosticsSurface.model}`}</span>
-                <span>{`PROVIDER::${latestDiagnosticsSurface.provider}`}</span>
-                <span>
-                  {latestDiagnosticsSurface.run
-                    ? `RUN::${RUN_STATUS_LABEL[latestDiagnosticsSurface.run.status]}`
-                    : "RUN::UNTRACKED"}
-                </span>
-                <span>
-                  {latestDiagnosticsSurface.run
-                    ? `STAGE::${RUN_STAGE_LABEL[latestDiagnosticsSurface.run.stage]}`
-                    : "STAGE::N/A"}
-                </span>
-              </div>
-              <details className={styles.opyCopilotDiagnosticsDisclosure}>
-                <summary className={styles.opyCopilotDiagnosticsSummary}>
-                  {`PROVENANCE::${latestDiagnosticsSurface.context.citations.length} SOURCE(S)`}
-                </summary>
-                <p className={styles.opyCopilotProposalHint}>
-                  {`CONFIDENCE REASON:: ${latestDiagnosticsSurface.context.confidenceReason}`}
+              {activeRun && (
+                <p className={styles.ownershipLensHint}>
+                  {`ACTIVE RUN::${activeRun.id.slice(0, 8)} · ${RUN_INTENT_LABEL[activeRun.intent]} · ${
+                    RUN_STAGE_LABEL[activeRun.stage]
+                  } · ${formatClockTime(activeRun.startedAt)}`}
                 </p>
+              )}
+              {!activeRun && latestRun?.status === "failed" && latestRun.errorSummary && (
+                <p className={styles.ownershipLensHint}>
+                  {`LAST FAILURE::${RUN_STAGE_LABEL[latestRun.stage]} · ${latestRun.errorSummary}`}
+                </p>
+              )}
+              <div className={styles.formGroup}>
+                <label className={styles.label} htmlFor="opy-session-select">
+                  Session
+                </label>
+                <div className={styles.formInlineRow}>
+                  <div className={styles.inputGrow}>
+                    <TacticalSelect
+                      id="opy-session-select"
+                      ariaLabel="Select OPY chat session"
+                      value={selectedSessionId}
+                      options={sessionOptions}
+                      disabled={isSessionLoading || sessionOptions.length === 0}
+                      onChange={handleSelectSession}
+                    />
+                  </div>
+                </div>
+                {selectedSession && (
+                  <p className={styles.ownershipLensHint}>
+                    {`RESUME::${
+                      formatClockTime(
+                        selectedSession.lastMessageAt ?? selectedSession.updatedAt,
+                      )
+                    } · NODES::${nodeCount} · EDGES::${edgeCount}`}
+                  </p>
+                )}
+                <div className={styles.ownershipLensToggleRow}>
+                  <button
+                    type="button"
+                    className={styles.ownershipLensToggleButton}
+                    onClick={handleCreateSession}
+                    disabled={isRunning || isSessionLoading}
+                  >
+                    NEW SESSION
+                  </button>
+                </div>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.label} htmlFor="opy-session-title">
+                  Session Name
+                </label>
+                <div className={styles.formInlineRow}>
+                  <input
+                    id="opy-session-title"
+                    type="text"
+                    className={`${styles.input} ${styles.inputGrow}`}
+                    value={sessionTitleDraft}
+                    onChange={(event) => {
+                      setSessionTitleDraft(event.target.value);
+                      if (runtimeError) {
+                        setRuntimeError(null);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleRenameSession();
+                      }
+                    }}
+                    disabled={isSessionLoading || selectedSessionId.length === 0}
+                    placeholder="Session title"
+                  />
+                  <button
+                    type="button"
+                    className={styles.ownershipLensToggleButton}
+                    onClick={handleRenameSession}
+                    disabled={isRunning || isSessionLoading || selectedSessionId.length === 0}
+                  >
+                    SAVE NAME
+                  </button>
+                </div>
+              </div>
+              <section
+                className={`${styles.opyCopilotModeBanner} ${
+                  actionModeSurface.tone === "critical"
+                    ? styles.opyCopilotModeBannerCritical
+                    : actionModeSurface.tone === "warning"
+                    ? styles.opyCopilotModeBannerWarning
+                    : styles.opyCopilotModeBannerReady
+                }`}
+                aria-label="OPY action mode boundary"
+              >
+                <div className={styles.opyCopilotProposalHeader}>
+                  <span>{`MODE POLICY::${actionMode.toUpperCase()}`}</span>
+                  <span>{actionModeSurface.label}</span>
+                </div>
+                <p className={styles.opyCopilotProposalHint}>{actionModeSurface.detail}</p>
+              </section>
+            </>
+          ),
+        })}
+        {latestDiagnosticsSurface && (
+          renderViewportSection({
+            keyId: "diagnostics",
+            title: `DIAGNOSTICS::${latestDiagnosticsSurface.title}`,
+            meta: diagnosticsSectionMeta,
+            summary: diagnosticsSectionSummary,
+            tone: diagnosticsSectionTone,
+            isUnseen: viewportSectionsUnseen.diagnostics,
+            children: (
+              <section className={styles.opyCopilotDiagnosticsCard} aria-label="Latest OPY diagnostics">
+                <div className={styles.opyCopilotProposalHeader}>
+                  <span>{`DIAGNOSTICS::${latestDiagnosticsSurface.title}`}</span>
+                  <span>{formatClockTime(latestDiagnosticsSurface.respondedAtMs)}</span>
+                </div>
+                <p className={styles.opyCopilotProposalSummary}>{latestDiagnosticsSurface.summary}</p>
+                <p className={styles.opyCopilotProposalHint}>{latestDiagnosticsSurface.detail}</p>
+                <div className={styles.opyCopilotProposalStats}>
+                  <span>{`CONFIDENCE::${formatConfidence(latestDiagnosticsSurface.context.confidence)}`}</span>
+                  <span>{`SOURCES::${latestDiagnosticsSurface.context.citations.length}`}</span>
+                  <span>{`MODEL::${latestDiagnosticsSurface.model}`}</span>
+                  <span>{`PROVIDER::${latestDiagnosticsSurface.provider}`}</span>
+                  <span>
+                    {latestDiagnosticsSurface.run
+                      ? `RUN::${RUN_STATUS_LABEL[latestDiagnosticsSurface.run.status]}`
+                      : "RUN::UNTRACKED"}
+                  </span>
+                  <span>
+                    {latestDiagnosticsSurface.run
+                      ? `STAGE::${RUN_STAGE_LABEL[latestDiagnosticsSurface.run.stage]}`
+                      : "STAGE::N/A"}
+                  </span>
+                </div>
+                <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                  <summary className={styles.opyCopilotDiagnosticsSummary}>
+                    {`PROVENANCE::${latestDiagnosticsSurface.context.citations.length} SOURCE(S)`}
+                  </summary>
+                  <p className={styles.opyCopilotProposalHint}>
+                    {`CONFIDENCE REASON:: ${latestDiagnosticsSurface.context.confidenceReason}`}
+                  </p>
+                  <div className={styles.opyCopilotEvidenceList}>
+                    {latestDiagnosticsSurface.context.citations.map((citation) => (
+                      <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
+                        <div className={styles.opyCopilotProposalItemMeta}>
+                          <span>{citation.tool.toUpperCase()}</span>
+                          <span>{citation.label}</span>
+                        </div>
+                        <p className={styles.opyCopilotProposalHint}>{citation.detail}</p>
+                      </article>
+                    ))}
+                  </div>
+                </details>
+                <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                  <summary className={styles.opyCopilotDiagnosticsSummary}>RUN DIAGNOSTICS</summary>
+                  {latestDiagnosticsSurface.run
+                    ? (
+                      <div className={styles.opyCopilotDiagnosticsMetaGrid}>
+                        <span>{`RUN ID::${latestDiagnosticsSurface.run.id.slice(0, 8)}`}</span>
+                        <span>{`INTENT::${RUN_INTENT_LABEL[latestDiagnosticsSurface.run.intent]}`}</span>
+                        <span>{`STATUS::${RUN_STATUS_LABEL[latestDiagnosticsSurface.run.status]}`}</span>
+                        <span>{`STAGE::${RUN_STAGE_LABEL[latestDiagnosticsSurface.run.stage]}`}</span>
+                        <span>{`STARTED::${formatClockTime(latestDiagnosticsSurface.run.startedAt)}`}</span>
+                        <span>
+                          {latestDiagnosticsSurface.run.completedAt
+                            ? `ENDED::${formatClockTime(latestDiagnosticsSurface.run.completedAt)}`
+                            : "ENDED::PENDING"}
+                        </span>
+                      </div>
+                    )
+                    : (
+                      <p className={styles.opyCopilotProposalHint}>
+                        RUN ENVELOPE UNAVAILABLE FOR THIS RESPONSE.
+                      </p>
+                    )}
+                  {latestDiagnosticsSurface.run?.errorSummary && (
+                    <p className={styles.opyCopilotProposalHint}>
+                      {`ERROR:: ${latestDiagnosticsSurface.run.errorSummary}`}
+                    </p>
+                  )}
+                </details>
+              </section>
+            ),
+          })
+        )}
+        {activeCheckpoints.length > 0 && latestCheckpoint && (
+          renderViewportSection({
+            keyId: "checkpoints",
+            title: "CHECKPOINT HISTORY",
+            meta: checkpointsSectionMeta,
+            summary: checkpointsSectionSummary,
+            tone: checkpointsSectionTone,
+            isUnseen: viewportSectionsUnseen.checkpoints,
+            children: (
+              <section className={styles.opyCopilotPlanCard} aria-label="OPY checkpoint history">
+                <div className={styles.opyCopilotProposalHeader}>
+                  <span>{`CHECKPOINTS::${activeCheckpoints.length}`}</span>
+                  <span>{`LATEST::${latestCheckpoint.id.slice(0, 8)}`}</span>
+                </div>
+                <p className={styles.opyCopilotProposalHint}>
+                  RESTORABLE PRE-APPLY SNAPSHOTS CAPTURED BEFORE CONFIRMED OPY BOARD MUTATIONS.
+                </p>
+                <div className={styles.opyCopilotProposalStats}>
+                  <span>{`LATEST BOARD::${latestCheckpoint.snapshot.name}`}</span>
+                  <span>{`LATEST CREATED::${formatClockTime(latestCheckpoint.createdAt)}`}</span>
+                  <span>{`LATEST PROPOSAL::${formatClockTime(latestCheckpoint.proposalRespondedAtMs)}`}</span>
+                </div>
+                <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                  <summary className={styles.opyCopilotDiagnosticsSummary}>
+                    {`RESTORE TARGETS::${activeCheckpoints.length}`}
+                  </summary>
+                  <div className={styles.opyCopilotPlanActionList}>
+                    {activeCheckpoints.map((checkpoint, index) => {
+                      const checkpointProposal = findProposalForCheckpoint(checkpoint, activeProposalHistory);
+                      const checkpointPreview = checkpointRestorePreviewById.get(checkpoint.id) ?? null;
+                      return (
+                        <article key={checkpoint.id} className={styles.opyCopilotProposalItem}>
+                          <div className={styles.opyCopilotProposalItemMeta}>
+                            <span>{`CHECKPOINT::${checkpoint.id.slice(0, 8)}`}</span>
+                            <span>{index === 0 ? "LATEST" : checkpoint.checkpointType.toUpperCase()}</span>
+                          </div>
+                          <p>{formatOpyRollbackSummary(checkpoint)}</p>
+                          <div className={styles.opyCopilotProposalStats}>
+                            <span>{`BOARD::${checkpoint.snapshot.name}`}</span>
+                            <span>{`CREATED::${formatClockTime(checkpoint.createdAt)}`}</span>
+                            <span>{`PROPOSAL::${formatClockTime(checkpoint.proposalRespondedAtMs)}`}</span>
+                            <span>{`NODES::${checkpoint.snapshot.nodes.length}`}</span>
+                            <span>{`EDGES::${checkpoint.snapshot.edges.length}`}</span>
+                          </div>
+                          {checkpointPreview
+                            ? (
+                              <>
+                                <div className={styles.opyCopilotProposalStats}>
+                                  <span>{`RESTORE NODES::${checkpointPreview.counts.restoreNodes}`}</span>
+                                  <span>{`REVERT NODES::${checkpointPreview.counts.revertNodes}`}</span>
+                                  <span>{`REMOVE NODES::${checkpointPreview.counts.removeNodes}`}</span>
+                                  <span>{`RESTORE EDGES::${checkpointPreview.counts.restoreEdges}`}</span>
+                                  <span>{`REVERT EDGES::${checkpointPreview.counts.revertEdges}`}</span>
+                                  <span>{`REMOVE EDGES::${checkpointPreview.counts.removeEdges}`}</span>
+                                </div>
+                                <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                                  <summary className={styles.opyCopilotDiagnosticsSummary}>
+                                    {checkpointPreview.hasChanges
+                                      ? `RESTORE DIFF::${checkpointPreview.impactedEntities.length} CHANGE(S)`
+                                      : "RESTORE DIFF::NO CHANGES"}
+                                  </summary>
+                                  {checkpointPreview.hasChanges
+                                    ? (
+                                      <div className={styles.opyCopilotPlanImpactList}>
+                                        {checkpointPreview.impactedEntities.map((impact) => (
+                                          <article key={impact.id} className={styles.opyCopilotProposalItem}>
+                                            <div className={styles.opyCopilotProposalItemMeta}>
+                                              <span>{impact.category.toUpperCase()}</span>
+                                              <span className={restoreImpactBadgeClassName(impact.status)}>
+                                                {RESTORE_IMPACT_LABEL[impact.status]}
+                                              </span>
+                                            </div>
+                                            <p>{impact.title}</p>
+                                            <p className={styles.opyCopilotProposalHint}>{impact.detail}</p>
+                                          </article>
+                                        ))}
+                                      </div>
+                                    )
+                                    : (
+                                      <p className={styles.opyCopilotProposalHint}>
+                                        CHECKPOINT SNAPSHOT ALREADY MATCHES THE CURRENT BOARD STATE.
+                                      </p>
+                                    )}
+                                </details>
+                              </>
+                            )
+                            : (
+                              <p className={styles.opyCopilotProposalHint}>
+                                RESTORE DIFF PREVIEW UNAVAILABLE UNTIL A NORMALIZED BOARD SUMMARY IS ACTIVE.
+                              </p>
+                            )}
+                          {checkpointProposal
+                            ? (
+                              <>
+                                <p className={styles.opyCopilotProposalSummary}>
+                                  {`PROPOSAL:: ${checkpointProposal.proposal.summary}`}
+                                </p>
+                                <p className={styles.opyCopilotProposalHint}>
+                                  {`SOURCE:: ${checkpointProposal.command.description}`}
+                                </p>
+                                <p className={styles.opyCopilotProposalHint}>
+                                  {`PLAN::${PLAN_DECISION_LABEL[checkpointProposal.decisionStatus]} · CONFIDENCE::${
+                                    formatConfidence(checkpointProposal.context.confidence)
+                                  }`}
+                                </p>
+                              </>
+                            )
+                            : (
+                              <p className={styles.opyCopilotProposalHint}>
+                                PROPOSAL PROVENANCE UNAVAILABLE FOR THIS CHECKPOINT IN CURRENT SESSION HISTORY.
+                              </p>
+                            )}
+                          <div className={styles.opyCopilotPlanDecisionRow}>
+                            <button
+                              type="button"
+                              className={styles.toolbarButton}
+                              onClick={() => {
+                                void handleRestoreCheckpoint(checkpoint);
+                              }}
+                              disabled={isRunning || actionMode !== "apply-with-confirmation"}
+                            >
+                              {isRunning ? "RESTORING..." : index === 0 ? "ROLLBACK LATEST" : "RESTORE CHECKPOINT"}
+                            </button>
+                            <p className={styles.opyCopilotProposalHint}>
+                              {actionMode === "apply-with-confirmation"
+                                ? index === 0
+                                  ? "RESTORE THE MOST RECENT CONFIRMED OPY CHECKPOINT THROUGH THE SAVE BOUNDARY."
+                                  : "RESTORE THIS HISTORICAL CHECKPOINT DELIBERATELY THROUGH THE SAVE BOUNDARY."
+                                : "SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE RESTORE."}
+                            </p>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </details>
+              </section>
+            ),
+          })
+        )}
+        {activeBoardReview && (
+          renderViewportSection({
+            keyId: "review",
+            title: "BOARD REVIEW",
+            meta: reviewSectionMeta,
+            summary: reviewSectionSummary,
+            tone: reviewSectionTone,
+            isUnseen: viewportSectionsUnseen.review,
+            children: (
+              <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
+                <div className={styles.opyCopilotProposalHeader}>
+                  <span>REVIEW::C4</span>
+                  <span>{formatClockTime(activeBoardReview.review.respondedAtMs)}</span>
+                </div>
+                <p className={styles.opyCopilotProposalSummary}>{activeBoardReview.review.summary}</p>
+                <p className={styles.opyCopilotProposalHint}>
+                  {`CONFIDENCE:: ${
+                    formatConfidence(activeBoardReview.context.confidence)
+                  } · ${activeBoardReview.context.confidenceReason}`}
+                </p>
+                <p className={styles.ownershipLensHint}>
+                  {`FOCUS:: ${formatReviewFocus(activeBoardReview.command.focus)}`}
+                </p>
+                {boardSummary && (
+                  <div className={styles.opyCopilotProposalStats}>
+                    <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
+                    <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
+                    <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
+                    <span>{`AMBIGUITIES::${activeBoardReview.review.ambiguities.length}`}</span>
+                    <span>{`RECOMMEND::${activeBoardReview.review.recommendedChanges.length}`}</span>
+                  </div>
+                )}
                 <div className={styles.opyCopilotEvidenceList}>
-                  {latestDiagnosticsSurface.context.citations.map((citation) => (
+                  {activeBoardReview.context.citations.map((citation) => (
                     <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
                       <div className={styles.opyCopilotProposalItemMeta}>
                         <span>{citation.tool.toUpperCase()}</span>
@@ -2565,665 +2826,449 @@ export function OpyCopilotPanel({
                     </article>
                   ))}
                 </div>
-              </details>
-              <details className={styles.opyCopilotDiagnosticsDisclosure}>
-                <summary className={styles.opyCopilotDiagnosticsSummary}>RUN DIAGNOSTICS</summary>
-                {latestDiagnosticsSurface.run
-                  ? (
-                    <div className={styles.opyCopilotDiagnosticsMetaGrid}>
-                      <span>{`RUN ID::${latestDiagnosticsSurface.run.id.slice(0, 8)}`}</span>
-                      <span>{`INTENT::${RUN_INTENT_LABEL[latestDiagnosticsSurface.run.intent]}`}</span>
-                      <span>{`STATUS::${RUN_STATUS_LABEL[latestDiagnosticsSurface.run.status]}`}</span>
-                      <span>{`STAGE::${RUN_STAGE_LABEL[latestDiagnosticsSurface.run.stage]}`}</span>
-                      <span>{`STARTED::${formatClockTime(latestDiagnosticsSurface.run.startedAt)}`}</span>
-                      <span>
-                        {latestDiagnosticsSurface.run.completedAt
-                          ? `ENDED::${formatClockTime(latestDiagnosticsSurface.run.completedAt)}`
-                          : "ENDED::PENDING"}
-                      </span>
+                <div className={styles.opyCopilotProposalColumns}>
+                  <div className={styles.opyCopilotProposalColumn}>
+                    <div className={styles.opyCopilotProposalHeader}>
+                      <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
+                      <span>READ ONLY</span>
                     </div>
-                  )
-                  : (
-                    <p className={styles.opyCopilotProposalHint}>
-                      RUN ENVELOPE UNAVAILABLE FOR THIS RESPONSE.
-                    </p>
-                  )}
-                {latestDiagnosticsSurface.run?.errorSummary && (
+                    {activeBoardReview.review.strengths.length > 0
+                      ? activeBoardReview.review.strengths.map((strength, index) => (
+                        <article
+                          key={`${strength.title}-${index}`}
+                          className={styles.opyCopilotProposalItem}
+                        >
+                          <div className={styles.opyCopilotProposalItemMeta}>
+                            <span>STRENGTH</span>
+                          </div>
+                          <p>{strength.title}</p>
+                          <p className={styles.opyCopilotProposalHint}>{strength.detail}</p>
+                        </article>
+                      ))
+                      : (
+                        <article className={styles.opyCopilotProposalItem}>
+                          <p>NO MAJOR STRENGTHS CALLED OUT.</p>
+                        </article>
+                      )}
+                  </div>
+                  <div className={styles.opyCopilotProposalColumn}>
+                    <div className={styles.opyCopilotProposalHeader}>
+                      <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
+                      <span>{activeBoardReview.review.model}</span>
+                    </div>
+                    {activeBoardReview.review.risks.length > 0
+                      ? activeBoardReview.review.risks.map((risk, index) => (
+                        <article
+                          key={`${risk.title}-${index}`}
+                          className={styles.opyCopilotProposalItem}
+                        >
+                          <div className={styles.opyCopilotProposalItemMeta}>
+                            <span>RISK</span>
+                            <span
+                              className={`${styles.opyCopilotProposalBadge} ${
+                                risk.severity === "high"
+                                  ? styles.opyCopilotReviewBadgeHigh
+                                  : risk.severity === "medium"
+                                  ? styles.opyCopilotReviewBadgeMedium
+                                  : styles.opyCopilotReviewBadgeLow
+                              }`}
+                            >
+                              {risk.severity.toUpperCase()}
+                            </span>
+                          </div>
+                          <p>{risk.title}</p>
+                          <p className={styles.opyCopilotProposalHint}>{risk.detail}</p>
+                        </article>
+                      ))
+                      : (
+                        <article className={styles.opyCopilotProposalItem}>
+                          <p>NO MATERIAL RISKS IDENTIFIED.</p>
+                        </article>
+                      )}
+                  </div>
+                  <div className={styles.opyCopilotProposalColumn}>
+                    <div className={styles.opyCopilotProposalHeader}>
+                      <span>{`AMBIGUITIES::${activeBoardReview.review.ambiguities.length}`}</span>
+                      <span>GAPS</span>
+                    </div>
+                    {activeBoardReview.review.ambiguities.length > 0
+                      ? activeBoardReview.review.ambiguities.map((ambiguity, index) => (
+                        <article
+                          key={`${ambiguity.title}-${index}`}
+                          className={styles.opyCopilotProposalItem}
+                        >
+                          <div className={styles.opyCopilotProposalItemMeta}>
+                            <span>AMBIGUITY</span>
+                          </div>
+                          <p>{ambiguity.title}</p>
+                          <p className={styles.opyCopilotProposalHint}>{ambiguity.detail}</p>
+                        </article>
+                      ))
+                      : (
+                        <article className={styles.opyCopilotProposalItem}>
+                          <p>NO MAJOR AMBIGUITIES IDENTIFIED.</p>
+                        </article>
+                      )}
+                    {activeBoardReview.review.missingNodes.length > 0 && (
+                      <div className={styles.opyCopilotProposalWarnings}>
+                        {activeBoardReview.review.missingNodes.map((node, index) => (
+                          <p key={`${node}-${index}`}>{`MISSING NODE:: ${node}`}</p>
+                        ))}
+                      </div>
+                    )}
+                    {activeBoardReview.review.missingEdges.length > 0 && (
+                      <div className={styles.opyCopilotProposalWarnings}>
+                        {activeBoardReview.review.missingEdges.map((edge, index) => (
+                          <p key={`${edge}-${index}`}>{`MISSING EDGE:: ${edge}`}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className={styles.opyCopilotProposalColumn}>
+                    <div className={styles.opyCopilotProposalHeader}>
+                      <span>{`RECOMMEND::${activeBoardReview.review.recommendedChanges.length}`}</span>
+                      <span>NEXT</span>
+                    </div>
+                    {activeBoardReview.review.recommendedChanges.length > 0
+                      ? activeBoardReview.review.recommendedChanges.map((change, index) => (
+                        <article
+                          key={`${change.title}-${index}`}
+                          className={styles.opyCopilotProposalItem}
+                        >
+                          <div className={styles.opyCopilotProposalItemMeta}>
+                            <span>CHANGE</span>
+                            <span
+                              className={`${styles.opyCopilotProposalBadge} ${
+                                change.priority === "high"
+                                  ? styles.opyCopilotReviewBadgeHigh
+                                  : change.priority === "medium"
+                                  ? styles.opyCopilotReviewBadgeMedium
+                                  : styles.opyCopilotReviewBadgeLow
+                              }`}
+                            >
+                              {change.priority.toUpperCase()}
+                            </span>
+                          </div>
+                          <p>{change.title}</p>
+                          <p className={styles.opyCopilotProposalHint}>{change.rationale}</p>
+                        </article>
+                      ))
+                      : (
+                        <article className={styles.opyCopilotProposalItem}>
+                          <p>NO IMMEDIATE STRUCTURAL CHANGES RECOMMENDED.</p>
+                        </article>
+                      )}
+                  </div>
+                </div>
+                <div className={styles.opyCopilotProposalActions}>
                   <p className={styles.opyCopilotProposalHint}>
-                    {`ERROR:: ${latestDiagnosticsSurface.run.errorSummary}`}
+                    {"REVIEW MODE ONLY. USE /diagram TO REQUEST A TARGETED C4 CHANGE PROPOSAL."}
+                  </p>
+                </div>
+              </section>
+            ),
+          })
+        )}
+        {activeDiagramProposal && (
+          renderViewportSection({
+            keyId: "proposal",
+            title: "DIAGRAM PROPOSAL",
+            meta: proposalSectionMeta,
+            summary: proposalSectionSummary,
+            tone: proposalSectionTone,
+            isUnseen: viewportSectionsUnseen.proposal,
+            children: (
+              <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">
+                <div className={styles.opyCopilotProposalHeader}>
+                  <span>PROPOSAL::C4</span>
+                  <span>{formatClockTime(activeDiagramProposal.proposal.respondedAtMs)}</span>
+                </div>
+                <p className={styles.opyCopilotProposalSummary}>{activeDiagramProposal.proposal.summary}</p>
+                <p className={styles.opyCopilotProposalRationale}>{activeDiagramProposal.proposal.rationale}</p>
+                <p className={styles.opyCopilotProposalHint}>
+                  {`CONFIDENCE:: ${
+                    formatConfidence(activeDiagramProposal.context.confidence)
+                  } · ${activeDiagramProposal.context.confidenceReason}`}
+                </p>
+                <p className={styles.ownershipLensHint}>
+                  {`SOURCE:: ${activeDiagramProposal.command.description}`}
+                </p>
+                {activeProposalSummary && (
+                  <p className={styles.opyCopilotProposalHint}>
+                    {activeProposalSummary.canApply
+                      ? activeProposalSummary.hasChanges
+                        ? `APPLY READY:: +${activeProposalSummary.newNodes} NODE(S) · +${activeProposalSummary.newEdges} EDGE(S) · REUSE ${activeProposalSummary.existingNodes} NODE(S) / ${activeProposalSummary.existingEdges} EDGE(S).`
+                        : "APPLY NO-OP:: PROPOSAL ALREADY MATCHES THE CURRENT BOARD."
+                      : `APPLY BLOCKED:: ${activeProposalSummary.ambiguousNodes} AMBIGUOUS NODE(S) · ${activeProposalSummary.ambiguousEdges} AMBIGUOUS EDGE(S).`}
                   </p>
                 )}
-              </details>
-            </section>
-          ),
-        })
-      )}
-      {activeCheckpoints.length > 0 && latestCheckpoint && (
-        renderViewportSection({
-          keyId: "checkpoints",
-          title: "CHECKPOINT HISTORY",
-          meta: checkpointsSectionMeta,
-          summary: checkpointsSectionSummary,
-          tone: checkpointsSectionTone,
-          isUnseen: viewportSectionsUnseen.checkpoints,
-          children: (
-            <section className={styles.opyCopilotPlanCard} aria-label="OPY checkpoint history">
-              <div className={styles.opyCopilotProposalHeader}>
-                <span>{`CHECKPOINTS::${activeCheckpoints.length}`}</span>
-                <span>{`LATEST::${latestCheckpoint.id.slice(0, 8)}`}</span>
-              </div>
-              <p className={styles.opyCopilotProposalHint}>
-                RESTORABLE PRE-APPLY SNAPSHOTS CAPTURED BEFORE CONFIRMED OPY BOARD MUTATIONS.
-              </p>
-              <div className={styles.opyCopilotProposalStats}>
-                <span>{`LATEST BOARD::${latestCheckpoint.snapshot.name}`}</span>
-                <span>{`LATEST CREATED::${formatClockTime(latestCheckpoint.createdAt)}`}</span>
-                <span>{`LATEST PROPOSAL::${formatClockTime(latestCheckpoint.proposalRespondedAtMs)}`}</span>
-              </div>
-              <details className={styles.opyCopilotDiagnosticsDisclosure}>
-                <summary className={styles.opyCopilotDiagnosticsSummary}>
-                  {`RESTORE TARGETS::${activeCheckpoints.length}`}
-                </summary>
-                <div className={styles.opyCopilotPlanActionList}>
-                  {activeCheckpoints.map((checkpoint, index) => {
-                    const checkpointProposal = findProposalForCheckpoint(checkpoint, activeProposalHistory);
-                    const checkpointPreview = checkpointRestorePreviewById.get(checkpoint.id) ?? null;
-                    return (
-                      <article key={checkpoint.id} className={styles.opyCopilotProposalItem}>
-                        <div className={styles.opyCopilotProposalItemMeta}>
-                          <span>{`CHECKPOINT::${checkpoint.id.slice(0, 8)}`}</span>
-                          <span>{index === 0 ? "LATEST" : checkpoint.checkpointType.toUpperCase()}</span>
-                        </div>
-                        <p>{formatOpyRollbackSummary(checkpoint)}</p>
-                        <div className={styles.opyCopilotProposalStats}>
-                          <span>{`BOARD::${checkpoint.snapshot.name}`}</span>
-                          <span>{`CREATED::${formatClockTime(checkpoint.createdAt)}`}</span>
-                          <span>{`PROPOSAL::${formatClockTime(checkpoint.proposalRespondedAtMs)}`}</span>
-                          <span>{`NODES::${checkpoint.snapshot.nodes.length}`}</span>
-                          <span>{`EDGES::${checkpoint.snapshot.edges.length}`}</span>
-                        </div>
-                        {checkpointPreview
-                          ? (
-                            <>
-                              <div className={styles.opyCopilotProposalStats}>
-                                <span>{`RESTORE NODES::${checkpointPreview.counts.restoreNodes}`}</span>
-                                <span>{`REVERT NODES::${checkpointPreview.counts.revertNodes}`}</span>
-                                <span>{`REMOVE NODES::${checkpointPreview.counts.removeNodes}`}</span>
-                                <span>{`RESTORE EDGES::${checkpointPreview.counts.restoreEdges}`}</span>
-                                <span>{`REVERT EDGES::${checkpointPreview.counts.revertEdges}`}</span>
-                                <span>{`REMOVE EDGES::${checkpointPreview.counts.removeEdges}`}</span>
-                              </div>
-                              <details className={styles.opyCopilotDiagnosticsDisclosure}>
-                                <summary className={styles.opyCopilotDiagnosticsSummary}>
-                                  {checkpointPreview.hasChanges
-                                    ? `RESTORE DIFF::${checkpointPreview.impactedEntities.length} CHANGE(S)`
-                                    : "RESTORE DIFF::NO CHANGES"}
-                                </summary>
-                                {checkpointPreview.hasChanges
-                                  ? (
-                                    <div className={styles.opyCopilotPlanImpactList}>
-                                      {checkpointPreview.impactedEntities.map((impact) => (
-                                        <article key={impact.id} className={styles.opyCopilotProposalItem}>
-                                          <div className={styles.opyCopilotProposalItemMeta}>
-                                            <span>{impact.category.toUpperCase()}</span>
-                                            <span className={restoreImpactBadgeClassName(impact.status)}>
-                                              {RESTORE_IMPACT_LABEL[impact.status]}
-                                            </span>
-                                          </div>
-                                          <p>{impact.title}</p>
-                                          <p className={styles.opyCopilotProposalHint}>{impact.detail}</p>
-                                        </article>
-                                      ))}
-                                    </div>
-                                  )
-                                  : (
-                                    <p className={styles.opyCopilotProposalHint}>
-                                      CHECKPOINT SNAPSHOT ALREADY MATCHES THE CURRENT BOARD STATE.
-                                    </p>
-                                  )}
-                              </details>
-                            </>
-                          )
-                          : (
-                            <p className={styles.opyCopilotProposalHint}>
-                              RESTORE DIFF PREVIEW UNAVAILABLE UNTIL A NORMALIZED BOARD SUMMARY IS ACTIVE.
-                            </p>
-                          )}
-                        {checkpointProposal
-                          ? (
-                            <>
-                              <p className={styles.opyCopilotProposalSummary}>
-                                {`PROPOSAL:: ${checkpointProposal.proposal.summary}`}
-                              </p>
-                              <p className={styles.opyCopilotProposalHint}>
-                                {`SOURCE:: ${checkpointProposal.command.description}`}
-                              </p>
-                              <p className={styles.opyCopilotProposalHint}>
-                                {`PLAN::${PLAN_DECISION_LABEL[checkpointProposal.decisionStatus]} · CONFIDENCE::${
-                                  formatConfidence(checkpointProposal.context.confidence)
+                {boardSummary && activeGroundedProposal && activeProposalSummary && (
+                  <div className={styles.opyCopilotProposalStats}>
+                    <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
+                    <span>
+                      {`NODE DIFF::${activeProposalSummary.newNodes} NEW · ${activeProposalSummary.existingNodes} MATCH · ${activeProposalSummary.ambiguousNodes} AMBIG`}
+                    </span>
+                    <span>
+                      {`EDGE DIFF::${activeProposalSummary.newEdges} NEW · ${activeProposalSummary.existingEdges} MATCH · ${activeProposalSummary.ambiguousEdges} AMBIG`}
+                    </span>
+                  </div>
+                )}
+                {activeMutationPlan && activePlanDecision && (
+                  <section className={styles.opyCopilotPlanCard} aria-label="Typed mutation plan">
+                    <div className={styles.opyCopilotProposalHeader}>
+                      <span>{`PLAN::${PLAN_DECISION_LABEL[activePlanDecision.status]}`}</span>
+                      <span>{activeMutationPlan.canApprove ? "SAFE TO APPROVE" : "BLOCKED"}</span>
+                    </div>
+                    <p className={styles.opyCopilotProposalHint}>
+                      {formatPlanDecisionHint(activePlanDecision.status)}
+                    </p>
+                    <div className={styles.opyCopilotProposalStats}>
+                      <span>{`ACTIONS::${activeMutationPlan.plan.totalActions}`}</span>
+                      <span>{`CREATE NODES::${activeMutationPlan.plan.totalNodesCreated}`}</span>
+                      <span>{`CREATE EDGES::${activeMutationPlan.plan.totalEdgesCreated}`}</span>
+                      <span>{`LAYOUT::${activeMutationPlan.plan.totalLayoutOperations}`}</span>
+                      <span>{`RISK::${activeMutationPlan.plan.highestRisk.toUpperCase()}`}</span>
+                      <span>{`ISSUES::${activeMutationPlan.issues.length}`}</span>
+                    </div>
+                    {activeMutationPlan.issues.length > 0 && (
+                      <div className={styles.opyCopilotPlanIssueList}>
+                        {activeMutationPlan.issues.map((issue) => (
+                          <article key={issue.id} className={styles.opyCopilotProposalItem}>
+                            <div className={styles.opyCopilotProposalItemMeta}>
+                              <span>{issue.kind.toUpperCase()}</span>
+                              <span
+                                className={`${styles.opyCopilotProposalBadge} ${styles.opyCopilotProposalBadgeAmbiguous}`}
+                              >
+                                BLOCKED
+                              </span>
+                            </div>
+                            <p>{issue.title}</p>
+                            <p className={styles.opyCopilotProposalHint}>{issue.detail}</p>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                    <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                      <summary className={styles.opyCopilotDiagnosticsSummary}>
+                        {`IMPACTED ENTITIES::${activeMutationPlan.impactedEntities.length}`}
+                      </summary>
+                      <div className={styles.opyCopilotPlanImpactList}>
+                        {activeMutationPlan.impactedEntities.map((entity) => (
+                          <article key={entity.id} className={styles.opyCopilotProposalItem}>
+                            <div className={styles.opyCopilotProposalItemMeta}>
+                              <span>{`${entity.category.toUpperCase()} · ${entity.status.toUpperCase()}`}</span>
+                              <span
+                                className={`${styles.opyCopilotProposalBadge} ${
+                                  entity.status === "create"
+                                    ? styles.opyCopilotProposalBadgeNew
+                                    : entity.status === "reuse"
+                                    ? styles.opyCopilotProposalBadgeExisting
+                                    : styles.opyCopilotProposalBadgeAmbiguous
                                 }`}
-                              </p>
-                            </>
-                          )
-                          : (
-                            <p className={styles.opyCopilotProposalHint}>
-                              PROPOSAL PROVENANCE UNAVAILABLE FOR THIS CHECKPOINT IN CURRENT SESSION HISTORY.
-                            </p>
-                          )}
-                        <div className={styles.opyCopilotPlanDecisionRow}>
+                              >
+                                {entity.status.toUpperCase()}
+                              </span>
+                            </div>
+                            <p>{entity.title}</p>
+                            <p className={styles.opyCopilotProposalHint}>{entity.detail}</p>
+                          </article>
+                        ))}
+                      </div>
+                    </details>
+                    <details className={styles.opyCopilotDiagnosticsDisclosure}>
+                      <summary className={styles.opyCopilotDiagnosticsSummary}>
+                        {`MUTATION ACTIONS::${activeMutationPlan.plan.actions.length}`}
+                      </summary>
+                      <div className={styles.opyCopilotPlanActionList}>
+                        {activeMutationPlan.plan.actions.map((action, index) => (
+                          <article key={`${action.tool}-${index}`} className={styles.opyCopilotProposalItem}>
+                            <div className={styles.opyCopilotProposalItemMeta}>
+                              <span>{action.tool.toUpperCase()}</span>
+                              <span>{summarizeRigToolPolicy(action.policy)}</span>
+                            </div>
+                            <p>{formatMutationActionSummary(action)}</p>
+                          </article>
+                        ))}
+                      </div>
+                    </details>
+                    <div className={styles.opyCopilotPlanDecisionRow}>
+                      <button
+                        type="button"
+                        className={styles.ownershipLensToggleButton}
+                        data-selected={activePlanDecision.status === "approved" ? "true" : undefined}
+                        onClick={() => {
+                          void handleSetPlanDecision("approved");
+                        }}
+                        disabled={isRunning || !activeMutationPlan.canApprove || !activeMutationPlan.hasChanges}
+                      >
+                        APPROVE PLAN
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.ownershipLensToggleButton}
+                        data-selected={activePlanDecision.status === "rejected" ? "true" : undefined}
+                        onClick={() => {
+                          void handleSetPlanDecision("rejected");
+                        }}
+                        disabled={isRunning || !activeMutationPlan.hasChanges}
+                      >
+                        REJECT PLAN
+                      </button>
+                      <p className={styles.opyCopilotProposalHint}>
+                        {`DECISION::${PLAN_DECISION_LABEL[activePlanDecision.status]} · ${
+                          activeMutationPlan.canApprove ? "READY FOR REVIEW" : "BLOCKERS PRESENT"
+                        }`}
+                      </p>
+                    </div>
+                  </section>
+                )}
+                {activeDiagramProposal.proposal.warnings.length > 0 && (
+                  <div className={styles.opyCopilotProposalWarnings}>
+                    {activeDiagramProposal.proposal.warnings.map((warning, index) => (
+                      <p key={`${warning}-${index}`}>{`WARNING:: ${warning}`}</p>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.opyCopilotEvidenceList}>
+                  {activeDiagramProposal.context.citations.map((citation) => (
+                    <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
+                      <div className={styles.opyCopilotProposalItemMeta}>
+                        <span>{citation.tool.toUpperCase()}</span>
+                        <span>{citation.label}</span>
+                      </div>
+                      <p className={styles.opyCopilotProposalHint}>{citation.detail}</p>
+                    </article>
+                  ))}
+                </div>
+                <div className={styles.opyCopilotProposalColumns}>
+                  <div className={styles.opyCopilotProposalColumn}>
+                    <div className={styles.opyCopilotProposalHeader}>
+                      <span>{`NODES::${activeDiagramProposal.proposal.nodes.length}`}</span>
+                      <span>{activeDiagramProposal.proposal.model}</span>
+                    </div>
+                    {(activeGroundedProposal?.nodeDiffs ?? activeDiagramProposal.proposal.nodes.map((node) => ({
+                      node,
+                      status: "new" as const,
+                      matches: [],
+                    }))).map((nodeDiff) => (
+                      <article key={nodeDiff.node.key} className={styles.opyCopilotProposalItem}>
+                        <div className={styles.opyCopilotProposalItemMeta}>
+                          <span>{nodeDiff.node.nodeType.toUpperCase()}</span>
+                          <span
+                            className={`${styles.opyCopilotProposalBadge} ${
+                              nodeDiff.status === "new"
+                                ? styles.opyCopilotProposalBadgeNew
+                                : nodeDiff.status === "existing"
+                                ? styles.opyCopilotProposalBadgeExisting
+                                : styles.opyCopilotProposalBadgeAmbiguous
+                            }`}
+                          >
+                            {DIFF_STATUS_LABEL[nodeDiff.status]}
+                          </span>
+                        </div>
+                        <p>{nodeDiff.node.label}</p>
+                        <p className={styles.opyCopilotProposalHint}>{`KEY:: ${nodeDiff.node.key}`}</p>
+                        {nodeDiff.node.description && <p>{nodeDiff.node.description}</p>}
+                        {nodeDiff.matches.length > 0 && (
+                          <p className={styles.opyCopilotProposalHint}>
+                            {`${nodeDiff.status === "existing" ? "MATCH" : "CANDIDATES"}:: ${
+                              formatNodeMatchSummary(nodeDiff.matches)
+                            }`}
+                          </p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                  <div className={styles.opyCopilotProposalColumn}>
+                    <div className={styles.opyCopilotProposalHeader}>
+                      <span>{`EDGES::${activeDiagramProposal.proposal.edges.length}`}</span>
+                      <span>PREVIEW ONLY</span>
+                    </div>
+                    {(activeGroundedProposal?.edgeDiffs ?? activeDiagramProposal.proposal.edges.map((edge) => ({
+                      edge,
+                      status: "new" as const,
+                      matches: [],
+                      sourceNode: null,
+                      targetNode: null,
+                    }))).map((edgeDiff, index) => (
+                      <article
+                        key={`${edgeDiff.edge.sourceKey}-${edgeDiff.edge.targetKey}-${index}`}
+                        className={styles.opyCopilotProposalItem}
+                      >
+                        <div className={styles.opyCopilotProposalItemMeta}>
+                          <span>{`${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey}`}</span>
+                          <span
+                            className={`${styles.opyCopilotProposalBadge} ${
+                              edgeDiff.status === "new"
+                                ? styles.opyCopilotProposalBadgeNew
+                                : edgeDiff.status === "existing"
+                                ? styles.opyCopilotProposalBadgeExisting
+                                : styles.opyCopilotProposalBadgeAmbiguous
+                            }`}
+                          >
+                            {DIFF_STATUS_LABEL[edgeDiff.status]}
+                          </span>
+                        </div>
+                        <p>{edgeDiff.edge.label}</p>
+                        {edgeDiff.sourceNode && edgeDiff.targetNode && (
+                          <p className={styles.opyCopilotProposalHint}>
+                            {`LINK:: ${edgeDiff.sourceNode.label} -> ${edgeDiff.targetNode.label}`}
+                          </p>
+                        )}
+                        {edgeDiff.matches.length > 0 && (
+                          <p className={styles.opyCopilotProposalHint}>
+                            {`${edgeDiff.status === "existing" ? "MATCH" : "CANDIDATES"}:: ${
+                              formatEdgeMatchSummary(edgeDiff.matches)
+                            }`}
+                          </p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </div>
+                <div className={styles.opyCopilotProposalActions}>
+                  {actionMode === "apply-with-confirmation"
+                    ? activeProposalSummary && activeMutationPlan && activePlanDecision
+                      ? (
+                        <>
                           <button
                             type="button"
                             className={styles.toolbarButton}
                             onClick={() => {
-                              void handleRestoreCheckpoint(checkpoint);
+                              void handleApplyActiveProposal();
                             }}
-                            disabled={isRunning || actionMode !== "apply-with-confirmation"}
+                            disabled={isRunning
+                              || !activeProposalSummary.canApply
+                              || !activeProposalSummary.hasChanges
+                              || !activeMutationPlan.canApprove
+                              || activePlanDecision.status !== "approved"}
                           >
-                            {isRunning ? "RESTORING..." : index === 0 ? "ROLLBACK LATEST" : "RESTORE CHECKPOINT"}
+                            {isRunning ? "APPLYING..." : "APPLY PROPOSAL"}
                           </button>
                           <p className={styles.opyCopilotProposalHint}>
-                            {actionMode === "apply-with-confirmation"
-                              ? index === 0
-                                ? "RESTORE THE MOST RECENT CONFIRMED OPY CHECKPOINT THROUGH THE SAVE BOUNDARY."
-                                : "RESTORE THIS HISTORICAL CHECKPOINT DELIBERATELY THROUGH THE SAVE BOUNDARY."
-                              : "SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE RESTORE."}
+                            {activePlanDecision.status === "approved"
+                              ? "APPROVED PLAN READY FOR CONFIRMED APPLY."
+                              : activePlanDecision.status === "rejected"
+                              ? "PLAN REJECTED. APPROVE A NEW OR UPDATED PLAN TO APPLY."
+                              : "APPROVE PLAN TO ENABLE APPLY."}
                           </p>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </details>
-            </section>
-          ),
-        })
-      )}
-      {activeBoardReview && (
-        renderViewportSection({
-          keyId: "review",
-          title: "BOARD REVIEW",
-          meta: reviewSectionMeta,
-          summary: reviewSectionSummary,
-          tone: reviewSectionTone,
-          isUnseen: viewportSectionsUnseen.review,
-          children: (
-            <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
-              <div className={styles.opyCopilotProposalHeader}>
-                <span>REVIEW::C4</span>
-                <span>{formatClockTime(activeBoardReview.review.respondedAtMs)}</span>
-              </div>
-              <p className={styles.opyCopilotProposalSummary}>{activeBoardReview.review.summary}</p>
-              <p className={styles.opyCopilotProposalHint}>
-                {`CONFIDENCE:: ${
-                  formatConfidence(activeBoardReview.context.confidence)
-                } · ${activeBoardReview.context.confidenceReason}`}
-              </p>
-              <p className={styles.ownershipLensHint}>
-                {`FOCUS:: ${formatReviewFocus(activeBoardReview.command.focus)}`}
-              </p>
-              {boardSummary && (
-                <div className={styles.opyCopilotProposalStats}>
-                  <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
-                  <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
-                  <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
-                  <span>{`AMBIGUITIES::${activeBoardReview.review.ambiguities.length}`}</span>
-                  <span>{`RECOMMEND::${activeBoardReview.review.recommendedChanges.length}`}</span>
-                </div>
-              )}
-              <div className={styles.opyCopilotEvidenceList}>
-                {activeBoardReview.context.citations.map((citation) => (
-                  <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
-                    <div className={styles.opyCopilotProposalItemMeta}>
-                      <span>{citation.tool.toUpperCase()}</span>
-                      <span>{citation.label}</span>
-                    </div>
-                    <p className={styles.opyCopilotProposalHint}>{citation.detail}</p>
-                  </article>
-                ))}
-              </div>
-              <div className={styles.opyCopilotProposalColumns}>
-                <div className={styles.opyCopilotProposalColumn}>
-                  <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
-                    <span>READ ONLY</span>
-                  </div>
-                  {activeBoardReview.review.strengths.length > 0
-                    ? activeBoardReview.review.strengths.map((strength, index) => (
-                      <article
-                        key={`${strength.title}-${index}`}
-                        className={styles.opyCopilotProposalItem}
-                      >
-                        <div className={styles.opyCopilotProposalItemMeta}>
-                          <span>STRENGTH</span>
-                        </div>
-                        <p>{strength.title}</p>
-                        <p className={styles.opyCopilotProposalHint}>{strength.detail}</p>
-                      </article>
-                    ))
-                    : (
-                      <article className={styles.opyCopilotProposalItem}>
-                        <p>NO MAJOR STRENGTHS CALLED OUT.</p>
-                      </article>
-                    )}
-                </div>
-                <div className={styles.opyCopilotProposalColumn}>
-                  <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
-                    <span>{activeBoardReview.review.model}</span>
-                  </div>
-                  {activeBoardReview.review.risks.length > 0
-                    ? activeBoardReview.review.risks.map((risk, index) => (
-                      <article
-                        key={`${risk.title}-${index}`}
-                        className={styles.opyCopilotProposalItem}
-                      >
-                        <div className={styles.opyCopilotProposalItemMeta}>
-                          <span>RISK</span>
-                          <span
-                            className={`${styles.opyCopilotProposalBadge} ${
-                              risk.severity === "high"
-                                ? styles.opyCopilotReviewBadgeHigh
-                                : risk.severity === "medium"
-                                ? styles.opyCopilotReviewBadgeMedium
-                                : styles.opyCopilotReviewBadgeLow
-                            }`}
-                          >
-                            {risk.severity.toUpperCase()}
-                          </span>
-                        </div>
-                        <p>{risk.title}</p>
-                        <p className={styles.opyCopilotProposalHint}>{risk.detail}</p>
-                      </article>
-                    ))
-                    : (
-                      <article className={styles.opyCopilotProposalItem}>
-                        <p>NO MATERIAL RISKS IDENTIFIED.</p>
-                      </article>
-                    )}
-                </div>
-                <div className={styles.opyCopilotProposalColumn}>
-                  <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`AMBIGUITIES::${activeBoardReview.review.ambiguities.length}`}</span>
-                    <span>GAPS</span>
-                  </div>
-                  {activeBoardReview.review.ambiguities.length > 0
-                    ? activeBoardReview.review.ambiguities.map((ambiguity, index) => (
-                      <article
-                        key={`${ambiguity.title}-${index}`}
-                        className={styles.opyCopilotProposalItem}
-                      >
-                        <div className={styles.opyCopilotProposalItemMeta}>
-                          <span>AMBIGUITY</span>
-                        </div>
-                        <p>{ambiguity.title}</p>
-                        <p className={styles.opyCopilotProposalHint}>{ambiguity.detail}</p>
-                      </article>
-                    ))
-                    : (
-                      <article className={styles.opyCopilotProposalItem}>
-                        <p>NO MAJOR AMBIGUITIES IDENTIFIED.</p>
-                      </article>
-                    )}
-                  {activeBoardReview.review.missingNodes.length > 0 && (
-                    <div className={styles.opyCopilotProposalWarnings}>
-                      {activeBoardReview.review.missingNodes.map((node, index) => (
-                        <p key={`${node}-${index}`}>{`MISSING NODE:: ${node}`}</p>
-                      ))}
-                    </div>
-                  )}
-                  {activeBoardReview.review.missingEdges.length > 0 && (
-                    <div className={styles.opyCopilotProposalWarnings}>
-                      {activeBoardReview.review.missingEdges.map((edge, index) => (
-                        <p key={`${edge}-${index}`}>{`MISSING EDGE:: ${edge}`}</p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className={styles.opyCopilotProposalColumn}>
-                  <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`RECOMMEND::${activeBoardReview.review.recommendedChanges.length}`}</span>
-                    <span>NEXT</span>
-                  </div>
-                  {activeBoardReview.review.recommendedChanges.length > 0
-                    ? activeBoardReview.review.recommendedChanges.map((change, index) => (
-                      <article
-                        key={`${change.title}-${index}`}
-                        className={styles.opyCopilotProposalItem}
-                      >
-                        <div className={styles.opyCopilotProposalItemMeta}>
-                          <span>CHANGE</span>
-                          <span
-                            className={`${styles.opyCopilotProposalBadge} ${
-                              change.priority === "high"
-                                ? styles.opyCopilotReviewBadgeHigh
-                                : change.priority === "medium"
-                                ? styles.opyCopilotReviewBadgeMedium
-                                : styles.opyCopilotReviewBadgeLow
-                            }`}
-                          >
-                            {change.priority.toUpperCase()}
-                          </span>
-                        </div>
-                        <p>{change.title}</p>
-                        <p className={styles.opyCopilotProposalHint}>{change.rationale}</p>
-                      </article>
-                    ))
-                    : (
-                      <article className={styles.opyCopilotProposalItem}>
-                        <p>NO IMMEDIATE STRUCTURAL CHANGES RECOMMENDED.</p>
-                      </article>
-                    )}
-                </div>
-              </div>
-              <div className={styles.opyCopilotProposalActions}>
-                <p className={styles.opyCopilotProposalHint}>
-                  {"REVIEW MODE ONLY. USE /diagram TO REQUEST A TARGETED C4 CHANGE PROPOSAL."}
-                </p>
-              </div>
-            </section>
-          ),
-        })
-      )}
-      {activeDiagramProposal && (
-        renderViewportSection({
-          keyId: "proposal",
-          title: "DIAGRAM PROPOSAL",
-          meta: proposalSectionMeta,
-          summary: proposalSectionSummary,
-          tone: proposalSectionTone,
-          isUnseen: viewportSectionsUnseen.proposal,
-          children: (
-            <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">
-              <div className={styles.opyCopilotProposalHeader}>
-                <span>PROPOSAL::C4</span>
-                <span>{formatClockTime(activeDiagramProposal.proposal.respondedAtMs)}</span>
-              </div>
-              <p className={styles.opyCopilotProposalSummary}>{activeDiagramProposal.proposal.summary}</p>
-              <p className={styles.opyCopilotProposalRationale}>{activeDiagramProposal.proposal.rationale}</p>
-              <p className={styles.opyCopilotProposalHint}>
-                {`CONFIDENCE:: ${
-                  formatConfidence(activeDiagramProposal.context.confidence)
-                } · ${activeDiagramProposal.context.confidenceReason}`}
-              </p>
-              <p className={styles.ownershipLensHint}>
-                {`SOURCE:: ${activeDiagramProposal.command.description}`}
-              </p>
-              {activeProposalSummary && (
-                <p className={styles.opyCopilotProposalHint}>
-                  {activeProposalSummary.canApply
-                    ? activeProposalSummary.hasChanges
-                      ? `APPLY READY:: +${activeProposalSummary.newNodes} NODE(S) · +${activeProposalSummary.newEdges} EDGE(S) · REUSE ${activeProposalSummary.existingNodes} NODE(S) / ${activeProposalSummary.existingEdges} EDGE(S).`
-                      : "APPLY NO-OP:: PROPOSAL ALREADY MATCHES THE CURRENT BOARD."
-                    : `APPLY BLOCKED:: ${activeProposalSummary.ambiguousNodes} AMBIGUOUS NODE(S) · ${activeProposalSummary.ambiguousEdges} AMBIGUOUS EDGE(S).`}
-                </p>
-              )}
-              {boardSummary && activeGroundedProposal && activeProposalSummary && (
-                <div className={styles.opyCopilotProposalStats}>
-                  <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
-                  <span>
-                    {`NODE DIFF::${activeProposalSummary.newNodes} NEW · ${activeProposalSummary.existingNodes} MATCH · ${activeProposalSummary.ambiguousNodes} AMBIG`}
-                  </span>
-                  <span>
-                    {`EDGE DIFF::${activeProposalSummary.newEdges} NEW · ${activeProposalSummary.existingEdges} MATCH · ${activeProposalSummary.ambiguousEdges} AMBIG`}
-                  </span>
-                </div>
-              )}
-              {activeMutationPlan && activePlanDecision && (
-                <section className={styles.opyCopilotPlanCard} aria-label="Typed mutation plan">
-                  <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`PLAN::${PLAN_DECISION_LABEL[activePlanDecision.status]}`}</span>
-                    <span>{activeMutationPlan.canApprove ? "SAFE TO APPROVE" : "BLOCKED"}</span>
-                  </div>
-                  <p className={styles.opyCopilotProposalHint}>
-                    {formatPlanDecisionHint(activePlanDecision.status)}
-                  </p>
-                  <div className={styles.opyCopilotProposalStats}>
-                    <span>{`ACTIONS::${activeMutationPlan.plan.totalActions}`}</span>
-                    <span>{`CREATE NODES::${activeMutationPlan.plan.totalNodesCreated}`}</span>
-                    <span>{`CREATE EDGES::${activeMutationPlan.plan.totalEdgesCreated}`}</span>
-                    <span>{`LAYOUT::${activeMutationPlan.plan.totalLayoutOperations}`}</span>
-                    <span>{`RISK::${activeMutationPlan.plan.highestRisk.toUpperCase()}`}</span>
-                    <span>{`ISSUES::${activeMutationPlan.issues.length}`}</span>
-                  </div>
-                  {activeMutationPlan.issues.length > 0 && (
-                    <div className={styles.opyCopilotPlanIssueList}>
-                      {activeMutationPlan.issues.map((issue) => (
-                        <article key={issue.id} className={styles.opyCopilotProposalItem}>
-                          <div className={styles.opyCopilotProposalItemMeta}>
-                            <span>{issue.kind.toUpperCase()}</span>
-                            <span
-                              className={`${styles.opyCopilotProposalBadge} ${styles.opyCopilotProposalBadgeAmbiguous}`}
-                            >
-                              BLOCKED
-                            </span>
-                          </div>
-                          <p>{issue.title}</p>
-                          <p className={styles.opyCopilotProposalHint}>{issue.detail}</p>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                  <details className={styles.opyCopilotDiagnosticsDisclosure}>
-                    <summary className={styles.opyCopilotDiagnosticsSummary}>
-                      {`IMPACTED ENTITIES::${activeMutationPlan.impactedEntities.length}`}
-                    </summary>
-                    <div className={styles.opyCopilotPlanImpactList}>
-                      {activeMutationPlan.impactedEntities.map((entity) => (
-                        <article key={entity.id} className={styles.opyCopilotProposalItem}>
-                          <div className={styles.opyCopilotProposalItemMeta}>
-                            <span>{`${entity.category.toUpperCase()} · ${entity.status.toUpperCase()}`}</span>
-                            <span
-                              className={`${styles.opyCopilotProposalBadge} ${
-                                entity.status === "create"
-                                  ? styles.opyCopilotProposalBadgeNew
-                                  : entity.status === "reuse"
-                                  ? styles.opyCopilotProposalBadgeExisting
-                                  : styles.opyCopilotProposalBadgeAmbiguous
-                              }`}
-                            >
-                              {entity.status.toUpperCase()}
-                            </span>
-                          </div>
-                          <p>{entity.title}</p>
-                          <p className={styles.opyCopilotProposalHint}>{entity.detail}</p>
-                        </article>
-                      ))}
-                    </div>
-                  </details>
-                  <details className={styles.opyCopilotDiagnosticsDisclosure}>
-                    <summary className={styles.opyCopilotDiagnosticsSummary}>
-                      {`MUTATION ACTIONS::${activeMutationPlan.plan.actions.length}`}
-                    </summary>
-                    <div className={styles.opyCopilotPlanActionList}>
-                      {activeMutationPlan.plan.actions.map((action, index) => (
-                        <article key={`${action.tool}-${index}`} className={styles.opyCopilotProposalItem}>
-                          <div className={styles.opyCopilotProposalItemMeta}>
-                            <span>{action.tool.toUpperCase()}</span>
-                            <span>{summarizeRigToolPolicy(action.policy)}</span>
-                          </div>
-                          <p>{formatMutationActionSummary(action)}</p>
-                        </article>
-                      ))}
-                    </div>
-                  </details>
-                  <div className={styles.opyCopilotPlanDecisionRow}>
-                    <button
-                      type="button"
-                      className={styles.ownershipLensToggleButton}
-                      data-selected={activePlanDecision.status === "approved" ? "true" : undefined}
-                      onClick={() => {
-                        void handleSetPlanDecision("approved");
-                      }}
-                      disabled={isRunning || !activeMutationPlan.canApprove || !activeMutationPlan.hasChanges}
-                    >
-                      APPROVE PLAN
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.ownershipLensToggleButton}
-                      data-selected={activePlanDecision.status === "rejected" ? "true" : undefined}
-                      onClick={() => {
-                        void handleSetPlanDecision("rejected");
-                      }}
-                      disabled={isRunning || !activeMutationPlan.hasChanges}
-                    >
-                      REJECT PLAN
-                    </button>
-                    <p className={styles.opyCopilotProposalHint}>
-                      {`DECISION::${PLAN_DECISION_LABEL[activePlanDecision.status]} · ${
-                        activeMutationPlan.canApprove ? "READY FOR REVIEW" : "BLOCKERS PRESENT"
-                      }`}
-                    </p>
-                  </div>
-                </section>
-              )}
-              {activeDiagramProposal.proposal.warnings.length > 0 && (
-                <div className={styles.opyCopilotProposalWarnings}>
-                  {activeDiagramProposal.proposal.warnings.map((warning, index) => (
-                    <p key={`${warning}-${index}`}>{`WARNING:: ${warning}`}</p>
-                  ))}
-                </div>
-              )}
-              <div className={styles.opyCopilotEvidenceList}>
-                {activeDiagramProposal.context.citations.map((citation) => (
-                  <article key={citation.id} className={styles.opyCopilotEvidenceItem}>
-                    <div className={styles.opyCopilotProposalItemMeta}>
-                      <span>{citation.tool.toUpperCase()}</span>
-                      <span>{citation.label}</span>
-                    </div>
-                    <p className={styles.opyCopilotProposalHint}>{citation.detail}</p>
-                  </article>
-                ))}
-              </div>
-              <div className={styles.opyCopilotProposalColumns}>
-                <div className={styles.opyCopilotProposalColumn}>
-                  <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`NODES::${activeDiagramProposal.proposal.nodes.length}`}</span>
-                    <span>{activeDiagramProposal.proposal.model}</span>
-                  </div>
-                  {(activeGroundedProposal?.nodeDiffs ?? activeDiagramProposal.proposal.nodes.map((node) => ({
-                    node,
-                    status: "new" as const,
-                    matches: [],
-                  }))).map((nodeDiff) => (
-                    <article key={nodeDiff.node.key} className={styles.opyCopilotProposalItem}>
-                      <div className={styles.opyCopilotProposalItemMeta}>
-                        <span>{nodeDiff.node.nodeType.toUpperCase()}</span>
-                        <span
-                          className={`${styles.opyCopilotProposalBadge} ${
-                            nodeDiff.status === "new"
-                              ? styles.opyCopilotProposalBadgeNew
-                              : nodeDiff.status === "existing"
-                              ? styles.opyCopilotProposalBadgeExisting
-                              : styles.opyCopilotProposalBadgeAmbiguous
-                          }`}
-                        >
-                          {DIFF_STATUS_LABEL[nodeDiff.status]}
-                        </span>
-                      </div>
-                      <p>{nodeDiff.node.label}</p>
-                      <p className={styles.opyCopilotProposalHint}>{`KEY:: ${nodeDiff.node.key}`}</p>
-                      {nodeDiff.node.description && <p>{nodeDiff.node.description}</p>}
-                      {nodeDiff.matches.length > 0 && (
+                        </>
+                      )
+                      : (
                         <p className={styles.opyCopilotProposalHint}>
-                          {`${nodeDiff.status === "existing" ? "MATCH" : "CANDIDATES"}:: ${
-                            formatNodeMatchSummary(nodeDiff.matches)
-                          }`}
+                          {"GROUNDING OR PLAN DATA UNAVAILABLE FOR THIS PROPOSAL."}
                         </p>
-                      )}
-                    </article>
-                  ))}
-                </div>
-                <div className={styles.opyCopilotProposalColumn}>
-                  <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`EDGES::${activeDiagramProposal.proposal.edges.length}`}</span>
-                    <span>PREVIEW ONLY</span>
-                  </div>
-                  {(activeGroundedProposal?.edgeDiffs ?? activeDiagramProposal.proposal.edges.map((edge) => ({
-                    edge,
-                    status: "new" as const,
-                    matches: [],
-                    sourceNode: null,
-                    targetNode: null,
-                  }))).map((edgeDiff, index) => (
-                    <article
-                      key={`${edgeDiff.edge.sourceKey}-${edgeDiff.edge.targetKey}-${index}`}
-                      className={styles.opyCopilotProposalItem}
-                    >
-                      <div className={styles.opyCopilotProposalItemMeta}>
-                        <span>{`${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey}`}</span>
-                        <span
-                          className={`${styles.opyCopilotProposalBadge} ${
-                            edgeDiff.status === "new"
-                              ? styles.opyCopilotProposalBadgeNew
-                              : edgeDiff.status === "existing"
-                              ? styles.opyCopilotProposalBadgeExisting
-                              : styles.opyCopilotProposalBadgeAmbiguous
-                          }`}
-                        >
-                          {DIFF_STATUS_LABEL[edgeDiff.status]}
-                        </span>
-                      </div>
-                      <p>{edgeDiff.edge.label}</p>
-                      {edgeDiff.sourceNode && edgeDiff.targetNode && (
-                        <p className={styles.opyCopilotProposalHint}>
-                          {`LINK:: ${edgeDiff.sourceNode.label} -> ${edgeDiff.targetNode.label}`}
-                        </p>
-                      )}
-                      {edgeDiff.matches.length > 0 && (
-                        <p className={styles.opyCopilotProposalHint}>
-                          {`${edgeDiff.status === "existing" ? "MATCH" : "CANDIDATES"}:: ${
-                            formatEdgeMatchSummary(edgeDiff.matches)
-                          }`}
-                        </p>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              </div>
-              <div className={styles.opyCopilotProposalActions}>
-                {actionMode === "apply-with-confirmation"
-                  ? activeProposalSummary && activeMutationPlan && activePlanDecision
-                    ? (
-                      <>
-                        <button
-                          type="button"
-                          className={styles.toolbarButton}
-                          onClick={() => {
-                            void handleApplyActiveProposal();
-                          }}
-                          disabled={isRunning
-                            || !activeProposalSummary.canApply
-                            || !activeProposalSummary.hasChanges
-                            || !activeMutationPlan.canApprove
-                            || activePlanDecision.status !== "approved"}
-                        >
-                          {isRunning ? "APPLYING..." : "APPLY PROPOSAL"}
-                        </button>
-                        <p className={styles.opyCopilotProposalHint}>
-                          {activePlanDecision.status === "approved"
-                            ? "APPROVED PLAN READY FOR CONFIRMED APPLY."
-                            : activePlanDecision.status === "rejected"
-                            ? "PLAN REJECTED. APPROVE A NEW OR UPDATED PLAN TO APPLY."
-                            : "APPROVE PLAN TO ENABLE APPLY."}
-                        </p>
-                      </>
-                    )
+                      )
                     : (
                       <p className={styles.opyCopilotProposalHint}>
-                        {"GROUNDING OR PLAN DATA UNAVAILABLE FOR THIS PROPOSAL."}
+                        {"SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE THIS PROPOSAL."}
                       </p>
-                    )
-                  : (
-                    <p className={styles.opyCopilotProposalHint}>
-                      {"SWITCH ACTION MODE TO APPLY-WITH-CONFIRMATION TO EXECUTE THIS PROPOSAL."}
-                    </p>
-                  )}
-              </div>
-            </section>
-          ),
-        })
-      )}
+                    )}
+                </div>
+              </section>
+            ),
+          })
+        )}
       </div>
       <div className={styles.opyCopilotConversation}>
         <div ref={transcriptRef} className={styles.opyCopilotTranscript} role="log" aria-live="polite">

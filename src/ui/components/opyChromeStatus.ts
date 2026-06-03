@@ -1,7 +1,10 @@
+import type { OpyViewportSectionKey } from "../../core/effects/settings.types";
+
 export type OpyWidgetChromeTone = "neutral" | "ready" | "caution" | "critical";
 
 export interface OpyWidgetChromeSignal {
   readonly key: "policy" | "review" | "proposal" | "checkpoint";
+  readonly targetSection: OpyViewportSectionKey;
   readonly label: string;
   readonly detail: string;
   readonly tone: OpyWidgetChromeTone;
@@ -11,6 +14,11 @@ export interface OpyWidgetChromeSignal {
 export interface OpyWidgetChromeStatus {
   readonly frameTone: OpyWidgetChromeTone;
   readonly signals: readonly OpyWidgetChromeSignal[];
+}
+
+export interface OpyWidgetChromeFocusRequest {
+  readonly section: OpyViewportSectionKey;
+  readonly nonce: number;
 }
 
 const CHROME_TONE_WEIGHT: Record<OpyWidgetChromeTone, number> = {
@@ -50,6 +58,7 @@ export const areOpyWidgetChromeStatusesEqual = (
     const next = right.signals[index];
     return next !== undefined
       && signal.key === next.key
+      && signal.targetSection === next.targetSection
       && signal.label === next.label
       && signal.detail === next.detail
       && signal.tone === next.tone

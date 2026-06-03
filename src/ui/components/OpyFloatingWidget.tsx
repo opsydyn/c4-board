@@ -10,7 +10,7 @@ import type {
   OpyWidgetSnapTarget,
 } from "../../core/effects/settings.types";
 import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
-import type { OpyWidgetChromeStatus } from "./opyChromeStatus";
+import type { OpyWidgetChromeSignal, OpyWidgetChromeStatus } from "./opyChromeStatus";
 import { OpyAvatar } from "./OpyAvatar";
 import * as styles from "./OpyFloatingWidget.css";
 
@@ -74,6 +74,7 @@ interface OpyFloatingWidgetProps {
     modeLayouts: OpyWidgetModeLayouts;
     presence: OpyWidgetPresence;
   }) => void;
+  readonly onChromeSignalAction: (signal: OpyWidgetChromeSignal) => void;
   readonly onOpenSettings: () => void;
   readonly onOpenSavedDiagrams: () => void;
   readonly onOpenPostee: () => void;
@@ -410,6 +411,7 @@ export function OpyFloatingWidget({
   containerRef,
   onOpen,
   onStateCommit,
+  onChromeSignalAction,
   onOpenSettings,
   onOpenSavedDiagrams,
   onOpenPostee,
@@ -1211,15 +1213,21 @@ export function OpyFloatingWidget({
                     {visibleChromeSignals.length > 0 && (
                       <div className={styles.widgetTelemetrySignals} data-density={telemetryDensity}>
                         {visibleChromeSignals.map((signal) => (
-                          <span
+                          <button
                             key={signal.key}
+                            type="button"
                             className={styles.widgetSignalPill}
                             data-tone={signal.tone}
                             data-fresh={signal.isFresh ? "true" : "false"}
                             title={signal.detail}
+                            aria-label={`${signal.label}. ${signal.detail}`}
+                            data-opy-stop-drag="true"
+                            onClick={() => {
+                              onChromeSignalAction(signal);
+                            }}
                           >
                             {signal.label}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     )}

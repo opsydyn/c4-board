@@ -79,7 +79,11 @@ import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
 import { OpyFloatingWidget } from "./OpyFloatingWidget";
-import { areOpyWidgetChromeStatusesEqual, type OpyWidgetChromeStatus } from "./opyChromeStatus";
+import {
+  areOpyWidgetChromeStatusesEqual,
+  type OpyWidgetChromeFocusRequest,
+  type OpyWidgetChromeStatus,
+} from "./opyChromeStatus";
 import { type OpyBoardAction, OpyCopilotPanel } from "./OpyCopilotPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
@@ -252,6 +256,7 @@ export function C4CanvasContainer() {
   const [isCommandBarOpen, setCommandBarOpen] = useState(true);
   const [isDataBarOpen, setDataBarOpen] = useState(false);
   const [opyChromeStatus, setOpyChromeStatus] = useState<OpyWidgetChromeStatus | null>(null);
+  const [opyChromeSectionRequest, setOpyChromeSectionRequest] = useState<OpyWidgetChromeFocusRequest | null>(null);
   const [ownershipTeamCatalog, setOwnershipTeamCatalog] = useState<string[]>([]);
   const [ownershipTeamFilter, setOwnershipTeamFilter] = useState<string>(
     OWNERSHIP_FILTER_ALL,
@@ -2458,6 +2463,12 @@ export function C4CanvasContainer() {
           onStateCommit={(nextState) => {
             void persistOpyWidgetState(nextState);
           }}
+          onChromeSignalAction={(signal) => {
+            setOpyChromeSectionRequest({
+              section: signal.targetSection,
+              nonce: Date.now(),
+            });
+          }}
           onOpenSettings={() => {
             void navigateWithSave("/settings");
           }}
@@ -2490,6 +2501,7 @@ export function C4CanvasContainer() {
                 areOpyWidgetChromeStatusesEqual(current, nextStatus) ? current : nextStatus
               );
             }}
+            chromeSectionRequest={opyChromeSectionRequest}
           />
         </OpyFloatingWidget>
         {!isSidebarOpen && (
