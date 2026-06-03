@@ -20,6 +20,8 @@
   - OPY has an explicit orchestration machine for `contextualizing`, `planning`, `proposing`, `awaiting_confirmation`, `applying`, `verifying`, `completed`, and `failed`
   - the panel is no longer relying on a single local `isRunning` flag for read/proposal/apply/rollback flow state
   - action confirmations now surface inside OPY as a real `awaiting_confirmation` state instead of dropping into `window.confirm`
+  - machine-level lifecycle telemetry now emits flow start, transition, completion, cancellation, and failure events independently of persisted run envelopes
+  - the control field now carries the last terminal flow outcome after a lifecycle returns to `idle`
   - retryable terminal failure handling now exists at the OPY surface
 - The OPY surface now goes beyond the original roadmap UI baseline:
   - floating widget with layout memory, minimize/orb presence, snap modes, and draggable resize
@@ -27,6 +29,7 @@
   - urgency-aware chrome signals for `policy`, `review`, `proposal`, and `checkpoint`
   - actionable chrome signals that open and focus the matching OPY section
 - The next critical Rig intelligence milestone is to finish **Phase 4 / `RIG-401` orchestration** by moving more OPY flow edges behind the machine boundary and tightening stage-aware cancellation semantics.
+- The next `RIG-401` sub-slice after this should focus on machine-owned cancellation/reset semantics and reducing remaining panel-local replay logic before starting resumable tasks in `RIG-402`.
 - `RIG-402` should still follow only after `RIG-401`, since resumable tasks need a stable staged execution model first.
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 

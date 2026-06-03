@@ -200,6 +200,8 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - confirmed board mutations (`/add`, proposal apply, checkpoint rollback) move through confirmation, apply, and verify explicitly
 - confirmation for board mutations now happens inside OPY itself rather than through blocking browser dialogs
 - the OPY header/control field now surfaces `FLOW::...` stage state while a lifecycle is active
+- OPY now emits lifecycle telemetry for stage start/transition/completion/cancellation/failure, not only persisted run completion
+- the control field now retains the last terminal flow outcome (`complete`, `cancelled`, `failed`) even after the active stage returns to idle
 - the runtime error strip can retry the last OPY flow after a terminal failure
 - this machine is the Phase 4 foundation for later persistent task resume in `RIG-402`
 

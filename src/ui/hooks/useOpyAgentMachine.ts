@@ -1,5 +1,6 @@
 import { useMachine } from "@xstate/react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { emitOpyAgentFlowTelemetry } from "../../core/effects/opy-agent.telemetry";
 import {
   createOpyAgentMachine,
   type OpyAgentLifecycleRequest,
@@ -19,6 +20,7 @@ export interface UseOpyAgentMachineResult {
   readonly lastCompletedAt: number | null;
   readonly lastError: string | null;
   readonly lastFailureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> | null;
+  readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastTerminalStatus: "completed" | "cancelled" | "failed" | null;
   readonly stage: OpyAgentLifecycleStage;
   readonly cancelActiveRequest: () => void;
@@ -45,6 +47,56 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
   const activeRequest = snapshot.context.activeRequest;
   const isBusy = !NON_BUSY_STAGES.has(stage);
   const canRetry = snapshot.context.lastRequest !== null && (stage === "completed" || stage === "failed");
+  const telemetryStateRef = useRef({
+    errorSummary: snapshot.context.lastError,
+    lastCompletedAt: snapshot.context.lastCompletedAt,
+    lastRequestId: snapshot.context.lastRequest?.id ?? null,
+    requestId: snapshot.context.activeRequest?.id ?? null,
+    stage,
+    terminalStatus: snapshot.context.lastTerminalStatus,
+  });
+
+  useEffect(() => {
+    const previousState = telemetryStateRef.current;
+    const nextState = {
+      errorSummary: snapshot.context.lastError,
+      lastCompletedAt: snapshot.context.lastCompletedAt,
+      lastRequestId: snapshot.context.lastRequest?.id ?? null,
+      requestId: snapshot.context.activeRequest?.id ?? null,
+      stage,
+      terminalStatus: snapshot.context.lastTerminalStatus,
+    };
+
+    const stageChanged = previousState.stage !== nextState.stage;
+    const requestChanged = previousState.requestId !== nextState.requestId
+      || previousState.lastRequestId !== nextState.lastRequestId;
+    const terminalChanged = previousState.lastCompletedAt !== nextState.lastCompletedAt
+      || previousState.terminalStatus !== nextState.terminalStatus
+      || previousState.errorSummary !== nextState.errorSummary;
+
+    if (stageChanged || requestChanged || terminalChanged) {
+      emitOpyAgentFlowTelemetry({
+        activeRequest: snapshot.context.activeRequest,
+        errorSummary: snapshot.context.lastError,
+        failureStage: snapshot.context.lastFailureStage,
+        fromStage: previousState.stage,
+        lastCompletedAt: snapshot.context.lastCompletedAt,
+        lastRequest: snapshot.context.lastRequest,
+        terminalStatus: snapshot.context.lastTerminalStatus,
+        toStage: stage,
+      });
+    }
+
+    telemetryStateRef.current = nextState;
+  }, [
+    snapshot.context.activeRequest,
+    snapshot.context.lastCompletedAt,
+    snapshot.context.lastError,
+    snapshot.context.lastFailureStage,
+    snapshot.context.lastRequest,
+    snapshot.context.lastTerminalStatus,
+    stage,
+  ]);
 
   const startReadRequest = useCallback((request: OpyAgentLifecycleRequest) => {
     sendRef.current({ type: "START_READ", request });
@@ -113,6 +165,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     lastCompletedAt: snapshot.context.lastCompletedAt,
     lastError: snapshot.context.lastError,
     lastFailureStage: snapshot.context.lastFailureStage,
+    lastRequest: snapshot.context.lastRequest,
     lastTerminalStatus: snapshot.context.lastTerminalStatus,
     stage,
     cancelActiveRequest,

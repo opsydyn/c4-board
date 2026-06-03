@@ -290,6 +290,12 @@ const LIFECYCLE_STAGE_LABEL: Record<Exclude<OpyAgentLifecycleStage, "idle">, str
   failed: "FAILED",
 };
 
+const LIFECYCLE_TERMINAL_STATUS_LABEL: Record<NonNullable<ReturnType<typeof useOpyAgentMachine>["lastTerminalStatus"]>, string> = {
+  completed: "COMPLETE",
+  cancelled: "CANCELLED",
+  failed: "FAILED",
+};
+
 const sortRunsByRecency = (runs: readonly OpyAgentRun[]): OpyAgentRun[] =>
   [...runs].sort((left, right) => right.startedAt - left.startedAt);
 
@@ -2460,8 +2466,15 @@ export function OpyCopilotPanel({
   const proposalSectionMeta = activeDiagramProposal
     ? `${activeDiagramProposal.proposal.nodes.length} NODE(S) · ${activeDiagramProposal.proposal.edges.length} EDGE(S)`
     : "UNAVAILABLE";
+  const lastLifecycleText = agentLifecycle.lastTerminalStatus && agentLifecycle.lastRequest && agentLifecycle.lastCompletedAt
+    ? `LAST FLOW::${agentLifecycle.lastRequest.label} · ${
+      LIFECYCLE_TERMINAL_STATUS_LABEL[agentLifecycle.lastTerminalStatus]
+    } · ${formatClockTime(agentLifecycle.lastCompletedAt)}`
+    : null;
   const controlSectionSummary = summarizeInlineText(
-    `BOARD::${currentBoardLabel} · SESSION::${selectedSession?.title ?? "NONE"} · ACTION::${actionMode.toUpperCase()}`,
+    agentLifecycle.stage !== "idle"
+      ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"} · ${LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]} · BOARD::${currentBoardLabel}`
+      : lastLifecycleText ?? `BOARD::${currentBoardLabel} · SESSION::${selectedSession?.title ?? "NONE"} · ACTION::${actionMode.toUpperCase()}`,
     "CONTROL SURFACE READY.",
   );
   const diagnosticsSectionSummary = latestDiagnosticsSurface
@@ -2656,6 +2669,11 @@ export function OpyCopilotPanel({
                   {`FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"} · ${
                     LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]
                   }`}
+                </p>
+              )}
+              {agentLifecycle.stage === "idle" && lastLifecycleText && (
+                <p className={styles.ownershipLensHint}>
+                  {lastLifecycleText}
                 </p>
               )}
               {!activeRun && latestRun?.status === "failed" && latestRun.errorSummary && (
