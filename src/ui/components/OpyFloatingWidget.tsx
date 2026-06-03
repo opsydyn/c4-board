@@ -422,6 +422,7 @@ export function OpyFloatingWidget({
   const [liveModeLayouts, setLiveModeLayouts] = useState(modeLayouts);
   const [livePresence, setLivePresence] = useState<OpyWidgetPresence>(presence);
   const [openOrb, setOpenOrb] = useState<string | null>(null);
+  const [activeChromeSignalKey, setActiveChromeSignalKey] = useState<OpyWidgetChromeSignal["key"] | null>(null);
   const widgetRootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -519,13 +520,28 @@ export function OpyFloatingWidget({
     const signalLimit = telemetryDensity === "wide" ? 3 : telemetryDensity === "compact" ? 2 : 1;
     return chromeStatus.signals.slice(0, signalLimit);
   }, [chromeStatus, telemetryDensity]);
+  const activeChromeSignal = useMemo(
+    () => visibleChromeSignals.find((signal) => signal.key === activeChromeSignalKey) ?? null,
+    [activeChromeSignalKey, visibleChromeSignals],
+  );
   const chromeTone = chromeStatus?.frameTone ?? "neutral";
 
   useEffect(() => {
     if (!visible || currentPresence === "orb") {
       setOpenOrb(null);
+      setActiveChromeSignalKey(null);
     }
   }, [currentPresence, visible]);
+
+  useEffect(() => {
+    if (!activeChromeSignalKey) {
+      return;
+    }
+
+    if (!visibleChromeSignals.some((signal) => signal.key === activeChromeSignalKey)) {
+      setActiveChromeSignalKey(null);
+    }
+  }, [activeChromeSignalKey, visibleChromeSignals]);
 
   useEffect(() => {
     if (!openOrb || currentPresence === "orb") {
@@ -1211,7 +1227,13 @@ export function OpyFloatingWidget({
                   </div>
                   <div className={styles.widgetTelemetry} data-density={telemetryDensity}>
                     {visibleChromeSignals.length > 0 && (
-                      <div className={styles.widgetTelemetrySignals} data-density={telemetryDensity}>
+                      <div
+                        className={styles.widgetTelemetrySignals}
+                        data-density={telemetryDensity}
+                        onMouseLeave={() => {
+                          setActiveChromeSignalKey(null);
+                        }}
+                      >
                         {visibleChromeSignals.map((signal) => (
                           <button
                             key={signal.key}
@@ -1222,6 +1244,15 @@ export function OpyFloatingWidget({
                             title={signal.detail}
                             aria-label={`${signal.label}. ${signal.detail}`}
                             data-opy-stop-drag="true"
+                            onMouseEnter={() => {
+                              setActiveChromeSignalKey(signal.key);
+                            }}
+                            onFocus={() => {
+                              setActiveChromeSignalKey(signal.key);
+                            }}
+                            onBlur={() => {
+                              setActiveChromeSignalKey((current) => current === signal.key ? null : current);
+                            }}
                             onClick={() => {
                               onChromeSignalAction(signal);
                             }}
@@ -1229,6 +1260,18 @@ export function OpyFloatingWidget({
                             {signal.label}
                           </button>
                         ))}
+                      </div>
+                    )}
+                    {activeChromeSignal && (
+                      <div
+                        className={styles.widgetSignalPreview}
+                        data-tone={activeChromeSignal.tone}
+                      >
+                        <div className={styles.widgetSignalPreviewHeader}>
+                          <span>{activeChromeSignal.label}</span>
+                          <span>{`OPEN::${activeChromeSignal.targetSection.toUpperCase()}`}</span>
+                        </div>
+                        <p className={styles.widgetSignalPreviewDetail}>{activeChromeSignal.detail}</p>
                       </div>
                     )}
                     <div className={styles.widgetTelemetryPrimary}>

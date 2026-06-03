@@ -327,6 +327,54 @@ export const widgetSignalPill = style([
   },
 ]);
 
+export const widgetSignalPreview = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(8, 13, 11, 0.78)",
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  width: "100%",
+  minWidth: 0,
+  selectors: {
+    '&[data-tone="ready"]': {
+      borderColor: theme.color.status.ready,
+      backgroundColor: `color-mix(in srgb, ${theme.color.status.ready} 9%, rgba(8, 13, 11, 0.84))`,
+    },
+    '&[data-tone="caution"]': {
+      borderColor: theme.color.status.caution,
+      backgroundColor: `color-mix(in srgb, ${theme.color.status.caution} 10%, rgba(8, 13, 11, 0.84))`,
+    },
+    '&[data-tone="critical"]': {
+      borderColor: theme.color.status.critical,
+      backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} 11%, rgba(8, 13, 11, 0.84))`,
+    },
+  },
+});
+
+export const widgetSignalPreviewHeader = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  minWidth: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const widgetSignalPreviewDetail = style({
+  margin: 0,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.normal,
+  letterSpacing: theme.typography.letterSpacing.normal,
+});
+
 export const widgetTelemetryPillSecondary = style([
   widgetTelemetryPill,
   {

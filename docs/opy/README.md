@@ -46,6 +46,7 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - prioritizes `MODE`, `STATE`, and `SNAP` in the header while demoting `NODES`, `EDGES`, and `SIZE` into a responsive secondary board-status row
 - promotes live `review`, `proposal`, `checkpoint`, and policy urgency into the widget chrome so the header pills, orb state, and collapsed section summaries all signal severity before expansion
 - allows those chrome severity pills to open and focus the matching OPY section directly
+- shows a short hover/focus preview for each chrome signal before you open the full section
 - remembers layout per mode
 - restores last active mode after minimize/reopen
 

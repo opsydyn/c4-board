@@ -1,6 +1,6 @@
 # Rig Agent Task Breakdown (Execution Plan)
 
-**Last Updated**: 2026-06-02
+**Last Updated**: 2026-06-03
 **Source ADR**: `docs/adr/008-rig-agent-platform-orchestration.md`
 **Delivery Horizon**: 6 phases across 2026-Q1/Q2
 
@@ -12,6 +12,18 @@
 4. Confirmed apply through existing save boundary.
 5. Multi-stage orchestration and resumable tasks.
 6. Governance, rollout gates, and evaluation automation.
+
+## Status Review
+
+- Completed in code: `RIG-001` through `RIG-004`, `RIG-101` through `RIG-103`, `RIG-201`, `RIG-202`, `RIG-203`, `RIG-301`, and `RIG-302`.
+- The OPY surface now goes beyond the original roadmap UI baseline:
+  - floating widget with layout memory, minimize/orb presence, snap modes, and draggable resize
+  - pinned conversation strip with collapsible upper sections
+  - urgency-aware chrome signals for `policy`, `review`, `proposal`, and `checkpoint`
+  - actionable chrome signals that open and focus the matching OPY section
+- The next critical Rig intelligence milestone is still **Phase 4 / `RIG-401` orchestration**, because the current OPY lifecycle is durable but still panel-driven rather than machine-driven.
+- `RIG-402` should follow only after `RIG-401`, since resumable tasks need a stable staged execution model first.
+- `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
 
@@ -274,13 +286,13 @@
   - Feature can be enabled by cohort/environment.
   - Audit trail captures who/what/when/why per applied task.
 
-## 8) Sprint-Ready First Slice (Recommended)
+## 8) Next Recommended Execution Order
 
-1. `RIG-001` Agent Config Contract.
-2. `RIG-002` Secret Storage Boundary.
-3. `RIG-003` Agent Run Envelope + Telemetry.
-4. `RIG-101` Read Tool Registry (board summary only).
-5. `RIG-102` Context Assembler + Citations (minimal path).
+1. `RIG-401` Orchestration Machine.
+2. `RIG-402` Persistent Task Lifecycle.
+3. `RIG-501` Policy Controls in Settings.
+4. `RIG-502` Evaluation Harness.
+5. `RIG-503` Rollout Controls + Audit View.
 
 ## 9) Definition of Ready / Done
 
