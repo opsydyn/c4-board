@@ -564,7 +564,7 @@ export const opyCopilotViewportSection = style({
 
 export const opyCopilotViewportSectionSummary = style({
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   justifyContent: "space-between",
   gap: theme.spacing["2"],
   transition: theme.transition.base,
@@ -585,6 +585,35 @@ export const opyCopilotViewportSectionSummary = style({
       color: theme.color.foreground.primary,
     },
   },
+});
+
+export const opyCopilotViewportSectionSummaryMain = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  minWidth: 0,
+  flex: 1,
+});
+
+export const opyCopilotViewportSectionSummaryTitle = style({
+  color: theme.color.foreground.secondary,
+});
+
+export const opyCopilotViewportSectionSummaryText = style({
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  color: theme.color.foreground.primary,
+  fontSize: theme.typography.size.xs,
+  letterSpacing: theme.typography.letterSpacing.normal,
+});
+
+export const opyCopilotViewportSectionSummaryAside = style({
+  display: "inline-flex",
+  alignItems: "flex-start",
+  justifyContent: "flex-end",
+  flexShrink: 0,
 });
 
 export const opyCopilotViewportSectionSummaryMeta = style({

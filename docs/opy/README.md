@@ -40,6 +40,7 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - collapses upper control and diagnostics sections by default so conversation stays primary
 - remembers upper viewport section open/closed state across widget remounts
 - marks fresh proposal, review, and checkpoint output on closed summaries until opened
+- renders tactical one-line section summaries for control, diagnostics, proposals, reviews, and checkpoints
 - remembers layout per mode
 - restores last active mode after minimize/reopen
 

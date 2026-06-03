@@ -174,6 +174,13 @@ const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
   proposal: false,
 };
 
+const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+const summarizeInlineText = (value: string, fallback: string): string => {
+  const normalized = collapseWhitespace(value);
+  return normalized.length > 0 ? normalized : fallback;
+};
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -1971,6 +1978,7 @@ export function OpyCopilotPanel({
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;
     readonly meta: string;
+    readonly summary: string;
     readonly isUnseen?: boolean;
     readonly children: ReactNode;
   }) => {
@@ -1992,13 +2000,18 @@ export function OpyCopilotPanel({
             toggleViewportSection(input.keyId);
           }}
         >
-          <span>{input.title}</span>
-          <span className={styles.opyCopilotViewportSectionSummaryMetaGroup}>
-            {showUnseen && (
-              <span className={styles.opyCopilotViewportSectionSummaryFlag}>NEW</span>
-            )}
-            <span className={styles.opyCopilotViewportSectionSummaryMeta}>
-              {`${isOpen ? "COLLAPSE" : "EXPAND"} :: ${input.meta}`}
+          <span className={styles.opyCopilotViewportSectionSummaryMain}>
+            <span className={styles.opyCopilotViewportSectionSummaryTitle}>{input.title}</span>
+            <span className={styles.opyCopilotViewportSectionSummaryText}>{input.summary}</span>
+          </span>
+          <span className={styles.opyCopilotViewportSectionSummaryAside}>
+            <span className={styles.opyCopilotViewportSectionSummaryMetaGroup}>
+              {showUnseen && (
+                <span className={styles.opyCopilotViewportSectionSummaryFlag}>NEW</span>
+              )}
+              <span className={styles.opyCopilotViewportSectionSummaryMeta}>
+                {`${isOpen ? "COLLAPSE" : "EXPAND"} :: ${input.meta}`}
+              </span>
             </span>
           </span>
         </button>
@@ -2021,6 +2034,56 @@ export function OpyCopilotPanel({
   const proposalSectionMeta = activeDiagramProposal
     ? `${activeDiagramProposal.proposal.nodes.length} NODE(S) · ${activeDiagramProposal.proposal.edges.length} EDGE(S)`
     : "UNAVAILABLE";
+  const controlSectionSummary = summarizeInlineText(
+    `BOARD::${currentBoardLabel} · SESSION::${
+      selectedSession?.title ?? "NONE"
+    } · ACTION::${actionMode.toUpperCase()}`,
+    "CONTROL SURFACE READY.",
+  );
+  const diagnosticsSectionSummary = latestDiagnosticsSurface
+    ? summarizeInlineText(
+      latestDiagnosticsSurface.summary,
+      `${latestDiagnosticsSurface.kind.toUpperCase()} DIAGNOSTICS READY.`,
+    )
+    : "NO DIAGNOSTICS YET.";
+  const checkpointsSectionSummary = latestCheckpoint
+    ? (() => {
+      const preview = checkpointRestorePreviewById.get(latestCheckpoint.id) ?? null;
+      if (!preview) {
+        return summarizeInlineText(
+          `LATEST::${latestCheckpoint.snapshot.name} · CREATED::${formatClockTime(latestCheckpoint.createdAt)}`,
+          "CHECKPOINTS READY.",
+        );
+      }
+
+      return summarizeInlineText(
+        preview.hasChanges
+          ? `LATEST::${latestCheckpoint.snapshot.name} · Δ::${
+            preview.impactedEntities.length
+          } CHANGE(S) · RESTORE::${preview.counts.restoreNodes + preview.counts.restoreEdges}`
+          : `LATEST::${latestCheckpoint.snapshot.name} · CURRENT BOARD ALREADY MATCHES SNAPSHOT`,
+        "CHECKPOINTS READY.",
+      );
+    })()
+    : "NO CHECKPOINTS CAPTURED.";
+  const reviewSectionSummary = activeBoardReview
+    ? summarizeInlineText(
+      `FOCUS::${formatReviewFocus(activeBoardReview.command.focus)} · RISKS::${
+        activeBoardReview.review.risks.length
+      } · NEXT::${activeBoardReview.review.recommendedChanges.length}`,
+      activeBoardReview.review.summary,
+    )
+    : "NO BOARD REVIEW YET.";
+  const proposalSectionSummary = activeDiagramProposal
+    ? summarizeInlineText(
+      activeMutationPlan
+        ? `PLAN::${activeMutationPlan.plan.totalActions} ACTION(S) · CREATE::${
+          activeMutationPlan.plan.totalNodesCreated
+        }N/${activeMutationPlan.plan.totalEdgesCreated}E · RISK::${activeMutationPlan.plan.highestRisk.toUpperCase()}`
+        : activeDiagramProposal.proposal.summary,
+      "PROPOSAL READY.",
+    )
+    : "NO DIAGRAM PROPOSAL YET.";
 
   useEffect(() => {
     if (pendingViewportBaselineRef.current) {
@@ -2117,6 +2180,7 @@ export function OpyCopilotPanel({
         keyId: "control",
         title: "CONTROL FIELD",
         meta: controlSectionMeta,
+        summary: controlSectionSummary,
         isUnseen: viewportSectionsUnseen.control,
         children: (
           <>
@@ -2250,6 +2314,7 @@ export function OpyCopilotPanel({
           keyId: "diagnostics",
           title: `DIAGNOSTICS::${latestDiagnosticsSurface.title}`,
           meta: diagnosticsSectionMeta,
+          summary: diagnosticsSectionSummary,
           isUnseen: viewportSectionsUnseen.diagnostics,
           children: (
             <section className={styles.opyCopilotDiagnosticsCard} aria-label="Latest OPY diagnostics">
@@ -2331,6 +2396,7 @@ export function OpyCopilotPanel({
           keyId: "checkpoints",
           title: "CHECKPOINT HISTORY",
           meta: checkpointsSectionMeta,
+          summary: checkpointsSectionSummary,
           isUnseen: viewportSectionsUnseen.checkpoints,
           children: (
             <section className={styles.opyCopilotPlanCard} aria-label="OPY checkpoint history">
@@ -2469,6 +2535,7 @@ export function OpyCopilotPanel({
           keyId: "review",
           title: "BOARD REVIEW",
           meta: reviewSectionMeta,
+          summary: reviewSectionSummary,
           isUnseen: viewportSectionsUnseen.review,
           children: (
             <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
@@ -2653,6 +2720,7 @@ export function OpyCopilotPanel({
           keyId: "proposal",
           title: "DIAGRAM PROPOSAL",
           meta: proposalSectionMeta,
+          summary: proposalSectionSummary,
           isUnseen: viewportSectionsUnseen.proposal,
           children: (
             <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">
