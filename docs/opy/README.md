@@ -38,6 +38,7 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - keeps the transcript and composer pinned in a dedicated bottom conversation strip
 - scrolls diagnostics, plan cards, and session controls independently above the composer
 - collapses upper control and diagnostics sections by default so conversation stays primary
+- remembers upper viewport section open/closed state across widget remounts
 - remembers layout per mode
 - restores last active mode after minimize/reopen
 

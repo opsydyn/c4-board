@@ -113,6 +113,25 @@ export type OpyWidgetMode = Schema.Schema.Type<typeof OpyWidgetModeSchema>;
 export const OpyWidgetPresenceSchema = Schema.Literal("orb", "field", "mission");
 export type OpyWidgetPresence = Schema.Schema.Type<typeof OpyWidgetPresenceSchema>;
 
+export const OpyViewportSectionKeySchema = Schema.Literal(
+  "control",
+  "diagnostics",
+  "checkpoints",
+  "review",
+  "proposal",
+);
+export type OpyViewportSectionKey = Schema.Schema.Type<typeof OpyViewportSectionKeySchema>;
+
+export const OpyViewportSectionsSchema = Schema.Struct({
+  control: Schema.Boolean,
+  diagnostics: Schema.Boolean,
+  checkpoints: Schema.Boolean,
+  review: Schema.Boolean,
+  proposal: Schema.Boolean,
+});
+
+export type OpyViewportSections = Schema.Schema.Type<typeof OpyViewportSectionsSchema>;
+
 export const OpyWidgetSnapTargetSchema = Schema.Literal(
   "free",
   "center",
@@ -188,6 +207,7 @@ export const AppSettingsSchema = Schema.Struct({
   opyWidgetPresence: OpyWidgetPresenceSchema,
   opyWidgetLayout: OpyWidgetLayoutSchema,
   opyWidgetModeLayouts: OpyWidgetModeLayoutsSchema,
+  opyViewportSections: OpyViewportSectionsSchema,
   masterVolume: MasterVolumeSchema,
   autosaveEnabled: Schema.Boolean,
   autosaveIntervalMs: AutosaveIntervalMsSchema,
@@ -243,6 +263,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       width: 860,
       height: 900,
     },
+  },
+  opyViewportSections: {
+    control: false,
+    diagnostics: false,
+    checkpoints: false,
+    review: false,
+    proposal: false,
   },
   masterVolume: 0.8,
   autosaveEnabled: true,

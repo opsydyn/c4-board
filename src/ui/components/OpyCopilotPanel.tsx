@@ -68,7 +68,11 @@ import {
   updateOpyAgentRun,
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
-import type { AiActionMode } from "../../core/effects/settings.types";
+import type {
+  AiActionMode,
+  OpyViewportSectionKey,
+  OpyViewportSections,
+} from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
 import * as styles from "./styles.css";
 import { TacticalSelect } from "./TacticalSelect";
@@ -162,13 +166,6 @@ interface OpyActionModeSurface {
   readonly detail: string;
 }
 
-type OpyViewportSectionKey =
-  | "control"
-  | "diagnostics"
-  | "checkpoints"
-  | "review"
-  | "proposal";
-
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -178,6 +175,8 @@ interface OpyCopilotPanelProps {
   readonly boardSummary: RigC4BoardSummary | null;
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly actionMode: AiActionMode;
+  readonly viewportSections: OpyViewportSections;
+  readonly onViewportSectionsChange: (sections: OpyViewportSections) => void;
   readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
 }
@@ -571,6 +570,8 @@ export function OpyCopilotPanel({
   boardSummary,
   boardContext,
   actionMode,
+  viewportSections,
+  onViewportSectionsChange,
   onApplyBoardAction,
   onOpenAiSettings,
 }: OpyCopilotPanelProps) {
@@ -603,15 +604,9 @@ export function OpyCopilotPanel({
   >({});
   const selectedSessionIdRef = useRef<string>("");
   const transcriptRef = useRef<HTMLDivElement | null>(null);
-  const [viewportSectionsOpen, setViewportSectionsOpen] = useState<
-    Readonly<Record<OpyViewportSectionKey, boolean>>
-  >({
-    control: false,
-    diagnostics: false,
-    checkpoints: false,
-    review: false,
-    proposal: false,
-  });
+  const [viewportSectionsOpen, setViewportSectionsOpen] = useState<OpyViewportSections>(
+    viewportSections,
+  );
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -676,6 +671,11 @@ export function OpyCopilotPanel({
     () => activeRuns.find((run) => run.intent === "review-c4-board") ?? null,
     [activeRuns],
   );
+
+  useEffect(() => {
+    setViewportSectionsOpen(viewportSections);
+  }, [viewportSections]);
+
   const activeGroundedProposal = useMemo(
     () =>
       activeDiagramProposal
@@ -1892,11 +1892,15 @@ export function OpyCopilotPanel({
   const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
   const currentBoardLabel = diagramName.trim().length > 0 ? diagramName.trim() : "UNTITLED BOARD";
   const toggleViewportSection = useCallback((key: OpyViewportSectionKey) => {
-    setViewportSectionsOpen((current) => ({
-      ...current,
-      [key]: !current[key],
-    }));
-  }, []);
+    setViewportSectionsOpen((current) => {
+      const nextSections = {
+        ...current,
+        [key]: !current[key],
+      };
+      onViewportSectionsChange(nextSections);
+      return nextSections;
+    });
+  }, [onViewportSectionsChange]);
   const renderViewportSection = useCallback((input: {
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;

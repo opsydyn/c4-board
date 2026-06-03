@@ -297,6 +297,20 @@ export function C4CanvasContainer() {
     [runEffect, settingsV1Enabled],
   );
 
+  const persistOpyViewportSections = useCallback(
+    async (sections: typeof appSettings.opyViewportSections): Promise<void> => {
+      if (!settingsV1Enabled) {
+        return;
+      }
+      await runEffect(
+        patchSettings({
+          opyViewportSections: sections,
+        }),
+      );
+    },
+    [runEffect, settingsV1Enabled],
+  );
+
   const {
     azurePanelVisible: isAzurePanelOpen,
     ownershipLensVisible: isOwnershipLensOpen,
@@ -2460,6 +2474,10 @@ export function C4CanvasContainer() {
             boardSummary={opyBoardSummary}
             boardContext={opyBoardContext}
             actionMode={appSettings.aiSettings.actionMode}
+            viewportSections={appSettings.opyViewportSections}
+            onViewportSectionsChange={(nextSections) => {
+              void persistOpyViewportSections(nextSections);
+            }}
             onApplyBoardAction={handleApplyOpyBoardAction}
             onOpenAiSettings={() => {
               void navigateWithSave("/settings");
