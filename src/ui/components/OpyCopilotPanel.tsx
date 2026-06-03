@@ -172,6 +172,14 @@ interface OpyActionModeSurface {
   readonly detail: string;
 }
 
+interface OpyPendingLifecycleConfirmation {
+  readonly request: OpyAgentLifecycleRequest;
+  readonly sessionId: string;
+  readonly confirmationLines: ReadonlyArray<string>;
+  readonly cancelMessage: string;
+  readonly failurePrefix: string;
+}
+
 const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
   control: false,
   diagnostics: false,
@@ -630,6 +638,10 @@ export function OpyCopilotPanel({
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
   const lastLifecycleReplayRef = useRef<(() => Promise<void>) | null>(null);
+  const pendingLifecycleExecutionRef = useRef<{
+    readonly execute: () => Promise<string>;
+    readonly onAfterApplied?: () => Promise<void> | void;
+  } | null>(null);
   const viewportAutoSignalsRef = useRef<{
     proposal: number | null;
     review: number | null;
@@ -672,6 +684,9 @@ export function OpyCopilotPanel({
   );
   const [viewportSectionsUnseen, setViewportSectionsUnseen] = useState<OpyViewportSections>(
     EMPTY_VIEWPORT_SECTION_STATE,
+  );
+  const [pendingLifecycleConfirmation, setPendingLifecycleConfirmation] = useState<OpyPendingLifecycleConfirmation | null>(
+    null,
   );
   const agentLifecycle = useOpyAgentMachine();
   const isRunning = agentLifecycle.isBusy;
@@ -1259,6 +1274,15 @@ export function OpyCopilotPanel({
     [appendAndPersistMessage],
   );
 
+  useEffect(() => {
+    if (agentLifecycle.stage === "awaiting_confirmation") {
+      return;
+    }
+
+    pendingLifecycleExecutionRef.current = null;
+    setPendingLifecycleConfirmation((current) => current === null ? current : null);
+  }, [agentLifecycle.stage]);
+
   const executeRigRun = useCallback(
     async <T,>(
       input: {
@@ -1386,13 +1410,22 @@ export function OpyCopilotPanel({
       };
       agentLifecycle.startActionRequest(input.lifecycleRequest);
 
-      if (!window.confirm(input.confirmationMessage)) {
-        await appendAndPersistMessage(
-          input.sessionId,
-          "system",
-          input.cancelMessage,
-        );
-        agentLifecycle.cancelActiveRequest();
+      if (input.lifecycleRequest.requiresConfirmation) {
+        pendingLifecycleExecutionRef.current = input.onAfterApplied
+          ? {
+            execute: input.execute,
+            onAfterApplied: input.onAfterApplied,
+          }
+          : {
+            execute: input.execute,
+          };
+        setPendingLifecycleConfirmation({
+          request: input.lifecycleRequest,
+          sessionId: input.sessionId,
+          confirmationLines: input.confirmationMessage.split("\n"),
+          cancelMessage: input.cancelMessage,
+          failurePrefix: input.failurePrefix,
+        });
         return null;
       }
 
@@ -2200,6 +2233,51 @@ export function OpyCopilotPanel({
     selectedSessionId,
   ]);
 
+  const handleConfirmPendingLifecycleAction = useCallback(async () => {
+    const pending = pendingLifecycleConfirmation;
+    const execution = pendingLifecycleExecutionRef.current;
+    if (!pending || !execution || agentLifecycle.stage !== "awaiting_confirmation") {
+      return;
+    }
+
+    setPendingLifecycleConfirmation(null);
+    pendingLifecycleExecutionRef.current = null;
+    setRuntimeError(null);
+    agentLifecycle.confirmActiveRequest();
+    try {
+      const actionResult = await execution.execute();
+      agentLifecycle.markVerifyReady();
+      await execution.onAfterApplied?.();
+      await appendAndPersistMessage(pending.sessionId, "assistant", actionResult);
+      agentLifecycle.completeActiveRequest();
+    } catch (error) {
+      const message = toErrorMessage(error);
+      setRuntimeError(message);
+      await appendAndPersistMessage(
+        pending.sessionId,
+        "system",
+        `${pending.failurePrefix}: ${message}`,
+      );
+      agentLifecycle.failActiveRequest(message, "applying");
+    }
+  }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
+
+  const handleCancelPendingLifecycleAction = useCallback(() => {
+    const pending = pendingLifecycleConfirmation;
+    if (!pending || agentLifecycle.stage !== "awaiting_confirmation") {
+      return;
+    }
+
+    setPendingLifecycleConfirmation(null);
+    pendingLifecycleExecutionRef.current = null;
+    void appendAndPersistMessage(
+      pending.sessionId,
+      "system",
+      pending.cancelMessage,
+    );
+    agentLifecycle.cancelActiveRequest();
+  }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
+
   const handleRetryLastLifecycle = useCallback(() => {
     if (isRunning) {
       return;
@@ -2589,6 +2667,46 @@ export function OpyCopilotPanel({
                 <p className={styles.ownershipLensHint}>
                   {`LAST FLOW FAILURE::${agentLifecycle.lastFailureStage?.toUpperCase() ?? "UNKNOWN"} · ${agentLifecycle.lastError}`}
                 </p>
+              )}
+              {pendingLifecycleConfirmation && agentLifecycle.stage === "awaiting_confirmation" && (
+                <section className={styles.opyCopilotPlanCard} aria-label="OPY pending confirmation">
+                  <div className={styles.opyCopilotProposalHeader}>
+                    <span>{`CONFIRM::${pendingLifecycleConfirmation.request.label}`}</span>
+                    <span>AWAITING OPERATOR</span>
+                  </div>
+                  <div className={styles.opyCopilotProposalActions}>
+                    <button
+                      type="button"
+                      className={styles.toolbarButton}
+                      onClick={() => {
+                        void handleConfirmPendingLifecycleAction();
+                      }}
+                      disabled={agentLifecycle.stage !== "awaiting_confirmation"}
+                    >
+                      CONFIRM ACTION
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.ownershipLensToggleButton}
+                      onClick={handleCancelPendingLifecycleAction}
+                      disabled={agentLifecycle.stage !== "awaiting_confirmation"}
+                    >
+                      CANCEL ACTION
+                    </button>
+                  </div>
+                  <div className={styles.opyCopilotPlanActionList}>
+                    {pendingLifecycleConfirmation.confirmationLines
+                      .filter((line) => line.trim().length > 0)
+                      .map((line, index) => (
+                        <article
+                          key={`${pendingLifecycleConfirmation.request.id}-confirm-${index}`}
+                          className={styles.opyCopilotProposalItem}
+                        >
+                          <p>{line}</p>
+                        </article>
+                      ))}
+                  </div>
+                </section>
               )}
               <div className={styles.formGroup}>
                 <label className={styles.label} htmlFor="opy-session-select">
@@ -3464,7 +3582,7 @@ export function OpyCopilotPanel({
               }}
               onStop={() => {
                 if (agentLifecycle.stage === "awaiting_confirmation") {
-                  agentLifecycle.cancelActiveRequest();
+                  handleCancelPendingLifecycleAction();
                 }
               }}
               autoFocus={false}

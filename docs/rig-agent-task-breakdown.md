@@ -19,6 +19,7 @@
 - `RIG-401` is now started:
   - OPY has an explicit orchestration machine for `contextualizing`, `planning`, `proposing`, `awaiting_confirmation`, `applying`, `verifying`, `completed`, and `failed`
   - the panel is no longer relying on a single local `isRunning` flag for read/proposal/apply/rollback flow state
+  - action confirmations now surface inside OPY as a real `awaiting_confirmation` state instead of dropping into `window.confirm`
   - retryable terminal failure handling now exists at the OPY surface
 - The OPY surface now goes beyond the original roadmap UI baseline:
   - floating widget with layout memory, minimize/orb presence, snap modes, and draggable resize
@@ -223,6 +224,7 @@
   - Emit lifecycle events for UI and telemetry.
 - Current status:
   - initial machine and OPY panel integration landed
+  - in-panel confirmation is now wired through the machine boundary
   - remaining work is to complete deeper orchestration ownership and handoff into persistent task lifecycle
 - Primary files:
   - `src/ui/machines/opy-agent.machine.ts`
