@@ -8,6 +8,11 @@ const createReadRequest = (): OpyAgentLifecycleRequest => ({
   kind: "chat",
   label: "CHAT",
   requiresConfirmation: false,
+  replay: {
+    kind: "chat",
+    prompt: "hello",
+    sessionId: "session-1",
+  },
 });
 
 const createActionRequest = (): OpyAgentLifecycleRequest => ({
@@ -16,6 +21,11 @@ const createActionRequest = (): OpyAgentLifecycleRequest => ({
   kind: "apply-proposal",
   label: "APPLY",
   requiresConfirmation: true,
+  replay: {
+    kind: "apply-proposal",
+    proposalRespondedAtMs: 123,
+    sessionId: "session-1",
+  },
 });
 
 describe("opyAgentMachine", () => {

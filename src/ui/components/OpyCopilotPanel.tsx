@@ -643,7 +643,6 @@ export function OpyCopilotPanel({
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
-  const lastLifecycleReplayRef = useRef<(() => Promise<void>) | null>(null);
   const pendingLifecycleExecutionRef = useRef<{
     readonly execute: () => Promise<string>;
     readonly onAfterApplied?: () => Promise<void> | void;
@@ -1293,6 +1292,7 @@ export function OpyCopilotPanel({
     async <T,>(
       input: {
         readonly lifecycleRequest: OpyAgentLifecycleRequest;
+        readonly manageLifecycleStart?: boolean;
         readonly sessionId: string;
         readonly intent: OpyAgentRunIntent;
         readonly contextualize: () => Promise<RigAgentContextBundle>;
@@ -1302,10 +1302,9 @@ export function OpyCopilotPanel({
         readonly onAfterPersisted?: (result: T) => void | Promise<void>;
       },
     ): Promise<T | null> => {
-      lastLifecycleReplayRef.current = async () => {
-        await executeRigRun(input);
-      };
-      agentLifecycle.startReadRequest(input.lifecycleRequest);
+      if (input.manageLifecycleStart !== false) {
+        agentLifecycle.startReadRequest(input.lifecycleRequest);
+      }
       let run: OpyAgentRun;
       try {
         run = await beginAgentRun(input.sessionId, input.intent);
@@ -1404,6 +1403,7 @@ export function OpyCopilotPanel({
   const executeBoardActionLifecycle = useCallback(
     async (input: {
       readonly lifecycleRequest: OpyAgentLifecycleRequest;
+      readonly manageLifecycleStart?: boolean;
       readonly sessionId: string;
       readonly confirmationMessage: string;
       readonly cancelMessage: string;
@@ -1411,10 +1411,9 @@ export function OpyCopilotPanel({
       readonly execute: () => Promise<string>;
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
-      lastLifecycleReplayRef.current = async () => {
-        await executeBoardActionLifecycle(input);
-      };
-      agentLifecycle.startActionRequest(input.lifecycleRequest);
+      if (input.manageLifecycleStart !== false) {
+        agentLifecycle.startActionRequest(input.lifecycleRequest);
+      }
 
       if (input.lifecycleRequest.requiresConfirmation) {
         pendingLifecycleExecutionRef.current = input.onAfterApplied
@@ -1513,6 +1512,7 @@ export function OpyCopilotPanel({
         return;
       }
 
+      agentLifecycle.resetLifecycle();
       setIsSessionLoading(true);
       setRuntimeError(null);
 
@@ -1613,13 +1613,14 @@ export function OpyCopilotPanel({
     return () => {
       isCancelled = true;
     };
-  }, [agentSecretStatus, diagramId, domain, hasOpenAiApiKey, hydrateMessagesForSession, runEffect]);
+  }, [agentLifecycle, agentSecretStatus, diagramId, domain, hasOpenAiApiKey, hydrateMessagesForSession, runEffect]);
 
   const handleCreateSession = useCallback(() => {
     if (isRunning || isSessionLoading) {
       return;
     }
 
+    agentLifecycle.resetLifecycle();
     setRuntimeError(null);
     setIsSessionLoading(true);
     void createAndActivateSession()
@@ -1633,11 +1634,16 @@ export function OpyCopilotPanel({
 
   const handleSelectSession = useCallback(
     (nextSessionId: string) => {
+      if (isRunning || isSessionLoading || nextSessionId === selectedSessionId) {
+        return;
+      }
+
+      agentLifecycle.resetLifecycle();
       setSelectedSessionId(nextSessionId);
       setRuntimeError(null);
       void hydrateMessagesForSession(nextSessionId);
     },
-    [hydrateMessagesForSession],
+    [agentLifecycle, hydrateMessagesForSession, isRunning, isSessionLoading, selectedSessionId],
   );
 
   const handleRenameSession = useCallback(() => {
@@ -1748,6 +1754,12 @@ export function OpyCopilotPanel({
             kind: "add-node",
             label: `ADD ${opyCommand.action.nodeType.toUpperCase()}`,
             requiresConfirmation: true,
+            replay: {
+              kind: "add-node",
+              label: opyCommand.action.label,
+              nodeType: opyCommand.action.nodeType,
+              sessionId,
+            },
           }),
           sessionId,
           confirmationMessage:
@@ -1800,6 +1812,11 @@ export function OpyCopilotPanel({
             kind: "proposal",
             label: "PROPOSAL",
             requiresConfirmation: false,
+            replay: {
+              description: opyCommand.proposal.description,
+              kind: "proposal",
+              sessionId,
+            },
           }),
           sessionId,
           intent: "plan-c4-diagram",
@@ -1890,6 +1907,11 @@ export function OpyCopilotPanel({
             kind: "review",
             label: "REVIEW",
             requiresConfirmation: false,
+            replay: {
+              focus: reviewFocus ?? null,
+              kind: "review",
+              sessionId,
+            },
           }),
           sessionId,
           intent: "review-c4-board",
@@ -1944,6 +1966,11 @@ export function OpyCopilotPanel({
           kind: "chat",
           label: "CHAT",
           requiresConfirmation: false,
+          replay: {
+            kind: "chat",
+            prompt: trimmed,
+            sessionId,
+          },
         }),
         sessionId,
         intent: "chat",
@@ -2139,6 +2166,11 @@ export function OpyCopilotPanel({
         kind: "apply-proposal",
         label: "APPLY PROPOSAL",
         requiresConfirmation: true,
+        replay: {
+          kind: "apply-proposal",
+          proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
+          sessionId,
+        },
       }),
       sessionId,
       confirmationMessage: [
@@ -2206,6 +2238,11 @@ export function OpyCopilotPanel({
         kind: "rollback",
         label: "ROLLBACK",
         requiresConfirmation: true,
+        replay: {
+          checkpointId: checkpoint.id,
+          kind: "rollback",
+          sessionId,
+        },
       }),
       sessionId,
       confirmationMessage: [
@@ -2238,6 +2275,514 @@ export function OpyCopilotPanel({
     refreshCheckpointsForSession,
     selectedSessionId,
   ]);
+
+  const findPersistedProposalForReplay = useCallback(
+    (sessionId: string, proposalRespondedAtMs: number): OpySessionDiagramProposal | null =>
+      (diagramProposalHistoryBySessionId[sessionId] ?? []).find(
+        (proposal) => proposal.proposal.respondedAtMs === proposalRespondedAtMs,
+      ) ?? null,
+    [diagramProposalHistoryBySessionId],
+  );
+
+  const findCheckpointForReplay = useCallback(
+    (sessionId: string, checkpointId: string): OpyAgentCheckpoint | null =>
+      (checkpointsBySessionId[sessionId] ?? []).find((checkpoint) => checkpoint.id === checkpointId) ?? null,
+    [checkpointsBySessionId],
+  );
+
+  const reportMissingLifecycleReplayTarget = useCallback(
+    async (sessionId: string, detail: string) => {
+      setRuntimeError(detail);
+      await appendAndPersistMessage(sessionId, "system", detail);
+    },
+    [appendAndPersistMessage],
+  );
+
+  const prepareLifecycleReplay = useCallback(
+    async (request: OpyAgentLifecycleRequest): Promise<boolean> => {
+      const replay = request.replay;
+      switch (replay.kind) {
+        case "chat":
+          if (!hasOpenAiApiKey) {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentConfigError({
+                message: "OpenAI key required for OPY Net chat.",
+                recommendedAction: "Navigate to Settings > AI Agent and configure your key.",
+              }),
+            );
+            return false;
+          }
+          return true;
+        case "proposal":
+          if (domain !== "c4") {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: "Diagram proposals are currently available in C4 mode only.",
+                recommendedAction: "Switch to the C4 board and retry.",
+              }),
+            );
+            return false;
+          }
+          if (!hasOpenAiApiKey) {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentConfigError({
+                message: "OpenAI key required for diagram proposals.",
+                recommendedAction: "Navigate to Settings > AI Agent and configure your key.",
+              }),
+            );
+            return false;
+          }
+          return true;
+        case "review":
+          if (domain !== "c4") {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: "Board review is currently available in C4 mode only.",
+                recommendedAction: "Switch to the C4 board and retry.",
+              }),
+            );
+            return false;
+          }
+          if (!boardSummary || boardSummary.nodeCount === 0) {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: "Board review requires at least one C4 node in the current board.",
+                recommendedAction: "Add or load a C4 node and retry.",
+              }),
+            );
+            return false;
+          }
+          if (!hasOpenAiApiKey) {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentConfigError({
+                message: "OpenAI key required for board review.",
+                recommendedAction: "Navigate to Settings > AI Agent and configure your key.",
+              }),
+            );
+            return false;
+          }
+          return true;
+        case "add-node":
+          if (domain !== "c4") {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: "Board commands are currently available in C4 mode only.",
+                recommendedAction: "Switch to the C4 board and retry.",
+              }),
+            );
+            return false;
+          }
+          if (actionMode !== "apply-with-confirmation") {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: `Action blocked by mode ${actionMode.toUpperCase()}.`,
+                recommendedAction: "Switch to APPLY-WITH-CONFIRMATION to execute board actions.",
+              }),
+            );
+            return false;
+          }
+          return true;
+        case "apply-proposal": {
+          if (actionMode !== "apply-with-confirmation") {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: `Proposal apply blocked by mode ${actionMode.toUpperCase()}.`,
+                recommendedAction: "Switch to APPLY-WITH-CONFIRMATION.",
+              }),
+            );
+            return false;
+          }
+          if (!boardSummary) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::CURRENT BOARD SUMMARY.",
+            );
+            return false;
+          }
+
+          const proposal = findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs);
+          if (!proposal) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::PROPOSAL HISTORY.",
+            );
+            return false;
+          }
+
+          const groundedProposal = buildGroundedProposalDiff(proposal.proposal, boardSummary);
+          if (!groundedProposal) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::PROPOSAL DIFF CONTEXT.",
+            );
+            return false;
+          }
+          const proposalSummary = summarizeGroundedProposalDiff(groundedProposal);
+          const mutationPlan = buildRigMutationPlanDiff(proposal.proposal, groundedProposal);
+          if (!mutationPlan) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::MUTATION PLAN CONTEXT.",
+            );
+            return false;
+          }
+          if (proposal.decisionStatus !== "approved") {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: `Plan apply blocked while decision is ${PLAN_DECISION_LABEL[proposal.decisionStatus]}.`,
+                recommendedAction: proposal.decisionStatus === "rejected"
+                  ? "Review the rejected plan or generate a new proposal."
+                  : "Approve the current plan before applying it.",
+              }),
+            );
+            return false;
+          }
+          if (!mutationPlan.canApprove) {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: `Plan apply blocked by ${mutationPlan.issues.length} unresolved issue(s).`,
+                recommendedAction: "Resolve or regenerate the blocked plan before apply.",
+              }),
+            );
+            return false;
+          }
+          if (!proposalSummary.canApply) {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message:
+                  `Proposal apply blocked by ${proposalSummary.ambiguousNodes} ambiguous node(s) and ${proposalSummary.ambiguousEdges} ambiguous edge(s).`,
+                recommendedAction: "Resolve proposal ambiguity before applying.",
+              }),
+            );
+            return false;
+          }
+          if (!proposalSummary.hasChanges) {
+            await appendAndPersistMessage(
+              replay.sessionId,
+              "assistant",
+              "NO NEW CHANGES TO APPLY. PROPOSAL ALREADY MATCHES THE BOARD.",
+            );
+            return false;
+          }
+          return true;
+        }
+        case "rollback":
+          if (actionMode !== "apply-with-confirmation") {
+            await appendAgentNotice(
+              replay.sessionId,
+              makeAgentPolicyError({
+                message: `Rollback blocked by mode ${actionMode.toUpperCase()}.`,
+                recommendedAction: "Switch to APPLY-WITH-CONFIRMATION.",
+              }),
+            );
+            return false;
+          }
+          if (!findCheckpointForReplay(replay.sessionId, replay.checkpointId)) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::CHECKPOINT HISTORY.",
+            );
+            return false;
+          }
+          return true;
+      }
+    },
+    [
+      actionMode,
+      appendAgentNotice,
+      appendAndPersistMessage,
+      boardSummary,
+      domain,
+      findCheckpointForReplay,
+      findPersistedProposalForReplay,
+      hasOpenAiApiKey,
+      reportMissingLifecycleReplayTarget,
+    ],
+  );
+
+  const replayLifecycleRequest = useCallback(
+    async (request: OpyAgentLifecycleRequest): Promise<void> => {
+      const replay = request.replay;
+      switch (replay.kind) {
+        case "chat":
+          await executeRigRun({
+            lifecycleRequest: request,
+            manageLifecycleStart: false,
+            sessionId: replay.sessionId,
+            intent: "chat",
+            contextualize: () => resolveRigAgentContext(replay.prompt),
+            execute: async (context) => {
+              const response = await runEffect(
+                runRigHello({
+                  prompt: [
+                    "You are OPY Net, an architecture copilot for OPSYDYN.",
+                    "Respond with concise, actionable architecture guidance.",
+                    "Ground every recommendation in the supplied board evidence and be explicit when confidence is limited.",
+                    `Board evidence:\n${context.promptContext}`,
+                    `Operator request: ${replay.prompt}`,
+                  ].join("\n"),
+                }),
+              );
+              return {
+                response,
+                context,
+              } satisfies OpyGroundedChatResponse;
+            },
+            assistantMessage: (groundedChat) =>
+              `${groundedChat.response.message}\n${formatRigAgentCitationBlock(groundedChat.context)}`,
+            failurePrefix: "AGENT RUNTIME ERROR",
+            onAfterPersisted: (groundedChat) => {
+              setGroundedChatsBySessionId((current) => ({
+                ...current,
+                [replay.sessionId]: groundedChat,
+              }));
+            },
+          });
+          return;
+        case "proposal":
+          await executeRigRun({
+            lifecycleRequest: request,
+            manageLifecycleStart: false,
+            sessionId: replay.sessionId,
+            intent: "plan-c4-diagram",
+            contextualize: () => resolveRigAgentContext(replay.description),
+            execute: async (context) => {
+              const proposal = await runEffect(
+                planRigC4Diagram({
+                  description: replay.description,
+                  diagramContext: context.promptContext,
+                  ...(boardSummary ? { boardSummary } : {}),
+                }),
+              );
+              return {
+                proposal,
+                context,
+              } satisfies OpyGroundedDiagramProposal;
+            },
+            assistantMessage: (groundedProposal) =>
+              `PROPOSAL READY:: ${groundedProposal.proposal.summary}\nNO BOARD CHANGES WERE APPLIED.\n${
+                formatRigAgentCitationBlock(groundedProposal.context)
+              }`,
+            failurePrefix: "DIAGRAM PROPOSAL FAILED",
+            onAfterPersisted: async (groundedProposal) => {
+              const persistedProposal: OpySessionDiagramProposal = {
+                command: {
+                  kind: "plan-c4-diagram",
+                  description: replay.description,
+                },
+                proposal: groundedProposal.proposal,
+                context: groundedProposal.context,
+                decisionStatus: "pending",
+                decidedAtMs: Date.now(),
+              };
+
+              await runEffect(
+                upsertOpyDiagramProposal(
+                  toPersistedDiagramProposal(replay.sessionId, persistedProposal),
+                ),
+              );
+              setDiagramProposalHistoryBySessionId((current) => ({
+                ...current,
+                [replay.sessionId]: upsertSessionDiagramProposalHistory(
+                  current[replay.sessionId] ?? [],
+                  persistedProposal,
+                ),
+              }));
+            },
+          });
+          return;
+        case "review": {
+          const reviewFocus = replay.focus;
+          if (!boardSummary) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::CURRENT BOARD SUMMARY.",
+            );
+            return;
+          }
+          await executeRigRun({
+            lifecycleRequest: request,
+            manageLifecycleStart: false,
+            sessionId: replay.sessionId,
+            intent: "review-c4-board",
+            contextualize: () => resolveRigAgentContext(reviewFocus ?? null),
+            execute: async (context) => {
+              const review = await runEffect(
+                reviewRigC4Board({
+                  ...(reviewFocus ? { focus: reviewFocus } : {}),
+                  diagramContext: context.promptContext,
+                  boardSummary,
+                }),
+              );
+              return {
+                review,
+                context,
+              } satisfies OpyGroundedBoardReview;
+            },
+            assistantMessage: (groundedReview) =>
+              `REVIEW READY:: ${groundedReview.review.summary}\nNO BOARD CHANGES WERE APPLIED.\n${
+                formatRigAgentCitationBlock(groundedReview.context)
+              }`,
+            failurePrefix: "BOARD REVIEW FAILED",
+            onAfterPersisted: (groundedReview) => {
+              setBoardReviewsBySessionId((current) => ({
+                ...current,
+                [replay.sessionId]: {
+                  command: {
+                    kind: "review-c4-board",
+                    focus: replay.focus,
+                  },
+                  review: groundedReview.review,
+                  context: groundedReview.context,
+                },
+              }));
+            },
+          });
+          return;
+        }
+        case "add-node":
+          await executeBoardActionLifecycle({
+            lifecycleRequest: request,
+            manageLifecycleStart: false,
+            sessionId: replay.sessionId,
+            confirmationMessage:
+              `Apply OPY board action?\n\nADD ${replay.nodeType.toUpperCase()} "${replay.label}"`,
+            cancelMessage: "ACTION CANCELLED BY OPERATOR.",
+            failurePrefix: "BOARD ACTION FAILED",
+            execute: () =>
+              onApplyBoardAction({
+                kind: "add-node",
+                nodeType: replay.nodeType,
+                label: replay.label,
+              }),
+          });
+          return;
+        case "apply-proposal": {
+          if (!boardSummary) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::CURRENT BOARD SUMMARY.",
+            );
+            return;
+          }
+          const proposal = findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs);
+          if (!proposal) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::PROPOSAL HISTORY.",
+            );
+            return;
+          }
+          const groundedProposal = buildGroundedProposalDiff(proposal.proposal, boardSummary);
+          if (!groundedProposal) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::PROPOSAL DIFF CONTEXT.",
+            );
+            return;
+          }
+          const proposalSummary = summarizeGroundedProposalDiff(groundedProposal);
+          const mutationPlan = buildRigMutationPlanDiff(proposal.proposal, groundedProposal);
+          if (!mutationPlan) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::MUTATION PLAN CONTEXT.",
+            );
+            return;
+          }
+
+          await executeBoardActionLifecycle({
+            lifecycleRequest: request,
+            manageLifecycleStart: false,
+            sessionId: replay.sessionId,
+            confirmationMessage: [
+              "Apply OPY diagram proposal?",
+              "",
+              `Plan actions ${mutationPlan.plan.totalActions}`,
+              `Create ${mutationPlan.plan.totalNodesCreated} node(s)`,
+              `Create ${mutationPlan.plan.totalEdgesCreated} edge(s)`,
+              `Reuse ${proposalSummary.existingNodes} node(s)`,
+              `Reuse ${proposalSummary.existingEdges} edge(s)`,
+              "",
+              "This will update and save the current board.",
+            ].join("\n"),
+            cancelMessage: "PROPOSAL APPLY CANCELLED BY OPERATOR.",
+            failurePrefix: "PROPOSAL APPLY FAILED",
+            execute: () =>
+              onApplyBoardAction({
+                kind: "apply-c4-proposal",
+                sessionId: replay.sessionId,
+                proposalRespondedAtMs: proposal.proposal.respondedAtMs,
+                proposal: proposal.proposal,
+              }),
+            onAfterApplied: async () => {
+              await refreshCheckpointsForSession(replay.sessionId);
+            },
+          });
+          return;
+        }
+        case "rollback": {
+          const checkpoint = findCheckpointForReplay(replay.sessionId, replay.checkpointId);
+          if (!checkpoint) {
+            await reportMissingLifecycleReplayTarget(
+              replay.sessionId,
+              "RETRY TARGET MISSING::CHECKPOINT HISTORY.",
+            );
+            return;
+          }
+          await executeBoardActionLifecycle({
+            lifecycleRequest: request,
+            manageLifecycleStart: false,
+            sessionId: replay.sessionId,
+            confirmationMessage: [
+              "Rollback to OPY checkpoint?",
+              "",
+              formatOpyRollbackSummary(checkpoint),
+              `Created ${formatClockTime(checkpoint.createdAt)}`,
+              "",
+              "This will restore the board to the checkpoint snapshot and save it.",
+            ].join("\n"),
+            cancelMessage: "ROLLBACK CANCELLED BY OPERATOR.",
+            failurePrefix: "ROLLBACK FAILED",
+            execute: () =>
+              onApplyBoardAction({
+                kind: "rollback-checkpoint",
+                sessionId: replay.sessionId,
+                checkpointId: checkpoint.id,
+              }),
+            onAfterApplied: async () => {
+              await refreshCheckpointsForSession(replay.sessionId);
+            },
+          });
+        }
+      }
+    },
+    [
+      appendAndPersistMessage,
+      boardSummary,
+      executeBoardActionLifecycle,
+      executeRigRun,
+      findCheckpointForReplay,
+      findPersistedProposalForReplay,
+      onApplyBoardAction,
+      refreshCheckpointsForSession,
+      reportMissingLifecycleReplayTarget,
+      resolveRigAgentContext,
+      runEffect,
+    ],
+  );
 
   const handleConfirmPendingLifecycleAction = useCallback(async () => {
     const pending = pendingLifecycleConfirmation;
@@ -2285,18 +2830,21 @@ export function OpyCopilotPanel({
   }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
 
   const handleRetryLastLifecycle = useCallback(() => {
-    if (isRunning) {
-      return;
-    }
-
-    const replay = lastLifecycleReplayRef.current;
-    if (!replay) {
+    const lastRequest = agentLifecycle.lastRequest;
+    if (isRunning || !lastRequest) {
       return;
     }
 
     setRuntimeError(null);
-    void replay();
-  }, [isRunning]);
+    void prepareLifecycleReplay(lastRequest).then((canReplay) => {
+      if (!canReplay) {
+        return;
+      }
+
+      agentLifecycle.retryLastRequest();
+      return replayLifecycleRequest(lastRequest);
+    });
+  }, [agentLifecycle, isRunning, prepareLifecycleReplay, replayLifecycleRequest]);
 
   const statusText = agentSecretStatus === "loading"
     ? "KEY::CHECKING"
