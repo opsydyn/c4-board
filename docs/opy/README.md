@@ -198,6 +198,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 
 - read flows (`chat`, `review`, `proposal`) move through context, planning, proposal persistence, and verification explicitly
 - confirmed board mutations (`/add`, proposal apply, checkpoint rollback) move through confirmation, apply, and verify explicitly
+- mutation-side action descriptors and blockers are now resolved through a shared `opy-action.runtime.ts` boundary before the panel executes them
 - confirmation for board mutations now happens inside OPY itself rather than through blocking browser dialogs
 - the OPY header/control field now surfaces `FLOW::...` stage state while a lifecycle is active
 - OPY now emits lifecycle telemetry for stage start/transition/completion/cancellation/failure, not only persisted run completion
@@ -411,6 +412,7 @@ Runtime and persistence:
 - [src/core/effects/opy-chat.persistence.ts](../../src/core/effects/opy-chat.persistence.ts)
 - [src/core/effects/agent-context.ts](../../src/core/effects/agent-context.ts)
 - [src/core/effects/agent-plan-diff.ts](../../src/core/effects/agent-plan-diff.ts)
+- [src/core/effects/opy-action.runtime.ts](../../src/core/effects/opy-action.runtime.ts)
 - [src/core/effects/agent-apply.runtime.ts](../../src/core/effects/agent-apply.runtime.ts)
 - [src/core/effects/agent-rollback.runtime.ts](../../src/core/effects/agent-rollback.runtime.ts)
 

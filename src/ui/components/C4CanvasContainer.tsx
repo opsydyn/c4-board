@@ -84,7 +84,8 @@ import {
   type OpyWidgetChromeFocusRequest,
   type OpyWidgetChromeStatus,
 } from "./opyChromeStatus";
-import { type OpyBoardAction, OpyCopilotPanel } from "./OpyCopilotPanel";
+import type { OpyBoardAction } from "../../core/effects/opy-action.runtime";
+import { OpyCopilotPanel } from "./OpyCopilotPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
