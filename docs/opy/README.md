@@ -35,6 +35,8 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - draggable within the canvas region
 - resizable
 - snap-aware
+- keeps the transcript and composer pinned in a dedicated bottom conversation strip
+- scrolls diagnostics, plan cards, and session controls independently above the composer
 - remembers layout per mode
 - restores last active mode after minimize/reopen
 

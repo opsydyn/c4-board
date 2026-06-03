@@ -595,6 +595,7 @@ export function OpyCopilotPanel({
     Readonly<Record<string, OpySessionBoardReview | undefined>>
   >({});
   const selectedSessionIdRef = useRef<string>("");
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -1875,8 +1876,16 @@ export function OpyCopilotPanel({
   const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
   const currentBoardLabel = diagramName.trim().length > 0 ? diagramName.trim() : "UNTITLED BOARD";
 
+  useEffect(() => {
+    const transcriptNode = transcriptRef.current;
+    if (transcriptNode) {
+      transcriptNode.scrollTop = transcriptNode.scrollHeight;
+    }
+  }, [messages, selectedSessionId]);
+
   return (
     <div className={styles.opyCopilotShell}>
+      <div className={styles.opyCopilotViewport}>
       <div className={styles.ownershipLensStats}>
         <span>MODE::ASSIST</span>
         <span>{statusText}</span>
@@ -2211,58 +2220,6 @@ export function OpyCopilotPanel({
           </details>
         </section>
       )}
-      <div className={styles.opyCopilotTranscript} role="log" aria-live="polite">
-        {isMessageLoading
-          ? <p className={styles.ownershipLensHint}>LOADING SESSION TRANSCRIPT...</p>
-          : messages.map((message) => {
-            const roleClassName = message.role === "user"
-              ? styles.opyCopilotMessageUser
-              : message.role === "assistant"
-              ? styles.opyCopilotMessageAssistant
-              : styles.opyCopilotMessageSystem;
-            const parsedDiagnostics = message.role === "assistant"
-              ? parseOpyTranscriptDiagnostics(message.content)
-              : null;
-            const messageBody = parsedDiagnostics?.body ?? message.content;
-            const hasDiagnostics = Boolean(
-              parsedDiagnostics
-                && (parsedDiagnostics.confidence !== null || parsedDiagnostics.citations.length > 0),
-            );
-
-            return (
-              <article key={message.id} className={`${styles.opyCopilotMessage} ${roleClassName}`}>
-                <div className={styles.opyCopilotMessageMeta}>
-                  <span>{ROLE_LABEL[message.role]}</span>
-                  <span>{formatClockTime(message.createdAt)}</span>
-                </div>
-                <p>{messageBody}</p>
-                {hasDiagnostics && parsedDiagnostics && (
-                  <details className={styles.opyCopilotMessageDiagnostics}>
-                    <summary className={styles.opyCopilotDiagnosticsSummary}>
-                      {`SOURCES::${parsedDiagnostics.citations.length} · ${
-                        parsedDiagnostics.confidence
-                          ? `CONF::${parsedDiagnostics.confidence.split("·")[0]?.trim()}`
-                          : "CONF::UNKNOWN"
-                      }`}
-                    </summary>
-                    {parsedDiagnostics.confidence && (
-                      <p className={styles.opyCopilotProposalHint}>
-                        {`CONFIDENCE:: ${parsedDiagnostics.confidence}`}
-                      </p>
-                    )}
-                    <div className={styles.opyCopilotDiagnosticsCitationStack}>
-                      {parsedDiagnostics.citations.map((citation, index) => (
-                        <p key={`${message.id}-citation-${index}`} className={styles.opyCopilotProposalHint}>
-                          {citation}
-                        </p>
-                      ))}
-                    </div>
-                  </details>
-                )}
-              </article>
-            );
-          })}
-      </div>
       {activeBoardReview && (
         <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
           <div className={styles.opyCopilotProposalHeader}>
@@ -2729,38 +2686,95 @@ export function OpyCopilotPanel({
           </div>
         </section>
       )}
-      <CopilotChatConfigurationProvider
-        agentId="opy-9000"
-        labels={{
-          chatInputPlaceholder: agentSecretStatus === "loading"
-            ? "Checking OPY Net secret resolver..."
-            : hasOpenAiApiKey
-            ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
-            : "Configure OpenAI key in Settings to enable OPY Net",
-        }}
-      >
-        <CopilotChatInput
-          className={styles.opyCopilotInput}
-          value={draftPrompt}
-          onChange={setDraftPrompt}
-          isRunning={isRunning}
-          onSubmitMessage={(value) => {
-            void handleSubmitPrompt(value);
-          }}
-          onStop={() => {
-            setIsRunning(false);
-          }}
-          autoFocus={false}
-        />
-      </CopilotChatConfigurationProvider>
-      <div className={styles.opyCopilotActions}>
-        <button
-          type="button"
-          className={styles.toolbarButton}
-          onClick={onOpenAiSettings}
-        >
-          OPEN AI SETTINGS
-        </button>
+      </div>
+      <div className={styles.opyCopilotConversation}>
+        <div ref={transcriptRef} className={styles.opyCopilotTranscript} role="log" aria-live="polite">
+          {isMessageLoading
+            ? <p className={styles.ownershipLensHint}>LOADING SESSION TRANSCRIPT...</p>
+            : messages.map((message) => {
+              const roleClassName = message.role === "user"
+                ? styles.opyCopilotMessageUser
+                : message.role === "assistant"
+                ? styles.opyCopilotMessageAssistant
+                : styles.opyCopilotMessageSystem;
+              const parsedDiagnostics = message.role === "assistant"
+                ? parseOpyTranscriptDiagnostics(message.content)
+                : null;
+              const messageBody = parsedDiagnostics?.body ?? message.content;
+              const hasDiagnostics = Boolean(
+                parsedDiagnostics
+                  && (parsedDiagnostics.confidence !== null || parsedDiagnostics.citations.length > 0),
+              );
+
+              return (
+                <article key={message.id} className={`${styles.opyCopilotMessage} ${roleClassName}`}>
+                  <div className={styles.opyCopilotMessageMeta}>
+                    <span>{ROLE_LABEL[message.role]}</span>
+                    <span>{formatClockTime(message.createdAt)}</span>
+                  </div>
+                  <p>{messageBody}</p>
+                  {hasDiagnostics && parsedDiagnostics && (
+                    <details className={styles.opyCopilotMessageDiagnostics}>
+                      <summary className={styles.opyCopilotDiagnosticsSummary}>
+                        {`SOURCES::${parsedDiagnostics.citations.length} · ${
+                          parsedDiagnostics.confidence
+                            ? `CONF::${parsedDiagnostics.confidence.split("·")[0]?.trim()}`
+                            : "CONF::UNKNOWN"
+                        }`}
+                      </summary>
+                      {parsedDiagnostics.confidence && (
+                        <p className={styles.opyCopilotProposalHint}>
+                          {`CONFIDENCE:: ${parsedDiagnostics.confidence}`}
+                        </p>
+                      )}
+                      <div className={styles.opyCopilotDiagnosticsCitationStack}>
+                        {parsedDiagnostics.citations.map((citation, index) => (
+                          <p key={`${message.id}-citation-${index}`} className={styles.opyCopilotProposalHint}>
+                            {citation}
+                          </p>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </article>
+              );
+            })}
+        </div>
+        <div className={styles.opyCopilotComposer}>
+          <CopilotChatConfigurationProvider
+            agentId="opy-9000"
+            labels={{
+              chatInputPlaceholder: agentSecretStatus === "loading"
+                ? "Checking OPY Net secret resolver..."
+                : hasOpenAiApiKey
+                ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
+                : "Configure OpenAI key in Settings to enable OPY Net",
+            }}
+          >
+            <CopilotChatInput
+              className={styles.opyCopilotInput}
+              value={draftPrompt}
+              onChange={setDraftPrompt}
+              isRunning={isRunning}
+              onSubmitMessage={(value) => {
+                void handleSubmitPrompt(value);
+              }}
+              onStop={() => {
+                setIsRunning(false);
+              }}
+              autoFocus={false}
+            />
+          </CopilotChatConfigurationProvider>
+          <div className={styles.opyCopilotActions}>
+            <button
+              type="button"
+              className={styles.toolbarButton}
+              onClick={onOpenAiSettings}
+            >
+              OPEN AI SETTINGS
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -522,11 +522,43 @@ export const ownershipLensStats = style({
 });
 
 export const opyCopilotShell = style({
-  display: "flex",
+  display: "grid",
+  gridTemplateRows: "minmax(0, 1fr) clamp(14rem, 36%, 24rem)",
+  gap: theme.spacing["2"],
   flex: 1,
+  height: "100%",
+  minHeight: 0,
+  overflow: "hidden",
+});
+
+export const opyCopilotViewport = style({
+  display: "flex",
   flexDirection: "column",
   gap: theme.spacing["2"],
   minHeight: 0,
+  overflowY: "auto",
+  overflowX: "hidden",
+  paddingRight: theme.spacing["1"],
+});
+
+export const opyCopilotConversation = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  minHeight: 0,
+  clipPath: theme.clipPath.md,
+  border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  backgroundColor: "rgba(9, 15, 12, 0.94)",
+  padding: theme.spacing["2"],
+});
+
+export const opyCopilotComposer = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  flexShrink: 0,
+  borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  paddingTop: theme.spacing["2"],
 });
 
 const opyAvatarPulse = keyframes({
@@ -576,9 +608,10 @@ export const opyAvatarRing = style({
 export const opyCopilotTranscript = style({
   display: "flex",
   flexDirection: "column",
+  flex: 1,
   gap: theme.spacing["2"],
+  minHeight: 0,
   paddingRight: theme.spacing["1"],
-  maxHeight: "16rem",
   overflowY: "auto",
 });
 
