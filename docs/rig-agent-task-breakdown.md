@@ -16,13 +16,17 @@
 ## Status Review
 
 - Completed in code: `RIG-001` through `RIG-004`, `RIG-101` through `RIG-103`, `RIG-201`, `RIG-202`, `RIG-203`, `RIG-301`, and `RIG-302`.
+- `RIG-401` is now started:
+  - OPY has an explicit orchestration machine for `contextualizing`, `planning`, `proposing`, `awaiting_confirmation`, `applying`, `verifying`, `completed`, and `failed`
+  - the panel is no longer relying on a single local `isRunning` flag for read/proposal/apply/rollback flow state
+  - retryable terminal failure handling now exists at the OPY surface
 - The OPY surface now goes beyond the original roadmap UI baseline:
   - floating widget with layout memory, minimize/orb presence, snap modes, and draggable resize
   - pinned conversation strip with collapsible upper sections
   - urgency-aware chrome signals for `policy`, `review`, `proposal`, and `checkpoint`
   - actionable chrome signals that open and focus the matching OPY section
-- The next critical Rig intelligence milestone is still **Phase 4 / `RIG-401` orchestration**, because the current OPY lifecycle is durable but still panel-driven rather than machine-driven.
-- `RIG-402` should follow only after `RIG-401`, since resumable tasks need a stable staged execution model first.
+- The next critical Rig intelligence milestone is to finish **Phase 4 / `RIG-401` orchestration** by moving more OPY flow edges behind the machine boundary and tightening stage-aware cancellation semantics.
+- `RIG-402` should still follow only after `RIG-401`, since resumable tasks need a stable staged execution model first.
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -217,6 +221,9 @@
     - `completed`
     - `failed`
   - Emit lifecycle events for UI and telemetry.
+- Current status:
+  - initial machine and OPY panel integration landed
+  - remaining work is to complete deeper orchestration ownership and handoff into persistent task lifecycle
 - Primary files:
   - `src/ui/machines/opy-agent.machine.ts`
   - `src/ui/hooks/useOpyAgentMachine.ts`

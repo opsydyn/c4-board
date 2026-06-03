@@ -1,0 +1,98 @@
+import { describe, expect, test } from "vitest";
+import { createActor } from "xstate";
+import { createOpyAgentMachine, type OpyAgentLifecycleRequest } from "./opy-agent.machine";
+
+const createReadRequest = (): OpyAgentLifecycleRequest => ({
+  id: "read-1",
+  mode: "read",
+  kind: "chat",
+  label: "CHAT",
+  requiresConfirmation: false,
+});
+
+const createActionRequest = (): OpyAgentLifecycleRequest => ({
+  id: "action-1",
+  mode: "action",
+  kind: "apply-proposal",
+  label: "APPLY",
+  requiresConfirmation: true,
+});
+
+describe("opyAgentMachine", () => {
+  test("advances a read flow through explicit lifecycle stages", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_READ", request: createReadRequest() });
+    expect(actor.getSnapshot().value).toBe("contextualizing");
+
+    actor.send({ type: "CONTEXT_READY" });
+    expect(actor.getSnapshot().value).toBe("planning");
+
+    actor.send({ type: "RESULT_READY" });
+    expect(actor.getSnapshot().value).toBe("proposing");
+
+    actor.send({ type: "PERSIST_READY" });
+    expect(actor.getSnapshot().value).toBe("verifying");
+
+    actor.send({ type: "COMPLETE" });
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("completed");
+    expect(snapshot.context.lastTerminalStatus).toBe("completed");
+    expect(snapshot.context.activeRequest).toBeNull();
+    expect(snapshot.context.lastRequest?.kind).toBe("chat");
+  });
+
+  test("supports confirmed action flow with cancellation and retry semantics", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_ACTION", request: createActionRequest() });
+    expect(actor.getSnapshot().value).toBe("awaiting_confirmation");
+
+    actor.send({ type: "CANCEL" });
+    let snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("completed");
+    expect(snapshot.context.lastTerminalStatus).toBe("cancelled");
+
+    actor.send({ type: "RETRY" });
+    expect(actor.getSnapshot().value).toBe("awaiting_confirmation");
+
+    actor.send({ type: "CONFIRM" });
+    expect(actor.getSnapshot().value).toBe("applying");
+
+    actor.send({ type: "VERIFY_READY" });
+    expect(actor.getSnapshot().value).toBe("verifying");
+
+    actor.send({ type: "COMPLETE" });
+    snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("completed");
+    expect(snapshot.context.lastTerminalStatus).toBe("completed");
+    expect(snapshot.context.lastRequest?.kind).toBe("apply-proposal");
+  });
+
+  test("records failure stage and re-enters the correct stage on retry", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_READ", request: createReadRequest() });
+    actor.send({ type: "CONTEXT_READY" });
+    actor.send({
+      type: "FAIL",
+      message: "planner offline",
+      stage: "planning",
+    });
+
+    let snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("failed");
+    expect(snapshot.context.lastTerminalStatus).toBe("failed");
+    expect(snapshot.context.lastError).toBe("planner offline");
+    expect(snapshot.context.lastFailureStage).toBe("planning");
+
+    actor.send({ type: "RETRY" });
+    snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("contextualizing");
+    expect(snapshot.context.lastError).toBeNull();
+    expect(snapshot.context.lastFailureStage).toBeNull();
+  });
+});

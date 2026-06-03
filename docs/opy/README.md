@@ -179,6 +179,29 @@ OPY’s answers are grounded in typed read tools rather than free-form prompt st
 - run metadata
 - stage-aware failure summaries
 
+## Orchestration Lifecycle
+
+OPY now has an explicit UI-side orchestration machine for active flows.
+
+### Lifecycle Stages
+
+- `contextualizing`
+- `planning`
+- `proposing`
+- `awaiting_confirmation`
+- `applying`
+- `verifying`
+- `completed`
+- `failed`
+
+### Current Lifecycle Behavior
+
+- read flows (`chat`, `review`, `proposal`) move through context, planning, proposal persistence, and verification explicitly
+- confirmed board mutations (`/add`, proposal apply, checkpoint rollback) move through confirmation, apply, and verify explicitly
+- the OPY header/control field now surfaces `FLOW::...` stage state while a lifecycle is active
+- the runtime error strip can retry the last OPY flow after a terminal failure
+- this machine is the Phase 4 foundation for later persistent task resume in `RIG-402`
+
 ## Run Envelope and Telemetry
 
 Each OPY run is wrapped in a durable run envelope.

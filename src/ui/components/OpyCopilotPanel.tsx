@@ -69,6 +69,8 @@ import {
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
 import type { AiActionMode, OpyViewportSectionKey, OpyViewportSections } from "../../core/effects/settings.types";
+import { useOpyAgentMachine } from "../hooks/useOpyAgentMachine";
+import type { OpyAgentLifecycleRequest, OpyAgentLifecycleStage } from "../machines/opy-agent.machine";
 import { useDatabase } from "../../core/effects/useDatabase";
 import {
   compareOpyWidgetChromeTone,
@@ -267,6 +269,17 @@ const RUN_STATUS_LABEL: Record<OpyAgentRun["status"], string> = {
   completed: "COMPLETE",
   failed: "FAILED",
   cancelled: "CANCELLED",
+};
+
+const LIFECYCLE_STAGE_LABEL: Record<Exclude<OpyAgentLifecycleStage, "idle">, string> = {
+  contextualizing: "CONTEXT",
+  planning: "PLAN",
+  proposing: "PROPOSE",
+  awaiting_confirmation: "AWAIT_CONFIRM",
+  applying: "APPLY",
+  verifying: "VERIFY",
+  completed: "COMPLETE",
+  failed: "FAILED",
 };
 
 const sortRunsByRecency = (runs: readonly OpyAgentRun[]): OpyAgentRun[] =>
@@ -594,6 +607,10 @@ const toProposalChromeTone = (risk: "low" | "medium" | "high"): OpyWidgetChromeT
     ? "caution"
     : "ready";
 
+const createLifecycleRequest = (
+  request: OpyAgentLifecycleRequest,
+): OpyAgentLifecycleRequest => request;
+
 export function OpyCopilotPanel({
   domain,
   diagramId,
@@ -612,6 +629,7 @@ export function OpyCopilotPanel({
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
+  const lastLifecycleReplayRef = useRef<(() => Promise<void>) | null>(null);
   const viewportAutoSignalsRef = useRef<{
     proposal: number | null;
     review: number | null;
@@ -622,7 +640,6 @@ export function OpyCopilotPanel({
     checkpoints: null,
   });
   const [draftPrompt, setDraftPrompt] = useState("");
-  const [isRunning, setIsRunning] = useState(false);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   const [isMessageLoading, setIsMessageLoading] = useState(false);
   const [agentSecretStatus, setAgentSecretStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -656,6 +673,8 @@ export function OpyCopilotPanel({
   const [viewportSectionsUnseen, setViewportSectionsUnseen] = useState<OpyViewportSections>(
     EMPTY_VIEWPORT_SECTION_STATE,
   );
+  const agentLifecycle = useOpyAgentMachine();
+  const isRunning = agentLifecycle.isBusy;
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -1243,15 +1262,20 @@ export function OpyCopilotPanel({
   const executeRigRun = useCallback(
     async <T,>(
       input: {
+        readonly lifecycleRequest: OpyAgentLifecycleRequest;
         readonly sessionId: string;
         readonly intent: OpyAgentRunIntent;
-        readonly invoke: () => Promise<T>;
+        readonly contextualize: () => Promise<RigAgentContextBundle>;
+        readonly execute: (context: RigAgentContextBundle) => Promise<T>;
         readonly assistantMessage: (result: T) => string;
         readonly failurePrefix: string;
         readonly onAfterPersisted?: (result: T) => void | Promise<void>;
       },
     ): Promise<T | null> => {
-      setIsRunning(true);
+      lastLifecycleReplayRef.current = async () => {
+        await executeRigRun(input);
+      };
+      agentLifecycle.startReadRequest(input.lifecycleRequest);
       let run: OpyAgentRun;
       try {
         run = await beginAgentRun(input.sessionId, input.intent);
@@ -1268,13 +1292,17 @@ export function OpyCopilotPanel({
           "system",
           summarizeAgentError(envelopeError),
         );
-        setIsRunning(false);
+        agentLifecycle.failActiveRequest(formatAgentError(envelopeError), "contextualizing");
         return null;
       }
 
       let currentRun = run;
       try {
-        const result = await input.invoke();
+        const context = await input.contextualize();
+        agentLifecycle.markContextReady();
+
+        const result = await input.execute(context);
+        agentLifecycle.markResultReady();
         currentRun = await transitionAgentRun(currentRun, {
           stage: "persist",
         });
@@ -1298,16 +1326,19 @@ export function OpyCopilotPanel({
             errorSummary: summarizeAgentError(persistError),
           });
           setRuntimeError(formatAgentError(persistError));
+          agentLifecycle.failActiveRequest(formatAgentError(persistError), "proposing");
           return null;
         }
 
         await input.onAfterPersisted?.(result);
+        agentLifecycle.markPersistReady();
         await transitionAgentRun(currentRun, {
           stage: "complete",
           status: "completed",
           completedAt: Date.now(),
           errorSummary: null,
         });
+        agentLifecycle.completeActiveRequest();
         return result;
       } catch (error) {
         const agentError = withAgentErrorContext(error, {
@@ -1326,12 +1357,66 @@ export function OpyCopilotPanel({
           completedAt: Date.now(),
           errorSummary,
         });
+        agentLifecycle.failActiveRequest(
+          formatAgentError(agentError),
+          agentLifecycle.stage === "planning"
+            ? "planning"
+            : agentLifecycle.stage === "proposing"
+            ? "proposing"
+            : "contextualizing",
+        );
         return null;
-      } finally {
-        setIsRunning(false);
       }
     },
-    [appendAndPersistMessage, beginAgentRun, transitionAgentRun],
+    [agentLifecycle, appendAndPersistMessage, beginAgentRun, transitionAgentRun],
+  );
+
+  const executeBoardActionLifecycle = useCallback(
+    async (input: {
+      readonly lifecycleRequest: OpyAgentLifecycleRequest;
+      readonly sessionId: string;
+      readonly confirmationMessage: string;
+      readonly cancelMessage: string;
+      readonly failurePrefix: string;
+      readonly execute: () => Promise<string>;
+      readonly onAfterApplied?: () => Promise<void> | void;
+    }): Promise<string | null> => {
+      lastLifecycleReplayRef.current = async () => {
+        await executeBoardActionLifecycle(input);
+      };
+      agentLifecycle.startActionRequest(input.lifecycleRequest);
+
+      if (!window.confirm(input.confirmationMessage)) {
+        await appendAndPersistMessage(
+          input.sessionId,
+          "system",
+          input.cancelMessage,
+        );
+        agentLifecycle.cancelActiveRequest();
+        return null;
+      }
+
+      agentLifecycle.confirmActiveRequest();
+      try {
+        const actionResult = await input.execute();
+        agentLifecycle.markVerifyReady();
+        await input.onAfterApplied?.();
+        await appendAndPersistMessage(input.sessionId, "assistant", actionResult);
+        agentLifecycle.completeActiveRequest();
+        return actionResult;
+      } catch (error) {
+        const message = toErrorMessage(error);
+        setRuntimeError(message);
+        await appendAndPersistMessage(
+          input.sessionId,
+          "system",
+          `${input.failurePrefix}: ${message}`,
+        );
+        agentLifecycle.failActiveRequest(message, agentLifecycle.stage === "verifying" ? "verifying" : "applying");
+        return null;
+      }
+    },
+    [agentLifecycle, appendAndPersistMessage],
   );
 
   const createAndActivateSession = useCallback(async (): Promise<void> => {
@@ -1617,35 +1702,21 @@ export function OpyCopilotPanel({
           return;
         }
 
-        if (
-          !window.confirm(
+        await executeBoardActionLifecycle({
+          lifecycleRequest: createLifecycleRequest({
+            id: createMessageId(),
+            mode: "action",
+            kind: "add-node",
+            label: `ADD ${opyCommand.action.nodeType.toUpperCase()}`,
+            requiresConfirmation: true,
+          }),
+          sessionId,
+          confirmationMessage:
             `Apply OPY board action?\n\nADD ${opyCommand.action.nodeType.toUpperCase()} "${opyCommand.action.label}"`,
-          )
-        ) {
-          await appendAndPersistMessage(
-            sessionId,
-            "system",
-            "ACTION CANCELLED BY OPERATOR.",
-          );
-          return;
-        }
-
-        try {
-          const actionResult = await onApplyBoardAction(opyCommand.action);
-          await appendAndPersistMessage(
-            sessionId,
-            "assistant",
-            actionResult,
-          );
-        } catch (error) {
-          const message = toErrorMessage(error);
-          setRuntimeError(message);
-          await appendAndPersistMessage(
-            sessionId,
-            "system",
-            `BOARD ACTION FAILED: ${message}`,
-          );
-        }
+          cancelMessage: "ACTION CANCELLED BY OPERATOR.",
+          failurePrefix: "BOARD ACTION FAILED",
+          execute: () => onApplyBoardAction(opyCommand.action),
+        });
         return;
       }
 
@@ -1684,10 +1755,17 @@ export function OpyCopilotPanel({
         }
 
         await executeRigRun({
+          lifecycleRequest: createLifecycleRequest({
+            id: createMessageId(),
+            mode: "read",
+            kind: "proposal",
+            label: "PROPOSAL",
+            requiresConfirmation: false,
+          }),
           sessionId,
           intent: "plan-c4-diagram",
-          invoke: async () => {
-            const context = await resolveRigAgentContext(opyCommand.proposal.description);
+          contextualize: () => resolveRigAgentContext(opyCommand.proposal.description),
+          execute: async (context) => {
             const proposal = await runEffect(
               planRigC4Diagram({
                 description: opyCommand.proposal.description,
@@ -1767,10 +1845,17 @@ export function OpyCopilotPanel({
 
         const reviewFocus = opyCommand.review.focus ?? boardContext?.selectedNode?.label;
         await executeRigRun({
+          lifecycleRequest: createLifecycleRequest({
+            id: createMessageId(),
+            mode: "read",
+            kind: "review",
+            label: "REVIEW",
+            requiresConfirmation: false,
+          }),
           sessionId,
           intent: "review-c4-board",
-          invoke: async () => {
-            const context = await resolveRigAgentContext(reviewFocus ?? null);
+          contextualize: () => resolveRigAgentContext(reviewFocus ?? null),
+          execute: async (context) => {
             const review = await runEffect(
               reviewRigC4Board({
                 ...(reviewFocus ? { focus: reviewFocus } : {}),
@@ -1814,10 +1899,17 @@ export function OpyCopilotPanel({
       }
 
       await executeRigRun({
+        lifecycleRequest: createLifecycleRequest({
+          id: createMessageId(),
+          mode: "read",
+          kind: "chat",
+          label: "CHAT",
+          requiresConfirmation: false,
+        }),
         sessionId,
         intent: "chat",
-        invoke: async () => {
-          const context = await resolveRigAgentContext(trimmed);
+        contextualize: () => resolveRigAgentContext(trimmed),
+        execute: async (context) => {
           const response = await runEffect(
             runRigHello({
               prompt: [
@@ -2000,51 +2092,40 @@ export function OpyCopilotPanel({
       return;
     }
 
-    if (
-      !window.confirm(
-        [
-          "Apply OPY diagram proposal?",
-          "",
-          `Plan actions ${activeMutationPlan.plan.totalActions}`,
-          `Create ${activeMutationPlan.plan.totalNodesCreated} node(s)`,
-          `Create ${activeMutationPlan.plan.totalEdgesCreated} edge(s)`,
-          `Reuse ${activeProposalSummary.existingNodes} node(s)`,
-          `Reuse ${activeProposalSummary.existingEdges} edge(s)`,
-          "",
-          "This will update and save the current board.",
-        ].join("\n"),
-      )
-    ) {
-      await appendAndPersistMessage(
-        sessionId,
-        "system",
-        "PROPOSAL APPLY CANCELLED BY OPERATOR.",
-      );
-      return;
-    }
-
     setRuntimeError(null);
-    setIsRunning(true);
-    try {
-      const actionResult = await onApplyBoardAction({
-        kind: "apply-c4-proposal",
-        sessionId,
-        proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
-        proposal: activeDiagramProposal.proposal,
-      });
-      await refreshCheckpointsForSession(sessionId);
-      await appendAndPersistMessage(sessionId, "assistant", actionResult);
-    } catch (error) {
-      const message = toErrorMessage(error);
-      setRuntimeError(message);
-      await appendAndPersistMessage(
-        sessionId,
-        "system",
-        `PROPOSAL APPLY FAILED: ${message}`,
-      );
-    } finally {
-      setIsRunning(false);
-    }
+    await executeBoardActionLifecycle({
+      lifecycleRequest: createLifecycleRequest({
+        id: createMessageId(),
+        mode: "action",
+        kind: "apply-proposal",
+        label: "APPLY PROPOSAL",
+        requiresConfirmation: true,
+      }),
+      sessionId,
+      confirmationMessage: [
+        "Apply OPY diagram proposal?",
+        "",
+        `Plan actions ${activeMutationPlan.plan.totalActions}`,
+        `Create ${activeMutationPlan.plan.totalNodesCreated} node(s)`,
+        `Create ${activeMutationPlan.plan.totalEdgesCreated} edge(s)`,
+        `Reuse ${activeProposalSummary.existingNodes} node(s)`,
+        `Reuse ${activeProposalSummary.existingEdges} edge(s)`,
+        "",
+        "This will update and save the current board.",
+      ].join("\n"),
+      cancelMessage: "PROPOSAL APPLY CANCELLED BY OPERATOR.",
+      failurePrefix: "PROPOSAL APPLY FAILED",
+      execute: () =>
+        onApplyBoardAction({
+          kind: "apply-c4-proposal",
+          sessionId,
+          proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
+          proposal: activeDiagramProposal.proposal,
+        }),
+      onAfterApplied: async () => {
+        await refreshCheckpointsForSession(sessionId);
+      },
+    });
   }, [
     actionMode,
     activeDiagramProposal,
@@ -2054,6 +2135,7 @@ export function OpyCopilotPanel({
     activeProposalSummary,
     appendAgentNotice,
     appendAndPersistMessage,
+    executeBoardActionLifecycle,
     isRunning,
     onApplyBoardAction,
     refreshCheckpointsForSession,
@@ -2077,56 +2159,60 @@ export function OpyCopilotPanel({
       return;
     }
 
-    if (
-      !window.confirm(
-        [
-          "Rollback to OPY checkpoint?",
-          "",
-          formatOpyRollbackSummary(checkpoint),
-          `Created ${formatClockTime(checkpoint.createdAt)}`,
-          "",
-          "This will restore the board to the checkpoint snapshot and save it.",
-        ].join("\n"),
-      )
-    ) {
-      await appendAndPersistMessage(
-        sessionId,
-        "system",
-        "ROLLBACK CANCELLED BY OPERATOR.",
-      );
-      return;
-    }
-
     setRuntimeError(null);
-    setIsRunning(true);
-    try {
-      const actionResult = await onApplyBoardAction({
-        kind: "rollback-checkpoint",
-        sessionId,
-        checkpointId: checkpoint.id,
-      });
-      await refreshCheckpointsForSession(sessionId);
-      await appendAndPersistMessage(sessionId, "assistant", actionResult);
-    } catch (error) {
-      const message = toErrorMessage(error);
-      setRuntimeError(message);
-      await appendAndPersistMessage(
-        sessionId,
-        "system",
-        `ROLLBACK FAILED: ${message}`,
-      );
-    } finally {
-      setIsRunning(false);
-    }
+    await executeBoardActionLifecycle({
+      lifecycleRequest: createLifecycleRequest({
+        id: createMessageId(),
+        mode: "action",
+        kind: "rollback",
+        label: "ROLLBACK",
+        requiresConfirmation: true,
+      }),
+      sessionId,
+      confirmationMessage: [
+        "Rollback to OPY checkpoint?",
+        "",
+        formatOpyRollbackSummary(checkpoint),
+        `Created ${formatClockTime(checkpoint.createdAt)}`,
+        "",
+        "This will restore the board to the checkpoint snapshot and save it.",
+      ].join("\n"),
+      cancelMessage: "ROLLBACK CANCELLED BY OPERATOR.",
+      failurePrefix: "ROLLBACK FAILED",
+      execute: () =>
+        onApplyBoardAction({
+          kind: "rollback-checkpoint",
+          sessionId,
+          checkpointId: checkpoint.id,
+        }),
+      onAfterApplied: async () => {
+        await refreshCheckpointsForSession(sessionId);
+      },
+    });
   }, [
     actionMode,
     appendAgentNotice,
     appendAndPersistMessage,
+    executeBoardActionLifecycle,
     isRunning,
     onApplyBoardAction,
     refreshCheckpointsForSession,
     selectedSessionId,
   ]);
+
+  const handleRetryLastLifecycle = useCallback(() => {
+    if (isRunning) {
+      return;
+    }
+
+    const replay = lastLifecycleReplayRef.current;
+    if (!replay) {
+      return;
+    }
+
+    setRuntimeError(null);
+    void replay();
+  }, [isRunning]);
 
   const statusText = agentSecretStatus === "loading"
     ? "KEY::CHECKING"
@@ -2135,7 +2221,15 @@ export function OpyCopilotPanel({
     : hasOpenAiApiKey
     ? "KEY::CONFIGURED"
     : "KEY::MISSING";
-  const runText = activeRun
+  const lifecycleText = agentLifecycle.stage !== "idle"
+    ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"}::${LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]}`
+    : null;
+  const composerRunning = agentLifecycle.stage === "contextualizing"
+    || agentLifecycle.stage === "planning"
+    || agentLifecycle.stage === "proposing";
+  const runText = lifecycleText
+    ? lifecycleText
+    : activeRun
     ? `RUN::${RUN_INTENT_LABEL[activeRun.intent]}::${RUN_STAGE_LABEL[activeRun.stage]}`
     : latestRun
     ? `LAST::${RUN_STATUS_LABEL[latestRun.status]}::${RUN_STAGE_LABEL[latestRun.stage]}`
@@ -2425,7 +2519,21 @@ export function OpyCopilotPanel({
           <span>{`SESSIONS::${sessions.length}`}</span>
           <span>{`ACTIVE::${selectedSession ? "ONLINE" : "NONE"}`}</span>
         </div>
-        {runtimeError && <p className={styles.opyCopilotError}>{`ERROR:: ${runtimeError}`}</p>}
+        {runtimeError && (
+          <div className={styles.opyCopilotActions}>
+            <p className={styles.opyCopilotError}>{`ERROR:: ${runtimeError}`}</p>
+            {agentLifecycle.canRetry && (
+              <button
+                type="button"
+                className={styles.ownershipLensToggleButton}
+                onClick={handleRetryLastLifecycle}
+                disabled={isRunning}
+              >
+                RETRY LAST FLOW
+              </button>
+            )}
+          </div>
+        )}
         {renderViewportSection({
           keyId: "control",
           title: "CONTROL FIELD",
@@ -2465,9 +2573,21 @@ export function OpyCopilotPanel({
                   } · ${formatClockTime(activeRun.startedAt)}`}
                 </p>
               )}
+              {agentLifecycle.stage !== "idle" && (
+                <p className={styles.ownershipLensHint}>
+                  {`FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"} · ${
+                    LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]
+                  }`}
+                </p>
+              )}
               {!activeRun && latestRun?.status === "failed" && latestRun.errorSummary && (
                 <p className={styles.ownershipLensHint}>
                   {`LAST FAILURE::${RUN_STAGE_LABEL[latestRun.stage]} · ${latestRun.errorSummary}`}
+                </p>
+              )}
+              {agentLifecycle.lastTerminalStatus === "failed" && agentLifecycle.lastError && (
+                <p className={styles.ownershipLensHint}>
+                  {`LAST FLOW FAILURE::${agentLifecycle.lastFailureStage?.toUpperCase() ?? "UNKNOWN"} · ${agentLifecycle.lastError}`}
                 </p>
               )}
               <div className={styles.formGroup}>
@@ -3338,12 +3458,14 @@ export function OpyCopilotPanel({
               className={styles.opyCopilotInput}
               value={draftPrompt}
               onChange={setDraftPrompt}
-              isRunning={isRunning}
+              isRunning={composerRunning}
               onSubmitMessage={(value) => {
                 void handleSubmitPrompt(value);
               }}
               onStop={() => {
-                setIsRunning(false);
+                if (agentLifecycle.stage === "awaiting_confirmation") {
+                  agentLifecycle.cancelActiveRequest();
+                }
               }}
               autoFocus={false}
             />
