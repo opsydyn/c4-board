@@ -576,6 +576,16 @@ export function OpyCopilotPanel({
   onOpenAiSettings,
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
+  const pendingViewportBaselineRef = useRef(true);
+  const viewportAutoSignalsRef = useRef<{
+    proposal: number | null;
+    review: number | null;
+    checkpoints: string | null;
+  }>({
+    proposal: null,
+    review: null,
+    checkpoints: null,
+  });
   const [draftPrompt, setDraftPrompt] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -675,6 +685,12 @@ export function OpyCopilotPanel({
   useEffect(() => {
     setViewportSectionsOpen(viewportSections);
   }, [viewportSections]);
+
+  const activeProposalSignal = activeDiagramProposal?.proposal.respondedAtMs ?? null;
+  const activeReviewSignal = activeBoardReview?.review.respondedAtMs ?? null;
+  const activeCheckpointSignal = latestCheckpoint
+    ? `${latestCheckpoint.id}:${latestCheckpoint.createdAt}`
+    : null;
 
   const activeGroundedProposal = useMemo(
     () =>
@@ -776,6 +792,10 @@ export function OpyCopilotPanel({
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId;
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    pendingViewportBaselineRef.current = true;
   }, [selectedSessionId]);
 
   useEffect(() => {
@@ -1891,16 +1911,37 @@ export function OpyCopilotPanel({
   const activeCommandToken = detectCommandToken(draftPrompt);
   const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
   const currentBoardLabel = diagramName.trim().length > 0 ? diagramName.trim() : "UNTITLED BOARD";
+  const commitViewportSections = useCallback(
+    (
+      updater: OpyViewportSections | ((current: OpyViewportSections) => OpyViewportSections),
+    ) => {
+      setViewportSectionsOpen((current) => {
+        const nextSections = typeof updater === "function"
+          ? updater(current)
+          : updater;
+
+        if (
+          nextSections.control === current.control
+          && nextSections.diagnostics === current.diagnostics
+          && nextSections.checkpoints === current.checkpoints
+          && nextSections.review === current.review
+          && nextSections.proposal === current.proposal
+        ) {
+          return current;
+        }
+
+        onViewportSectionsChange(nextSections);
+        return nextSections;
+      });
+    },
+    [onViewportSectionsChange],
+  );
   const toggleViewportSection = useCallback((key: OpyViewportSectionKey) => {
-    setViewportSectionsOpen((current) => {
-      const nextSections = {
-        ...current,
-        [key]: !current[key],
-      };
-      onViewportSectionsChange(nextSections);
-      return nextSections;
-    });
-  }, [onViewportSectionsChange]);
+    commitViewportSections((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  }, [commitViewportSections]);
   const renderViewportSection = useCallback((input: {
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;
@@ -1947,6 +1988,78 @@ export function OpyCopilotPanel({
   const proposalSectionMeta = activeDiagramProposal
     ? `${activeDiagramProposal.proposal.nodes.length} NODE(S) · ${activeDiagramProposal.proposal.edges.length} EDGE(S)`
     : "UNAVAILABLE";
+
+  useEffect(() => {
+    if (pendingViewportBaselineRef.current) {
+      if (isMessageLoading) {
+        return;
+      }
+
+      viewportAutoSignalsRef.current = {
+        proposal: activeProposalSignal,
+        review: activeReviewSignal,
+        checkpoints: activeCheckpointSignal,
+      };
+      pendingViewportBaselineRef.current = false;
+      return;
+    }
+
+    let openProposal = false;
+    let openReview = false;
+    let openCheckpoints = false;
+    let hasAutoOpen = false;
+
+    if (
+      activeProposalSignal !== null
+      && viewportAutoSignalsRef.current.proposal !== activeProposalSignal
+    ) {
+      viewportAutoSignalsRef.current.proposal = activeProposalSignal;
+      if (!viewportSectionsOpen.proposal) {
+        openProposal = true;
+        hasAutoOpen = true;
+      }
+    }
+
+    if (
+      activeReviewSignal !== null
+      && viewportAutoSignalsRef.current.review !== activeReviewSignal
+    ) {
+      viewportAutoSignalsRef.current.review = activeReviewSignal;
+      if (!viewportSectionsOpen.review) {
+        openReview = true;
+        hasAutoOpen = true;
+      }
+    }
+
+    if (
+      activeCheckpointSignal !== null
+      && viewportAutoSignalsRef.current.checkpoints !== activeCheckpointSignal
+    ) {
+      viewportAutoSignalsRef.current.checkpoints = activeCheckpointSignal;
+      if (!viewportSectionsOpen.checkpoints) {
+        openCheckpoints = true;
+        hasAutoOpen = true;
+      }
+    }
+
+    if (hasAutoOpen) {
+      commitViewportSections((current) => ({
+        ...current,
+        proposal: openProposal ? true : current.proposal,
+        review: openReview ? true : current.review,
+        checkpoints: openCheckpoints ? true : current.checkpoints,
+      }));
+    }
+  }, [
+    activeCheckpointSignal,
+    activeProposalSignal,
+    activeReviewSignal,
+    commitViewportSections,
+    isMessageLoading,
+    viewportSectionsOpen.checkpoints,
+    viewportSectionsOpen.proposal,
+    viewportSectionsOpen.review,
+  ]);
 
   useEffect(() => {
     const transcriptNode = transcriptRef.current;
