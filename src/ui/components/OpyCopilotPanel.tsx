@@ -2859,6 +2859,29 @@ export function OpyCopilotPanel({
   const composerRunning = agentLifecycle.stage === "contextualizing"
     || agentLifecycle.stage === "planning"
     || agentLifecycle.stage === "proposing";
+  const copilotChatInputPlaceholder = useMemo(
+    () =>
+      agentSecretStatus === "loading"
+        ? "Checking OPY Net secret resolver..."
+        : hasOpenAiApiKey
+        ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
+        : "Configure OpenAI key in Settings to enable OPY Net",
+    [agentSecretStatus, hasOpenAiApiKey],
+  );
+  const copilotChatLabels = useMemo(
+    () => ({
+      chatInputPlaceholder: copilotChatInputPlaceholder,
+    }),
+    [copilotChatInputPlaceholder],
+  );
+  const handleCopilotSubmitMessage = useCallback((value: string) => {
+    void handleSubmitPrompt(value);
+  }, [handleSubmitPrompt]);
+  const handleCopilotStop = useCallback(() => {
+    if (agentLifecycle.stage === "awaiting_confirmation") {
+      handleCancelPendingLifecycleAction();
+    }
+  }, [agentLifecycle.stage, handleCancelPendingLifecycleAction]);
   const runText = lifecycleText
     ? lifecycleText
     : activeRun
@@ -4130,27 +4153,15 @@ export function OpyCopilotPanel({
         <div className={styles.opyCopilotComposer}>
           <CopilotChatConfigurationProvider
             agentId="opy-9000"
-            labels={{
-              chatInputPlaceholder: agentSecretStatus === "loading"
-                ? "Checking OPY Net secret resolver..."
-                : hasOpenAiApiKey
-                ? "Ask OPY Net, use /review, or use /diagram for a C4 proposal..."
-                : "Configure OpenAI key in Settings to enable OPY Net",
-            }}
+            labels={copilotChatLabels}
           >
             <CopilotChatInput
               className={styles.opyCopilotInput}
               value={draftPrompt}
               onChange={setDraftPrompt}
               isRunning={composerRunning}
-              onSubmitMessage={(value) => {
-                void handleSubmitPrompt(value);
-              }}
-              onStop={() => {
-                if (agentLifecycle.stage === "awaiting_confirmation") {
-                  handleCancelPendingLifecycleAction();
-                }
-              }}
+              onSubmitMessage={handleCopilotSubmitMessage}
+              onStop={handleCopilotStop}
               autoFocus={false}
             />
           </CopilotChatConfigurationProvider>
