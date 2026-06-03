@@ -79,6 +79,7 @@ import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
 import { OpyFloatingWidget } from "./OpyFloatingWidget";
+import { areOpyWidgetChromeStatusesEqual, type OpyWidgetChromeStatus } from "./opyChromeStatus";
 import { type OpyBoardAction, OpyCopilotPanel } from "./OpyCopilotPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
@@ -250,6 +251,7 @@ export function C4CanvasContainer() {
   const [isCompactLayout, setCompactLayout] = useState(false);
   const [isCommandBarOpen, setCommandBarOpen] = useState(true);
   const [isDataBarOpen, setDataBarOpen] = useState(false);
+  const [opyChromeStatus, setOpyChromeStatus] = useState<OpyWidgetChromeStatus | null>(null);
   const [ownershipTeamCatalog, setOwnershipTeamCatalog] = useState<string[]>([]);
   const [ownershipTeamFilter, setOwnershipTeamFilter] = useState<string>(
     OWNERSHIP_FILTER_ALL,
@@ -2447,6 +2449,7 @@ export function C4CanvasContainer() {
           nodeCount={state.context.nodes.length}
           edgeCount={state.context.edges.length}
           boardContext={opyBoardContext}
+          chromeStatus={opyChromeStatus}
           presence={appSettings.opyWidgetPresence}
           layout={appSettings.opyWidgetLayout}
           modeLayouts={appSettings.opyWidgetModeLayouts}
@@ -2481,6 +2484,11 @@ export function C4CanvasContainer() {
             onApplyBoardAction={handleApplyOpyBoardAction}
             onOpenAiSettings={() => {
               void navigateWithSave("/settings");
+            }}
+            onChromeStatusChange={(nextStatus) => {
+              setOpyChromeStatus((current) =>
+                areOpyWidgetChromeStatusesEqual(current, nextStatus) ? current : nextStatus
+              );
             }}
           />
         </OpyFloatingWidget>

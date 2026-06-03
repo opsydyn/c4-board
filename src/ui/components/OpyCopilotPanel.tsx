@@ -75,6 +75,13 @@ import type {
 } from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
 import * as styles from "./styles.css";
+import {
+  compareOpyWidgetChromeTone,
+  pickHigherOpyWidgetChromeTone,
+  type OpyWidgetChromeSignal,
+  type OpyWidgetChromeStatus,
+  type OpyWidgetChromeTone,
+} from "./opyChromeStatus";
 import { TacticalSelect } from "./TacticalSelect";
 
 type OpyC4NodeType = "person" | "system" | "externalSystem" | "container" | "component";
@@ -194,6 +201,7 @@ interface OpyCopilotPanelProps {
   readonly onViewportSectionsChange: (sections: OpyViewportSections) => void;
   readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
+  readonly onChromeStatusChange: (status: OpyWidgetChromeStatus) => void;
 }
 
 const createMessageId = (): string => {
@@ -576,6 +584,18 @@ const describeActionMode = (actionMode: AiActionMode): OpyActionModeSurface => {
   }
 };
 
+const toOpyChromeTone = (tone: OpyActionModeSurface["tone"]): OpyWidgetChromeTone =>
+  tone === "warning"
+    ? "caution"
+    : tone;
+
+const toProposalChromeTone = (risk: "low" | "medium" | "high"): OpyWidgetChromeTone =>
+  risk === "high"
+    ? "critical"
+    : risk === "medium"
+      ? "caution"
+      : "ready";
+
 export function OpyCopilotPanel({
   domain,
   diagramId,
@@ -589,6 +609,7 @@ export function OpyCopilotPanel({
   onViewportSectionsChange,
   onApplyBoardAction,
   onOpenAiSettings,
+  onChromeStatusChange,
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
@@ -795,6 +816,188 @@ export function OpyCopilotPanel({
     latestDiagramRun,
     latestReviewRun,
   ]);
+  const policyChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
+    if (actionModeSurface.tone === "ready") {
+      return null;
+    }
+
+    return {
+      key: "policy",
+      label: `POLICY::${actionMode.toUpperCase()}`,
+      detail: actionModeSurface.label,
+      tone: toOpyChromeTone(actionModeSurface.tone),
+      isFresh: false,
+    };
+  }, [actionMode, actionModeSurface]);
+  const reviewChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
+    if (!activeBoardReview) {
+      return null;
+    }
+
+    const highRiskCount = activeBoardReview.review.risks.filter((risk) => risk.severity === "high").length;
+    const mediumRiskCount = activeBoardReview.review.risks.filter((risk) => risk.severity === "medium").length;
+    const totalRiskCount = activeBoardReview.review.risks.length;
+
+    if (highRiskCount > 0) {
+      return {
+        key: "review",
+        label: `REVIEW::HIGH ${highRiskCount}H${mediumRiskCount > 0 ? `/${mediumRiskCount}M` : ""}`,
+        detail: activeBoardReview.review.summary,
+        tone: "critical",
+        isFresh: viewportSectionsUnseen.review,
+      };
+    }
+
+    if (totalRiskCount > 0 || activeBoardReview.review.ambiguities.length > 0) {
+      return {
+        key: "review",
+        label: `REVIEW::${totalRiskCount} RISK${totalRiskCount === 1 ? "" : "S"}`,
+        detail: activeBoardReview.review.summary,
+        tone: "caution",
+        isFresh: viewportSectionsUnseen.review,
+      };
+    }
+
+    if (activeBoardReview.review.recommendedChanges.length > 0) {
+      return {
+        key: "review",
+        label: `REVIEW::NEXT ${activeBoardReview.review.recommendedChanges.length}`,
+        detail: activeBoardReview.review.summary,
+        tone: "caution",
+        isFresh: viewportSectionsUnseen.review,
+      };
+    }
+
+    return {
+      key: "review",
+      label: "REVIEW::CLEAR",
+      detail: activeBoardReview.review.summary,
+      tone: "ready",
+      isFresh: viewportSectionsUnseen.review,
+    };
+  }, [activeBoardReview, viewportSectionsUnseen.review]);
+  const proposalChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
+    if (!activeDiagramProposal) {
+      return null;
+    }
+
+    if (activePlanDecision?.status === "rejected") {
+      return {
+        key: "proposal",
+        label: "PLAN::REJECTED",
+        detail: activeDiagramProposal.proposal.summary,
+        tone: "caution",
+        isFresh: viewportSectionsUnseen.proposal,
+      };
+    }
+
+    const warningCount = activeDiagramProposal.proposal.warnings.length;
+    const highestRisk = activeMutationPlan?.plan.highestRisk ?? (warningCount > 0 ? "medium" : "low");
+    const tone = toProposalChromeTone(highestRisk);
+
+    if (warningCount > 0 && !activeMutationPlan) {
+      return {
+        key: "proposal",
+        label: `PLAN::WARN ${warningCount}`,
+        detail: activeDiagramProposal.proposal.summary,
+        tone: "caution",
+        isFresh: viewportSectionsUnseen.proposal,
+      };
+    }
+
+    return {
+      key: "proposal",
+      label: activeMutationPlan
+        ? `PLAN::${highestRisk.toUpperCase()} ${activeMutationPlan.plan.totalActions}A`
+        : `PLAN::${highestRisk.toUpperCase()}`,
+      detail: activeDiagramProposal.proposal.summary,
+      tone,
+      isFresh: viewportSectionsUnseen.proposal,
+    };
+  }, [
+    activeDiagramProposal,
+    activeMutationPlan,
+    activePlanDecision?.status,
+    viewportSectionsUnseen.proposal,
+  ]);
+  const checkpointChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
+    if (!latestCheckpoint) {
+      return null;
+    }
+
+    const preview = checkpointRestorePreviewById.get(latestCheckpoint.id) ?? null;
+    const hasRemovalImpact = preview
+      ? preview.counts.removeNodes + preview.counts.removeEdges > 0
+      : false;
+
+    return {
+      key: "checkpoint",
+      label: preview
+        ? preview.hasChanges
+          ? `RESTORE::${preview.impactedEntities.length}Δ`
+          : "RESTORE::SYNC"
+        : `RESTORE::${latestCheckpoint.snapshot.nodes.length}N`,
+      detail: preview
+        ? preview.hasChanges
+          ? `${preview.impactedEntities.length} board change(s) differ from the latest checkpoint snapshot.`
+          : "Current board already matches the latest checkpoint snapshot."
+        : latestCheckpoint.snapshot.name,
+      tone: preview
+        ? preview.hasChanges
+          ? hasRemovalImpact ? "critical" : "caution"
+          : "ready"
+        : "neutral",
+      isFresh: viewportSectionsUnseen.checkpoints,
+    };
+  }, [checkpointRestorePreviewById, latestCheckpoint, viewportSectionsUnseen.checkpoints]);
+  const chromeStatus = useMemo<OpyWidgetChromeStatus>(() => {
+    const priorities: Record<OpyWidgetChromeSignal["key"], number> = {
+      review: 0,
+      proposal: 1,
+      checkpoint: 2,
+      policy: 3,
+    };
+    const signals = [
+      reviewChromeSignal,
+      proposalChromeSignal,
+      checkpointChromeSignal,
+      policyChromeSignal,
+    ]
+      .filter((signal): signal is OpyWidgetChromeSignal => signal !== null)
+      .sort((left, right) => {
+        const toneDelta = compareOpyWidgetChromeTone(left.tone, right.tone);
+        if (toneDelta !== 0) {
+          return toneDelta;
+        }
+        if (left.isFresh !== right.isFresh) {
+          return left.isFresh ? -1 : 1;
+        }
+        return priorities[left.key] - priorities[right.key];
+      });
+
+    return {
+      frameTone: signals.reduce<OpyWidgetChromeTone>(
+        (current, signal) => pickHigherOpyWidgetChromeTone(current, signal.tone),
+        "neutral",
+      ),
+      signals,
+    };
+  }, [checkpointChromeSignal, policyChromeSignal, proposalChromeSignal, reviewChromeSignal]);
+  const controlSectionTone = policyChromeSignal?.tone ?? "neutral";
+  const diagnosticsSectionTone = latestRun?.status === "failed"
+    ? "critical"
+    : latestDiagnosticsSurface?.context.confidence === "low"
+      ? "caution"
+      : latestDiagnosticsSurface
+        ? "ready"
+        : "neutral";
+  const checkpointsSectionTone = checkpointChromeSignal?.tone ?? "neutral";
+  const reviewSectionTone = reviewChromeSignal?.tone ?? "neutral";
+  const proposalSectionTone = proposalChromeSignal?.tone ?? "neutral";
+
+  useEffect(() => {
+    onChromeStatusChange(chromeStatus);
+  }, [chromeStatus, onChromeStatusChange]);
 
   const resolveRigAgentContext = useCallback(
     async (focus: string | null): Promise<RigAgentContextBundle> =>
@@ -1979,6 +2182,7 @@ export function OpyCopilotPanel({
     readonly title: string;
     readonly meta: string;
     readonly summary: string;
+    readonly tone?: OpyWidgetChromeTone;
     readonly isUnseen?: boolean;
     readonly children: ReactNode;
   }) => {
@@ -1989,6 +2193,7 @@ export function OpyCopilotPanel({
       <section
         className={styles.opyCopilotViewportSection}
         data-open={isOpen ? "true" : "false"}
+        data-tone={input.tone ?? "neutral"}
         data-unseen={showUnseen ? "true" : "false"}
         aria-label={input.title}
       >
@@ -2181,6 +2386,7 @@ export function OpyCopilotPanel({
         title: "CONTROL FIELD",
         meta: controlSectionMeta,
         summary: controlSectionSummary,
+        tone: controlSectionTone,
         isUnseen: viewportSectionsUnseen.control,
         children: (
           <>
@@ -2315,6 +2521,7 @@ export function OpyCopilotPanel({
           title: `DIAGNOSTICS::${latestDiagnosticsSurface.title}`,
           meta: diagnosticsSectionMeta,
           summary: diagnosticsSectionSummary,
+          tone: diagnosticsSectionTone,
           isUnseen: viewportSectionsUnseen.diagnostics,
           children: (
             <section className={styles.opyCopilotDiagnosticsCard} aria-label="Latest OPY diagnostics">
@@ -2397,6 +2604,7 @@ export function OpyCopilotPanel({
           title: "CHECKPOINT HISTORY",
           meta: checkpointsSectionMeta,
           summary: checkpointsSectionSummary,
+          tone: checkpointsSectionTone,
           isUnseen: viewportSectionsUnseen.checkpoints,
           children: (
             <section className={styles.opyCopilotPlanCard} aria-label="OPY checkpoint history">
@@ -2536,6 +2744,7 @@ export function OpyCopilotPanel({
           title: "BOARD REVIEW",
           meta: reviewSectionMeta,
           summary: reviewSectionSummary,
+          tone: reviewSectionTone,
           isUnseen: viewportSectionsUnseen.review,
           children: (
             <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
@@ -2721,6 +2930,7 @@ export function OpyCopilotPanel({
           title: "DIAGRAM PROPOSAL",
           meta: proposalSectionMeta,
           summary: proposalSectionSummary,
+          tone: proposalSectionTone,
           isUnseen: viewportSectionsUnseen.proposal,
           children: (
             <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">

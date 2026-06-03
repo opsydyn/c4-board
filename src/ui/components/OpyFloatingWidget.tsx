@@ -10,6 +10,7 @@ import type {
   OpyWidgetSnapTarget,
 } from "../../core/effects/settings.types";
 import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
+import type { OpyWidgetChromeStatus } from "./opyChromeStatus";
 import { OpyAvatar } from "./OpyAvatar";
 import * as styles from "./OpyFloatingWidget.css";
 
@@ -62,6 +63,7 @@ interface OpyFloatingWidgetProps {
   readonly nodeCount: number;
   readonly edgeCount: number;
   readonly boardContext: OpyBoardContextRegistry | null;
+  readonly chromeStatus: OpyWidgetChromeStatus | null;
   readonly presence: OpyWidgetPresence;
   readonly layout: OpyWidgetLayout;
   readonly modeLayouts: OpyWidgetModeLayouts;
@@ -401,6 +403,7 @@ export function OpyFloatingWidget({
   nodeCount,
   edgeCount,
   boardContext,
+  chromeStatus,
   presence,
   layout,
   modeLayouts,
@@ -506,6 +509,15 @@ export function OpyFloatingWidget({
     () => `BOARD::${nodeCount}N/${edgeCount}E · ${Math.round(resolvedLayout.width)}×${Math.round(resolvedLayout.height)}`,
     [edgeCount, nodeCount, resolvedLayout.height, resolvedLayout.width],
   );
+  const visibleChromeSignals = useMemo(() => {
+    if (!chromeStatus || chromeStatus.signals.length === 0) {
+      return [];
+    }
+
+    const signalLimit = telemetryDensity === "wide" ? 3 : telemetryDensity === "compact" ? 2 : 1;
+    return chromeStatus.signals.slice(0, signalLimit);
+  }, [chromeStatus, telemetryDensity]);
+  const chromeTone = chromeStatus?.frameTone ?? "neutral";
 
   useEffect(() => {
     if (!visible || currentPresence === "orb") {
@@ -1057,6 +1069,7 @@ export function OpyFloatingWidget({
                 type="button"
                 className={styles.widgetLauncher}
                 onClick={handleLauncherOpen}
+                data-chrome-tone={chromeTone}
                 aria-label="Open OPY presence field"
               >
                 <RobotIcon size={18} weight="duotone" />
@@ -1080,6 +1093,7 @@ export function OpyFloatingWidget({
                 type="button"
                 className={styles.widgetOrbLauncher}
                 onClick={handleRestoreFromOrb}
+                data-chrome-tone={chromeTone}
                 aria-label={`Restore OPY ${currentMode === "mission" ? "mission surface" : "presence field"}`}
               >
                 <RobotIcon size={18} weight="duotone" />
@@ -1170,11 +1184,13 @@ export function OpyFloatingWidget({
               />
               <section
                 className={`${styles.widgetFrame} ${currentMode === "mission" ? styles.widgetFrameMission : ""}`}
+                data-chrome-tone={chromeTone}
                 role="dialog"
                 aria-label="OPY presence field"
               >
                 <header
                   className={`${styles.widgetHandle} ${currentMode === "mission" ? styles.widgetHandleMission : ""}`}
+                  data-chrome-tone={chromeTone}
                 >
                   <div className={styles.widgetTitleBlock}>
                     <p
@@ -1192,6 +1208,21 @@ export function OpyFloatingWidget({
                     <p className={styles.widgetMeta}>{`${domain.toUpperCase()} BOARD · ${normalizedDiagramName}`}</p>
                   </div>
                   <div className={styles.widgetTelemetry} data-density={telemetryDensity}>
+                    {visibleChromeSignals.length > 0 && (
+                      <div className={styles.widgetTelemetrySignals} data-density={telemetryDensity}>
+                        {visibleChromeSignals.map((signal) => (
+                          <span
+                            key={signal.key}
+                            className={styles.widgetSignalPill}
+                            data-tone={signal.tone}
+                            data-fresh={signal.isFresh ? "true" : "false"}
+                            title={signal.detail}
+                          >
+                            {signal.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div className={styles.widgetTelemetryPrimary}>
                       {primaryTelemetry.map((item) => (
                         <span key={item} className={styles.widgetTelemetryPill}>

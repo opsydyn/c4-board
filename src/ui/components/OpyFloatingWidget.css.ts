@@ -17,6 +17,18 @@ export const widgetLauncher = style({
   color: theme.color.foreground.primary,
 
   selectors: {
+    '&[data-chrome-tone="ready"]': {
+      borderColor: theme.color.status.ready,
+      boxShadow: `0 0 18px color-mix(in srgb, ${theme.color.status.ready} 24%, transparent)`,
+    },
+    '&[data-chrome-tone="caution"]': {
+      borderColor: theme.color.status.caution,
+      boxShadow: `0 0 18px color-mix(in srgb, ${theme.color.status.caution} 24%, transparent)`,
+    },
+    '&[data-chrome-tone="critical"]': {
+      borderColor: theme.color.status.critical,
+      boxShadow: `0 0 20px color-mix(in srgb, ${theme.color.status.critical} 28%, transparent)`,
+    },
     "&:hover": {
       transform: "scale(1.04)",
       borderColor: theme.color.status.selected,
@@ -75,6 +87,18 @@ export const widgetOrbLauncher = style({
   color: theme.color.foreground.primary,
 
   selectors: {
+    '&[data-chrome-tone="ready"]': {
+      borderColor: theme.color.status.ready,
+      boxShadow: `${theme.effect.glow.lg}, 0 16px 36px color-mix(in srgb, ${theme.color.status.ready} 20%, transparent)`,
+    },
+    '&[data-chrome-tone="caution"]': {
+      borderColor: theme.color.status.caution,
+      boxShadow: `${theme.effect.glow.lg}, 0 16px 36px color-mix(in srgb, ${theme.color.status.caution} 24%, transparent)`,
+    },
+    '&[data-chrome-tone="critical"]': {
+      borderColor: theme.color.status.critical,
+      boxShadow: `${theme.effect.glow.lg}, 0 16px 40px color-mix(in srgb, ${theme.color.status.critical} 28%, transparent)`,
+    },
     "&:hover": {
       transform: "scale(1.06)",
       boxShadow: `${theme.effect.glow.lg}, 0 16px 36px rgba(0, 0, 0, 0.48)`,
@@ -92,6 +116,20 @@ export const widgetFrame = style({
   width: "100%",
   height: "100%",
   overflow: "hidden",
+  selectors: {
+    '&[data-chrome-tone="ready"]': {
+      borderColor: theme.color.status.ready,
+      boxShadow: `${theme.effect.glow.lg}, 0 18px 60px color-mix(in srgb, ${theme.color.status.ready} 14%, transparent)`,
+    },
+    '&[data-chrome-tone="caution"]': {
+      borderColor: theme.color.status.caution,
+      boxShadow: `${theme.effect.glow.lg}, 0 18px 60px color-mix(in srgb, ${theme.color.status.caution} 16%, transparent)`,
+    },
+    '&[data-chrome-tone="critical"]': {
+      borderColor: theme.color.status.critical,
+      boxShadow: `${theme.effect.glow.lg}, 0 18px 64px color-mix(in srgb, ${theme.color.status.critical} 18%, transparent)`,
+    },
+  },
 });
 
 export const widgetFrameMission = style({
@@ -110,6 +148,17 @@ export const widgetHandle = style({
   background: "linear-gradient(180deg, rgba(10, 18, 14, 0.98) 0%, rgba(7, 13, 10, 0.94) 100%)",
   cursor: "move",
   padding: `${theme.spacing["4"]} ${theme.spacing["5"]} ${theme.spacing["3"]}`,
+  selectors: {
+    '&[data-chrome-tone="ready"]': {
+      borderBottomColor: theme.color.status.ready,
+    },
+    '&[data-chrome-tone="caution"]': {
+      borderBottomColor: theme.color.status.caution,
+    },
+    '&[data-chrome-tone="critical"]': {
+      borderBottomColor: theme.color.status.critical,
+    },
+  },
 });
 
 export const widgetHandleMission = style({
@@ -170,6 +219,22 @@ export const widgetTelemetry = style({
   },
 });
 
+export const widgetTelemetrySignals = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  alignItems: "start",
+  gap: theme.spacing["1"],
+  width: "100%",
+  selectors: {
+    [`${widgetTelemetry}[data-density="compact"] &`]: {
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    },
+    [`${widgetTelemetry}[data-density="collapsed"] &`]: {
+      gridTemplateColumns: "minmax(0, 1fr)",
+    },
+  },
+});
+
 export const widgetTelemetryPrimary = style({
   display: "grid",
   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -218,6 +283,38 @@ export const widgetTelemetryPill = style({
   overflow: "hidden",
   textOverflow: "ellipsis",
 });
+
+export const widgetSignalPill = style([
+  widgetTelemetryPill,
+  {
+    justifyContent: "center",
+    color: theme.color.foreground.primary,
+    selectors: {
+      '&[data-tone="neutral"]': {
+        borderColor: theme.color.border.secondary,
+        backgroundColor: "rgba(10, 16, 13, 0.8)",
+      },
+      '&[data-tone="ready"]': {
+        borderColor: theme.color.status.ready,
+        backgroundColor: `color-mix(in srgb, ${theme.color.status.ready} 14%, rgba(10, 16, 13, 0.86))`,
+        color: theme.color.status.ready,
+      },
+      '&[data-tone="caution"]': {
+        borderColor: theme.color.status.caution,
+        backgroundColor: `color-mix(in srgb, ${theme.color.status.caution} 14%, rgba(10, 16, 13, 0.86))`,
+        color: theme.color.status.caution,
+      },
+      '&[data-tone="critical"]': {
+        borderColor: theme.color.status.critical,
+        backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} 14%, rgba(10, 16, 13, 0.86))`,
+        color: theme.color.status.critical,
+      },
+      '&[data-fresh="true"]': {
+        boxShadow: theme.effect.glow.sm,
+      },
+    },
+  },
+]);
 
 export const widgetTelemetryPillSecondary = style([
   widgetTelemetryPill,

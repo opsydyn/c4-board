@@ -551,6 +551,17 @@ export const opyCopilotViewportSection = style({
   padding: theme.spacing["2"],
 
   selectors: {
+    '&[data-tone="ready"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.ready} 55%, ${theme.color.border.secondary})`,
+    },
+    '&[data-tone="caution"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.caution} 60%, ${theme.color.border.secondary})`,
+      boxShadow: `0 0 12px color-mix(in srgb, ${theme.color.status.caution} 18%, transparent)`,
+    },
+    '&[data-tone="critical"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.critical} 68%, ${theme.color.border.secondary})`,
+      boxShadow: `0 0 14px color-mix(in srgb, ${theme.color.status.critical} 22%, transparent)`,
+    },
     "&[data-open=\"true\"]": {
       borderColor: theme.color.border.primary,
       boxShadow: theme.effect.glow.sm,
@@ -597,6 +608,17 @@ export const opyCopilotViewportSectionSummaryMain = style({
 
 export const opyCopilotViewportSectionSummaryTitle = style({
   color: theme.color.foreground.secondary,
+  selectors: {
+    [`${opyCopilotViewportSection}[data-tone="ready"] &`]: {
+      color: theme.color.status.ready,
+    },
+    [`${opyCopilotViewportSection}[data-tone="caution"] &`]: {
+      color: theme.color.status.caution,
+    },
+    [`${opyCopilotViewportSection}[data-tone="critical"] &`]: {
+      color: theme.color.status.critical,
+    },
+  },
 });
 
 export const opyCopilotViewportSectionSummaryText = style({
@@ -607,6 +629,17 @@ export const opyCopilotViewportSectionSummaryText = style({
   color: theme.color.foreground.primary,
   fontSize: theme.typography.size.xs,
   letterSpacing: theme.typography.letterSpacing.normal,
+  selectors: {
+    [`${opyCopilotViewportSection}[data-tone="ready"] &`]: {
+      color: theme.color.status.ready,
+    },
+    [`${opyCopilotViewportSection}[data-tone="caution"] &`]: {
+      color: theme.color.status.caution,
+    },
+    [`${opyCopilotViewportSection}[data-tone="critical"] &`]: {
+      color: theme.color.status.critical,
+    },
+  },
 });
 
 export const opyCopilotViewportSectionSummaryAside = style({
@@ -618,6 +651,17 @@ export const opyCopilotViewportSectionSummaryAside = style({
 
 export const opyCopilotViewportSectionSummaryMeta = style({
   color: theme.color.foreground.tertiary,
+  selectors: {
+    [`${opyCopilotViewportSection}[data-tone="ready"] &`]: {
+      color: theme.color.status.ready,
+    },
+    [`${opyCopilotViewportSection}[data-tone="caution"] &`]: {
+      color: theme.color.status.caution,
+    },
+    [`${opyCopilotViewportSection}[data-tone="critical"] &`]: {
+      color: theme.color.status.critical,
+    },
+  },
 });
 
 export const opyCopilotViewportSectionSummaryMetaGroup = style({
