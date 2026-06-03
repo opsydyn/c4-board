@@ -1047,16 +1047,35 @@ pub async fn rig_agent_store_openai_api_key(
     let normalized =
         normalize_secret(&secret).ok_or_else(|| "OpenAI key cannot be empty.".to_string())?;
 
-    store_openai_api_key_in_keychain(normalized).await?;
-    let stored = resolve_openai_api_key_from_keychain().await?;
-    if stored.is_none() {
-        return Err(
-            "OpenAI key was written, but the dev/runtime process could not read it back from keychain. Inspect local keychain access for the Tauri dev app."
-                .to_string(),
-        );
-    }
-    clear_openai_api_key_from_settings(&state).await?;
-    rig_agent_secret_status(state).await
+    let keychain_issue = match store_openai_api_key_in_keychain(normalized.clone()).await {
+        Ok(()) => match resolve_openai_api_key_from_keychain().await {
+            Ok(Some(_)) => {
+                clear_openai_api_key_from_settings(&state).await?;
+                return rig_agent_secret_status(state).await;
+            }
+            Ok(None) => Some(
+                "OpenAI key was written, but the dev/runtime process could not read it back from keychain."
+                    .to_string(),
+            ),
+            Err(error) => Some(error),
+        },
+        Err(error) => Some(error),
+    };
+
+    store_openai_api_key_in_settings(&state, &normalized).await?;
+
+    Ok(RigAgentSecretStatusResponse {
+        configured: true,
+        source: RigAgentSecretSource::SettingsDb,
+        warning: Some(match keychain_issue {
+            Some(detail) => compose_secret_warning(DEV_KEYCHAIN_FALLBACK_WARNING, &detail),
+            None => SETTINGS_DB_STORAGE_WARNING.to_string(),
+        }),
+        resolution_order: KEY_RESOLUTION_ORDER
+            .iter()
+            .map(|source| source.to_string())
+            .collect(),
+    })
 }
 
 #[tauri::command]

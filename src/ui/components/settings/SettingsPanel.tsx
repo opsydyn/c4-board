@@ -443,7 +443,13 @@ export function SettingsPanel() {
         setAgentSecretResolutionOrder(status.resolutionOrder);
         setOpenAiApiKeyDraft("");
         clearLegacyOpenAiFallback();
-        setAgentSecretActionMessage("OPENAI KEY STORED IN KEYCHAIN.");
+        setAgentSecretActionMessage(
+          status.source === "keychain"
+            ? "OPENAI KEY STORED IN KEYCHAIN."
+            : status.source === "settings-db"
+              ? "OPENAI KEY STORED IN SETTINGS DB FALLBACK."
+              : "OPENAI KEY STORED.",
+        );
       })
       .catch((error: unknown) => {
         setAgentSecretStatus("error");
