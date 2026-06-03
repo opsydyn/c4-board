@@ -316,6 +316,7 @@ OPY depends on an OpenAI-compatible model configuration.
 - keychain writes are read-back verified before the UI reports success
 - keychain read failures surface as runtime diagnostics instead of collapsing to “missing key”
 - dev/runtime keychain failures fall back to settings DB with an explicit warning
+- macOS debug builds intentionally use the settings DB fallback instead of keychain
 - the settings panel reports `SETTINGS DB (FALLBACK)` when dev keychain access is unavailable
 - UI shows configured/not configured diagnostics
 - runtime keeps raw secrets out of transcript and telemetry surfaces

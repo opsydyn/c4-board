@@ -29,6 +29,8 @@ const ENV_STORAGE_WARNING: &str =
     "OpenAI key currently resolves from environment variable fallback.";
 const DEV_KEYCHAIN_FALLBACK_WARNING: &str =
     "Keychain access is unavailable in this runtime. Using app settings fallback.";
+const DEV_KEYCHAIN_DISABLED_WARNING: &str =
+    "Keychain storage is disabled for macOS debug builds. Using app settings fallback.";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -413,6 +415,16 @@ fn compose_secret_warning(base: &str, detail: &str) -> String {
     format!("{base} {detail}")
 }
 
+#[cfg(all(target_os = "macos", debug_assertions))]
+fn keychain_supported_in_runtime() -> bool {
+    false
+}
+
+#[cfg(not(all(target_os = "macos", debug_assertions)))]
+fn keychain_supported_in_runtime() -> bool {
+    true
+}
+
 async fn resolve_openai_api_key_from_settings(state: &State<'_, AppDb>) -> Option<String> {
     let row = sqlx::query("SELECT value FROM app_settings WHERE key = ? LIMIT 1")
         .bind(OPENAI_API_KEY_SETTING_KEY)
@@ -459,6 +471,26 @@ async fn store_openai_api_key_in_settings(
 }
 
 async fn resolve_openai_secret(state: &State<'_, AppDb>) -> Result<Option<ResolvedSecret>, String> {
+    if !keychain_supported_in_runtime() {
+        if let Some(from_settings) = resolve_openai_api_key_from_settings(state).await {
+            return Ok(Some(ResolvedSecret {
+                value: from_settings,
+                source: RigAgentSecretSource::SettingsDb,
+                warning: Some(DEV_KEYCHAIN_DISABLED_WARNING.to_string()),
+            }));
+        }
+
+        if let Some(from_env) = resolve_openai_api_key_from_env() {
+            return Ok(Some(ResolvedSecret {
+                value: from_env,
+                source: RigAgentSecretSource::Env,
+                warning: Some(ENV_STORAGE_WARNING.to_string()),
+            }));
+        }
+
+        return Ok(None);
+    }
+
     let keychain_result = resolve_openai_api_key_from_keychain().await;
     let keychain_read_error = match keychain_result {
         Ok(Some(from_keychain)) => {
@@ -1047,6 +1079,19 @@ pub async fn rig_agent_store_openai_api_key(
     let normalized =
         normalize_secret(&secret).ok_or_else(|| "OpenAI key cannot be empty.".to_string())?;
 
+    if !keychain_supported_in_runtime() {
+        store_openai_api_key_in_settings(&state, &normalized).await?;
+        return Ok(RigAgentSecretStatusResponse {
+            configured: true,
+            source: RigAgentSecretSource::SettingsDb,
+            warning: Some(DEV_KEYCHAIN_DISABLED_WARNING.to_string()),
+            resolution_order: KEY_RESOLUTION_ORDER
+                .iter()
+                .map(|source| source.to_string())
+                .collect(),
+        });
+    }
+
     let keychain_issue = match store_openai_api_key_in_keychain(normalized.clone()).await {
         Ok(()) => match resolve_openai_api_key_from_keychain().await {
             Ok(Some(_)) => {
@@ -1082,7 +1127,9 @@ pub async fn rig_agent_store_openai_api_key(
 pub async fn rig_agent_clear_openai_api_key(
     state: State<'_, AppDb>,
 ) -> Result<RigAgentSecretStatusResponse, String> {
-    clear_openai_api_key_from_keychain().await?;
+    if keychain_supported_in_runtime() {
+        clear_openai_api_key_from_keychain().await?;
+    }
     clear_openai_api_key_from_settings(&state).await?;
     rig_agent_secret_status(state).await
 }
