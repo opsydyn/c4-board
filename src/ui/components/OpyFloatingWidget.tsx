@@ -481,6 +481,31 @@ export function OpyFloatingWidget({
     () => getOrbPosition(resolvedLayout, bounds),
     [bounds, resolvedLayout],
   );
+  const telemetryDensity = resolvedLayout.width < 580
+    ? "collapsed"
+    : resolvedLayout.width < 760
+      ? "compact"
+      : "wide";
+  const primaryTelemetry = useMemo(
+    () => [
+      `MODE::${getModeLabel(currentMode)}`,
+      `STATE::${currentPresence === "orb" ? "ORB" : "SURFACE"}`,
+      `SNAP::${getSnapLabel(currentSnapTarget)}`,
+    ],
+    [currentMode, currentPresence, currentSnapTarget],
+  );
+  const secondaryTelemetry = useMemo(
+    () => [
+      `NODES::${nodeCount}`,
+      `EDGES::${edgeCount}`,
+      `SIZE::${Math.round(resolvedLayout.width)}×${Math.round(resolvedLayout.height)}`,
+    ],
+    [edgeCount, nodeCount, resolvedLayout.height, resolvedLayout.width],
+  );
+  const collapsedTelemetrySummary = useMemo(
+    () => `BOARD::${nodeCount}N/${edgeCount}E · ${Math.round(resolvedLayout.width)}×${Math.round(resolvedLayout.height)}`,
+    [edgeCount, nodeCount, resolvedLayout.height, resolvedLayout.width],
+  );
 
   useEffect(() => {
     if (!visible || currentPresence === "orb") {
@@ -545,7 +570,7 @@ export function OpyFloatingWidget({
 
     window.addEventListener("keydown", handleEscape);
     return () => {
-    window.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("keydown", handleEscape);
     };
   }, [currentPresence, onStateCommit, presence, resolvedLayout, resolvedModeLayouts, visible]);
 
@@ -1152,25 +1177,44 @@ export function OpyFloatingWidget({
                   className={`${styles.widgetHandle} ${currentMode === "mission" ? styles.widgetHandleMission : ""}`}
                 >
                   <div className={styles.widgetTitleBlock}>
-                    <p className={`${styles.widgetEyebrow} ${currentMode === "mission" ? styles.widgetEyebrowMission : ""}`}>
+                    <p
+                      className={`${styles.widgetEyebrow} ${
+                        currentMode === "mission" ? styles.widgetEyebrowMission : ""
+                      }`}
+                    >
                       {currentMode === "mission"
-                        ? "Mission Analysis Surface · OPY Mission Surface"
-                        : "Engineering Presence Field · OPY Presence Field"}
+                        ? "OPY Mission Analysis Surface"
+                        : "OPY Engineering Presence Field "}
                     </p>
                     <div className={styles.widgetLensRow}>
                       <OpyAvatar size={48} />
                     </div>
                     <p className={styles.widgetMeta}>{`${domain.toUpperCase()} BOARD · ${normalizedDiagramName}`}</p>
                   </div>
-                  <div className={styles.widgetTelemetry}>
-                    <span className={styles.widgetTelemetryPill}>{`MODE::${getModeLabel(currentMode)}`}</span>
-                    <span className={styles.widgetTelemetryPill}>{`STATE::${currentPresence === "orb" ? "ORB" : "SURFACE"}`}</span>
-                    <span className={styles.widgetTelemetryPill}>{`SNAP::${getSnapLabel(currentSnapTarget)}`}</span>
-                    <span className={styles.widgetTelemetryPill}>{`NODES::${nodeCount}`}</span>
-                    <span className={styles.widgetTelemetryPill}>{`EDGES::${edgeCount}`}</span>
-                    <span className={styles.widgetTelemetryPill}>
-                      {`SIZE::${Math.round(resolvedLayout.width)}×${Math.round(resolvedLayout.height)}`}
-                    </span>
+                  <div className={styles.widgetTelemetry} data-density={telemetryDensity}>
+                    <div className={styles.widgetTelemetryPrimary}>
+                      {primaryTelemetry.map((item) => (
+                        <span key={item} className={styles.widgetTelemetryPill}>
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                    <div
+                      className={styles.widgetTelemetrySecondary}
+                      data-density={telemetryDensity}
+                    >
+                      {telemetryDensity === "collapsed"
+                        ? (
+                          <span className={styles.widgetTelemetryPillSecondarySummary}>
+                            {collapsedTelemetrySummary}
+                          </span>
+                        )
+                        : secondaryTelemetry.map((item) => (
+                          <span key={item} className={styles.widgetTelemetryPillSecondary}>
+                            {item}
+                          </span>
+                        ))}
+                    </div>
                   </div>
                 </header>
                 <div className={`${styles.widgetBody} ${currentMode === "mission" ? styles.widgetBodyMission : ""}`}>

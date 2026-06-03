@@ -104,6 +104,7 @@ export const widgetHandle = style({
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "space-between",
+  flexWrap: "wrap",
   gap: theme.spacing["3"],
   borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   background: "linear-gradient(180deg, rgba(10, 18, 14, 0.98) 0%, rgba(7, 13, 10, 0.94) 100%)",
@@ -153,13 +154,49 @@ export const widgetMeta = style({
 });
 
 export const widgetTelemetry = style({
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  display: "flex",
+  flexDirection: "column",
   alignItems: "start",
   justifyContent: "flex-end",
   gap: theme.spacing["1"],
   minWidth: "13.5rem",
-  maxWidth: "18rem",
+  maxWidth: "19rem",
+  flex: "1 1 16rem",
+  selectors: {
+    '&[data-density="collapsed"]': {
+      minWidth: "11rem",
+      maxWidth: "100%",
+    },
+  },
+});
+
+export const widgetTelemetryPrimary = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  alignItems: "start",
+  gap: theme.spacing["1"],
+  width: "100%",
+  selectors: {
+    [`${widgetTelemetry}[data-density="compact"] &`]: {
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    },
+    [`${widgetTelemetry}[data-density="collapsed"] &`]: {
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    },
+  },
+});
+
+export const widgetTelemetrySecondary = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  alignItems: "start",
+  gap: theme.spacing["1"],
+  width: "100%",
+  selectors: {
+    [`${widgetTelemetry}[data-density="collapsed"] &`]: {
+      gridTemplateColumns: "minmax(0, 1fr)",
+    },
+  },
 });
 
 export const widgetTelemetryPill = style({
@@ -181,6 +218,23 @@ export const widgetTelemetryPill = style({
   overflow: "hidden",
   textOverflow: "ellipsis",
 });
+
+export const widgetTelemetryPillSecondary = style([
+  widgetTelemetryPill,
+  {
+    borderColor: theme.color.border.secondary,
+    backgroundColor: "rgba(8, 13, 11, 0.72)",
+    color: theme.color.foreground.tertiary,
+  },
+]);
+
+export const widgetTelemetryPillSecondarySummary = style([
+  widgetTelemetryPillSecondary,
+  {
+    width: "100%",
+    justifyContent: "center",
+  },
+]);
 
 export const widgetBody = style({
   display: "flex",
