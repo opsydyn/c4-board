@@ -166,6 +166,14 @@ interface OpyActionModeSurface {
   readonly detail: string;
 }
 
+const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
+  control: false,
+  diagnostics: false,
+  checkpoints: false,
+  review: false,
+  proposal: false,
+};
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -617,6 +625,9 @@ export function OpyCopilotPanel({
   const [viewportSectionsOpen, setViewportSectionsOpen] = useState<OpyViewportSections>(
     viewportSections,
   );
+  const [viewportSectionsUnseen, setViewportSectionsUnseen] = useState<OpyViewportSections>(
+    EMPTY_VIEWPORT_SECTION_STATE,
+  );
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -796,6 +807,7 @@ export function OpyCopilotPanel({
 
   useEffect(() => {
     pendingViewportBaselineRef.current = true;
+    setViewportSectionsUnseen(EMPTY_VIEWPORT_SECTION_STATE);
   }, [selectedSessionId]);
 
   useEffect(() => {
@@ -1936,24 +1948,40 @@ export function OpyCopilotPanel({
     },
     [onViewportSectionsChange],
   );
+  const clearViewportSectionUnseen = useCallback((key: OpyViewportSectionKey) => {
+    setViewportSectionsUnseen((current) =>
+      current[key]
+        ? {
+          ...current,
+          [key]: false,
+        }
+        : current
+    );
+  }, []);
   const toggleViewportSection = useCallback((key: OpyViewportSectionKey) => {
+    if (!viewportSectionsOpen[key]) {
+      clearViewportSectionUnseen(key);
+    }
     commitViewportSections((current) => ({
       ...current,
       [key]: !current[key],
     }));
-  }, [commitViewportSections]);
+  }, [clearViewportSectionUnseen, commitViewportSections, viewportSectionsOpen]);
   const renderViewportSection = useCallback((input: {
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;
     readonly meta: string;
+    readonly isUnseen?: boolean;
     readonly children: ReactNode;
   }) => {
     const isOpen = viewportSectionsOpen[input.keyId];
+    const showUnseen = !isOpen && input.isUnseen === true;
 
     return (
       <section
         className={styles.opyCopilotViewportSection}
         data-open={isOpen ? "true" : "false"}
+        data-unseen={showUnseen ? "true" : "false"}
         aria-label={input.title}
       >
         <button
@@ -1965,8 +1993,13 @@ export function OpyCopilotPanel({
           }}
         >
           <span>{input.title}</span>
-          <span className={styles.opyCopilotViewportSectionSummaryMeta}>
-            {`${isOpen ? "COLLAPSE" : "EXPAND"} :: ${input.meta}`}
+          <span className={styles.opyCopilotViewportSectionSummaryMetaGroup}>
+            {showUnseen && (
+              <span className={styles.opyCopilotViewportSectionSummaryFlag}>NEW</span>
+            )}
+            <span className={styles.opyCopilotViewportSectionSummaryMeta}>
+              {`${isOpen ? "COLLAPSE" : "EXPAND"} :: ${input.meta}`}
+            </span>
           </span>
         </button>
         {isOpen && (
@@ -2000,24 +2033,21 @@ export function OpyCopilotPanel({
         review: activeReviewSignal,
         checkpoints: activeCheckpointSignal,
       };
+      setViewportSectionsUnseen(EMPTY_VIEWPORT_SECTION_STATE);
       pendingViewportBaselineRef.current = false;
       return;
     }
 
-    let openProposal = false;
-    let openReview = false;
-    let openCheckpoints = false;
-    let hasAutoOpen = false;
+    let proposalChanged = false;
+    let reviewChanged = false;
+    let checkpointsChanged = false;
 
     if (
       activeProposalSignal !== null
       && viewportAutoSignalsRef.current.proposal !== activeProposalSignal
     ) {
       viewportAutoSignalsRef.current.proposal = activeProposalSignal;
-      if (!viewportSectionsOpen.proposal) {
-        openProposal = true;
-        hasAutoOpen = true;
-      }
+      proposalChanged = true;
     }
 
     if (
@@ -2025,10 +2055,7 @@ export function OpyCopilotPanel({
       && viewportAutoSignalsRef.current.review !== activeReviewSignal
     ) {
       viewportAutoSignalsRef.current.review = activeReviewSignal;
-      if (!viewportSectionsOpen.review) {
-        openReview = true;
-        hasAutoOpen = true;
-      }
+      reviewChanged = true;
     }
 
     if (
@@ -2036,25 +2063,31 @@ export function OpyCopilotPanel({
       && viewportAutoSignalsRef.current.checkpoints !== activeCheckpointSignal
     ) {
       viewportAutoSignalsRef.current.checkpoints = activeCheckpointSignal;
-      if (!viewportSectionsOpen.checkpoints) {
-        openCheckpoints = true;
-        hasAutoOpen = true;
-      }
+      checkpointsChanged = true;
     }
 
-    if (hasAutoOpen) {
-      commitViewportSections((current) => ({
-        ...current,
-        proposal: openProposal ? true : current.proposal,
-        review: openReview ? true : current.review,
-        checkpoints: openCheckpoints ? true : current.checkpoints,
-      }));
+    if (proposalChanged || reviewChanged || checkpointsChanged) {
+      setViewportSectionsUnseen((current) => {
+        const next = {
+          ...current,
+          proposal: proposalChanged ? !viewportSectionsOpen.proposal : current.proposal,
+          review: reviewChanged ? !viewportSectionsOpen.review : current.review,
+          checkpoints: checkpointsChanged ? !viewportSectionsOpen.checkpoints : current.checkpoints,
+        };
+
+        return (
+          next.proposal === current.proposal
+          && next.review === current.review
+          && next.checkpoints === current.checkpoints
+        )
+          ? current
+          : next;
+      });
     }
   }, [
     activeCheckpointSignal,
     activeProposalSignal,
     activeReviewSignal,
-    commitViewportSections,
     isMessageLoading,
     viewportSectionsOpen.checkpoints,
     viewportSectionsOpen.proposal,
@@ -2084,6 +2117,7 @@ export function OpyCopilotPanel({
         keyId: "control",
         title: "CONTROL FIELD",
         meta: controlSectionMeta,
+        isUnseen: viewportSectionsUnseen.control,
         children: (
           <>
             <p className={styles.ownershipLensHint}>
@@ -2216,6 +2250,7 @@ export function OpyCopilotPanel({
           keyId: "diagnostics",
           title: `DIAGNOSTICS::${latestDiagnosticsSurface.title}`,
           meta: diagnosticsSectionMeta,
+          isUnseen: viewportSectionsUnseen.diagnostics,
           children: (
             <section className={styles.opyCopilotDiagnosticsCard} aria-label="Latest OPY diagnostics">
               <div className={styles.opyCopilotProposalHeader}>
@@ -2296,6 +2331,7 @@ export function OpyCopilotPanel({
           keyId: "checkpoints",
           title: "CHECKPOINT HISTORY",
           meta: checkpointsSectionMeta,
+          isUnseen: viewportSectionsUnseen.checkpoints,
           children: (
             <section className={styles.opyCopilotPlanCard} aria-label="OPY checkpoint history">
               <div className={styles.opyCopilotProposalHeader}>
@@ -2433,6 +2469,7 @@ export function OpyCopilotPanel({
           keyId: "review",
           title: "BOARD REVIEW",
           meta: reviewSectionMeta,
+          isUnseen: viewportSectionsUnseen.review,
           children: (
             <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
               <div className={styles.opyCopilotProposalHeader}>
@@ -2616,6 +2653,7 @@ export function OpyCopilotPanel({
           keyId: "proposal",
           title: "DIAGRAM PROPOSAL",
           meta: proposalSectionMeta,
+          isUnseen: viewportSectionsUnseen.proposal,
           children: (
             <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">
               <div className={styles.opyCopilotProposalHeader}>

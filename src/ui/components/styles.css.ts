@@ -555,6 +555,10 @@ export const opyCopilotViewportSection = style({
       borderColor: theme.color.border.primary,
       boxShadow: theme.effect.glow.sm,
     },
+    "&[data-unseen=\"true\"]": {
+      borderColor: theme.color.status.selected,
+      boxShadow: theme.effect.glow.sm,
+    },
   },
 });
 
@@ -585,6 +589,23 @@ export const opyCopilotViewportSectionSummary = style({
 
 export const opyCopilotViewportSectionSummaryMeta = style({
   color: theme.color.foreground.tertiary,
+});
+
+export const opyCopilotViewportSectionSummaryMetaGroup = style({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: theme.spacing["1"],
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+});
+
+export const opyCopilotViewportSectionSummaryFlag = style({
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.status.selected}`,
+  backgroundColor: "rgba(12, 26, 18, 0.98)",
+  boxShadow: theme.effect.glow.sm,
+  padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
+  color: theme.color.status.selected,
 });
 
 export const opyCopilotViewportSectionBody = style({

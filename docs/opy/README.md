@@ -39,7 +39,7 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - scrolls diagnostics, plan cards, and session controls independently above the composer
 - collapses upper control and diagnostics sections by default so conversation stays primary
 - remembers upper viewport section open/closed state across widget remounts
-- auto-opens fresh proposal, review, and checkpoint sections once when new content arrives
+- marks fresh proposal, review, and checkpoint output on closed summaries until opened
 - remembers layout per mode
 - restores last active mode after minimize/reopen
 
