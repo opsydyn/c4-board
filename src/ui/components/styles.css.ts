@@ -541,6 +541,59 @@ export const opyCopilotViewport = style({
   paddingRight: theme.spacing["1"],
 });
 
+export const opyCopilotViewportSection = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.md,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(8, 14, 11, 0.94)",
+  padding: theme.spacing["2"],
+
+  selectors: {
+    "&[data-open=\"true\"]": {
+      borderColor: theme.color.border.primary,
+      boxShadow: theme.effect.glow.sm,
+    },
+  },
+});
+
+export const opyCopilotViewportSectionSummary = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  transition: theme.transition.base,
+  border: "none",
+  background: "transparent",
+  cursor: "pointer",
+  padding: 0,
+  width: "100%",
+  textAlign: "left",
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+
+  selectors: {
+    "&:hover": {
+      color: theme.color.foreground.primary,
+    },
+  },
+});
+
+export const opyCopilotViewportSectionSummaryMeta = style({
+  color: theme.color.foreground.tertiary,
+});
+
+export const opyCopilotViewportSectionBody = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  minHeight: 0,
+});
+
 export const opyCopilotConversation = style({
   display: "flex",
   flexDirection: "column",
