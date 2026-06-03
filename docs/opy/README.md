@@ -42,6 +42,7 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - marks fresh proposal, review, and checkpoint output on closed summaries until opened
 - renders tactical one-line section summaries for control, diagnostics, proposals, reviews, and checkpoints
 - uses a compact blue presence-line header with an enlarged animated OPY lens instead of a large hero title
+- compresses header telemetry into a denser two-column tactical status cluster
 - remembers layout per mode
 - restores last active mode after minimize/reopen
 

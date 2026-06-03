@@ -153,27 +153,33 @@ export const widgetMeta = style({
 });
 
 export const widgetTelemetry = style({
-  display: "inline-flex",
-  flexWrap: "wrap",
-  alignItems: "center",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  alignItems: "start",
   justifyContent: "flex-end",
-  gap: theme.spacing["2"],
-  minWidth: "12rem",
+  gap: theme.spacing["1"],
+  minWidth: "13.5rem",
+  maxWidth: "18rem",
 });
 
 export const widgetTelemetryPill = style({
   display: "inline-flex",
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent: "flex-start",
   clipPath: theme.clipPath.base,
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-  backgroundColor: "rgba(13, 22, 17, 0.92)",
-  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  backgroundColor: "rgba(11, 18, 15, 0.84)",
+  padding: `${theme.spacing["1"]} ${theme.spacing["1"]}`,
   textTransform: theme.typography.textTransform.uppercase,
   letterSpacing: theme.typography.letterSpacing.wide,
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.tight,
+  minWidth: 0,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 });
 
 export const widgetBody = style({
