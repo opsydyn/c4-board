@@ -1044,6 +1044,106 @@ export const opyCopilotPlanActionList = style({
   gap: theme.spacing["2"],
 });
 
+export const opyCopilotTaskTimeline = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotTaskCard = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(9, 15, 12, 0.82)",
+  padding: theme.spacing["2"],
+});
+
+globalStyle(`${opyCopilotTaskCard}[data-status="failed"]`, {
+  borderColor: theme.color.status.critical,
+});
+
+globalStyle(`${opyCopilotTaskCard}[data-status="interrupted"]`, {
+  borderColor: theme.color.status.caution,
+});
+
+globalStyle(`${opyCopilotTaskCard}[data-status="completed"]`, {
+  borderColor: theme.color.status.ready,
+});
+
+export const opyCopilotTaskToggle = style({
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  width: "100%",
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  color: theme.color.foreground.primary,
+  textAlign: "left",
+  cursor: "pointer",
+});
+
+export const opyCopilotTaskToggleMain = style({
+  display: "flex",
+  flexWrap: "wrap",
+  gap: theme.spacing["1"],
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotTaskMeta = style({
+  flexShrink: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const opyCopilotTaskDetail = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotTaskTraceGrid = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotTaskArtifactStack = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotTaskTraceItem = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(6, 11, 9, 0.9)",
+  padding: theme.spacing["2"],
+});
+
+export const opyCopilotTaskArtifactPayload = style({
+  margin: 0,
+  overflowX: "auto",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.normal,
+});
+
 export const opyCopilotPlanDecisionRow = style({
   display: "flex",
   flexWrap: "wrap",

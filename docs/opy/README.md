@@ -214,7 +214,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 
 ## Resumable Task Lifecycle
 
-`RIG-402` is now started.
+`RIG-402` is now active in the product.
 
 ### Current Task Persistence
 
@@ -235,6 +235,14 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - starting a new OPY lifecycle supersedes any older resumable task for that session
 - current persisted tool calls include context assembly, agent invoke, assistant-message persistence, action resolution, board mutation execution, and post-apply checkpoint refresh
 - current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, mutation plans, and checkpoint restore previews
+
+### Current Task History Surface
+
+- the control field now shows a per-session `TASK HISTORY` strip
+- each task row exposes request label, task status, current stage, timestamp, and short task id
+- expanding a task lazy-loads its persisted tool-call timeline and artifact bundle
+- interrupted tasks are marked distinctly from failed and completed tasks
+- artifacts are rendered inline so operators can inspect grounded context, mutation plans, and restore previews after failure or resume
 
 ## Run Envelope and Telemetry
 
