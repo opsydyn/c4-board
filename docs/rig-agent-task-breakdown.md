@@ -287,6 +287,7 @@
   - resume now surfaces an explicit boundary plan and only reuses safe cross-session steps; session-local persistence/refresh boundaries remain fresh when the chain crosses sessions
   - resumed tasks now persist the actual reuse outcome for each boundary, so task history can show what was inherited versus rerun after execution
   - OPY now aggregates those persisted outcomes across the full lineage chain, so interrupted-task cards, resume cards, and task history expose continuity efficiency at the chain level instead of only per task
+  - task history now supports continuity-chain and boundary-state filters so operators can isolate one lineage or one reuse/rerun condition as the persisted trail grows
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

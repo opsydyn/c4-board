@@ -118,7 +118,7 @@ import {
   pickHigherOpyWidgetChromeTone,
 } from "./opyChromeStatus";
 import * as styles from "./styles.css";
-import { TacticalSelect } from "./TacticalSelect";
+import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
 
 interface OpyDiagramProposalCommand {
   readonly kind: "plan-c4-diagram";
@@ -183,6 +183,27 @@ interface OpyActionModeSurface {
   readonly detail: string;
 }
 
+type OpyTaskHistoryChainFilter = "all" | string;
+type OpyTaskHistoryBoundaryFilter =
+  | "all"
+  | "reused-current-session"
+  | "reused-inherited-session"
+  | "reran"
+  | "pending";
+
+interface OpyTaskHistoryEntry {
+  readonly task: OpyAgentTask;
+  readonly resumeTrail: {
+    readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
+    readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
+  };
+  readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
+  readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
+  readonly lineageDiagnostics: ReturnType<typeof summarizeOpyAgentTaskLineage>;
+  readonly resumePlan: ReadonlyArray<OpyResumeBoundaryPlanItem>;
+  readonly persistedResumeOutcome: OpyPersistedResumeBoundaryOutcomePayload | null;
+}
+
 const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
   control: false,
   diagnostics: false,
@@ -190,6 +211,32 @@ const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
   review: false,
   proposal: false,
 };
+
+const TASK_HISTORY_CHAIN_FILTER_ALL = "all";
+const TASK_HISTORY_BOUNDARY_FILTER_ALL = "all";
+
+const TASK_HISTORY_BOUNDARY_OPTIONS: ReadonlyArray<TacticalSelectOption> = [
+  {
+    value: TASK_HISTORY_BOUNDARY_FILTER_ALL,
+    label: "ALL BOUNDARIES",
+  },
+  {
+    value: "reused-current-session",
+    label: "LOCAL REUSE",
+  },
+  {
+    value: "reused-inherited-session",
+    label: "INHERITED REUSE",
+  },
+  {
+    value: "reran",
+    label: "RERAN",
+  },
+  {
+    value: "pending",
+    label: "PENDING",
+  },
+];
 
 const collapseWhitespace = (value: string): string => value.replace(/\s+/g, " ").trim();
 
@@ -609,6 +656,41 @@ const formatLineageSessionScope = (
   sessionIds
     .map((sessionId) => sessionLookup[sessionId]?.title ?? sessionId.slice(0, 8))
     .join(" · ");
+
+const formatTaskHistoryChainFilterLabel = (task: OpyAgentTask): string => {
+  switch (task.request.replay.kind) {
+    case "chat":
+      return `CHAT · ${summarizeInlineText(task.request.replay.prompt, "PROMPT")}`;
+    case "proposal":
+      return `PROPOSAL · ${summarizeInlineText(task.request.replay.description, "DESCRIPTION")}`;
+    case "review":
+      return `REVIEW · ${summarizeInlineText(task.request.replay.focus ?? "WHOLE BOARD", "WHOLE BOARD")}`;
+    case "add-node":
+      return `ADD ${task.request.replay.nodeType.toUpperCase()} · ${summarizeInlineText(task.request.replay.label, "NODE")}`;
+    case "apply-proposal":
+      return `APPLY PROPOSAL · ${String(task.request.replay.proposalRespondedAtMs)}`;
+    case "rollback":
+      return `ROLLBACK · ${task.request.replay.checkpointId.slice(0, 8)}`;
+  }
+};
+
+const matchesTaskHistoryBoundaryFilter = (
+  rollup: ReturnType<typeof summarizeOpyAgentTaskLineage>["resumeOutcomeRollup"],
+  filter: OpyTaskHistoryBoundaryFilter,
+): boolean => {
+  switch (filter) {
+    case "all":
+      return true;
+    case "reused-current-session":
+      return rollup.reusedCurrentSessionCount > 0;
+    case "reused-inherited-session":
+      return rollup.reusedInheritedSessionCount > 0;
+    case "reran":
+      return rollup.reranCount > 0;
+    case "pending":
+      return rollup.taskCount === 0 || rollup.pendingCount > 0;
+  }
+};
 
 type OpyResumeBoundaryOrigin = "current-session" | "inherited-session" | "fresh";
 
@@ -1276,6 +1358,12 @@ export function OpyCopilotPanel({
     Readonly<Record<string, boolean | undefined>>
   >({});
   const [expandedTaskIds, setExpandedTaskIds] = useState<ReadonlyArray<string>>([]);
+  const [taskHistoryChainFilter, setTaskHistoryChainFilter] = useState<OpyTaskHistoryChainFilter>(
+    TASK_HISTORY_CHAIN_FILTER_ALL,
+  );
+  const [taskHistoryBoundaryFilter, setTaskHistoryBoundaryFilter] = useState<OpyTaskHistoryBoundaryFilter>(
+    TASK_HISTORY_BOUNDARY_FILTER_ALL,
+  );
   const [groundedChatsBySessionId, setGroundedChatsBySessionId] = useState<
     Readonly<Record<string, OpyGroundedChatResponse | undefined>>
   >({});
@@ -1995,6 +2083,73 @@ export function OpyCopilotPanel({
     },
     [compatibleTasks, taskArtifactsByTaskId, taskToolCallsByTaskId],
   );
+
+  const taskHistoryEntries = useMemo<ReadonlyArray<OpyTaskHistoryEntry>>(
+    () =>
+      activeTasks.map((task) => {
+        const resumeTrail = getTaskResumeTrail(task.id);
+        const toolCalls = taskToolCallsByTaskId[task.id] ?? [];
+        const artifacts = taskArtifactsByTaskId[task.id] ?? [];
+        const lineageDiagnostics = getTaskLineageDiagnostics(task);
+        const resumePlan = buildTaskResumeBoundaryPlan(task.sessionId, task.request, resumeTrail.toolCalls);
+        const persistedResumeOutcome = selectPersistedResumeBoundaryOutcome(artifacts);
+
+        return {
+          task,
+          resumeTrail,
+          toolCalls,
+          artifacts,
+          lineageDiagnostics,
+          resumePlan,
+          persistedResumeOutcome,
+        } satisfies OpyTaskHistoryEntry;
+      }),
+    [activeTasks, getTaskLineageDiagnostics, getTaskResumeTrail, taskArtifactsByTaskId, taskToolCallsByTaskId],
+  );
+
+  const taskHistoryChainOptions = useMemo<ReadonlyArray<TacticalSelectOption>>(() => {
+    const seen = new Set<string>();
+    const options: TacticalSelectOption[] = [
+      {
+        value: TASK_HISTORY_CHAIN_FILTER_ALL,
+        label: "ALL CHAINS",
+      },
+    ];
+
+    for (const entry of taskHistoryEntries) {
+      const continuityKey = entry.lineageDiagnostics.continuityKey;
+      if (seen.has(continuityKey)) {
+        continue;
+      }
+
+      seen.add(continuityKey);
+      options.push({
+        value: continuityKey,
+        label: formatTaskHistoryChainFilterLabel(entry.task),
+      });
+    }
+
+    return options;
+  }, [taskHistoryEntries]);
+
+  const filteredTaskHistoryEntries = useMemo(
+    () =>
+      taskHistoryEntries.filter((entry) => (
+        (taskHistoryChainFilter === TASK_HISTORY_CHAIN_FILTER_ALL
+          || entry.lineageDiagnostics.continuityKey === taskHistoryChainFilter)
+        && matchesTaskHistoryBoundaryFilter(entry.lineageDiagnostics.resumeOutcomeRollup, taskHistoryBoundaryFilter)
+      )),
+    [taskHistoryBoundaryFilter, taskHistoryChainFilter, taskHistoryEntries],
+  );
+
+  useEffect(() => {
+    if (
+      taskHistoryChainFilter !== TASK_HISTORY_CHAIN_FILTER_ALL
+      && !taskHistoryChainOptions.some((option) => option.value === taskHistoryChainFilter)
+    ) {
+      setTaskHistoryChainFilter(TASK_HISTORY_CHAIN_FILTER_ALL);
+    }
+  }, [taskHistoryChainFilter, taskHistoryChainOptions]);
 
   const hydrateMessagesForSession = useCallback(
     async (sessionId: string) => {
@@ -5324,22 +5479,50 @@ export function OpyCopilotPanel({
                 <section className={styles.opyCopilotPlanCard} aria-label="OPY task history">
                   <div className={styles.opyCopilotProposalHeader}>
                     <span>TASK HISTORY</span>
-                    <span>{`${activeTasks.length} RECORDED`}</span>
+                    <span>{`${filteredTaskHistoryEntries.length} SHOWN · ${activeTasks.length} RECORDED`}</span>
                   </div>
                   <p className={styles.opyCopilotProposalSummary}>
                     PERSISTED TASKS, TOOL CALLS, AND ARTIFACTS FOR THIS SESSION.
                   </p>
+                  <div className={styles.formInlineRow}>
+                    <div className={styles.inputGrow}>
+                      <TacticalSelect
+                        id="opy-task-history-chain-filter"
+                        ariaLabel="Filter OPY task history by continuity chain"
+                        value={taskHistoryChainFilter}
+                        options={taskHistoryChainOptions}
+                        onChange={(value) => {
+                          setTaskHistoryChainFilter(value);
+                        }}
+                      />
+                    </div>
+                    <div className={styles.inputGrow}>
+                      <TacticalSelect
+                        id="opy-task-history-boundary-filter"
+                        ariaLabel="Filter OPY task history by resume boundary state"
+                        value={taskHistoryBoundaryFilter}
+                        options={TASK_HISTORY_BOUNDARY_OPTIONS}
+                        onChange={(value) => {
+                          setTaskHistoryBoundaryFilter(value as OpyTaskHistoryBoundaryFilter);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <p className={styles.ownershipLensHint}>
+                    {`FILTER::CHAIN ${
+                      taskHistoryChainFilter === TASK_HISTORY_CHAIN_FILTER_ALL ? "ALL" : "TARGETED"
+                    } · BOUNDARY::${
+                      taskHistoryBoundaryFilter === TASK_HISTORY_BOUNDARY_FILTER_ALL
+                        ? "ALL"
+                        : taskHistoryBoundaryFilter.toUpperCase().replaceAll("-", " ")
+                    }`}
+                  </p>
                   <div className={styles.opyCopilotTaskTimeline}>
-                    {activeTasks.slice(0, 6).map((task) => {
+                    {filteredTaskHistoryEntries.slice(0, 6).map((entry) => {
+                      const { task, toolCalls, artifacts, lineageDiagnostics, resumePlan, persistedResumeOutcome } = entry;
                       const isExpanded = expandedTaskIds.includes(task.id);
-                      const resumeTrail = getTaskResumeTrail(task.id);
-                      const toolCalls = taskToolCallsByTaskId[task.id] ?? [];
-                      const artifacts = taskArtifactsByTaskId[task.id] ?? [];
                       const isLoading = taskDetailLoadingByTaskId[task.id] === true;
                       const isResumable = agentLifecycle.resumableTaskId === task.id;
-                      const lineageDiagnostics = getTaskLineageDiagnostics(task);
-                      const resumePlan = buildTaskResumeBoundaryPlan(task.sessionId, task.request, resumeTrail.toolCalls);
-                      const persistedResumeOutcome = selectPersistedResumeBoundaryOutcome(artifacts);
                       const resumeDiagnosticsSummary = persistedResumeOutcome
                         ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
                         : summarizeTaskResumeBoundaryPlan(resumePlan);
@@ -5489,6 +5672,11 @@ export function OpyCopilotPanel({
                         </article>
                       );
                     })}
+                    {filteredTaskHistoryEntries.length === 0 && (
+                      <p className={styles.ownershipLensHint}>
+                        NO TASKS MATCH THE CURRENT CHAIN / BOUNDARY FILTER.
+                      </p>
+                    )}
                   </div>
                 </section>
               )}

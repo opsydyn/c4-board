@@ -264,6 +264,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - artifacts are rendered inline so operators can inspect grounded context, mutation plans, and restore previews after failure or resume
 - task history now shows both `RESUME PLAN` and `RESUME OUTCOME`, so operators can compare expected boundary reuse against what was actually rerun
 - interrupted-task cards, resume cards, and task-history rows now also show chain-level outcome rollups (`LOCAL`, `INHERITED`, `RERAN`, `PENDING`) aggregated across the full lineage trail
+- task history now supports operator-facing filtering by continuity chain and boundary state, so larger lineage trails can be narrowed to one chain or one reuse/rerun condition without losing the persisted diagnostics
 
 ## Run Envelope and Telemetry
 
