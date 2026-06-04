@@ -156,14 +156,6 @@ interface OpyActionModeSurface {
   readonly detail: string;
 }
 
-interface OpyPendingLifecycleConfirmation {
-  readonly request: OpyAgentLifecycleRequest;
-  readonly sessionId: string;
-  readonly confirmationLines: ReadonlyArray<string>;
-  readonly cancelMessage: string;
-  readonly failurePrefix: string;
-}
-
 const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
   control: false,
   diagnostics: false,
@@ -674,11 +666,10 @@ export function OpyCopilotPanel({
   const [viewportSectionsUnseen, setViewportSectionsUnseen] = useState<OpyViewportSections>(
     EMPTY_VIEWPORT_SECTION_STATE,
   );
-  const [pendingLifecycleConfirmation, setPendingLifecycleConfirmation] = useState<OpyPendingLifecycleConfirmation | null>(
-    null,
-  );
   const agentLifecycle = useOpyAgentMachine();
   const isRunning = agentLifecycle.isBusy;
+  const pendingLifecycleRequest = agentLifecycle.pendingConfirmationRequest;
+  const pendingLifecycleConfirmation = pendingLifecycleRequest?.confirmation ?? null;
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -1269,7 +1260,6 @@ export function OpyCopilotPanel({
     }
 
     pendingLifecycleExecutionRef.current = null;
-    setPendingLifecycleConfirmation((current) => current === null ? current : null);
   }, [agentLifecycle.stage]);
 
   const executeRigRun = useCallback(
@@ -1384,14 +1374,42 @@ export function OpyCopilotPanel({
     [agentLifecycle, appendAndPersistMessage, beginAgentRun, transitionAgentRun],
   );
 
+  const executeAppliedBoardAction = useCallback(
+    async (input: {
+      readonly sessionId: string;
+      readonly failurePrefix: string;
+      readonly execute: () => Promise<string>;
+      readonly onAfterApplied?: () => Promise<void> | void;
+    }): Promise<string | null> => {
+      try {
+        const actionResult = await input.execute();
+        agentLifecycle.markVerifyReady();
+        await input.onAfterApplied?.();
+        await appendAndPersistMessage(input.sessionId, "assistant", actionResult);
+        agentLifecycle.completeActiveRequest();
+        return actionResult;
+      } catch (error) {
+        const message = toErrorMessage(error);
+        setRuntimeError(message);
+        await appendAndPersistMessage(
+          input.sessionId,
+          "system",
+          `${input.failurePrefix}: ${message}`,
+        );
+        agentLifecycle.failActiveRequest(
+          message,
+          agentLifecycle.stage === "verifying" ? "verifying" : "applying",
+        );
+        return null;
+      }
+    },
+    [agentLifecycle, appendAndPersistMessage],
+  );
+
   const executeBoardActionLifecycle = useCallback(
     async (input: {
       readonly lifecycleRequest: OpyAgentLifecycleRequest;
       readonly manageLifecycleStart?: boolean;
-      readonly sessionId: string;
-      readonly confirmationMessage: string;
-      readonly cancelMessage: string;
-      readonly failurePrefix: string;
       readonly execute: () => Promise<string>;
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
@@ -1408,37 +1426,20 @@ export function OpyCopilotPanel({
           : {
             execute: input.execute,
           };
-        setPendingLifecycleConfirmation({
-          request: input.lifecycleRequest,
-          sessionId: input.sessionId,
-          confirmationLines: input.confirmationMessage.split("\n"),
-          cancelMessage: input.cancelMessage,
-          failurePrefix: input.failurePrefix,
-        });
         return null;
       }
 
       agentLifecycle.confirmActiveRequest();
-      try {
-        const actionResult = await input.execute();
-        agentLifecycle.markVerifyReady();
-        await input.onAfterApplied?.();
-        await appendAndPersistMessage(input.sessionId, "assistant", actionResult);
-        agentLifecycle.completeActiveRequest();
-        return actionResult;
-      } catch (error) {
-        const message = toErrorMessage(error);
-        setRuntimeError(message);
-        await appendAndPersistMessage(
-          input.sessionId,
-          "system",
-          `${input.failurePrefix}: ${message}`,
-        );
-        agentLifecycle.failActiveRequest(message, agentLifecycle.stage === "verifying" ? "verifying" : "applying");
-        return null;
-      }
+      return executeAppliedBoardAction({
+        sessionId: input.lifecycleRequest.confirmation?.sessionId ?? input.lifecycleRequest.replay.sessionId,
+        failurePrefix: input.lifecycleRequest.confirmation?.failurePrefix ?? "BOARD ACTION FAILED",
+        execute: input.execute,
+        ...(input.onAfterApplied
+          ? { onAfterApplied: input.onAfterApplied }
+          : {}),
+      });
     },
-    [agentLifecycle, appendAndPersistMessage],
+    [agentLifecycle, executeAppliedBoardAction],
   );
 
   const createAndActivateSession = useCallback(async (): Promise<void> => {
@@ -1784,6 +1785,7 @@ export function OpyCopilotPanel({
 
         await executeRigRun({
           lifecycleRequest: createLifecycleRequest({
+            confirmation: null,
             id: createMessageId(),
             mode: "read",
             kind: "proposal",
@@ -1879,6 +1881,7 @@ export function OpyCopilotPanel({
         const reviewFocus = opyCommand.review.focus ?? boardContext?.selectedNode?.label;
         await executeRigRun({
           lifecycleRequest: createLifecycleRequest({
+            confirmation: null,
             id: createMessageId(),
             mode: "read",
             kind: "review",
@@ -1938,6 +1941,7 @@ export function OpyCopilotPanel({
 
       await executeRigRun({
         lifecycleRequest: createLifecycleRequest({
+          confirmation: null,
           id: createMessageId(),
           mode: "read",
           kind: "chat",
@@ -2118,6 +2122,12 @@ export function OpyCopilotPanel({
     }): Promise<string | null> =>
       executeBoardActionLifecycle({
         lifecycleRequest: input.lifecycleRequest ?? createLifecycleRequest({
+          confirmation: {
+            cancelMessage: input.descriptor.cancelMessage,
+            confirmationLines: input.descriptor.confirmationMessage.split("\n"),
+            failurePrefix: input.descriptor.failurePrefix,
+            sessionId: input.descriptor.sessionId,
+          },
           id: createMessageId(),
           mode: "action",
           kind: input.descriptor.requestKind,
@@ -2125,10 +2135,6 @@ export function OpyCopilotPanel({
           requiresConfirmation: true,
           replay: input.replay,
         }),
-        sessionId: input.descriptor.sessionId,
-        confirmationMessage: input.descriptor.confirmationMessage,
-        cancelMessage: input.descriptor.cancelMessage,
-        failurePrefix: input.descriptor.failurePrefix,
         execute: () => onApplyBoardAction(input.descriptor.boardAction),
         ...(typeof input.manageLifecycleStart === "boolean"
           ? { manageLifecycleStart: input.manageLifecycleStart }
@@ -2555,27 +2561,18 @@ export function OpyCopilotPanel({
       return;
     }
 
-    setPendingLifecycleConfirmation(null);
     pendingLifecycleExecutionRef.current = null;
     setRuntimeError(null);
     agentLifecycle.confirmActiveRequest();
-    try {
-      const actionResult = await execution.execute();
-      agentLifecycle.markVerifyReady();
-      await execution.onAfterApplied?.();
-      await appendAndPersistMessage(pending.sessionId, "assistant", actionResult);
-      agentLifecycle.completeActiveRequest();
-    } catch (error) {
-      const message = toErrorMessage(error);
-      setRuntimeError(message);
-      await appendAndPersistMessage(
-        pending.sessionId,
-        "system",
-        `${pending.failurePrefix}: ${message}`,
-      );
-      agentLifecycle.failActiveRequest(message, "applying");
-    }
-  }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
+    await executeAppliedBoardAction({
+      sessionId: pending.sessionId,
+      failurePrefix: pending.failurePrefix,
+      execute: execution.execute,
+      ...(execution.onAfterApplied
+        ? { onAfterApplied: execution.onAfterApplied }
+        : {}),
+    });
+  }, [agentLifecycle, executeAppliedBoardAction, pendingLifecycleConfirmation]);
 
   const handleCancelPendingLifecycleAction = useCallback(() => {
     const pending = pendingLifecycleConfirmation;
@@ -2583,7 +2580,6 @@ export function OpyCopilotPanel({
       return;
     }
 
-    setPendingLifecycleConfirmation(null);
     pendingLifecycleExecutionRef.current = null;
     void appendAndPersistMessage(
       pending.sessionId,
@@ -3021,10 +3017,10 @@ export function OpyCopilotPanel({
                   {`LAST FLOW FAILURE::${agentLifecycle.lastFailureStage?.toUpperCase() ?? "UNKNOWN"} · ${agentLifecycle.lastError}`}
                 </p>
               )}
-              {pendingLifecycleConfirmation && agentLifecycle.stage === "awaiting_confirmation" && (
+              {pendingLifecycleConfirmation && pendingLifecycleRequest && agentLifecycle.stage === "awaiting_confirmation" && (
                 <section className={styles.opyCopilotPlanCard} aria-label="OPY pending confirmation">
                   <div className={styles.opyCopilotProposalHeader}>
-                    <span>{`CONFIRM::${pendingLifecycleConfirmation.request.label}`}</span>
+                    <span>{`CONFIRM::${pendingLifecycleRequest.label}`}</span>
                     <span>AWAITING OPERATOR</span>
                   </div>
                   <div className={styles.opyCopilotProposalActions}>
@@ -3052,7 +3048,7 @@ export function OpyCopilotPanel({
                       .filter((line) => line.trim().length > 0)
                       .map((line, index) => (
                         <article
-                          key={`${pendingLifecycleConfirmation.request.id}-confirm-${index}`}
+                          key={`${pendingLifecycleRequest.id}-confirm-${index}`}
                           className={styles.opyCopilotProposalItem}
                         >
                           <p>{line}</p>

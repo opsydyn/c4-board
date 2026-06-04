@@ -3,6 +3,7 @@ import { createActor } from "xstate";
 import { createOpyAgentMachine, type OpyAgentLifecycleRequest } from "./opy-agent.machine";
 
 const createReadRequest = (): OpyAgentLifecycleRequest => ({
+  confirmation: null,
   id: "read-1",
   mode: "read",
   kind: "chat",
@@ -16,6 +17,15 @@ const createReadRequest = (): OpyAgentLifecycleRequest => ({
 });
 
 const createActionRequest = (): OpyAgentLifecycleRequest => ({
+  confirmation: {
+    cancelMessage: "ACTION CANCELLED BY OPERATOR.",
+    confirmationLines: [
+      "Apply OPY board action?",
+      "ADD COMPONENT \"Ledger Service\"",
+    ],
+    failurePrefix: "BOARD ACTION FAILED",
+    sessionId: "session-1",
+  },
   id: "action-1",
   mode: "action",
   kind: "apply-proposal",
@@ -58,12 +68,15 @@ describe("opyAgentMachine", () => {
     actor.start();
 
     actor.send({ type: "START_ACTION", request: createActionRequest() });
-    expect(actor.getSnapshot().value).toBe("awaiting_confirmation");
+    let snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("awaiting_confirmation");
+    expect(snapshot.context.activeRequest?.confirmation?.sessionId).toBe("session-1");
 
     actor.send({ type: "CANCEL" });
-    let snapshot = actor.getSnapshot();
+    snapshot = actor.getSnapshot();
     expect(snapshot.value).toBe("completed");
     expect(snapshot.context.lastTerminalStatus).toBe("cancelled");
+    expect(snapshot.context.activeRequest).toBeNull();
 
     actor.send({ type: "RETRY" });
     expect(actor.getSnapshot().value).toBe("awaiting_confirmation");
@@ -79,6 +92,22 @@ describe("opyAgentMachine", () => {
     expect(snapshot.value).toBe("completed");
     expect(snapshot.context.lastTerminalStatus).toBe("completed");
     expect(snapshot.context.lastRequest?.kind).toBe("apply-proposal");
+  });
+
+  test("clears pending confirmation context on reset", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_ACTION", request: createActionRequest() });
+    expect(actor.getSnapshot().value).toBe("awaiting_confirmation");
+    expect(actor.getSnapshot().context.activeRequest?.confirmation).not.toBeNull();
+
+    actor.send({ type: "RESET" });
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("idle");
+    expect(snapshot.context.activeRequest).toBeNull();
+    expect(snapshot.context.lastRequest).toBeNull();
+    expect(snapshot.context.lastTerminalStatus).toBeNull();
   });
 
   test("records failure stage and re-enters the correct stage on retry", () => {

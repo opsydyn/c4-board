@@ -22,6 +22,7 @@ export interface UseOpyAgentMachineResult {
   readonly lastFailureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> | null;
   readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastTerminalStatus: "completed" | "cancelled" | "failed" | null;
+  readonly pendingConfirmationRequest: OpyAgentLifecycleRequest | null;
   readonly stage: OpyAgentLifecycleStage;
   readonly cancelActiveRequest: () => void;
   readonly completeActiveRequest: () => void;
@@ -45,6 +46,11 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
 
   const stage = snapshot.value as OpyAgentLifecycleStage;
   const activeRequest = snapshot.context.activeRequest;
+  const pendingConfirmationRequest = stage === "awaiting_confirmation"
+    ? activeRequest?.confirmation
+      ? activeRequest
+      : null
+    : null;
   const isBusy = !NON_BUSY_STAGES.has(stage);
   const canRetry = snapshot.context.lastRequest !== null && (stage === "completed" || stage === "failed");
   const telemetryStateRef = useRef({
@@ -167,6 +173,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     lastFailureStage: snapshot.context.lastFailureStage,
     lastRequest: snapshot.context.lastRequest,
     lastTerminalStatus: snapshot.context.lastTerminalStatus,
+    pendingConfirmationRequest,
     stage,
     cancelActiveRequest,
     completeActiveRequest,

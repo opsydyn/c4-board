@@ -14,6 +14,13 @@ export type OpyAgentLifecycleStage =
 export type OpyAgentLifecycleMode = "read" | "action";
 export type OpyAgentLifecycleStatus = "completed" | "cancelled" | "failed" | null;
 
+export interface OpyAgentLifecycleConfirmation {
+  readonly cancelMessage: string;
+  readonly confirmationLines: ReadonlyArray<string>;
+  readonly failurePrefix: string;
+  readonly sessionId: string;
+}
+
 export type OpyAgentLifecycleReplay =
   | {
     readonly kind: "chat";
@@ -48,6 +55,7 @@ export type OpyAgentLifecycleReplay =
   };
 
 export interface OpyAgentLifecycleRequest {
+  readonly confirmation: OpyAgentLifecycleConfirmation | null;
   readonly id: string;
   readonly mode: OpyAgentLifecycleMode;
   readonly kind: "chat" | "review" | "proposal" | "add-node" | "apply-proposal" | "rollback";
