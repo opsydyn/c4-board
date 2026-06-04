@@ -13,7 +13,7 @@ export type OpyAgentLifecycleStage =
 
 export type OpyAgentLifecycleMode = "read" | "action";
 export type OpyAgentLifecycleStatus = "completed" | "cancelled" | "failed" | null;
-export type OpyAgentLifecycleFailurePhase = "apply" | "verify" | "persist";
+export type OpyAgentLifecycleFailurePhase = "invoke" | "apply" | "verify" | "persist";
 
 export interface OpyAgentLifecycleConfirmation {
   readonly cancelMessage: string;

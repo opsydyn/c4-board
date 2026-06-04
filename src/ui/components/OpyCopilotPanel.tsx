@@ -1338,7 +1338,7 @@ export function OpyCopilotPanel({
           "system",
           summarizeAgentError(envelopeError),
         );
-        agentLifecycle.failActiveRequest(formatAgentError(envelopeError), "contextualizing");
+        agentLifecycle.failActiveRequest(formatAgentError(envelopeError), "contextualizing", "persist");
         return null;
       }
 
@@ -1353,7 +1353,7 @@ export function OpyCopilotPanel({
           stage: "persist",
         });
 
-        const persistedMessage = await appendAndPersistMessage(
+        const persistedMessage = await persistOpyMessage(
           input.sessionId,
           "assistant",
           input.assistantMessage(result),
@@ -1361,7 +1361,7 @@ export function OpyCopilotPanel({
 
         if (!persistedMessage) {
           const persistError = makeAgentRuntimeError({
-            message: "Assistant response could not be persisted.",
+            message: "Assistant response could not be persisted because the content was empty.",
             runId: currentRun.id,
             stage: "persist",
             recommendedAction: "Check local database runtime status and retry.",
@@ -1372,7 +1372,24 @@ export function OpyCopilotPanel({
             errorSummary: summarizeAgentError(persistError),
           });
           setRuntimeError(formatAgentError(persistError));
-          agentLifecycle.failActiveRequest(formatAgentError(persistError), "proposing");
+          agentLifecycle.failActiveRequest(formatAgentError(persistError), "proposing", "persist");
+          return null;
+        }
+
+        if (!persistedMessage.ok) {
+          const persistError = makeAgentRuntimeError({
+            message: `Assistant response could not be persisted: ${persistedMessage.errorMessage}`,
+            runId: currentRun.id,
+            stage: "persist",
+            recommendedAction: "Check local database runtime status and retry.",
+          });
+          currentRun = await transitionAgentRun(currentRun, {
+            status: "failed",
+            completedAt: Date.now(),
+            errorSummary: summarizeAgentError(persistError),
+          });
+          setRuntimeError(formatAgentError(persistError));
+          agentLifecycle.failActiveRequest(formatAgentError(persistError), "proposing", "persist");
           return null;
         }
 
@@ -1403,18 +1420,23 @@ export function OpyCopilotPanel({
           completedAt: Date.now(),
           errorSummary,
         });
+        const failureStage = agentLifecycle.stage === "planning"
+          ? "planning"
+          : agentLifecycle.stage === "proposing"
+          ? "proposing"
+          : agentLifecycle.stage === "verifying"
+          ? "verifying"
+          : "contextualizing";
+        const failurePhase = currentRun.stage === "persist" ? "persist" : "invoke";
         agentLifecycle.failActiveRequest(
           formatAgentError(agentError),
-          agentLifecycle.stage === "planning"
-            ? "planning"
-            : agentLifecycle.stage === "proposing"
-            ? "proposing"
-            : "contextualizing",
+          failureStage,
+          failurePhase,
         );
         return null;
       }
     },
-    [agentLifecycle, appendAndPersistMessage, beginAgentRun, transitionAgentRun],
+    [agentLifecycle, appendAndPersistMessage, beginAgentRun, persistOpyMessage, transitionAgentRun],
   );
 
   const executeAppliedBoardAction = useCallback(

@@ -137,4 +137,38 @@ describe("opy-agent.telemetry", () => {
       terminalStatus: "failed",
     });
   });
+
+  test("emits failure provenance for read invoke failures", () => {
+    let detail: Record<string, unknown> | null = null;
+    const handleEvent = (event: Event) => {
+      detail = (event as CustomEvent<Record<string, unknown>>).detail;
+    };
+
+    window.addEventListener(getOpyAgentFlowTelemetryEventName(), handleEvent, { once: true });
+
+    emitOpyAgentFlowTelemetry({
+      activeRequest: null,
+      errorSummary: "Planner offline while contextualizing board evidence",
+      failurePhase: "invoke",
+      failureStage: "planning",
+      fromStage: "planning",
+      lastCompletedAt: 810,
+      lastRequest: {
+        id: "request-4",
+        kind: "review",
+        label: "REVIEW",
+        mode: "read",
+      },
+      terminalStatus: "failed",
+      toStage: "failed",
+    });
+
+    expect(detail).toMatchObject({
+      event: "opy_flow_failed",
+      requestId: "request-4",
+      failurePhase: "invoke",
+      failureStage: "planning",
+      terminalStatus: "failed",
+    });
+  });
 });

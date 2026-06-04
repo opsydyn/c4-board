@@ -203,7 +203,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - the confirmation card is now derived from the active machine request metadata rather than separate panel-local state
 - the OPY header/control field now surfaces `FLOW::...` stage state while a lifecycle is active
 - OPY now emits lifecycle telemetry for stage start/transition/completion/cancellation/failure, not only persisted run completion
-- action-side failures now preserve extra provenance for `apply`, `verify`, and `persist` boundaries instead of collapsing to one generic mutation failure
+- read-side failures now preserve `invoke` vs `persist` provenance, and action-side failures preserve `apply`, `verify`, and `persist` boundaries instead of collapsing to one generic runtime failure
 - the control field now retains the last terminal flow outcome (`complete`, `cancelled`, `failed`) even after the active stage returns to idle
 - lifecycle retry now replays from machine-owned request metadata instead of a captured panel closure
 - lifecycle reset now clears pending confirmation context structurally through the machine

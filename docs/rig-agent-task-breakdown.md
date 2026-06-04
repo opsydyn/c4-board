@@ -25,6 +25,7 @@
   - retry now replays from machine-owned request metadata rather than a panel-local closure
   - mutation action descriptors and blockers for `/add`, proposal apply, and rollback now resolve through `src/core/effects/opy-action.runtime.ts` instead of staying embedded in the panel
   - confirmation UI is now derived from the active machine request metadata, and lifecycle reset clears that pending confirmation state structurally
+  - read-side failures now preserve `invoke` vs `persist` provenance, so terminal OPY state and telemetry no longer flatten read runtime and persistence errors together
   - action-side failures now preserve separate `apply`, `verify`, and `persist` provenance so terminal OPY state and telemetry no longer flatten all mutation failures together
   - session changes now reset the OPY lifecycle boundary to avoid cross-session stale flow state
   - retryable terminal failure handling now exists at the OPY surface
@@ -33,8 +34,8 @@
   - pinned conversation strip with collapsible upper sections
   - urgency-aware chrome signals for `policy`, `review`, `proposal`, and `checkpoint`
   - actionable chrome signals that open and focus the matching OPY section
-- The next critical Rig intelligence milestone is to finish **Phase 4 / `RIG-401` orchestration** by aligning the remaining terminal-state and replay semantics across read and action flows.
-- The next `RIG-401` sub-slice after this should focus on final terminal-state normalization before starting `RIG-402`.
+- The next critical Rig intelligence milestone is still to finish **Phase 4 / `RIG-401` orchestration**, but the remaining work is now narrower: machine-owned cancellation/reset and post-action completion semantics rather than read/action failure provenance.
+- The next `RIG-401` sub-slice after this should focus on final machine-owned terminal-state cleanup before starting `RIG-402`.
 - `RIG-402` should still follow only after `RIG-401`, since resumable tasks need a stable staged execution model first.
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 

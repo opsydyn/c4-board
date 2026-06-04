@@ -119,6 +119,7 @@ describe("opyAgentMachine", () => {
     actor.send({
       type: "FAIL",
       message: "planner offline",
+      phase: "invoke",
       stage: "planning",
     });
 
@@ -127,7 +128,7 @@ describe("opyAgentMachine", () => {
     expect(snapshot.context.lastTerminalStatus).toBe("failed");
     expect(snapshot.context.lastError).toBe("planner offline");
     expect(snapshot.context.lastFailureStage).toBe("planning");
-    expect(snapshot.context.lastFailurePhase).toBeNull();
+    expect(snapshot.context.lastFailurePhase).toBe("invoke");
 
     actor.send({ type: "RETRY" });
     snapshot = actor.getSnapshot();
