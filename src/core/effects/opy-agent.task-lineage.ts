@@ -23,9 +23,13 @@ export interface OpyAgentTaskLineageArtifactShape {
 }
 
 export interface OpyAgentTaskLineageDiagnostics {
+  readonly continuityKey: string;
   readonly lineageKey: string;
   readonly segmentCount: number;
   readonly inheritedSegmentCount: number;
+  readonly sessionCount: number;
+  readonly sessionIds: ReadonlyArray<string>;
+  readonly crossSessionSegmentCount: number;
   readonly completedStepNames: ReadonlyArray<OpyAgentToolCallName>;
   readonly artifactKinds: ReadonlyArray<OpyAgentArtifactKind>;
 }
@@ -42,6 +46,23 @@ const sortByTimelineAsc = <T extends Pick<OpyAgentTaskLineageShape, "createdAt" 
   left: T,
   right: T,
 ): number => left.createdAt - right.createdAt || left.updatedAt - right.updatedAt;
+
+export const deriveOpyAgentTaskContinuityKeyFromReplay = (replay: OpyAgentLifecycleReplay): string => {
+  switch (replay.kind) {
+    case "chat":
+      return `chat:${normalizeLineageSegment(replay.prompt)}`;
+    case "proposal":
+      return `proposal:${normalizeLineageSegment(replay.description)}`;
+    case "review":
+      return `review:${normalizeLineageSegment(replay.focus ?? "whole-board")}`;
+    case "add-node":
+      return `add-node:${replay.nodeType}:${normalizeLineageSegment(replay.label)}`;
+    case "apply-proposal":
+      return `apply-proposal:${replay.proposalRespondedAtMs}`;
+    case "rollback":
+      return `rollback:${replay.checkpointId}`;
+  }
+};
 
 export const deriveOpyAgentTaskLineageKeyFromReplay = (replay: OpyAgentLifecycleReplay): string => {
   switch (replay.kind) {
@@ -63,20 +84,32 @@ export const deriveOpyAgentTaskLineageKeyFromReplay = (replay: OpyAgentLifecycle
 export const deriveOpyAgentTaskLineageKey = (request: OpyAgentLifecycleRequest): string =>
   deriveOpyAgentTaskLineageKeyFromReplay(request.replay);
 
+export const deriveOpyAgentTaskContinuityKey = (request: OpyAgentLifecycleRequest): string =>
+  deriveOpyAgentTaskContinuityKeyFromReplay(request.replay);
+
 export const getOpyAgentTaskLineageKey = <T extends OpyAgentTaskLineageShape>(task: T): string =>
   task.lineageKey ?? deriveOpyAgentTaskLineageKey(task.request);
+
+export const getOpyAgentTaskContinuityKey = <T extends OpyAgentTaskLineageShape>(task: T): string =>
+  deriveOpyAgentTaskContinuityKey(task.request);
 
 export const findOpyAgentTaskLineagePredecessor = <T extends OpyAgentTaskLineageShape>(
   tasks: readonly T[],
   task: T,
 ): T | null => {
-  const lineageKey = getOpyAgentTaskLineageKey(task);
+  const continuityKey = getOpyAgentTaskContinuityKey(task);
   return tasks
-    .filter((candidate) =>
-      candidate.sessionId === task.sessionId
-      && candidate.id !== task.id
-      && getOpyAgentTaskLineageKey(candidate) === lineageKey,
-    )
+    .filter((candidate) => (
+      candidate.id !== task.id
+      && getOpyAgentTaskContinuityKey(candidate) === continuityKey
+      && (
+        candidate.createdAt < task.createdAt
+        || (
+          candidate.createdAt === task.createdAt
+          && candidate.updatedAt <= task.updatedAt
+        )
+      )
+    ))
     .sort(sortByRecencyDesc)[0] ?? null;
 };
 
@@ -101,11 +134,10 @@ export const buildOpyAgentTaskLineage = <T extends OpyAgentTaskLineageShape>(
     }
   }
 
-  const lineageKey = getOpyAgentTaskLineageKey(task);
+  const continuityKey = getOpyAgentTaskContinuityKey(task);
   const fallbackChain = tasks
     .filter((candidate) =>
-      candidate.sessionId === task.sessionId
-      && getOpyAgentTaskLineageKey(candidate) === lineageKey
+      getOpyAgentTaskContinuityKey(candidate) === continuityKey
       && (
         candidate.createdAt < task.createdAt
         || (
@@ -127,10 +159,10 @@ export const selectLatestOpyAgentTasksByLineage = <T extends OpyAgentTaskLineage
   const latestByLineage = new Map<string, T>();
 
   for (const task of tasks) {
-    const lineageKey = getOpyAgentTaskLineageKey(task);
-    const existing = latestByLineage.get(lineageKey);
+    const continuityKey = getOpyAgentTaskContinuityKey(task);
+    const existing = latestByLineage.get(continuityKey);
     if (!existing || sortByRecencyDesc(task, existing) < 0) {
-      latestByLineage.set(lineageKey, task);
+      latestByLineage.set(continuityKey, task);
     }
   }
 
@@ -149,6 +181,7 @@ export const summarizeOpyAgentTaskLineage = <
 ): OpyAgentTaskLineageDiagnostics => {
   const lineageTasks = buildOpyAgentTaskLineage(tasks, task);
   const lineageTaskIds = new Set(lineageTasks.map((lineageTask) => lineageTask.id));
+  const sessionIds = new Set(lineageTasks.map((lineageTask) => lineageTask.sessionId));
 
   const completedStepNames: OpyAgentToolCallName[] = [];
   const seenStepNames = new Set<OpyAgentToolCallName>();
@@ -173,9 +206,13 @@ export const summarizeOpyAgentTaskLineage = <
   }
 
   return {
+    continuityKey: getOpyAgentTaskContinuityKey(task),
     lineageKey: getOpyAgentTaskLineageKey(task),
     segmentCount: lineageTasks.length,
     inheritedSegmentCount: Math.max(0, lineageTasks.length - 1),
+    sessionCount: sessionIds.size,
+    sessionIds: [...sessionIds],
+    crossSessionSegmentCount: Math.max(0, lineageTasks.filter((lineageTask) => lineageTask.sessionId !== task.sessionId).length),
     completedStepNames,
     artifactKinds,
   };

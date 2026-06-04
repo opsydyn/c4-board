@@ -544,6 +544,14 @@ const formatTaskLineageSummary = (input: {
 }): string =>
   `CHAIN::${input.segmentCount} · READY::${input.completedStepCount} · ARTIFACTS::${input.artifactCount}`;
 
+const formatLineageSessionScope = (
+  sessionIds: readonly string[],
+  sessionLookup: Readonly<Record<string, OpyChatSession | undefined>>,
+): string =>
+  sessionIds
+    .map((sessionId) => sessionLookup[sessionId]?.title ?? sessionId.slice(0, 8))
+    .join(" · ");
+
 const LIFECYCLE_TERMINAL_STATUS_LABEL: Record<
   NonNullable<ReturnType<typeof useOpyAgentMachine>["lastTerminalStatus"]>,
   string
@@ -1038,6 +1046,14 @@ export function OpyCopilotPanel({
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
     [selectedSessionId, sessions],
   );
+  const sessionLookup = useMemo(
+    () => Object.fromEntries(sessions.map((session) => [session.id, session] as const)),
+    [sessions],
+  );
+  const compatibleSessionIds = useMemo(
+    () => sessions.map((session) => session.id),
+    [sessions],
+  );
 
   const activeProposalHistory = useMemo(
     () => diagramProposalHistoryBySessionId[selectedSessionId] ?? [],
@@ -1467,6 +1483,41 @@ export function OpyCopilotPanel({
     [sessions],
   );
 
+  const loadTasksForSessions = useCallback(
+    async (sessionIds: readonly string[]): Promise<Readonly<Record<string, ReadonlyArray<OpyAgentTask>>>> => {
+      const uniqueSessionIds = [...new Set(sessionIds)].filter((sessionId) => sessionId.length > 0);
+      const missingSessionIds = uniqueSessionIds.filter((sessionId) => tasksBySessionId[sessionId] === undefined);
+
+      if (missingSessionIds.length === 0) {
+        return {};
+      }
+
+      const loadedEntries = await Promise.all(
+        missingSessionIds.map(async (sessionId) => [sessionId, await runEffect(listOpyAgentTasks(sessionId))] as const),
+      );
+      const loadedTasksBySessionId = Object.fromEntries(loadedEntries);
+
+      agentTaskIndexRef.current = {
+        ...agentTaskIndexRef.current,
+        ...Object.fromEntries(
+          loadedEntries.flatMap(([, loadedTasks]) => loadedTasks.map((task) => [task.id, task] as const)),
+        ),
+      };
+      setTasksBySessionId((current) => ({
+        ...current,
+        ...loadedTasksBySessionId,
+      }));
+
+      return loadedTasksBySessionId;
+    },
+    [runEffect, tasksBySessionId],
+  );
+
+  const compatibleTasks = useMemo(
+    () => compatibleSessionIds.flatMap((sessionId) => tasksBySessionId[sessionId] ?? []),
+    [compatibleSessionIds, tasksBySessionId],
+  );
+
   const loadOpyTaskDetails = useCallback(
     async (taskId: string): Promise<{
       readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
@@ -1565,8 +1616,13 @@ export function OpyCopilotPanel({
       readonly artifactsByTaskId: Readonly<Record<string, ReadonlyArray<OpyAgentArtifact> | undefined>>;
       readonly lineageTasks: ReadonlyArray<OpyAgentTask>;
     }> => {
-      const sessionTasks = tasksBySessionId[task.sessionId] ?? [];
-      const lineageTasks = buildOpyAgentTaskLineage(sessionTasks, task);
+      const loadedRelatedTasksBySessionId = await loadTasksForSessions([
+        ...compatibleSessionIds,
+        task.sessionId,
+      ]);
+      const continuityTasks = [...new Set([...compatibleSessionIds, task.sessionId])]
+        .flatMap((sessionId) => loadedRelatedTasksBySessionId[sessionId] ?? tasksBySessionId[sessionId] ?? []);
+      const lineageTasks = buildOpyAgentTaskLineage(continuityTasks, task);
       const missingLineageTasks = lineageTasks.filter((lineageTask) =>
         !taskToolCallsByTaskId[lineageTask.id] || !taskArtifactsByTaskId[lineageTask.id]
       );
@@ -1606,7 +1662,14 @@ export function OpyCopilotPanel({
         lineageTasks,
       };
     },
-    [loadOpyTaskDetails, taskArtifactsByTaskId, taskToolCallsByTaskId, tasksBySessionId],
+    [
+      compatibleSessionIds,
+      loadOpyTaskDetails,
+      loadTasksForSessions,
+      taskArtifactsByTaskId,
+      taskToolCallsByTaskId,
+      tasksBySessionId,
+    ],
   );
 
   const activateResumableTask = useCallback(
@@ -1653,26 +1716,24 @@ export function OpyCopilotPanel({
         };
       }
 
-      const sessionTasks = tasksBySessionId[task.sessionId] ?? [];
-      const lineageTasks = buildOpyAgentTaskLineage(sessionTasks, task);
+      const lineageTasks = buildOpyAgentTaskLineage(compatibleTasks, task);
       return {
         artifacts: lineageTasks.flatMap((lineageTask) => taskArtifactsByTaskId[lineageTask.id] ?? []),
         toolCalls: lineageTasks.flatMap((lineageTask) => taskToolCallsByTaskId[lineageTask.id] ?? []),
       };
     },
-    [taskArtifactsByTaskId, taskToolCallsByTaskId, tasksBySessionId],
+    [compatibleTasks, taskArtifactsByTaskId, taskToolCallsByTaskId],
   );
 
   const getTaskLineageDiagnostics = useCallback(
     (task: OpyAgentTask) => {
-      const sessionTasks = tasksBySessionId[task.sessionId] ?? [];
-      const lineageTasks = buildOpyAgentTaskLineage(sessionTasks, task);
+      const lineageTasks = buildOpyAgentTaskLineage(compatibleTasks, task);
       const lineageArtifacts = lineageTasks.flatMap((lineageTask) => taskArtifactsByTaskId[lineageTask.id] ?? []);
       const lineageToolCalls = lineageTasks.flatMap((lineageTask) => taskToolCallsByTaskId[lineageTask.id] ?? []);
 
-      return summarizeOpyAgentTaskLineage(sessionTasks, task, lineageToolCalls, lineageArtifacts);
+      return summarizeOpyAgentTaskLineage(compatibleTasks, task, lineageToolCalls, lineageArtifacts);
     },
-    [taskArtifactsByTaskId, taskToolCallsByTaskId, tasksBySessionId],
+    [compatibleTasks, taskArtifactsByTaskId, taskToolCallsByTaskId],
   );
 
   const hydrateMessagesForSession = useCallback(
@@ -1764,12 +1825,26 @@ export function OpyCopilotPanel({
   );
 
   useEffect(() => {
+    const missingRelatedSessionIds = compatibleSessionIds.filter((sessionId) =>
+      sessionId !== selectedSessionId && tasksBySessionId[sessionId] === undefined
+    );
+
+    if (missingRelatedSessionIds.length === 0) {
+      return;
+    }
+
+    void loadTasksForSessions(missingRelatedSessionIds).catch((error) => {
+      setRuntimeError(`RELATED TASK LOAD FAILED: ${toErrorMessage(error)}`);
+    });
+  }, [compatibleSessionIds, loadTasksForSessions, selectedSessionId, tasksBySessionId]);
+
+  useEffect(() => {
     if (selectedSessionId.length === 0 || activeInterruptedTasks.length === 0) {
       return;
     }
 
     const missingQueueTask = activeInterruptedTasks.find((task) => {
-      const lineageTasks = buildOpyAgentTaskLineage(activeTasks, task);
+      const lineageTasks = buildOpyAgentTaskLineage(compatibleTasks, task);
       return lineageTasks.some((lineageTask) =>
         !taskToolCallsByTaskId[lineageTask.id] || !taskArtifactsByTaskId[lineageTask.id]
       );
@@ -1784,7 +1859,7 @@ export function OpyCopilotPanel({
     });
   }, [
     activeInterruptedTasks,
-    activeTasks,
+    compatibleTasks,
     loadTaskLineageDetails,
     selectedSessionId,
     taskArtifactsByTaskId,
@@ -1860,10 +1935,9 @@ export function OpyCopilotPanel({
     async (task: OpyAgentTask): Promise<OpyAgentTask> => {
       const existing = agentTaskIndexRef.current[task.id];
       const lineageKey = existing?.lineageKey ?? task.lineageKey ?? deriveOpyAgentTaskLineageKey(task.request);
-      const sessionTasks = tasksBySessionId[task.sessionId] ?? [];
       const predecessor = existing
         ? null
-        : findOpyAgentTaskLineagePredecessor(sessionTasks, {
+        : findOpyAgentTaskLineagePredecessor(compatibleTasks, {
           ...task,
           lineageKey,
           parentTaskId: task.parentTaskId ?? null,
@@ -1884,7 +1958,7 @@ export function OpyCopilotPanel({
       }));
       return persisted;
     },
-    [runEffect, tasksBySessionId],
+    [compatibleTasks, runEffect],
   );
 
   const warnOpyTracePersistFailure = useCallback((scope: string, error: unknown) => {
@@ -4639,6 +4713,7 @@ export function OpyCopilotPanel({
                         .slice(0, 2)
                         .map(formatLineageCompletedStep)
                         .join(" · ");
+                      const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
 
                       return (
                         <article
@@ -4662,8 +4737,14 @@ export function OpyCopilotPanel({
                                 completedStepCount: lineageDiagnostics.completedStepNames.length,
                                 segmentCount: lineageDiagnostics.segmentCount,
                               })}</span>
+                              {lineageDiagnostics.sessionCount > 1 && (
+                                <span>{`SESSIONS::${lineageDiagnostics.sessionCount}`}</span>
+                              )}
                               {lineageDiagnostics.inheritedSegmentCount > 0 && (
                                 <span>{`INHERITS::${lineageDiagnostics.inheritedSegmentCount}`}</span>
+                              )}
+                              {lineageDiagnostics.crossSessionSegmentCount > 0 && (
+                                <span>{`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`}</span>
                               )}
                               {completedStepPreview.length > 0 && (
                                 <span>{`READY STEPS::${completedStepPreview}`}</span>
@@ -4673,6 +4754,9 @@ export function OpyCopilotPanel({
                               {`${formatClockTime(task.updatedAt)} · ${task.id.slice(0, 8)}`}
                             </span>
                           </button>
+                          {lineageDiagnostics.sessionCount > 1 && (
+                            <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
+                          )}
                         </article>
                       );
                     })}
@@ -4700,15 +4784,21 @@ export function OpyCopilotPanel({
                       .slice(0, 3)
                       .map(formatLineageCompletedStep)
                       .join(" · ");
+                    const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
 
                     return (
-                      <p className={styles.ownershipLensHint}>
-                        {`CHAIN::${lineageDiagnostics.segmentCount} · INHERITS::${
-                          lineageDiagnostics.inheritedSegmentCount
-                        } · READY::${
-                          completedSteps.length > 0 ? completedSteps : "FRESH EXECUTION"
-                        }`}
-                      </p>
+                      <>
+                        <p className={styles.ownershipLensHint}>
+                          {`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount} · INHERITS::${
+                            lineageDiagnostics.inheritedSegmentCount
+                          } · READY::${
+                            completedSteps.length > 0 ? completedSteps : "FRESH EXECUTION"
+                          }`}
+                        </p>
+                        {lineageDiagnostics.sessionCount > 1 && (
+                          <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
+                        )}
+                      </>
                     );
                   })()}
                   <div className={styles.opyCopilotProposalActions}>
@@ -4795,6 +4885,7 @@ export function OpyCopilotPanel({
                         .slice(0, 2)
                         .map(formatLineageCompletedStep)
                         .join(" · ");
+                      const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
 
                       return (
                         <article
@@ -4819,8 +4910,14 @@ export function OpyCopilotPanel({
                                 completedStepCount: lineageDiagnostics.completedStepNames.length,
                                 segmentCount: lineageDiagnostics.segmentCount,
                               })}</span>
+                              {lineageDiagnostics.sessionCount > 1 && (
+                                <span>{`SESSIONS::${lineageDiagnostics.sessionCount}`}</span>
+                              )}
                               {lineageDiagnostics.inheritedSegmentCount > 0 && (
                                 <span>{`INHERITS::${lineageDiagnostics.inheritedSegmentCount}`}</span>
+                              )}
+                              {lineageDiagnostics.crossSessionSegmentCount > 0 && (
+                                <span>{`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`}</span>
                               )}
                               {completedStepPreview.length > 0 && (
                                 <span>{`READY::${completedStepPreview}`}</span>
@@ -4837,10 +4934,15 @@ export function OpyCopilotPanel({
                                 {`TASK::${task.id} · MODE::${task.request.mode.toUpperCase()} · KIND::${task.request.kind.toUpperCase()}`}
                               </p>
                               <p className={styles.ownershipLensHint}>
-                                {`LINEAGE::${lineageDiagnostics.lineageKey} · SEGMENTS::${
+                                {`CONTINUITY::${lineageDiagnostics.continuityKey} · LINEAGE::${lineageDiagnostics.lineageKey} · SEGMENTS::${
                                   lineageDiagnostics.segmentCount
-                                } · INHERITED::${lineageDiagnostics.inheritedSegmentCount}`}
+                                } · SESSIONS::${lineageDiagnostics.sessionCount} · INHERITED::${
+                                  lineageDiagnostics.inheritedSegmentCount
+                                }`}
                               </p>
+                              {lineageDiagnostics.sessionCount > 1 && (
+                                <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
+                              )}
                               {lineageDiagnostics.completedStepNames.length > 0 && (
                                 <p className={styles.ownershipLensHint}>
                                   {`READY BOUNDARIES::${

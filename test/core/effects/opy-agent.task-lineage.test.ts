@@ -1,5 +1,6 @@
 import {
   buildOpyAgentTaskLineage,
+  deriveOpyAgentTaskContinuityKey,
   deriveOpyAgentTaskLineageKey,
   findOpyAgentTaskLineagePredecessor,
   selectLatestOpyAgentTasksByLineage,
@@ -41,6 +42,11 @@ describe("opy-agent.task-lineage", () => {
     expect(key).toBe("review:session-1:payments api");
   });
 
+  it("derives cross-session continuity keys from replay payloads", () => {
+    const key = deriveOpyAgentTaskContinuityKey(createTask().request);
+    expect(key).toBe("review:payments api");
+  });
+
   it("finds the most recent predecessor in the same lineage", () => {
     const oldest = createTask({
       id: "task-oldest",
@@ -59,6 +65,32 @@ describe("opy-agent.task-lineage", () => {
     });
 
     expect(findOpyAgentTaskLineagePredecessor([oldest, latest], candidate)?.id).toBe("task-latest");
+  });
+
+  it("can resolve predecessors across compatible sessions", () => {
+    const priorSession = createTask({
+      id: "task-session-1",
+      sessionId: "session-1",
+      createdAt: 1_000,
+      updatedAt: 1_050,
+    });
+    const laterSession = createTask({
+      id: "task-session-2",
+      sessionId: "session-2",
+      request: {
+        ...createTask().request,
+        replay: {
+          kind: "review",
+          focus: "Payments API",
+          sessionId: "session-2",
+        },
+      },
+      lineageKey: "review:session-2:payments api",
+      createdAt: 2_000,
+      updatedAt: 2_050,
+    });
+
+    expect(findOpyAgentTaskLineagePredecessor([priorSession], laterSession)?.id).toBe("task-session-1");
   });
 
   it("walks explicit lineage parents before falling back to chronology", () => {
@@ -84,6 +116,35 @@ describe("opy-agent.task-lineage", () => {
       "task-root",
       "task-middle",
       "task-head",
+    ]);
+  });
+
+  it("builds fallback chains across compatible sessions when continuity matches", () => {
+    const firstSession = createTask({
+      id: "task-session-1",
+      sessionId: "session-1",
+      createdAt: 1_000,
+      updatedAt: 1_050,
+    });
+    const secondSession = createTask({
+      id: "task-session-2",
+      sessionId: "session-2",
+      request: {
+        ...createTask().request,
+        replay: {
+          kind: "review",
+          focus: "Payments API",
+          sessionId: "session-2",
+        },
+      },
+      lineageKey: "review:session-2:payments api",
+      createdAt: 2_000,
+      updatedAt: 2_050,
+    });
+
+    expect(buildOpyAgentTaskLineage([firstSession, secondSession], secondSession).map((task) => task.id)).toEqual([
+      "task-session-1",
+      "task-session-2",
     ]);
   });
 
@@ -175,6 +236,9 @@ describe("opy-agent.task-lineage", () => {
 
     expect(summary.segmentCount).toBe(2);
     expect(summary.inheritedSegmentCount).toBe(1);
+    expect(summary.sessionCount).toBe(1);
+    expect(summary.sessionIds).toEqual(["session-1"]);
+    expect(summary.crossSessionSegmentCount).toBe(0);
     expect(summary.completedStepNames).toEqual(["assemble_context", "invoke_agent"]);
     expect(summary.artifactKinds).toEqual(["context_bundle", "chat_response"]);
   });
