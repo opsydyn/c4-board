@@ -3,6 +3,7 @@ import {
   deriveOpyAgentTaskLineageKey,
   findOpyAgentTaskLineagePredecessor,
   selectLatestOpyAgentTasksByLineage,
+  summarizeOpyAgentTaskLineage,
 } from "@/core/effects/opy-agent.task-lineage";
 import type { OpyAgentTask } from "@/core/effects/opy-chat.persistence";
 import { describe, expect, it } from "vitest";
@@ -124,5 +125,57 @@ describe("opy-agent.task-lineage", () => {
       "proposal-1",
       "review-newer",
     ]);
+  });
+
+  it("summarizes completed lineage boundaries across chained segments", () => {
+    const root = createTask({
+      id: "task-root",
+      createdAt: 1_000,
+      updatedAt: 1_050,
+    });
+    const head = createTask({
+      id: "task-head",
+      createdAt: 2_000,
+      updatedAt: 2_050,
+      parentTaskId: "task-root",
+      status: "interrupted",
+    });
+
+    const summary = summarizeOpyAgentTaskLineage(
+      [root, head],
+      head,
+      [
+        {
+          taskId: "task-root",
+          name: "assemble_context",
+          status: "completed",
+        },
+        {
+          taskId: "task-root",
+          name: "invoke_agent",
+          status: "completed",
+        },
+        {
+          taskId: "task-head",
+          name: "persist_assistant_message",
+          status: "running",
+        },
+      ],
+      [
+        {
+          taskId: "task-root",
+          kind: "context_bundle",
+        },
+        {
+          taskId: "task-head",
+          kind: "chat_response",
+        },
+      ],
+    );
+
+    expect(summary.segmentCount).toBe(2);
+    expect(summary.inheritedSegmentCount).toBe(1);
+    expect(summary.completedStepNames).toEqual(["assemble_context", "invoke_agent"]);
+    expect(summary.artifactKinds).toEqual(["context_bundle", "chat_response"]);
   });
 });

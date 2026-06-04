@@ -231,6 +231,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - session hydration now interrupts stale running tasks from the previous mount
 - OPY builds a resumable queue of interrupted tasks for the active session
 - OPY auto-selects an active resume slot from that queue when the operator is idle
+- OPY now remembers the last selected resume slot per session, so switching away and back preserves the operator's active interrupted chain when possible
 - OPY hydrates the selected interrupted task's persisted tool-call and artifact trail before surfacing resume controls
 - OPY now persists task lineage metadata (`lineage_key`, `parent_task_id`) so related retries or follow-on runs can be restored as a chain instead of isolated rows
 - grounded chat, review, and proposal artifacts can repopulate in-memory OPY state during resume hydration
@@ -239,6 +240,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - action-path resume now skips completed `execute_board_action`, `refresh_checkpoints`, and `persist_assistant_message` boundaries when the matching persisted trail is present
 - if the interrupted task stage is resumable, OPY exposes both a control-field interrupted-task queue and a resume card for the active slot
 - operators can switch the active resume slot to a different interrupted task without losing the persisted trail
+- interrupted queue cards and task history cards now show chain diagnostics before expansion, including segment count, inherited segments, completed reusable boundaries, and captured artifact count
 - when the selected task belongs to a known lineage, OPY aggregates ancestor tool calls and artifacts so resume can continue from the last completed boundary across the chain
 - operators can either resume the exact persisted request or dismiss it explicitly
 - when the active resumable task is dismissed or resolved, OPY auto-advances to the next interrupted task in the queue

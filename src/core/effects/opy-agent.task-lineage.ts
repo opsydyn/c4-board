@@ -1,4 +1,5 @@
 import type { OpyAgentLifecycleReplay, OpyAgentLifecycleRequest } from "./opy-agent.lifecycle";
+import type { OpyAgentArtifactKind, OpyAgentToolCallName, OpyAgentToolCallStatus } from "./opy-agent.trace";
 
 export interface OpyAgentTaskLineageShape {
   readonly id: string;
@@ -8,6 +9,25 @@ export interface OpyAgentTaskLineageShape {
   readonly updatedAt: number;
   readonly lineageKey?: string | null;
   readonly parentTaskId?: string | null;
+}
+
+export interface OpyAgentTaskLineageToolCallShape {
+  readonly taskId: string;
+  readonly name: OpyAgentToolCallName;
+  readonly status: OpyAgentToolCallStatus;
+}
+
+export interface OpyAgentTaskLineageArtifactShape {
+  readonly taskId: string;
+  readonly kind: OpyAgentArtifactKind;
+}
+
+export interface OpyAgentTaskLineageDiagnostics {
+  readonly lineageKey: string;
+  readonly segmentCount: number;
+  readonly inheritedSegmentCount: number;
+  readonly completedStepNames: ReadonlyArray<OpyAgentToolCallName>;
+  readonly artifactKinds: ReadonlyArray<OpyAgentArtifactKind>;
 }
 
 const normalizeLineageSegment = (value: string): string =>
@@ -115,4 +135,48 @@ export const selectLatestOpyAgentTasksByLineage = <T extends OpyAgentTaskLineage
   }
 
   return [...latestByLineage.values()].sort(sortByRecencyDesc);
+};
+
+export const summarizeOpyAgentTaskLineage = <
+  TTask extends OpyAgentTaskLineageShape,
+  TToolCall extends OpyAgentTaskLineageToolCallShape,
+  TArtifact extends OpyAgentTaskLineageArtifactShape,
+>(
+  tasks: readonly TTask[],
+  task: TTask,
+  toolCalls: readonly TToolCall[],
+  artifacts: readonly TArtifact[],
+): OpyAgentTaskLineageDiagnostics => {
+  const lineageTasks = buildOpyAgentTaskLineage(tasks, task);
+  const lineageTaskIds = new Set(lineageTasks.map((lineageTask) => lineageTask.id));
+
+  const completedStepNames: OpyAgentToolCallName[] = [];
+  const seenStepNames = new Set<OpyAgentToolCallName>();
+  for (const toolCall of toolCalls) {
+    if (!lineageTaskIds.has(toolCall.taskId) || toolCall.status !== "completed" || seenStepNames.has(toolCall.name)) {
+      continue;
+    }
+
+    seenStepNames.add(toolCall.name);
+    completedStepNames.push(toolCall.name);
+  }
+
+  const artifactKinds: OpyAgentArtifactKind[] = [];
+  const seenArtifactKinds = new Set<OpyAgentArtifactKind>();
+  for (const artifact of artifacts) {
+    if (!lineageTaskIds.has(artifact.taskId) || seenArtifactKinds.has(artifact.kind)) {
+      continue;
+    }
+
+    seenArtifactKinds.add(artifact.kind);
+    artifactKinds.push(artifact.kind);
+  }
+
+  return {
+    lineageKey: getOpyAgentTaskLineageKey(task),
+    segmentCount: lineageTasks.length,
+    inheritedSegmentCount: Math.max(0, lineageTasks.length - 1),
+    completedStepNames,
+    artifactKinds,
+  };
 };
