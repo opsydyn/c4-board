@@ -1,78 +1,34 @@
 import { assign, setup } from "xstate";
+import type {
+  OpyAgentLifecycleFailurePhase,
+  OpyAgentLifecycleNonTerminalStage,
+  OpyAgentLifecycleRequest,
+  OpyAgentLifecycleStatus,
+} from "../../core/effects/opy-agent.lifecycle";
 
-export type OpyAgentLifecycleStage =
-  | "idle"
-  | "planning"
-  | "contextualizing"
-  | "proposing"
-  | "awaiting_confirmation"
-  | "applying"
-  | "verifying"
-  | "completed"
-  | "failed";
-
-export type OpyAgentLifecycleMode = "read" | "action";
-export type OpyAgentLifecycleStatus = "completed" | "cancelled" | "failed" | null;
-export type OpyAgentLifecycleFailurePhase = "invoke" | "apply" | "verify" | "persist";
-
-export interface OpyAgentLifecycleConfirmation {
-  readonly cancelMessage: string;
-  readonly confirmationLines: ReadonlyArray<string>;
-  readonly failurePrefix: string;
-  readonly sessionId: string;
-}
-
-export type OpyAgentLifecycleReplay =
-  | {
-    readonly kind: "chat";
-    readonly prompt: string;
-    readonly sessionId: string;
-  }
-  | {
-    readonly description: string;
-    readonly kind: "proposal";
-    readonly sessionId: string;
-  }
-  | {
-    readonly focus: string | null;
-    readonly kind: "review";
-    readonly sessionId: string;
-  }
-  | {
-    readonly kind: "add-node";
-    readonly label: string;
-    readonly nodeType: "person" | "system" | "externalSystem" | "container" | "component";
-    readonly sessionId: string;
-  }
-  | {
-    readonly kind: "apply-proposal";
-    readonly proposalRespondedAtMs: number;
-    readonly sessionId: string;
-  }
-  | {
-    readonly checkpointId: string;
-    readonly kind: "rollback";
-    readonly sessionId: string;
-  };
-
-export interface OpyAgentLifecycleRequest {
-  readonly confirmation: OpyAgentLifecycleConfirmation | null;
-  readonly id: string;
-  readonly mode: OpyAgentLifecycleMode;
-  readonly kind: "chat" | "review" | "proposal" | "add-node" | "apply-proposal" | "rollback";
-  readonly label: string;
-  readonly requiresConfirmation: boolean;
-  readonly replay: OpyAgentLifecycleReplay;
-}
+export type {
+  OpyAgentLifecycleConfirmation,
+  OpyAgentLifecycleFailurePhase,
+  OpyAgentLifecycleMode,
+  OpyAgentLifecycleNonTerminalStage,
+  OpyAgentLifecycleReplay,
+  OpyAgentLifecycleRequest,
+  OpyAgentLifecycleStage,
+  OpyAgentLifecycleStatus,
+} from "../../core/effects/opy-agent.lifecycle";
 
 export interface OpyAgentMachineContext {
   readonly activeRequest: OpyAgentLifecycleRequest | null;
   readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastError: string | null;
   readonly lastFailurePhase: OpyAgentLifecycleFailurePhase | null;
-  readonly lastFailureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> | null;
+  readonly lastFailureStage: OpyAgentLifecycleNonTerminalStage | null;
   readonly lastCompletedAt: number | null;
   readonly lastTerminalStatus: OpyAgentLifecycleStatus;
+  readonly resumableRequest: OpyAgentLifecycleRequest | null;
+  readonly resumableStage: OpyAgentLifecycleNonTerminalStage | null;
+  readonly resumableTaskId: string | null;
+  readonly resumableUpdatedAt: number | null;
 }
 
 export type OpyAgentMachineEvent =
@@ -85,12 +41,21 @@ export type OpyAgentMachineEvent =
   | { type: "VERIFY_READY" }
   | { type: "COMPLETE" }
   | {
+    type: "HYDRATE_RESUMABLE";
+    request: OpyAgentLifecycleRequest;
+    stage: OpyAgentLifecycleNonTerminalStage;
+    taskId: string;
+    updatedAt: number;
+  }
+  | {
     type: "FAIL";
     message: string;
     phase?: OpyAgentLifecycleFailurePhase | null;
-    stage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed">;
+    stage: OpyAgentLifecycleNonTerminalStage;
   }
   | { type: "CANCEL" }
+  | { type: "RESUME" }
+  | { type: "DISMISS_RESUMABLE" }
   | { type: "RETRY" }
   | { type: "RESET" };
 
@@ -104,6 +69,10 @@ const initialContext: OpyAgentMachineContext = {
   lastFailureStage: null,
   lastCompletedAt: null,
   lastTerminalStatus: null,
+  resumableRequest: null,
+  resumableStage: null,
+  resumableTaskId: null,
+  resumableUpdatedAt: null,
 };
 
 const opyAgentMachineSetup = setup({
@@ -116,6 +85,9 @@ const opyAgentMachineSetup = setup({
     lastRequestNeedsConfirmation: ({ context }) => context.lastRequest?.requiresConfirmation === true,
     lastRequestWasRead: ({ context }) => context.lastRequest?.mode === "read",
     hasRetryableRequest: ({ context }) => context.lastRequest !== null,
+    hasResumableRequest: ({ context }) => context.resumableRequest !== null,
+    resumableRequestNeedsConfirmation: ({ context }) => context.resumableRequest?.requiresConfirmation === true,
+    resumableRequestWasRead: ({ context }) => context.resumableRequest?.mode === "read",
   },
   actions: {
     startRequest: assign(({ event }) => {
@@ -131,6 +103,10 @@ const opyAgentMachineSetup = setup({
         lastFailureStage: null,
         lastCompletedAt: null,
         lastTerminalStatus: null,
+        resumableRequest: null,
+        resumableStage: null,
+        resumableTaskId: null,
+        resumableUpdatedAt: null,
       };
     }),
     clearFailure: assign(() => ({
@@ -138,6 +114,37 @@ const opyAgentMachineSetup = setup({
       lastFailurePhase: null,
       lastFailureStage: null,
       lastTerminalStatus: null,
+    })),
+    hydrateResumable: assign(({ event }) => {
+      if (event.type !== "HYDRATE_RESUMABLE") {
+        return {};
+      }
+
+      return {
+        resumableRequest: event.request,
+        resumableStage: event.stage,
+        resumableTaskId: event.taskId,
+        resumableUpdatedAt: event.updatedAt,
+      };
+    }),
+    clearResumable: assign(() => ({
+      resumableRequest: null,
+      resumableStage: null,
+      resumableTaskId: null,
+      resumableUpdatedAt: null,
+    })),
+    startResumable: assign(({ context }) => ({
+      activeRequest: context.resumableRequest,
+      lastRequest: context.resumableRequest,
+      lastError: null,
+      lastFailurePhase: null,
+      lastFailureStage: null,
+      lastCompletedAt: null,
+      lastTerminalStatus: null,
+      resumableRequest: null,
+      resumableStage: null,
+      resumableTaskId: null,
+      resumableUpdatedAt: null,
     })),
     recordCompletion: assign(({ context }) => ({
       activeRequest: null,
@@ -202,6 +209,29 @@ export const createOpyAgentMachine = () =>
           RESET: {
             actions: "clearLifecycle",
           },
+          HYDRATE_RESUMABLE: {
+            actions: "hydrateResumable",
+          },
+          DISMISS_RESUMABLE: {
+            actions: "clearResumable",
+          },
+          RESUME: [
+            {
+              target: "contextualizing",
+              actions: "startResumable",
+              guard: "resumableRequestWasRead",
+            },
+            {
+              target: "awaiting_confirmation",
+              actions: "startResumable",
+              guard: "resumableRequestNeedsConfirmation",
+            },
+            {
+              target: "applying",
+              actions: "startResumable",
+              guard: "hasResumableRequest",
+            },
+          ],
         },
       },
       contextualizing: {
@@ -338,6 +368,29 @@ export const createOpyAgentMachine = () =>
             target: "idle",
             actions: "clearLifecycle",
           },
+          HYDRATE_RESUMABLE: {
+            actions: "hydrateResumable",
+          },
+          DISMISS_RESUMABLE: {
+            actions: "clearResumable",
+          },
+          RESUME: [
+            {
+              target: "contextualizing",
+              actions: "startResumable",
+              guard: "resumableRequestWasRead",
+            },
+            {
+              target: "awaiting_confirmation",
+              actions: "startResumable",
+              guard: "resumableRequestNeedsConfirmation",
+            },
+            {
+              target: "applying",
+              actions: "startResumable",
+              guard: "hasResumableRequest",
+            },
+          ],
         },
       },
       failed: {
@@ -378,6 +431,29 @@ export const createOpyAgentMachine = () =>
             target: "idle",
             actions: "clearLifecycle",
           },
+          HYDRATE_RESUMABLE: {
+            actions: "hydrateResumable",
+          },
+          DISMISS_RESUMABLE: {
+            actions: "clearResumable",
+          },
+          RESUME: [
+            {
+              target: "contextualizing",
+              actions: "startResumable",
+              guard: "resumableRequestWasRead",
+            },
+            {
+              target: "awaiting_confirmation",
+              actions: "startResumable",
+              guard: "resumableRequestNeedsConfirmation",
+            },
+            {
+              target: "applying",
+              actions: "startResumable",
+              guard: "hasResumableRequest",
+            },
+          ],
         },
       },
     },

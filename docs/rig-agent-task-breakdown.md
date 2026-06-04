@@ -1,6 +1,6 @@
 # Rig Agent Task Breakdown (Execution Plan)
 
-**Last Updated**: 2026-06-03
+**Last Updated**: 2026-06-04
 **Source ADR**: `docs/adr/008-rig-agent-platform-orchestration.md`
 **Delivery Horizon**: 6 phases across 2026-Q1/Q2
 
@@ -36,8 +36,11 @@
   - urgency-aware chrome signals for `policy`, `review`, `proposal`, and `checkpoint`
   - actionable chrome signals that open and focus the matching OPY section
 - `RIG-401` is now effectively complete in code for the current OPY scope: staged lifecycle, machine-owned retry/reset, typed failure provenance, and confirmation replay are all in place.
-- The next critical Rig intelligence milestone is **Phase 4 / `RIG-402` resumable tasks**, built on top of the now-stable staged execution model.
-- `RIG-402` should focus on persisting and restoring active lifecycle work across remounts/restarts rather than only terminal replay after failure.
+- `RIG-402` is now started:
+  - active OPY lifecycle requests are persisted in `opy_agent_tasks`
+  - session hydration/switch/create interrupts stale running tasks instead of losing them silently
+  - OPY can hydrate the latest interrupted request for a session and surface `resume` / `dismiss` controls back to the operator
+- the next `RIG-402` slices should extend this baseline into tool-call/artifact persistence and deeper restart continuity rather than only terminal replay after failure
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -251,10 +254,16 @@
   - Add `opy_agent_tasks`, `opy_agent_tool_calls`, `opy_agent_artifacts`.
   - Resume logic from last persisted stage.
 - Primary files:
-  - `src-tauri/migrations/021_opy_agent_tasks.sql`
+  - `src-tauri/migrations/024_create_opy_agent_tasks.sql`
   - `src/core/effects/opy-chat.persistence.ts`
   - `src/ui/components/OpyCopilotPanel.tsx`
+  - `src/ui/machines/opy-agent.machine.ts`
 - Depends on: `RIG-401`.
+- Current status:
+  - first slice complete for task persistence and resume hydration
+  - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
+  - OPY can hydrate the latest interrupted request for the active session and let the operator resume or dismiss it
+  - tool-call/artifact persistence is still pending
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

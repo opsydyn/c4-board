@@ -210,7 +210,26 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - confirmed action execution is now re-resolved from the active machine request replay metadata instead of a panel-local execution ref
 - switching or creating sessions resets the active OPY lifecycle boundary so stale flow state does not bleed across sessions
 - the runtime error strip can retry the last OPY flow after a terminal failure
-- this machine is now stable enough to hand off into persistent task resume work in `RIG-402`
+- active OPY lifecycle requests are now persisted as resumable agent tasks, interrupted on session hydration/switch/create, and surfaced back to the operator as `RESUME TASK` / `DISMISS TASK` controls
+
+## Resumable Task Lifecycle
+
+`RIG-402` is now started.
+
+### Current Task Persistence
+
+- OPY persists active lifecycle requests in `opy_agent_tasks`
+- persisted task fields include `request`, `stage`, `status`, timestamps, and error summary
+- non-terminal stages are tracked as `running`
+- interrupted work is marked as `interrupted` instead of disappearing on remount
+
+### Current Resume Behavior
+
+- session hydration now interrupts stale running tasks from the previous mount
+- OPY loads the latest interrupted task for the active session
+- if the interrupted task stage is resumable, OPY exposes a control-field resume card
+- operators can either resume the exact persisted request or dismiss it explicitly
+- starting a new OPY lifecycle supersedes any older resumable task for that session
 
 ## Run Envelope and Telemetry
 

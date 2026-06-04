@@ -3,6 +3,13 @@ import type { RigAgentContextBundle, RigAgentCitation } from "./agent-context";
 import type { RigC4DiagramProposal } from "./ai-agent.runtime";
 import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService, NotFoundError } from "./database.base";
+import type {
+  OpyAgentLifecycleConfirmation,
+  OpyAgentLifecycleMode,
+  OpyAgentLifecycleNonTerminalStage,
+  OpyAgentLifecycleReplay,
+  OpyAgentLifecycleRequest,
+} from "./opy-agent.lifecycle";
 
 export type OpyChatRole = "assistant" | "user" | "system";
 export type OpyChatDomain = "c4" | "ddd";
@@ -38,6 +45,21 @@ export interface OpyAgentRun {
   readonly stage: OpyAgentRunStage;
   readonly status: OpyAgentRunStatus;
   readonly startedAt: number;
+  readonly completedAt: number | null;
+  readonly errorSummary: string | null;
+}
+
+export type OpyAgentTaskStatus = "running" | "interrupted" | "completed" | "failed" | "cancelled";
+export type OpyAgentTaskStage = OpyAgentLifecycleNonTerminalStage | "completed" | "failed";
+
+export interface OpyAgentTask {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly request: OpyAgentLifecycleRequest;
+  readonly stage: OpyAgentTaskStage;
+  readonly status: OpyAgentTaskStatus;
+  readonly createdAt: number;
+  readonly updatedAt: number;
   readonly completedAt: number | null;
   readonly errorSummary: string | null;
 }
@@ -103,6 +125,12 @@ export interface FinalizeInterruptedOpyAgentRunsInput {
   readonly sessionId: string;
   readonly completedAt?: number;
   readonly errorSummary?: string;
+}
+
+export interface InterruptOpyAgentTasksInput {
+  readonly sessionId: string;
+  readonly errorSummary?: string;
+  readonly updatedAt?: number;
 }
 
 const LIST_SESSIONS_SQL = `
@@ -191,6 +219,22 @@ const LIST_RUNS_SQL = `
   ORDER BY started_at DESC
 `;
 
+const LIST_AGENT_TASKS_SQL = `
+  SELECT
+    id,
+    session_id AS sessionId,
+    request_json AS requestJson,
+    stage,
+    status,
+    created_at AS createdAt,
+    updated_at AS updatedAt,
+    completed_at AS completedAt,
+    error_summary AS errorSummary
+  FROM opy_agent_tasks
+  WHERE session_id = ?
+  ORDER BY updated_at DESC, created_at DESC
+`;
+
 const LIST_DIAGRAM_PROPOSALS_SQL = `
   SELECT
     session_id AS sessionId,
@@ -249,6 +293,23 @@ const LIST_ACTIVE_RUNS_SQL = `
   ORDER BY started_at DESC
 `;
 
+const LIST_RUNNING_TASKS_SQL = `
+  SELECT
+    id,
+    session_id AS sessionId,
+    request_json AS requestJson,
+    stage,
+    status,
+    created_at AS createdAt,
+    updated_at AS updatedAt,
+    completed_at AS completedAt,
+    error_summary AS errorSummary
+  FROM opy_agent_tasks
+  WHERE session_id = ?
+    AND status = 'running'
+  ORDER BY updated_at DESC, created_at DESC
+`;
+
 const INSERT_RUN_SQL = `
   INSERT INTO opy_agent_runs (
     id,
@@ -262,6 +323,28 @@ const INSERT_RUN_SQL = `
     error_summary
   )
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`;
+
+const UPSERT_TASK_SQL = `
+  INSERT INTO opy_agent_tasks (
+    id,
+    session_id,
+    request_json,
+    stage,
+    status,
+    created_at,
+    updated_at,
+    completed_at,
+    error_summary
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    request_json = excluded.request_json,
+    stage = excluded.stage,
+    status = excluded.status,
+    updated_at = excluded.updated_at,
+    completed_at = excluded.completed_at,
+    error_summary = excluded.error_summary
 `;
 
 const UPDATE_RUN_SQL = `
@@ -280,6 +363,16 @@ const FAIL_INTERRUPTED_RUNS_SQL = `
   SET
     status = 'failed',
     completed_at = ?,
+    error_summary = COALESCE(error_summary, ?)
+  WHERE session_id = ?
+    AND status = 'running'
+`;
+
+const INTERRUPT_RUNNING_TASKS_SQL = `
+  UPDATE opy_agent_tasks
+  SET
+    status = 'interrupted',
+    updated_at = ?,
     error_summary = COALESCE(error_summary, ?)
   WHERE session_id = ?
     AND status = 'running'
@@ -331,6 +424,23 @@ const isOpyAgentRunStage = (value: unknown): value is OpyAgentRunStage =>
 const isOpyAgentRunStatus = (value: unknown): value is OpyAgentRunStatus =>
   value === "running" || value === "completed" || value === "failed" || value === "cancelled";
 
+const isOpyAgentTaskStatus = (value: unknown): value is OpyAgentTaskStatus =>
+  value === "running"
+  || value === "interrupted"
+  || value === "completed"
+  || value === "failed"
+  || value === "cancelled";
+
+const isOpyAgentTaskStage = (value: unknown): value is OpyAgentTaskStage =>
+  value === "contextualizing"
+  || value === "planning"
+  || value === "proposing"
+  || value === "awaiting_confirmation"
+  || value === "applying"
+  || value === "verifying"
+  || value === "completed"
+  || value === "failed";
+
 const isOpyPlanDecisionStatus = (value: unknown): value is OpyPlanDecisionStatus =>
   value === "pending" || value === "approved" || value === "rejected";
 
@@ -376,6 +486,18 @@ type AgentRunRow = {
   errorSummary: string | null;
 };
 
+type AgentTaskRow = {
+  id: string;
+  sessionId: string;
+  requestJson: string;
+  stage: string;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  completedAt: number | null;
+  errorSummary: string | null;
+};
+
 type DiagramProposalRow = {
   sessionId: string;
   commandDescription: string;
@@ -406,6 +528,78 @@ const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
   } catch {
     return null;
   }
+};
+
+const isOpyAgentLifecycleConfirmation = (value: unknown): value is OpyAgentLifecycleConfirmation => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.cancelMessage === "string"
+    && Array.isArray(candidate.confirmationLines)
+    && candidate.confirmationLines.every((line) => typeof line === "string")
+    && typeof candidate.failurePrefix === "string"
+    && typeof candidate.sessionId === "string";
+};
+
+const isOpyAgentLifecycleMode = (value: unknown): value is OpyAgentLifecycleMode =>
+  value === "read" || value === "action";
+
+const isOpyAgentLifecycleReplay = (value: unknown): value is OpyAgentLifecycleReplay => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.kind !== "string" || typeof candidate.sessionId !== "string") {
+    return false;
+  }
+
+  switch (candidate.kind) {
+    case "chat":
+      return typeof candidate.prompt === "string";
+    case "proposal":
+      return typeof candidate.description === "string";
+    case "review":
+      return candidate.focus === null || typeof candidate.focus === "string";
+    case "add-node":
+      return typeof candidate.label === "string"
+        && (candidate.nodeType === "person"
+          || candidate.nodeType === "system"
+          || candidate.nodeType === "externalSystem"
+          || candidate.nodeType === "container"
+          || candidate.nodeType === "component");
+    case "apply-proposal":
+      return typeof candidate.proposalRespondedAtMs === "number"
+        && Number.isFinite(candidate.proposalRespondedAtMs);
+    case "rollback":
+      return typeof candidate.checkpointId === "string";
+    default:
+      return false;
+  }
+};
+
+const isOpyAgentLifecycleRequest = (value: unknown): value is OpyAgentLifecycleRequest => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (candidate.confirmation === null || isOpyAgentLifecycleConfirmation(candidate.confirmation))
+    && typeof candidate.id === "string"
+    && isOpyAgentLifecycleMode(candidate.mode)
+    && (
+      candidate.kind === "chat"
+      || candidate.kind === "review"
+      || candidate.kind === "proposal"
+      || candidate.kind === "add-node"
+      || candidate.kind === "apply-proposal"
+      || candidate.kind === "rollback"
+    )
+    && typeof candidate.label === "string"
+    && typeof candidate.requiresConfirmation === "boolean"
+    && isOpyAgentLifecycleReplay(candidate.replay);
 };
 
 const isRigAgentCitation = (value: unknown): value is RigAgentCitation => {
@@ -532,6 +726,29 @@ const decodeAgentRunRow = (row: AgentRunRow): OpyAgentRun | null => {
   };
 };
 
+const decodeAgentTaskRow = (row: AgentTaskRow): OpyAgentTask | null => {
+  if (!isOpyAgentTaskStage(row.stage) || !isOpyAgentTaskStatus(row.status)) {
+    return null;
+  }
+
+  const request = parseJsonObject(row.requestJson);
+  if (!isOpyAgentLifecycleRequest(request)) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    request,
+    stage: row.stage,
+    status: row.status,
+    createdAt: toTimestamp(row.createdAt),
+    updatedAt: toTimestamp(row.updatedAt),
+    completedAt: toNullableTimestamp(row.completedAt),
+    errorSummary: toNullableText(row.errorSummary),
+  };
+};
+
 const decodeDiagramProposalRow = (row: DiagramProposalRow): OpyPersistedDiagramProposal | null => {
   if (!isOpyPlanDecisionStatus(row.decisionStatus) || typeof row.commandDescription !== "string") {
     return null;
@@ -579,6 +796,9 @@ const sortSessionsByRecency = (sessions: readonly OpyChatSession[]): OpyChatSess
 
 const sortRunsByRecency = (runs: readonly OpyAgentRun[]): OpyAgentRun[] =>
   [...runs].sort((left, right) => right.startedAt - left.startedAt);
+
+const sortTasksByRecency = (tasks: readonly OpyAgentTask[]): OpyAgentTask[] =>
+  [...tasks].sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt);
 
 export const listOpyChatSessions = (input: ListOpyChatSessionsInput) =>
   Effect.gen(function*() {
@@ -649,6 +869,15 @@ export const listOpyAgentRuns = (sessionId: string) =>
     );
   });
 
+export const listOpyAgentTasks = (sessionId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentTaskRow>(LIST_AGENT_TASKS_SQL, [sessionId]);
+    return sortTasksByRecency(
+      rows.map(decodeAgentTaskRow).filter((row): row is OpyAgentTask => row !== null),
+    );
+  });
+
 export const listOpyDiagramProposals = (sessionId: string) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -703,6 +932,24 @@ export const createOpyAgentRun = (run: OpyAgentRun) =>
     ]);
 
     return run;
+  });
+
+export const upsertOpyAgentTask = (task: OpyAgentTask) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(UPSERT_TASK_SQL, [
+      task.id,
+      task.sessionId,
+      JSON.stringify(task.request),
+      task.stage,
+      task.status,
+      task.createdAt,
+      task.updatedAt,
+      task.completedAt,
+      task.errorSummary,
+    ]);
+
+    return task;
   });
 
 export const upsertOpyDiagramProposal = (proposal: OpyPersistedDiagramProposal) =>
@@ -781,6 +1028,37 @@ export const finalizeInterruptedOpyAgentRuns = (
       ...run,
       status: "failed" as const,
       completedAt,
+      errorSummary,
+    }));
+  });
+
+export const interruptOpyAgentTasks = (input: InterruptOpyAgentTasksInput) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const updatedAt = input.updatedAt ?? Date.now();
+    const errorSummary = input.errorSummary?.trim().length
+      ? input.errorSummary.trim()
+      : "INTERRUPTED DURING PREVIOUS SESSION.";
+
+    const rows = yield* service.query<AgentTaskRow>(LIST_RUNNING_TASKS_SQL, [input.sessionId]);
+    const activeTasks = rows
+      .map(decodeAgentTaskRow)
+      .filter((row): row is OpyAgentTask => row !== null);
+
+    if (activeTasks.length === 0) {
+      return [] as OpyAgentTask[];
+    }
+
+    yield* service.execute(INTERRUPT_RUNNING_TASKS_SQL, [
+      updatedAt,
+      errorSummary,
+      input.sessionId,
+    ]);
+
+    return activeTasks.map((task) => ({
+      ...task,
+      status: "interrupted" as const,
+      updatedAt,
       errorSummary,
     }));
   });

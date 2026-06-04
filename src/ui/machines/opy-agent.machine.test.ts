@@ -157,4 +157,30 @@ describe("opyAgentMachine", () => {
     expect(snapshot.context.lastFailureStage).toBe("verifying");
     expect(snapshot.context.lastFailurePhase).toBe("persist");
   });
+
+  test("hydrates and resumes an interrupted request", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({
+      type: "HYDRATE_RESUMABLE",
+      request: createActionRequest(),
+      stage: "awaiting_confirmation",
+      taskId: "task-1",
+      updatedAt: 500,
+    });
+
+    let snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("idle");
+    expect(snapshot.context.resumableTaskId).toBe("task-1");
+    expect(snapshot.context.resumableStage).toBe("awaiting_confirmation");
+    expect(snapshot.context.resumableRequest?.id).toBe("action-1");
+
+    actor.send({ type: "RESUME" });
+    snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("awaiting_confirmation");
+    expect(snapshot.context.activeRequest?.id).toBe("action-1");
+    expect(snapshot.context.resumableRequest).toBeNull();
+    expect(snapshot.context.resumableTaskId).toBeNull();
+  });
 });

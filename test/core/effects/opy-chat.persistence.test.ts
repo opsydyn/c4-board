@@ -1,11 +1,15 @@
 import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
 import {
   createOpyAgentCheckpoint,
+  interruptOpyAgentTasks,
   getOpyAgentCheckpoint,
+  listOpyAgentTasks,
   listOpyAgentCheckpoints,
   listOpyDiagramProposals,
+  type OpyAgentTask,
   type OpyAgentCheckpoint,
   type OpyPersistedDiagramProposal,
+  upsertOpyAgentTask,
   upsertOpyDiagramProposal,
 } from "@/core/effects/opy-chat.persistence";
 import { Cause, Effect, Layer, Option } from "effect";
@@ -75,6 +79,33 @@ const createCheckpoint = (
     savedAt: 1_900,
   },
   createdAt: 2_100,
+  ...overrides,
+});
+
+const createTask = (
+  overrides?: Partial<OpyAgentTask>,
+): OpyAgentTask => ({
+  id: "task-1",
+  sessionId: "session-1",
+  request: {
+    confirmation: null,
+    id: "request-1",
+    mode: "read",
+    kind: "review",
+    label: "REVIEW",
+    requiresConfirmation: false,
+    replay: {
+      kind: "review",
+      focus: "Payments API",
+      sessionId: "session-1",
+    },
+  },
+  stage: "planning",
+  status: "running",
+  createdAt: 2_000,
+  updatedAt: 2_050,
+  completedAt: null,
+  errorSummary: null,
   ...overrides,
 });
 
@@ -307,5 +338,114 @@ describe("opy-chat.persistence", () => {
         });
       }
     }
+  });
+
+  it("upserts and lists persisted OPY agent tasks", async () => {
+    const execute = vi.fn();
+    const task = createTask();
+
+    const persistedTask = await runWithDatabaseService(
+      upsertOpyAgentTask(task),
+      { execute },
+    );
+
+    expect(persistedTask).toEqual(task);
+    const [upsertSql, upsertValues] = execute.mock.calls[0] as [string, unknown[]];
+    expect(upsertSql).toContain("INSERT INTO opy_agent_tasks");
+    expect(upsertValues[0]).toBe("task-1");
+    expect(upsertValues[1]).toBe("session-1");
+    expect(JSON.parse(String(upsertValues[2]))).toEqual(task.request);
+    expect(upsertValues[3]).toBe("planning");
+    expect(upsertValues[4]).toBe("running");
+
+    const listed = await runWithDatabaseService(
+      listOpyAgentTasks("session-1"),
+      {
+        query: () => [
+          {
+            id: "task-older",
+            sessionId: "session-1",
+            requestJson: JSON.stringify({
+              confirmation: null,
+              id: "request-older",
+              mode: "read",
+              kind: "chat",
+              label: "CHAT",
+              requiresConfirmation: false,
+              replay: {
+                kind: "chat",
+                prompt: "older",
+                sessionId: "session-1",
+              },
+            }),
+            stage: "contextualizing",
+            status: "interrupted",
+            createdAt: 1_000,
+            updatedAt: 1_050,
+            completedAt: null,
+            errorSummary: "INTERRUPTED",
+          },
+          {
+            id: task.id,
+            sessionId: task.sessionId,
+            requestJson: JSON.stringify(task.request),
+            stage: task.stage,
+            status: task.status,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+            completedAt: task.completedAt,
+            errorSummary: task.errorSummary,
+          },
+        ],
+      },
+    );
+
+    expect(listed).toHaveLength(2);
+    expect(listed[0]?.id).toBe("task-1");
+    expect(listed[0]?.request.label).toBe("REVIEW");
+    expect(listed[1]?.status).toBe("interrupted");
+  });
+
+  it("interrupts running OPY agent tasks on resume hydration", async () => {
+    const task = createTask();
+    const execute = vi.fn();
+
+    const interrupted = await runWithDatabaseService(
+      interruptOpyAgentTasks({
+        sessionId: "session-1",
+        errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+        updatedAt: 3_000,
+      }),
+      {
+        query: () => [
+          {
+            id: task.id,
+            sessionId: task.sessionId,
+            requestJson: JSON.stringify(task.request),
+            stage: task.stage,
+            status: task.status,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+            completedAt: task.completedAt,
+            errorSummary: task.errorSummary,
+          },
+        ],
+        execute,
+      },
+    );
+
+    expect(interrupted).toHaveLength(1);
+    expect(interrupted[0]).toMatchObject({
+      id: "task-1",
+      status: "interrupted",
+      updatedAt: 3_000,
+      errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+    });
+
+    const [updateSql, updateValues] = execute.mock.calls[0] as [string, unknown[]];
+    expect(updateSql).toContain("UPDATE opy_agent_tasks");
+    expect(updateValues[0]).toBe(3_000);
+    expect(updateValues[1]).toBe("INTERRUPTED DURING PREVIOUS SESSION.");
+    expect(updateValues[2]).toBe("session-1");
   });
 });

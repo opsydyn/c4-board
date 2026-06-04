@@ -59,8 +59,10 @@ import {
 import {
   appendOpyChatMessage,
   createOpyAgentRun,
-  createOpyChatSession,
   finalizeInterruptedOpyAgentRuns,
+  interruptOpyAgentTasks,
+  createOpyChatSession,
+  listOpyAgentTasks,
   listOpyAgentCheckpoints,
   listOpyAgentRuns,
   listOpyChatMessages,
@@ -69,6 +71,8 @@ import {
   type OpyAgentCheckpoint,
   type OpyAgentRun,
   type OpyAgentRunIntent,
+  type OpyAgentTask,
+  type OpyAgentTaskStage,
   type OpyChatMessage,
   type OpyChatRole,
   type OpyChatSession,
@@ -76,11 +80,12 @@ import {
   type OpyPlanDecisionStatus,
   renameOpyChatSession,
   updateOpyAgentRun,
+  upsertOpyAgentTask,
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
 import type { AiActionMode, OpyViewportSectionKey, OpyViewportSections } from "../../core/effects/settings.types";
 import { useOpyAgentMachine } from "../hooks/useOpyAgentMachine";
-import type { OpyAgentLifecycleRequest, OpyAgentLifecycleStage } from "../machines/opy-agent.machine";
+import type { OpyAgentLifecycleNonTerminalStage, OpyAgentLifecycleRequest, OpyAgentLifecycleStage } from "../machines/opy-agent.machine";
 import { useDatabase } from "../../core/effects/useDatabase";
 import {
   compareOpyWidgetChromeTone,
@@ -297,6 +302,9 @@ const formatLifecycleFailureScope = (input: {
 
 const sortRunsByRecency = (runs: readonly OpyAgentRun[]): OpyAgentRun[] =>
   [...runs].sort((left, right) => right.startedAt - left.startedAt);
+
+const isResumableTaskStage = (stage: OpyAgentTaskStage): stage is OpyAgentLifecycleNonTerminalStage =>
+  stage !== "completed" && stage !== "failed";
 
 const upsertSessionRun = (
   runs: readonly OpyAgentRun[],
@@ -642,6 +650,22 @@ export function OpyCopilotPanel({
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
+  const agentTaskIndexRef = useRef<Record<string, OpyAgentTask>>({});
+  const lifecycleTaskSyncRef = useRef<{
+    activeRequestId: string | null;
+    errorSummary: string | null;
+    lastCompletedAt: number | null;
+    lastRequestId: string | null;
+    stage: OpyAgentLifecycleStage;
+    terminalStatus: ReturnType<typeof useOpyAgentMachine>["lastTerminalStatus"];
+  }>({
+    activeRequestId: null,
+    errorSummary: null,
+    lastCompletedAt: null,
+    lastRequestId: null,
+    stage: "idle",
+    terminalStatus: null,
+  });
   const viewportAutoSignalsRef = useRef<{
     proposal: number | null;
     review: number | null;
@@ -1114,10 +1138,21 @@ export function OpyCopilotPanel({
           }),
         );
         interruptedRuns.forEach(emitOpyAgentRunTelemetry);
+        await runEffect(
+          interruptOpyAgentTasks({
+            sessionId,
+            errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+          }),
+        );
         const loadedMessages = await runEffect(listOpyChatMessages(sessionId));
         const loadedRuns = await runEffect(listOpyAgentRuns(sessionId));
+        const loadedTasks = await runEffect(listOpyAgentTasks(sessionId));
         const loadedProposals = await runEffect(listOpyDiagramProposals(sessionId));
         const loadedCheckpoints = await runEffect(listOpyAgentCheckpoints(sessionId));
+        agentTaskIndexRef.current = {
+          ...agentTaskIndexRef.current,
+          ...Object.fromEntries(loadedTasks.map((task) => [task.id, task])),
+        };
         setMessages(loadedMessages);
         setRunsBySessionId((current) => ({
           ...current,
@@ -1131,6 +1166,17 @@ export function OpyCopilotPanel({
           ...current,
           [sessionId]: loadedCheckpoints,
         }));
+        const resumableTask = loadedTasks.find((task) => task.status === "interrupted") ?? null;
+        if (resumableTask && isResumableTaskStage(resumableTask.stage)) {
+          agentLifecycle.hydrateResumableRequest({
+            request: resumableTask.request,
+            stage: resumableTask.stage,
+            taskId: resumableTask.id,
+            updatedAt: resumableTask.updatedAt,
+          });
+        } else {
+          agentLifecycle.clearResumableRequest();
+        }
       } catch (error) {
         setRuntimeError(`FAILED TO LOAD TRANSCRIPT: ${toErrorMessage(error)}`);
         setMessages([]);
@@ -1146,11 +1192,12 @@ export function OpyCopilotPanel({
           ...current,
           [sessionId]: [],
         }));
+        agentLifecycle.clearResumableRequest();
       } finally {
         setIsMessageLoading(false);
       }
     },
-    [runEffect],
+    [agentLifecycle, runEffect],
   );
 
   const refreshCheckpointsForSession = useCallback(
@@ -1217,6 +1264,159 @@ export function OpyCopilotPanel({
     },
     [runEffect],
   );
+
+  const persistOpyTask = useCallback(
+    async (task: OpyAgentTask): Promise<OpyAgentTask> => {
+      const persisted = await runEffect(upsertOpyAgentTask(task));
+      agentTaskIndexRef.current = {
+        ...agentTaskIndexRef.current,
+        [persisted.id]: persisted,
+      };
+      return persisted;
+    },
+    [runEffect],
+  );
+
+  const interruptActiveLifecycleTask = useCallback(
+    async (errorSummary: string): Promise<void> => {
+      const activeRequest = agentLifecycle.activeRequest;
+      if (!activeRequest || agentLifecycle.stage === "idle" || agentLifecycle.stage === "completed" || agentLifecycle.stage === "failed") {
+        return;
+      }
+
+      const existingTask = agentTaskIndexRef.current[activeRequest.id];
+      const now = Date.now();
+      await persistOpyTask({
+        id: activeRequest.id,
+        sessionId: activeRequest.replay.sessionId,
+        request: activeRequest,
+        stage: agentLifecycle.stage,
+        status: "interrupted",
+        createdAt: existingTask?.createdAt ?? now,
+        updatedAt: now,
+        completedAt: null,
+        errorSummary,
+      });
+    },
+    [agentLifecycle.activeRequest, agentLifecycle.stage, persistOpyTask],
+  );
+
+  const dismissResumableLifecycleTask = useCallback(
+    async (errorSummary: string): Promise<void> => {
+      const resumableRequest = agentLifecycle.resumableRequest;
+      const resumableStage = agentLifecycle.resumableStage;
+      const resumableTaskId = agentLifecycle.resumableTaskId;
+      if (!resumableRequest || !resumableStage || !resumableTaskId) {
+        return;
+      }
+
+      const existingTask = agentTaskIndexRef.current[resumableTaskId];
+      const completedAt = Date.now();
+      await persistOpyTask({
+        id: resumableTaskId,
+        sessionId: resumableRequest.replay.sessionId,
+        request: resumableRequest,
+        stage: resumableStage,
+        status: "cancelled",
+        createdAt: existingTask?.createdAt ?? completedAt,
+        updatedAt: completedAt,
+        completedAt,
+        errorSummary,
+      });
+      agentLifecycle.clearResumableRequest();
+    },
+    [
+      agentLifecycle.clearResumableRequest,
+      agentLifecycle.resumableRequest,
+      agentLifecycle.resumableStage,
+      agentLifecycle.resumableTaskId,
+      persistOpyTask,
+    ],
+  );
+
+  useEffect(() => {
+    const previousState = lifecycleTaskSyncRef.current;
+    const nextState = {
+      activeRequestId: agentLifecycle.activeRequest?.id ?? null,
+      errorSummary: agentLifecycle.lastError,
+      lastCompletedAt: agentLifecycle.lastCompletedAt,
+      lastRequestId: agentLifecycle.lastRequest?.id ?? null,
+      stage: agentLifecycle.stage,
+      terminalStatus: agentLifecycle.lastTerminalStatus,
+    };
+
+    const activeRequest = agentLifecycle.activeRequest;
+    const isRunningStage = agentLifecycle.stage !== "idle"
+      && agentLifecycle.stage !== "completed"
+      && agentLifecycle.stage !== "failed";
+    if (
+      isRunningStage
+      && activeRequest
+      && (
+        previousState.stage !== nextState.stage
+        || previousState.activeRequestId !== nextState.activeRequestId
+      )
+    ) {
+      const now = Date.now();
+      const existingTask = agentTaskIndexRef.current[activeRequest.id];
+      void persistOpyTask({
+        id: activeRequest.id,
+        sessionId: activeRequest.replay.sessionId,
+        request: activeRequest,
+        stage: agentLifecycle.stage,
+        status: "running",
+        createdAt: existingTask?.createdAt ?? now,
+        updatedAt: now,
+        completedAt: null,
+        errorSummary: null,
+      }).catch((error) => {
+        setRuntimeError(`TASK PERSIST FAILED: ${toErrorMessage(error)}`);
+      });
+    }
+
+    const lastRequest = agentLifecycle.lastRequest;
+    const isTerminalStage = agentLifecycle.stage === "completed" || agentLifecycle.stage === "failed";
+    if (
+      isTerminalStage
+      && lastRequest
+      && agentLifecycle.lastTerminalStatus
+      && (
+        previousState.stage !== nextState.stage
+        || previousState.lastRequestId !== nextState.lastRequestId
+        || previousState.lastCompletedAt !== nextState.lastCompletedAt
+        || previousState.terminalStatus !== nextState.terminalStatus
+        || previousState.errorSummary !== nextState.errorSummary
+      )
+    ) {
+      const completedAt = agentLifecycle.lastCompletedAt ?? Date.now();
+      const existingTask = agentTaskIndexRef.current[lastRequest.id];
+      void persistOpyTask({
+        id: lastRequest.id,
+        sessionId: lastRequest.replay.sessionId,
+        request: lastRequest,
+        stage: agentLifecycle.stage,
+        status: agentLifecycle.lastTerminalStatus,
+        createdAt: existingTask?.createdAt ?? completedAt,
+        updatedAt: completedAt,
+        completedAt,
+        errorSummary: agentLifecycle.lastTerminalStatus === "failed"
+          ? agentLifecycle.lastError
+          : null,
+      }).catch((error) => {
+        setRuntimeError(`TASK PERSIST FAILED: ${toErrorMessage(error)}`);
+      });
+    }
+
+    lifecycleTaskSyncRef.current = nextState;
+  }, [
+    agentLifecycle.activeRequest,
+    agentLifecycle.lastCompletedAt,
+    agentLifecycle.lastError,
+    agentLifecycle.lastRequest,
+    agentLifecycle.lastTerminalStatus,
+    agentLifecycle.stage,
+    persistOpyTask,
+  ]);
 
   const persistOpyMessage = useCallback(
     async (
@@ -1312,6 +1512,9 @@ export function OpyCopilotPanel({
       },
     ): Promise<T | null> => {
       if (input.manageLifecycleStart !== false) {
+        if (agentLifecycle.resumableTaskId && agentLifecycle.resumableTaskId !== input.lifecycleRequest.id) {
+          await dismissResumableLifecycleTask("SUPERSEDED BY NEW TASK.");
+        }
         agentLifecycle.startReadRequest(input.lifecycleRequest);
       }
       let run: OpyAgentRun;
@@ -1428,7 +1631,7 @@ export function OpyCopilotPanel({
         return null;
       }
     },
-    [agentLifecycle, appendAndPersistMessage, beginAgentRun, persistOpyMessage, transitionAgentRun],
+    [agentLifecycle, appendAndPersistMessage, beginAgentRun, dismissResumableLifecycleTask, persistOpyMessage, transitionAgentRun],
   );
 
   const executeAppliedBoardAction = useCallback(
@@ -1514,6 +1717,9 @@ export function OpyCopilotPanel({
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
       if (input.manageLifecycleStart !== false) {
+        if (agentLifecycle.resumableTaskId && agentLifecycle.resumableTaskId !== input.lifecycleRequest.id) {
+          await dismissResumableLifecycleTask("SUPERSEDED BY NEW TASK.");
+        }
         agentLifecycle.startActionRequest(input.lifecycleRequest);
       }
 
@@ -1533,7 +1739,7 @@ export function OpyCopilotPanel({
           : {}),
       });
     },
-    [agentLifecycle, executeAppliedBoardAction],
+    [agentLifecycle, dismissResumableLifecycleTask, executeAppliedBoardAction],
   );
 
   const createAndActivateSession = useCallback(async (): Promise<void> => {
@@ -1591,6 +1797,7 @@ export function OpyCopilotPanel({
         return;
       }
 
+      await interruptActiveLifecycleTask("INTERRUPTED BY SESSION HYDRATION.");
       agentLifecycle.resetLifecycle();
       setIsSessionLoading(true);
       setRuntimeError(null);
@@ -1692,24 +1899,27 @@ export function OpyCopilotPanel({
     return () => {
       isCancelled = true;
     };
-  }, [agentLifecycle, agentSecretStatus, diagramId, domain, hasOpenAiApiKey, hydrateMessagesForSession, runEffect]);
+  }, [agentLifecycle, agentSecretStatus, diagramId, domain, hasOpenAiApiKey, hydrateMessagesForSession, interruptActiveLifecycleTask, runEffect]);
 
   const handleCreateSession = useCallback(() => {
     if (isRunning || isSessionLoading) {
       return;
     }
 
-    agentLifecycle.resetLifecycle();
     setRuntimeError(null);
     setIsSessionLoading(true);
-    void createAndActivateSession()
+    void interruptActiveLifecycleTask("INTERRUPTED BY SESSION CREATE.")
+      .then(() => {
+        agentLifecycle.resetLifecycle();
+        return createAndActivateSession();
+      })
       .catch((error) => {
         setRuntimeError(`SESSION CREATE FAILED: ${toErrorMessage(error)}`);
       })
       .finally(() => {
         setIsSessionLoading(false);
       });
-  }, [createAndActivateSession, isRunning, isSessionLoading]);
+  }, [agentLifecycle, createAndActivateSession, interruptActiveLifecycleTask, isRunning, isSessionLoading]);
 
   const handleSelectSession = useCallback(
     (nextSessionId: string) => {
@@ -1717,12 +1927,18 @@ export function OpyCopilotPanel({
         return;
       }
 
-      agentLifecycle.resetLifecycle();
-      setSelectedSessionId(nextSessionId);
       setRuntimeError(null);
-      void hydrateMessagesForSession(nextSessionId);
+      void interruptActiveLifecycleTask("INTERRUPTED BY SESSION SWITCH.")
+        .then(() => {
+          agentLifecycle.resetLifecycle();
+          setSelectedSessionId(nextSessionId);
+          return hydrateMessagesForSession(nextSessionId);
+        })
+        .catch((error) => {
+          setRuntimeError(`SESSION SWITCH FAILED: ${toErrorMessage(error)}`);
+        });
     },
-    [agentLifecycle, hydrateMessagesForSession, isRunning, isSessionLoading, selectedSessionId],
+    [agentLifecycle, hydrateMessagesForSession, interruptActiveLifecycleTask, isRunning, isSessionLoading, selectedSessionId],
   );
 
   const handleRenameSession = useCallback(() => {
@@ -2709,6 +2925,33 @@ export function OpyCopilotPanel({
     agentLifecycle.cancelActiveRequest();
   }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
 
+  const handleResumeInterruptedLifecycle = useCallback(() => {
+    const request = agentLifecycle.resumableRequest;
+    if (isRunning || !request) {
+      return;
+    }
+
+    setRuntimeError(null);
+    void prepareLifecycleReplay(request).then((canReplay) => {
+      if (!canReplay) {
+        return;
+      }
+
+      agentLifecycle.resumeResumableRequest();
+      return replayLifecycleRequest(request);
+    });
+  }, [agentLifecycle, isRunning, prepareLifecycleReplay, replayLifecycleRequest]);
+
+  const handleDismissInterruptedLifecycle = useCallback(() => {
+    if (!agentLifecycle.resumableRequest) {
+      return;
+    }
+
+    void dismissResumableLifecycleTask("INTERRUPTED TASK DISMISSED BY OPERATOR.").catch((error) => {
+      setRuntimeError(`TASK DISMISS FAILED: ${toErrorMessage(error)}`);
+    });
+  }, [agentLifecycle.resumableRequest, dismissResumableLifecycleTask]);
+
   const handleRetryLastLifecycle = useCallback(() => {
     const lastRequest = agentLifecycle.lastRequest;
     if (isRunning || !lastRequest) {
@@ -2735,6 +2978,13 @@ export function OpyCopilotPanel({
     : "KEY::MISSING";
   const lifecycleText = agentLifecycle.stage !== "idle"
     ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"}::${LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]}`
+    : null;
+  const resumableLifecycleText = agentLifecycle.stage === "idle"
+    && agentLifecycle.resumableRequest
+    && agentLifecycle.resumableStage
+    ? `RESUME::${agentLifecycle.resumableRequest.label} · INTERRUPTED AT ${
+      LIFECYCLE_STAGE_LABEL[agentLifecycle.resumableStage]
+    }`
     : null;
   const composerRunning = agentLifecycle.stage === "contextualizing"
     || agentLifecycle.stage === "planning"
@@ -2764,6 +3014,8 @@ export function OpyCopilotPanel({
   }, [agentLifecycle.stage, handleCancelPendingLifecycleAction]);
   const runText = lifecycleText
     ? lifecycleText
+    : resumableLifecycleText
+    ? resumableLifecycleText
     : activeRun
     ? `RUN::${RUN_INTENT_LABEL[activeRun.intent]}::${RUN_STAGE_LABEL[activeRun.stage]}`
     : latestRun
@@ -2925,7 +3177,9 @@ export function OpyCopilotPanel({
   const controlSectionSummary = summarizeInlineText(
     agentLifecycle.stage !== "idle"
       ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"} · ${LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]} · BOARD::${currentBoardLabel}`
-      : lastLifecycleText ?? `BOARD::${currentBoardLabel} · SESSION::${selectedSession?.title ?? "NONE"} · ACTION::${actionMode.toUpperCase()}`,
+      : resumableLifecycleText
+      ?? lastLifecycleText
+      ?? `BOARD::${currentBoardLabel} · SESSION::${selectedSession?.title ?? "NONE"} · ACTION::${actionMode.toUpperCase()}`,
     "CONTROL SURFACE READY.",
   );
   const diagnosticsSectionSummary = latestDiagnosticsSurface
@@ -3139,6 +3393,39 @@ export function OpyCopilotPanel({
                     phase: agentLifecycle.lastFailurePhase,
                   })} · ${agentLifecycle.lastError}`}
                 </p>
+              )}
+              {agentLifecycle.stage === "idle" && agentLifecycle.resumableRequest && agentLifecycle.resumableStage && (
+                <section className={styles.opyCopilotPlanCard} aria-label="OPY resumable task">
+                  <div className={styles.opyCopilotProposalHeader}>
+                    <span>{`RESUME::${agentLifecycle.resumableRequest.label}`}</span>
+                    <span>{`INTERRUPTED AT ${LIFECYCLE_STAGE_LABEL[agentLifecycle.resumableStage]}`}</span>
+                  </div>
+                  <p className={styles.opyCopilotProposalSummary}>
+                    {`TASK ${agentLifecycle.resumableTaskId?.slice(0, 8) ?? "UNKNOWN"} · ${
+                      agentLifecycle.resumableUpdatedAt
+                        ? formatClockTime(agentLifecycle.resumableUpdatedAt)
+                        : "UNKNOWN TIME"
+                    }`}
+                  </p>
+                  <div className={styles.opyCopilotProposalActions}>
+                    <button
+                      type="button"
+                      className={styles.toolbarButton}
+                      onClick={handleResumeInterruptedLifecycle}
+                      disabled={isRunning}
+                    >
+                      RESUME TASK
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.ownershipLensToggleButton}
+                      onClick={handleDismissInterruptedLifecycle}
+                      disabled={isRunning}
+                    >
+                      DISMISS TASK
+                    </button>
+                  </div>
+                </section>
               )}
               {pendingLifecycleConfirmation && pendingLifecycleRequest && agentLifecycle.stage === "awaiting_confirmation" && (
                 <section className={styles.opyCopilotPlanCard} aria-label="OPY pending confirmation">

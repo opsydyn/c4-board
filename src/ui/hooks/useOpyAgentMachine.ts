@@ -4,6 +4,7 @@ import { emitOpyAgentFlowTelemetry } from "../../core/effects/opy-agent.telemetr
 import {
   createOpyAgentMachine,
   type OpyAgentLifecycleFailurePhase,
+  type OpyAgentLifecycleNonTerminalStage,
   type OpyAgentLifecycleRequest,
   type OpyAgentLifecycleStage,
 } from "../machines/opy-agent.machine";
@@ -21,23 +22,35 @@ export interface UseOpyAgentMachineResult {
   readonly lastCompletedAt: number | null;
   readonly lastError: string | null;
   readonly lastFailurePhase: OpyAgentLifecycleFailurePhase | null;
-  readonly lastFailureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> | null;
+  readonly lastFailureStage: OpyAgentLifecycleNonTerminalStage | null;
   readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastTerminalStatus: "completed" | "cancelled" | "failed" | null;
   readonly pendingConfirmationRequest: OpyAgentLifecycleRequest | null;
+  readonly resumableRequest: OpyAgentLifecycleRequest | null;
+  readonly resumableStage: OpyAgentLifecycleNonTerminalStage | null;
+  readonly resumableTaskId: string | null;
+  readonly resumableUpdatedAt: number | null;
   readonly stage: OpyAgentLifecycleStage;
   readonly cancelActiveRequest: () => void;
+  readonly clearResumableRequest: () => void;
   readonly completeActiveRequest: () => void;
   readonly failActiveRequest: (
     message: string,
-    stage?: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed">,
+    stage?: OpyAgentLifecycleNonTerminalStage,
     phase?: OpyAgentLifecycleFailurePhase | null,
   ) => void;
+  readonly hydrateResumableRequest: (input: {
+    request: OpyAgentLifecycleRequest;
+    stage: OpyAgentLifecycleNonTerminalStage;
+    taskId: string;
+    updatedAt: number;
+  }) => void;
   readonly markContextReady: () => void;
   readonly markPersistReady: () => void;
   readonly markResultReady: () => void;
   readonly markVerifyReady: () => void;
   readonly resetLifecycle: () => void;
+  readonly resumeResumableRequest: () => void;
   readonly retryLastRequest: () => void;
   readonly startActionRequest: (request: OpyAgentLifecycleRequest) => void;
   readonly startReadRequest: (request: OpyAgentLifecycleRequest) => void;
@@ -57,6 +70,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
       ? activeRequest
       : null
     : null;
+  const resumableRequest = snapshot.context.resumableRequest;
   const isBusy = !NON_BUSY_STAGES.has(stage);
   const canRetry = snapshot.context.lastRequest !== null && (stage === "completed" || stage === "failed");
   const telemetryStateRef = useRef({
@@ -151,8 +165,8 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
   const failActiveRequest = useCallback(
     (
       message: string,
-      failureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> = (
-        snapshot.value as Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed">
+      failureStage: OpyAgentLifecycleNonTerminalStage = (
+        snapshot.value as OpyAgentLifecycleNonTerminalStage
       ),
       failurePhase: OpyAgentLifecycleFailurePhase | null = null,
     ) => {
@@ -165,6 +179,29 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     },
     [snapshot.value],
   );
+
+  const hydrateResumableRequest = useCallback((input: {
+    request: OpyAgentLifecycleRequest;
+    stage: OpyAgentLifecycleNonTerminalStage;
+    taskId: string;
+    updatedAt: number;
+  }) => {
+    sendRef.current({
+      type: "HYDRATE_RESUMABLE",
+      request: input.request,
+      stage: input.stage,
+      taskId: input.taskId,
+      updatedAt: input.updatedAt,
+    });
+  }, []);
+
+  const resumeResumableRequest = useCallback(() => {
+    sendRef.current({ type: "RESUME" });
+  }, []);
+
+  const clearResumableRequest = useCallback(() => {
+    sendRef.current({ type: "DISMISS_RESUMABLE" });
+  }, []);
 
   const retryLastRequest = useCallback(() => {
     sendRef.current({ type: "RETRY" });
@@ -185,15 +222,22 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     lastRequest: snapshot.context.lastRequest,
     lastTerminalStatus: snapshot.context.lastTerminalStatus,
     pendingConfirmationRequest,
+    resumableRequest,
+    resumableStage: snapshot.context.resumableStage,
+    resumableTaskId: snapshot.context.resumableTaskId,
+    resumableUpdatedAt: snapshot.context.resumableUpdatedAt,
     stage,
     cancelActiveRequest,
+    clearResumableRequest,
     completeActiveRequest,
     failActiveRequest,
+    hydrateResumableRequest,
     markContextReady,
     markPersistReady,
     markResultReady,
     markVerifyReady,
     resetLifecycle,
+    resumeResumableRequest,
     retryLastRequest,
     startActionRequest,
     startReadRequest,
