@@ -42,7 +42,8 @@
   - OPY can hydrate the latest interrupted request for a session and surface `resume` / `dismiss` controls back to the operator
   - OPY now persists a queryable execution trail in `opy_agent_tool_calls` plus grounded/action artifacts in `opy_agent_artifacts`
 - OPY now surfaces per-session task history with expandable tool-call and artifact inspection in the control field
-- the next `RIG-402` slices should extend this baseline into deeper restart continuity rather than only terminal replay after failure
+- interrupted-task resume now rehydrates persisted artifacts into OPY state and can replay action flows from a persisted `action_descriptor` when live replay targets are unavailable
+- the next `RIG-402` slices should extend this baseline into deeper restart continuity beyond single-task artifact restore
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -263,12 +264,13 @@
   - `src/ui/machines/opy-agent.machine.ts`
 - Depends on: `RIG-401`.
 - Current status:
-  - third slice complete for task execution-trail persistence and surfaced task-history UX
+  - fourth slice complete for task execution-trail persistence, surfaced task-history UX, and artifact-backed resume context restore
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
   - OPY can hydrate the latest interrupted request for the active session and let the operator resume or dismiss it
   - `opy_agent_tool_calls` now records high-signal lifecycle steps such as context assembly, agent invoke, assistant-message persistence, action resolution, board apply, and checkpoint refresh
   - `opy_agent_artifacts` now stores grounded context bundles, response/proposal/review payloads, action descriptors, mutation plans, and checkpoint restore previews
   - OPY now surfaces recent per-session task history with expandable tool-call timeline and artifact inspection
+  - interrupted-task resume now rehydrates persisted grounded/action artifacts and can recover action execution from stored descriptors
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

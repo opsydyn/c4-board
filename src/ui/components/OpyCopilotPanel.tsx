@@ -263,6 +263,11 @@ interface OpyTaskArtifactDraft {
   readonly payload: unknown;
 }
 
+interface OpyPersistedActionDescriptorArtifactPayload {
+  readonly descriptor: OpyActionFlowDescriptor;
+  readonly replay: OpyAgentLifecycleRequest["replay"];
+}
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -295,6 +300,63 @@ const createRunId = (): string => {
 };
 
 const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isGroundedChatResponsePayload = (value: unknown): value is OpyGroundedChatResponse =>
+  isRecord(value) && isRecord(value.response) && isRecord(value.context);
+
+const isGroundedDiagramProposalPayload = (value: unknown): value is OpyGroundedDiagramProposal =>
+  isRecord(value) && isRecord(value.proposal) && isRecord(value.context);
+
+const isGroundedBoardReviewPayload = (value: unknown): value is OpyGroundedBoardReview =>
+  isRecord(value) && isRecord(value.review) && isRecord(value.context);
+
+const isPersistedActionDescriptorArtifactPayload = (
+  value: unknown,
+): value is OpyPersistedActionDescriptorArtifactPayload =>
+  isRecord(value)
+  && isRecord(value.descriptor)
+  && isRecord(value.replay);
+
+const selectLatestTaskArtifact = (
+  artifacts: readonly OpyAgentArtifact[],
+  kind: OpyAgentArtifactKind,
+): OpyAgentArtifact | null =>
+  [...artifacts]
+    .filter((artifact) => artifact.kind === kind)
+    .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null;
+
+const toArtifactDraft = (artifact: OpyAgentArtifact): OpyTaskArtifactDraft => ({
+  kind: artifact.kind,
+  summary: artifact.summary,
+  payload: artifact.payload,
+});
+
+const mergeArtifactDrafts = (
+  left: readonly OpyTaskArtifactDraft[],
+  right: readonly OpyTaskArtifactDraft[],
+): ReadonlyArray<OpyTaskArtifactDraft> =>
+  [
+    ...left,
+    ...right.filter((candidate) =>
+      !left.some((artifact) =>
+        artifact.kind === candidate.kind
+        && artifact.summary === candidate.summary
+      )
+    ),
+  ];
+
+const selectResumableActionArtifacts = (
+  artifacts: readonly OpyAgentArtifact[],
+): ReadonlyArray<OpyTaskArtifactDraft> =>
+  artifacts
+    .filter((artifact) =>
+      artifact.kind === "mutation_plan"
+      || artifact.kind === "checkpoint_restore_preview"
+    )
+    .map(toArtifactDraft);
 
 const formatClockTime = (timestamp: number): string =>
   new Intl.DateTimeFormat(undefined, {
@@ -1287,6 +1349,87 @@ export function OpyCopilotPanel({
     [sessions],
   );
 
+  const loadOpyTaskDetails = useCallback(
+    async (taskId: string): Promise<{
+      readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
+      readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
+    }> => {
+      const [toolCalls, artifacts] = await Promise.all([
+        runEffect(listOpyAgentToolCalls(taskId)),
+        runEffect(listOpyAgentArtifacts(taskId)),
+      ]);
+
+      return {
+        artifacts,
+        toolCalls,
+      };
+    },
+    [runEffect],
+  );
+
+  const hydratePersistedTaskContext = useCallback(
+    (task: OpyAgentTask, artifacts: readonly OpyAgentArtifact[]): void => {
+      const latestChatArtifact = selectLatestTaskArtifact(artifacts, "chat_response");
+      if (latestChatArtifact && isGroundedChatResponsePayload(latestChatArtifact.payload)) {
+        const groundedChat = latestChatArtifact.payload;
+        setGroundedChatsBySessionId((current) => ({
+          ...current,
+          [task.sessionId]: groundedChat,
+        }));
+      }
+
+      const reviewReplay = task.request.replay;
+      const latestReviewArtifact = selectLatestTaskArtifact(artifacts, "board_review");
+      if (
+        latestReviewArtifact
+        && isGroundedBoardReviewPayload(latestReviewArtifact.payload)
+        && reviewReplay.kind === "review"
+      ) {
+        const groundedReview = latestReviewArtifact.payload;
+        setBoardReviewsBySessionId((current) => ({
+          ...current,
+          [task.sessionId]: {
+            command: {
+              kind: "review-c4-board",
+              focus: reviewReplay.focus,
+            },
+            review: groundedReview.review,
+            context: groundedReview.context,
+          },
+        }));
+      }
+
+      const proposalReplay = task.request.replay;
+      const latestProposalArtifact = selectLatestTaskArtifact(artifacts, "diagram_proposal");
+      if (
+        latestProposalArtifact
+        && isGroundedDiagramProposalPayload(latestProposalArtifact.payload)
+        && proposalReplay.kind === "proposal"
+      ) {
+        const groundedProposal = latestProposalArtifact.payload;
+        const restoredProposal: OpySessionDiagramProposal = {
+          command: {
+            kind: "plan-c4-diagram",
+            description: proposalReplay.description,
+          },
+          proposal: groundedProposal.proposal,
+          context: groundedProposal.context,
+          decisionStatus: "pending",
+          decidedAtMs: task.updatedAt,
+        };
+
+        setDiagramProposalHistoryBySessionId((current) => ({
+          ...current,
+          [task.sessionId]: upsertSessionDiagramProposalHistory(
+            current[task.sessionId] ?? [],
+            restoredProposal,
+          ),
+        }));
+      }
+    },
+    [],
+  );
+
   const hydrateMessagesForSession = useCallback(
     async (sessionId: string) => {
       setIsMessageLoading(true);
@@ -1338,6 +1481,20 @@ export function OpyCopilotPanel({
         }));
         const resumableTask = loadedTasks.find((task) => task.status === "interrupted") ?? null;
         if (resumableTask && isResumableTaskStage(resumableTask.stage)) {
+          try {
+            const { toolCalls: resumableToolCalls, artifacts: resumableArtifacts } = await loadOpyTaskDetails(resumableTask.id);
+            setTaskToolCallsByTaskId((current) => ({
+              ...current,
+              [resumableTask.id]: resumableToolCalls,
+            }));
+            setTaskArtifactsByTaskId((current) => ({
+              ...current,
+              [resumableTask.id]: resumableArtifacts,
+            }));
+            hydratePersistedTaskContext(resumableTask, resumableArtifacts);
+          } catch (error) {
+            setRuntimeError(`TASK RESUME CONTEXT RESTORE FAILED: ${toErrorMessage(error)}`);
+          }
           agentLifecycle.hydrateResumableRequest({
             request: resumableTask.request,
             stage: resumableTask.stage,
@@ -1371,7 +1528,7 @@ export function OpyCopilotPanel({
         setIsMessageLoading(false);
       }
     },
-    [agentLifecycle, runEffect],
+    [agentLifecycle, hydratePersistedTaskContext, loadOpyTaskDetails, runEffect],
   );
 
   const refreshCheckpointsForSession = useCallback(
@@ -1651,10 +1808,7 @@ export function OpyCopilotPanel({
       }));
 
       try {
-        const [loadedToolCalls, loadedArtifacts] = await Promise.all([
-          runEffect(listOpyAgentToolCalls(taskId)),
-          runEffect(listOpyAgentArtifacts(taskId)),
-        ]);
+        const { toolCalls: loadedToolCalls, artifacts: loadedArtifacts } = await loadOpyTaskDetails(taskId);
 
         setTaskToolCallsByTaskId((current) => ({
           ...current,
@@ -1673,7 +1827,7 @@ export function OpyCopilotPanel({
         }));
       }
     },
-    [runEffect],
+    [loadOpyTaskDetails],
   );
 
   const toggleExpandedTask = useCallback((taskId: string) => {
@@ -2965,19 +3119,50 @@ export function OpyCopilotPanel({
     }
   }, []);
 
+  const resolvePersistedActionDescriptorReplay = useCallback(
+    (
+      request: OpyAgentLifecycleRequest,
+    ): {
+      readonly artifacts: ReadonlyArray<OpyTaskArtifactDraft>;
+      readonly ok: true;
+      readonly value: OpyActionFlowDescriptor;
+    } | null => {
+      const artifacts = taskArtifactsByTaskId[request.id] ?? [];
+      const persistedDescriptorArtifact = selectLatestTaskArtifact(artifacts, "action_descriptor");
+      if (
+        !persistedDescriptorArtifact
+        || !isPersistedActionDescriptorArtifactPayload(persistedDescriptorArtifact.payload)
+      ) {
+        return null;
+      }
+
+      const payload = persistedDescriptorArtifact.payload;
+      return {
+        ok: true,
+        value: payload.descriptor,
+        artifacts: selectResumableActionArtifacts(artifacts),
+      };
+    },
+    [taskArtifactsByTaskId],
+  );
+
   const resolveExecutableActionReplay = useCallback(
     (
       replay: OpyAgentLifecycleRequest["replay"],
+      request?: OpyAgentLifecycleRequest,
     ): OpyExecutableActionReplayResolution | null => {
+      let liveResolution: OpyExecutableActionReplayResolution | null = null;
+
       switch (replay.kind) {
         case "add-node":
-          return resolveOpyExecutableAddNodeActionFlow({
+          liveResolution = resolveOpyExecutableAddNodeActionFlow({
             actionMode,
             domain,
             sessionId: replay.sessionId,
             nodeType: replay.nodeType,
             label: replay.label,
           });
+          break;
         case "apply-proposal": {
           const resolution = resolveOpyApplyProposalActionFlow({
             actionMode,
@@ -2985,7 +3170,7 @@ export function OpyCopilotPanel({
             proposalRecord: findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs),
             sessionId: replay.sessionId,
           });
-          return resolution.ok
+          liveResolution = resolution.ok
             ? {
               ok: true,
               value: resolution.value.descriptor,
@@ -2998,6 +3183,7 @@ export function OpyCopilotPanel({
               ],
             }
             : resolution;
+          break;
         }
         case "rollback": {
           const checkpoint = findCheckpointForReplay(replay.sessionId, replay.checkpointId);
@@ -3007,21 +3193,43 @@ export function OpyCopilotPanel({
             sessionId: replay.sessionId,
           });
           if (!resolution.ok) {
-            return resolution;
+            liveResolution = resolution;
+            break;
           }
 
           const previewArtifact = createCheckpointRestorePreviewArtifactDraft(
             checkpoint ? buildOpyCheckpointRestorePreview(checkpoint, boardSummary) : null,
           );
-          return {
+          liveResolution = {
             ok: true,
             value: resolution.value,
             ...(previewArtifact ? { artifacts: [previewArtifact] } : {}),
           };
+          break;
         }
         default:
-          return null;
+          liveResolution = null;
       }
+
+      if (request) {
+        const persistedResolution = resolvePersistedActionDescriptorReplay(request);
+        if (persistedResolution) {
+          if (!liveResolution || !liveResolution.ok) {
+            return persistedResolution;
+          }
+
+          return {
+            ok: true,
+            value: liveResolution.value,
+            artifacts: mergeArtifactDrafts(
+              liveResolution.artifacts ?? [],
+              persistedResolution.artifacts ?? [],
+            ),
+          };
+        }
+      }
+
+      return liveResolution;
     },
     [
       actionMode,
@@ -3029,6 +3237,7 @@ export function OpyCopilotPanel({
       domain,
       findCheckpointForReplay,
       findPersistedProposalForReplay,
+      resolvePersistedActionDescriptorReplay,
     ],
   );
 
@@ -3263,7 +3472,7 @@ export function OpyCopilotPanel({
         case "apply-proposal":
         case "rollback":
           {
-            const resolution = resolveExecutableActionReplay(replay);
+            const resolution = resolveExecutableActionReplay(replay, request);
             if (!resolution) {
               return false;
             }
@@ -3429,7 +3638,7 @@ export function OpyCopilotPanel({
         case "add-node":
         case "apply-proposal":
         case "rollback": {
-          const resolution = resolveExecutableActionReplay(replay);
+          const resolution = resolveExecutableActionReplay(replay, request);
           if (!resolution) {
             return;
           }
@@ -3475,7 +3684,7 @@ export function OpyCopilotPanel({
       return;
     }
 
-    const resolution = resolveExecutableActionReplay(request.replay);
+    const resolution = resolveExecutableActionReplay(request.replay, request);
     if (!resolution) {
       return;
     }

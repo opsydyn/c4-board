@@ -230,6 +230,9 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 
 - session hydration now interrupts stale running tasks from the previous mount
 - OPY loads the latest interrupted task for the active session
+- OPY hydrates the interrupted task's persisted tool-call and artifact trail before surfacing resume controls
+- grounded chat, review, and proposal artifacts can repopulate in-memory OPY state during resume hydration
+- action resume can fall back to a persisted `action_descriptor` artifact when the live replay target is missing
 - if the interrupted task stage is resumable, OPY exposes a control-field resume card
 - operators can either resume the exact persisted request or dismiss it explicitly
 - starting a new OPY lifecycle supersedes any older resumable task for that session
