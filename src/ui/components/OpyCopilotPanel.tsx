@@ -175,6 +175,10 @@ type OpyPersistMessageResult =
   | { readonly ok: true; readonly message: OpyChatMessage }
   | { readonly ok: false; readonly errorMessage: string; readonly message: OpyChatMessage };
 
+type OpyExecutableActionReplayResolution =
+  | { readonly ok: true; readonly value: OpyActionFlowDescriptor }
+  | { readonly ok: false; readonly issue: OpyActionFlowIssue };
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -638,10 +642,6 @@ export function OpyCopilotPanel({
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
-  const pendingLifecycleExecutionRef = useRef<{
-    readonly execute: () => Promise<string>;
-    readonly onAfterApplied?: () => Promise<void> | void;
-  } | null>(null);
   const viewportAutoSignalsRef = useRef<{
     proposal: number | null;
     review: number | null;
@@ -1297,14 +1297,6 @@ export function OpyCopilotPanel({
     [appendAndPersistMessage],
   );
 
-  useEffect(() => {
-    if (agentLifecycle.stage === "awaiting_confirmation") {
-      return;
-    }
-
-    pendingLifecycleExecutionRef.current = null;
-  }, [agentLifecycle.stage]);
-
   const executeRigRun = useCallback(
     async <T,>(
       input: {
@@ -1517,6 +1509,7 @@ export function OpyCopilotPanel({
     async (input: {
       readonly lifecycleRequest: OpyAgentLifecycleRequest;
       readonly manageLifecycleStart?: boolean;
+      readonly skipConfirmation?: boolean;
       readonly execute: () => Promise<string>;
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
@@ -1524,19 +1517,13 @@ export function OpyCopilotPanel({
         agentLifecycle.startActionRequest(input.lifecycleRequest);
       }
 
-      if (input.lifecycleRequest.requiresConfirmation) {
-        pendingLifecycleExecutionRef.current = input.onAfterApplied
-          ? {
-            execute: input.execute,
-            onAfterApplied: input.onAfterApplied,
-          }
-          : {
-            execute: input.execute,
-          };
+      if (input.lifecycleRequest.requiresConfirmation && input.skipConfirmation !== true) {
         return null;
       }
 
-      agentLifecycle.confirmActiveRequest();
+      if (input.lifecycleRequest.requiresConfirmation) {
+        agentLifecycle.confirmActiveRequest();
+      }
       return executeAppliedBoardAction({
         sessionId: input.lifecycleRequest.confirmation?.sessionId ?? input.lifecycleRequest.replay.sessionId,
         failurePrefix: input.lifecycleRequest.confirmation?.failurePrefix ?? "BOARD ACTION FAILED",
@@ -2220,12 +2207,70 @@ export function OpyCopilotPanel({
     [appendAgentNotice, appendAndPersistMessage, reportMissingLifecycleReplayTarget],
   );
 
+  const summarizeOpyActionFlowIssue = useCallback((issue: OpyActionFlowIssue): string => {
+    switch (issue.kind) {
+      case "policy":
+        return summarizeInlineText(`${issue.message} ${issue.recommendedAction}`, issue.message);
+      case "missing-target":
+        return issue.detail;
+      case "no-op":
+        return issue.message;
+    }
+  }, []);
+
+  const resolveExecutableActionReplay = useCallback(
+    (
+      replay: OpyAgentLifecycleRequest["replay"],
+    ): OpyExecutableActionReplayResolution | null => {
+      switch (replay.kind) {
+        case "add-node":
+          return resolveOpyExecutableAddNodeActionFlow({
+            actionMode,
+            domain,
+            sessionId: replay.sessionId,
+            nodeType: replay.nodeType,
+            label: replay.label,
+          });
+        case "apply-proposal": {
+          const resolution = resolveOpyApplyProposalActionFlow({
+            actionMode,
+            boardSummary,
+            proposalRecord: findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs),
+            sessionId: replay.sessionId,
+          });
+          return resolution.ok
+            ? {
+              ok: true,
+              value: resolution.value.descriptor,
+            }
+            : resolution;
+        }
+        case "rollback":
+          return resolveOpyRollbackActionFlow({
+            actionMode,
+            checkpoint: findCheckpointForReplay(replay.sessionId, replay.checkpointId),
+            sessionId: replay.sessionId,
+          });
+        default:
+          return null;
+      }
+    },
+    [
+      actionMode,
+      boardSummary,
+      domain,
+      findCheckpointForReplay,
+      findPersistedProposalForReplay,
+    ],
+  );
+
   const executeOpyActionFlow = useCallback(
     async (input: {
       readonly descriptor: OpyActionFlowDescriptor;
       readonly lifecycleRequest?: OpyAgentLifecycleRequest;
       readonly manageLifecycleStart?: boolean;
       readonly replay: OpyAgentLifecycleRequest["replay"];
+      readonly skipConfirmation?: boolean;
     }): Promise<string | null> =>
       executeBoardActionLifecycle({
         lifecycleRequest: input.lifecycleRequest ?? createLifecycleRequest({
@@ -2245,6 +2290,9 @@ export function OpyCopilotPanel({
         execute: () => onApplyBoardAction(input.descriptor.boardAction),
         ...(typeof input.manageLifecycleStart === "boolean"
           ? { manageLifecycleStart: input.manageLifecycleStart }
+          : {}),
+        ...(typeof input.skipConfirmation === "boolean"
+          ? { skipConfirmation: input.skipConfirmation }
           : {}),
         ...(input.descriptor.refreshCheckpointsAfterApply
           ? {
@@ -2404,40 +2452,13 @@ export function OpyCopilotPanel({
           }
           return true;
         case "add-node":
-          {
-            const resolution = resolveOpyExecutableAddNodeActionFlow({
-              actionMode,
-              domain,
-              sessionId: replay.sessionId,
-              nodeType: replay.nodeType,
-              label: replay.label,
-            });
-            if (!resolution.ok) {
-              await handleOpyActionFlowIssue(replay.sessionId, resolution.issue);
-              return false;
-            }
-            return true;
-          }
-        case "apply-proposal": {
-          const resolution = resolveOpyApplyProposalActionFlow({
-            actionMode,
-            boardSummary,
-            proposalRecord: findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs),
-            sessionId: replay.sessionId,
-          });
-          if (!resolution.ok) {
-            await handleOpyActionFlowIssue(replay.sessionId, resolution.issue);
-            return false;
-          }
-          return true;
-        }
+        case "apply-proposal":
         case "rollback":
           {
-            const resolution = resolveOpyRollbackActionFlow({
-              actionMode,
-              checkpoint: findCheckpointForReplay(replay.sessionId, replay.checkpointId),
-              sessionId: replay.sessionId,
-            });
+            const resolution = resolveExecutableActionReplay(replay);
+            if (!resolution) {
+              return false;
+            }
             if (!resolution.ok) {
               await handleOpyActionFlowIssue(replay.sessionId, resolution.issue);
               return false;
@@ -2447,14 +2468,10 @@ export function OpyCopilotPanel({
       }
     },
     [
-      actionMode,
       appendAgentNotice,
-      boardSummary,
-      domain,
-      findCheckpointForReplay,
-      findPersistedProposalForReplay,
       hasOpenAiApiKey,
       handleOpyActionFlowIssue,
+      resolveExecutableActionReplay,
     ],
   );
 
@@ -2599,44 +2616,22 @@ export function OpyCopilotPanel({
           return;
         }
         case "add-node":
-          await executeOpyActionFlow({
-            descriptor: createOpyAddNodeActionFlowDescriptor({
-              sessionId: replay.sessionId,
-              nodeType: replay.nodeType,
-              label: replay.label,
-            }),
-            lifecycleRequest: request,
-            manageLifecycleStart: false,
-            replay,
-          });
-          return;
-        case "apply-proposal": {
-          const resolution = resolveOpyApplyProposalActionFlow({
-            actionMode,
-            boardSummary,
-            proposalRecord: findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs),
-            sessionId: replay.sessionId,
-          });
-          if (!resolution.ok) {
-            await handleOpyActionFlowIssue(replay.sessionId, resolution.issue);
+        case "apply-proposal":
+        case "rollback": {
+          const resolution = resolveExecutableActionReplay(replay);
+          if (!resolution) {
             return;
           }
-          await executeOpyActionFlow({
-            descriptor: resolution.value.descriptor,
-            lifecycleRequest: request,
-            manageLifecycleStart: false,
-            replay,
-          });
-          return;
-        }
-        case "rollback": {
-          const resolution = resolveOpyRollbackActionFlow({
-            actionMode,
-            checkpoint: findCheckpointForReplay(replay.sessionId, replay.checkpointId),
-            sessionId: replay.sessionId,
-          });
           if (!resolution.ok) {
             await handleOpyActionFlowIssue(replay.sessionId, resolution.issue);
+            agentLifecycle.failActiveRequest(
+              summarizeOpyActionFlowIssue(resolution.issue),
+              request.requiresConfirmation ? "awaiting_confirmation" : "applying",
+              "apply",
+            );
+            return;
+          }
+          if (request.requiresConfirmation) {
             return;
           }
           await executeOpyActionFlow({
@@ -2645,41 +2640,60 @@ export function OpyCopilotPanel({
             manageLifecycleStart: false,
             replay,
           });
+          return;
         }
       }
     },
     [
-      actionMode,
-      boardSummary,
       executeOpyActionFlow,
       executeRigRun,
-      findCheckpointForReplay,
-      findPersistedProposalForReplay,
+      agentLifecycle,
       handleOpyActionFlowIssue,
       resolveRigAgentContext,
+      resolveExecutableActionReplay,
       runEffect,
+      summarizeOpyActionFlowIssue,
     ],
   );
 
   const handleConfirmPendingLifecycleAction = useCallback(async () => {
+    const request = pendingLifecycleRequest;
     const pending = pendingLifecycleConfirmation;
-    const execution = pendingLifecycleExecutionRef.current;
-    if (!pending || !execution || agentLifecycle.stage !== "awaiting_confirmation") {
+    if (!request || !pending || agentLifecycle.stage !== "awaiting_confirmation") {
       return;
     }
 
-    pendingLifecycleExecutionRef.current = null;
+    const resolution = resolveExecutableActionReplay(request.replay);
+    if (!resolution) {
+      return;
+    }
+    if (!resolution.ok) {
+      await handleOpyActionFlowIssue(pending.sessionId, resolution.issue);
+      agentLifecycle.failActiveRequest(
+        summarizeOpyActionFlowIssue(resolution.issue),
+        "awaiting_confirmation",
+        "apply",
+      );
+      return;
+    }
+
     setRuntimeError(null);
-    agentLifecycle.confirmActiveRequest();
-    await executeAppliedBoardAction({
-      sessionId: pending.sessionId,
-      failurePrefix: pending.failurePrefix,
-      execute: execution.execute,
-      ...(execution.onAfterApplied
-        ? { onAfterApplied: execution.onAfterApplied }
-        : {}),
+    await executeOpyActionFlow({
+      descriptor: resolution.value,
+      lifecycleRequest: request,
+      manageLifecycleStart: false,
+      replay: request.replay,
+      skipConfirmation: true,
     });
-  }, [agentLifecycle, executeAppliedBoardAction, pendingLifecycleConfirmation]);
+  }, [
+    agentLifecycle,
+    executeOpyActionFlow,
+    handleOpyActionFlowIssue,
+    pendingLifecycleConfirmation,
+    pendingLifecycleRequest,
+    resolveExecutableActionReplay,
+    summarizeOpyActionFlowIssue,
+  ]);
 
   const handleCancelPendingLifecycleAction = useCallback(() => {
     const pending = pendingLifecycleConfirmation;
@@ -2687,7 +2701,6 @@ export function OpyCopilotPanel({
       return;
     }
 
-    pendingLifecycleExecutionRef.current = null;
     void appendAndPersistMessage(
       pending.sessionId,
       "system",

@@ -207,9 +207,10 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - the control field now retains the last terminal flow outcome (`complete`, `cancelled`, `failed`) even after the active stage returns to idle
 - lifecycle retry now replays from machine-owned request metadata instead of a captured panel closure
 - lifecycle reset now clears pending confirmation context structurally through the machine
+- confirmed action execution is now re-resolved from the active machine request replay metadata instead of a panel-local execution ref
 - switching or creating sessions resets the active OPY lifecycle boundary so stale flow state does not bleed across sessions
 - the runtime error strip can retry the last OPY flow after a terminal failure
-- this machine is the Phase 4 foundation for later persistent task resume in `RIG-402`
+- this machine is now stable enough to hand off into persistent task resume work in `RIG-402`
 
 ## Run Envelope and Telemetry
 
