@@ -267,16 +267,17 @@
   - `src-tauri/migrations/024_create_opy_agent_tasks.sql`
   - `src-tauri/migrations/025_create_opy_agent_tool_calls_and_artifacts.sql`
   - `src/core/effects/opy-chat.persistence.ts`
+  - `src/core/effects/opy-agent.trace.ts`
   - `src/ui/components/OpyCopilotPanel.tsx`
   - `src/ui/machines/opy-agent.machine.ts`
 - Depends on: `RIG-401`.
 - Current status:
-  - fifth slice complete for task execution-trail persistence, surfaced task-history UX, artifact-backed context restore, and boundary-aware task resume
+  - latest slice complete for persisted resume execution outcomes on top of the existing task execution trail, surfaced task-history UX, artifact-backed context restore, and boundary-aware task resume
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
   - OPY can hydrate a resumable interrupted-task queue for the active session, let the operator switch the active resume slot, and resume or dismiss the selected task
   - `opy_agent_tasks` now also stores lineage metadata so related task segments can be chained through `lineage_key` and `parent_task_id`
   - `opy_agent_tool_calls` now records high-signal lifecycle steps such as context assembly, agent invoke, assistant-message persistence, action resolution, board apply, and checkpoint refresh
-  - `opy_agent_artifacts` now stores grounded context bundles, response/proposal/review payloads, action descriptors, action results, mutation plans, and checkpoint restore previews
+  - `opy_agent_artifacts` now stores grounded context bundles, response/proposal/review payloads, action descriptors, action results, resume boundary outcomes, mutation plans, and checkpoint restore previews
   - OPY now surfaces recent per-session task history with expandable tool-call timeline and artifact inspection
   - interrupted-task resume now rehydrates persisted grounded/action artifacts and can recover action execution from stored descriptors
   - resumed tasks can now skip already-completed read/action tool-call boundaries when the persisted trail is sufficient
@@ -284,6 +285,7 @@
   - OPY remembers the operator-selected resumable task per session and shows chain-level diagnostics before expansion or resume
   - OPY continuity is now board/domain-aware across compatible sessions, and queue/history cards surface session count, cross-session segment count, and session-scope provenance for inherited chains
   - resume now surfaces an explicit boundary plan and only reuses safe cross-session steps; session-local persistence/refresh boundaries remain fresh when the chain crosses sessions
+  - resumed tasks now persist the actual reuse outcome for each boundary, so task history can show what was inherited versus rerun after execution
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

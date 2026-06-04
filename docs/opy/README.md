@@ -246,11 +246,13 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - interrupted queue cards, resume cards, and task history rows now surface cross-session provenance with session count, cross-session segment count, and session-scope labels when the active chain inherits work from another session
 - OPY now exposes an explicit resume-boundary plan for interrupted chains, showing which steps will be reused (`CONTEXT`, `RESULT`, `ACTION`, `APPLY`) and which remain fresh
 - session-local boundaries such as assistant-message persistence and checkpoint refresh are no longer treated as reusable across sessions, even when the broader continuity chain is inherited
+- resumed tasks now persist a `resume_boundary_outcome` artifact so OPY can record what actually happened at execution time, not just the pre-run reuse plan
+- resume outcome tracking distinguishes reused current-session work, reused inherited-session work, and boundaries that were rerun in the active task
 - operators can either resume the exact persisted request or dismiss it explicitly
 - when the active resumable task is dismissed or resolved, OPY auto-advances to the next interrupted task in the queue
 - starting a new OPY lifecycle supersedes any older resumable task for that session
 - current persisted tool calls include context assembly, agent invoke, assistant-message persistence, action resolution, board mutation execution, and post-apply checkpoint refresh
-- current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, action results, mutation plans, and checkpoint restore previews
+- current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, action results, resume boundary outcomes, mutation plans, and checkpoint restore previews
 
 ### Current Task History Surface
 
@@ -259,6 +261,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - expanding a task lazy-loads its persisted tool-call timeline and artifact bundle
 - interrupted tasks are marked distinctly from failed and completed tasks
 - artifacts are rendered inline so operators can inspect grounded context, mutation plans, and restore previews after failure or resume
+- task history now shows both `RESUME PLAN` and `RESUME OUTCOME`, so operators can compare expected boundary reuse against what was actually rerun
 
 ## Run Envelope and Telemetry
 

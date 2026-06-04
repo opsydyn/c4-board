@@ -34,6 +34,7 @@ export type OpyAgentArtifactKind =
   | "board_review"
   | "action_descriptor"
   | "action_result"
+  | "resume_boundary_outcome"
   | "mutation_plan"
   | "checkpoint_restore_preview";
 

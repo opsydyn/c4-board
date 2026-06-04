@@ -283,6 +283,23 @@ interface OpyPersistedActionResultArtifactPayload {
   readonly message: string;
 }
 
+type OpyResumeBoundaryOutcome =
+  | "reused-current-session"
+  | "reused-inherited-session"
+  | "reran"
+  | "pending";
+
+interface OpyPersistedResumeBoundaryOutcomeItem {
+  readonly name: OpyAgentToolCallName;
+  readonly outcome: OpyResumeBoundaryOutcome;
+}
+
+interface OpyPersistedResumeBoundaryOutcomePayload {
+  readonly boundaries: ReadonlyArray<OpyPersistedResumeBoundaryOutcomeItem>;
+  readonly requestKind: OpyAgentLifecycleRequest["kind"];
+  readonly updatedAt: number;
+}
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -339,6 +356,19 @@ const isPersistedActionResultArtifactPayload = (
 ): value is OpyPersistedActionResultArtifactPayload =>
   isRecord(value) && typeof value.message === "string";
 
+const isPersistedResumeBoundaryOutcomePayload = (
+  value: unknown,
+): value is OpyPersistedResumeBoundaryOutcomePayload =>
+  isRecord(value)
+  && Array.isArray(value.boundaries)
+  && typeof value.updatedAt === "number"
+  && typeof value.requestKind === "string"
+  && value.boundaries.every((item) =>
+    isRecord(item)
+    && typeof item.name === "string"
+    && typeof item.outcome === "string"
+  );
+
 const isRigAgentContextBundlePayload = (value: unknown): value is RigAgentContextBundle =>
   isRecord(value)
   && typeof value.promptContext === "string"
@@ -393,6 +423,15 @@ const createActionResultArtifactDraft = (message: string): OpyTaskArtifactDraft 
     message,
   } satisfies OpyPersistedActionResultArtifactPayload,
 });
+
+const selectPersistedResumeBoundaryOutcome = (
+  artifacts: readonly OpyAgentArtifact[],
+): OpyPersistedResumeBoundaryOutcomePayload | null => {
+  const artifact = selectLatestTaskArtifact(artifacts, "resume_boundary_outcome");
+  return artifact && isPersistedResumeBoundaryOutcomePayload(artifact.payload)
+    ? artifact.payload
+    : null;
+};
 
 const selectPersistedReadResultArtifact = (
   request: OpyAgentLifecycleRequest,
@@ -565,10 +604,31 @@ const RESUME_BOUNDARY_ORIGIN_LABEL: Record<Exclude<OpyResumeBoundaryOrigin, "fre
   "inherited-session": "INHERITED",
 };
 
+const RESUME_BOUNDARY_OUTCOME_LABEL: Record<Exclude<OpyResumeBoundaryOutcome, "pending">, string> = {
+  "reused-current-session": "LOCAL",
+  "reused-inherited-session": "INHERITED",
+  reran: "RERAN",
+};
+
 const getResumeBoundariesForRequest = (
   request: OpyAgentLifecycleRequest,
 ): ReadonlyArray<OpyAgentToolCallName> => {
   switch (request.kind) {
+    case "chat":
+    case "proposal":
+    case "review":
+      return ["assemble_context", "invoke_agent", "persist_assistant_message"];
+    case "add-node":
+    case "apply-proposal":
+    case "rollback":
+      return ["resolve_action", "execute_board_action", "refresh_checkpoints", "persist_assistant_message"];
+  }
+};
+
+const getResumeBoundariesForRequestKind = (
+  kind: OpyAgentLifecycleRequest["kind"],
+): ReadonlyArray<OpyAgentToolCallName> => {
+  switch (kind) {
     case "chat":
     case "proposal":
     case "review":
@@ -616,6 +676,26 @@ const buildTaskResumeBoundaryPlan = (
     } satisfies OpyResumeBoundaryPlanItem;
   });
 
+const buildTaskResumeBoundaryPlanForKind = (
+  targetSessionId: string,
+  kind: OpyAgentLifecycleRequest["kind"],
+  toolCalls: readonly OpyAgentToolCall[],
+): ReadonlyArray<OpyResumeBoundaryPlanItem> =>
+  getResumeBoundariesForRequestKind(kind).map((name) => {
+    const reusableToolCall = selectReusableCompletedTaskToolCall(targetSessionId, toolCalls, name);
+    if (!reusableToolCall) {
+      return {
+        name,
+        origin: "fresh",
+      } satisfies OpyResumeBoundaryPlanItem;
+    }
+
+    return {
+      name,
+      origin: reusableToolCall.sessionId === targetSessionId ? "current-session" : "inherited-session",
+    } satisfies OpyResumeBoundaryPlanItem;
+  });
+
 const summarizeTaskResumeBoundaryPlan = (
   plan: readonly OpyResumeBoundaryPlanItem[],
   limit = 3,
@@ -643,6 +723,62 @@ const summarizeTaskResumeBoundaryPlan = (
 
   return `REUSE::${reusedLabel} · NEXT::${RESUME_BOUNDARY_LABEL[fresh[0]!.name]}`;
 };
+
+const toPersistedResumeBoundaryOutcome = (
+  plan: readonly OpyResumeBoundaryPlanItem[],
+): ReadonlyArray<OpyPersistedResumeBoundaryOutcomeItem> =>
+  plan.map((item) => ({
+    name: item.name,
+    outcome: item.origin === "current-session"
+      ? "reused-current-session"
+      : item.origin === "inherited-session"
+      ? "reused-inherited-session"
+      : "pending",
+  }));
+
+const markResumeBoundaryReran = (
+  items: readonly OpyPersistedResumeBoundaryOutcomeItem[],
+  name: OpyAgentToolCallName,
+): ReadonlyArray<OpyPersistedResumeBoundaryOutcomeItem> =>
+  items.map((item) => item.name === name ? { ...item, outcome: "reran" } : item);
+
+const summarizePersistedResumeBoundaryOutcome = (
+  payload: OpyPersistedResumeBoundaryOutcomePayload,
+  limit = 3,
+): string => {
+  const active = payload.boundaries
+    .filter((item) => item.outcome !== "pending")
+    .slice(0, limit)
+    .map((item) => {
+      const outcomeLabel = item.outcome === "reran"
+        ? "RERAN"
+        : RESUME_BOUNDARY_OUTCOME_LABEL[item.outcome as Exclude<OpyResumeBoundaryOutcome, "pending" | "reran">];
+      return `${RESUME_BOUNDARY_LABEL[item.name]}[${outcomeLabel}]`;
+    })
+    .join(" · ");
+
+  const pending = payload.boundaries.filter((item) => item.outcome === "pending");
+
+  if (active.length === 0) {
+    return pending.length > 0
+      ? `OUTCOME::PENDING · NEXT::${RESUME_BOUNDARY_LABEL[pending[0]!.name]}`
+      : "OUTCOME::PENDING";
+  }
+
+  if (pending.length === 0) {
+    return `OUTCOME::${active}`;
+  }
+
+  return `OUTCOME::${active} · NEXT::${RESUME_BOUNDARY_LABEL[pending[0]!.name]}`;
+};
+
+const createResumeBoundaryOutcomeArtifactDraft = (
+  payload: OpyPersistedResumeBoundaryOutcomePayload,
+): OpyTaskArtifactDraft => ({
+  kind: "resume_boundary_outcome",
+  summary: summarizePersistedResumeBoundaryOutcome(payload),
+  payload,
+});
 
 const LIFECYCLE_TERMINAL_STATUS_LABEL: Record<
   NonNullable<ReturnType<typeof useOpyAgentMachine>["lastTerminalStatus"]>,
@@ -2107,6 +2243,22 @@ export function OpyCopilotPanel({
     [runEffect, warnOpyTracePersistFailure],
   );
 
+  const persistResumeBoundaryOutcomeArtifact = useCallback(
+    async (input: {
+      readonly taskId: string;
+      readonly sessionId: string;
+      readonly payload: OpyPersistedResumeBoundaryOutcomePayload;
+    }): Promise<void> => {
+      await createOpyTaskArtifact({
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        toolCallId: null,
+        draft: createResumeBoundaryOutcomeArtifactDraft(input.payload),
+      });
+    },
+    [createOpyTaskArtifact],
+  );
+
   const trackOpyTaskToolCall = useCallback(
     async <T,>(
       input: {
@@ -2494,6 +2646,9 @@ export function OpyCopilotPanel({
       }
 
       let currentRun = run;
+      let resumeBoundaryOutcome = toPersistedResumeBoundaryOutcome(
+        buildTaskResumeBoundaryPlan(input.sessionId, input.lifecycleRequest, getTaskResumeTrail(taskId).toolCalls),
+      );
       try {
         const resumeTrail = getTaskResumeTrail(taskId);
         const persistedContext = selectReusableCompletedTaskToolCall(
@@ -2503,6 +2658,9 @@ export function OpyCopilotPanel({
         )
           ? selectPersistedContextBundle(resumeTrail.artifacts)
           : null;
+        if (!persistedContext) {
+          resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "assemble_context");
+        }
         const context = persistedContext ?? await trackOpyTaskToolCall({
           taskId,
           sessionId: input.sessionId,
@@ -2529,6 +2687,9 @@ export function OpyCopilotPanel({
         )
           ? selectPersistedReadResultArtifact(input.lifecycleRequest, resumeTrail.artifacts) as T | null
           : null;
+        if (!persistedResult) {
+          resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "invoke_agent");
+        }
         const result = persistedResult ?? await trackOpyTaskToolCall({
           taskId,
           sessionId: input.sessionId,
@@ -2551,6 +2712,15 @@ export function OpyCopilotPanel({
           resumeTrail.toolCalls,
           "persist_assistant_message",
         )) {
+          await persistResumeBoundaryOutcomeArtifact({
+            taskId,
+            sessionId: input.sessionId,
+            payload: {
+              boundaries: resumeBoundaryOutcome,
+              requestKind: input.lifecycleRequest.kind,
+              updatedAt: Date.now(),
+            },
+          });
           await input.onAfterPersisted?.(result);
           agentLifecycle.markPersistReady();
           await transitionAgentRun(currentRun, {
@@ -2563,6 +2733,7 @@ export function OpyCopilotPanel({
           return result;
         }
 
+        resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "persist_assistant_message");
         const persistedMessageCallId = createMessageId();
         const persistedMessageStartedAt = Date.now();
         await persistOpyToolCall({
@@ -2606,6 +2777,15 @@ export function OpyCopilotPanel({
             completedAt: Date.now(),
             errorSummary: summarizeAgentError(persistError),
           });
+          await persistResumeBoundaryOutcomeArtifact({
+            taskId,
+            sessionId: input.sessionId,
+            payload: {
+              boundaries: resumeBoundaryOutcome,
+              requestKind: input.lifecycleRequest.kind,
+              updatedAt: Date.now(),
+            },
+          });
           setRuntimeError(formatAgentError(persistError));
           agentLifecycle.failActiveRequest(formatAgentError(persistError), "proposing", "persist");
           return null;
@@ -2637,6 +2817,15 @@ export function OpyCopilotPanel({
             completedAt: Date.now(),
             errorSummary: summarizeAgentError(persistError),
           });
+          await persistResumeBoundaryOutcomeArtifact({
+            taskId,
+            sessionId: input.sessionId,
+            payload: {
+              boundaries: resumeBoundaryOutcome,
+              requestKind: input.lifecycleRequest.kind,
+              updatedAt: Date.now(),
+            },
+          });
           setRuntimeError(formatAgentError(persistError));
           agentLifecycle.failActiveRequest(formatAgentError(persistError), "proposing", "persist");
           return null;
@@ -2657,6 +2846,15 @@ export function OpyCopilotPanel({
           errorSummary: null,
         });
 
+        await persistResumeBoundaryOutcomeArtifact({
+          taskId,
+          sessionId: input.sessionId,
+          payload: {
+            boundaries: resumeBoundaryOutcome,
+            requestKind: input.lifecycleRequest.kind,
+            updatedAt: Date.now(),
+          },
+        });
         await input.onAfterPersisted?.(result);
         agentLifecycle.markPersistReady();
         await transitionAgentRun(currentRun, {
@@ -2684,6 +2882,15 @@ export function OpyCopilotPanel({
           completedAt: Date.now(),
           errorSummary,
         });
+        await persistResumeBoundaryOutcomeArtifact({
+          taskId,
+          sessionId: input.sessionId,
+          payload: {
+            boundaries: resumeBoundaryOutcome,
+            requestKind: input.lifecycleRequest.kind,
+            updatedAt: Date.now(),
+          },
+        });
         const failureStage = agentLifecycle.stage === "planning"
           ? "planning"
           : agentLifecycle.stage === "proposing"
@@ -2708,6 +2915,7 @@ export function OpyCopilotPanel({
       getTaskResumeTrail,
       persistOpyMessage,
       persistOpyToolCall,
+      persistResumeBoundaryOutcomeArtifact,
       trackOpyTaskToolCall,
       transitionAgentRun,
     ],
@@ -2717,15 +2925,35 @@ export function OpyCopilotPanel({
     async (input: {
       readonly taskId: string;
       readonly sessionId: string;
+      readonly requestKind: OpyAgentLifecycleRequest["kind"];
+      readonly initialResumeBoundaryOutcome?: ReadonlyArray<OpyPersistedResumeBoundaryOutcomeItem>;
       readonly failurePrefix: string;
       readonly execute: () => Promise<string>;
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
+      let resumeBoundaryOutcome = input.initialResumeBoundaryOutcome
+        ? [...input.initialResumeBoundaryOutcome]
+        : toPersistedResumeBoundaryOutcome(
+          buildTaskResumeBoundaryPlanForKind(
+            input.sessionId,
+            input.requestKind,
+            getTaskResumeTrail(input.taskId).toolCalls,
+          ),
+        );
       const failBoardActionLifecycle = async (failure: {
         readonly message: string;
         readonly phase: "apply" | "verify" | "persist";
         readonly stage: Extract<OpyAgentLifecycleStage, "applying" | "verifying">;
       }): Promise<null> => {
+        await persistResumeBoundaryOutcomeArtifact({
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          payload: {
+            boundaries: resumeBoundaryOutcome,
+            requestKind: input.requestKind,
+            updatedAt: Date.now(),
+          },
+        });
         setRuntimeError(failure.message);
         const persistedFailure = await persistOpyMessage(
           input.sessionId,
@@ -2759,6 +2987,7 @@ export function OpyCopilotPanel({
       if (completedBoardAction && persistedActionResult) {
         actionResult = persistedActionResult;
       } else {
+        resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "execute_board_action");
         try {
           actionResult = await trackOpyTaskToolCall({
             taskId: input.taskId,
@@ -2781,6 +3010,7 @@ export function OpyCopilotPanel({
       agentLifecycle.markVerifyReady();
 
       if (!selectReusableCompletedTaskToolCall(input.sessionId, resumeTrail.toolCalls, "refresh_checkpoints")) {
+        resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "refresh_checkpoints");
         try {
           if (input.onAfterApplied) {
             await trackOpyTaskToolCall({
@@ -2805,10 +3035,20 @@ export function OpyCopilotPanel({
       }
 
       if (selectReusableCompletedTaskToolCall(input.sessionId, resumeTrail.toolCalls, "persist_assistant_message")) {
+        await persistResumeBoundaryOutcomeArtifact({
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          payload: {
+            boundaries: resumeBoundaryOutcome,
+            requestKind: input.requestKind,
+            updatedAt: Date.now(),
+          },
+        });
         agentLifecycle.completeActiveRequest();
         return actionResult;
       }
 
+      resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "persist_assistant_message");
       const persistedMessageCallId = createMessageId();
       const persistedMessageStartedAt = Date.now();
       await persistOpyToolCall({
@@ -2883,10 +3123,26 @@ export function OpyCopilotPanel({
         errorSummary: null,
       });
 
+      await persistResumeBoundaryOutcomeArtifact({
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        payload: {
+          boundaries: resumeBoundaryOutcome,
+          requestKind: input.requestKind,
+          updatedAt: Date.now(),
+        },
+      });
       agentLifecycle.completeActiveRequest();
       return actionResult;
     },
-    [agentLifecycle, getTaskResumeTrail, persistOpyMessage, persistOpyToolCall, trackOpyTaskToolCall],
+    [
+      agentLifecycle,
+      getTaskResumeTrail,
+      persistOpyMessage,
+      persistOpyToolCall,
+      persistResumeBoundaryOutcomeArtifact,
+      trackOpyTaskToolCall,
+    ],
   );
 
   const executeBoardActionLifecycle = useCallback(
@@ -2894,6 +3150,7 @@ export function OpyCopilotPanel({
       readonly lifecycleRequest: OpyAgentLifecycleRequest;
       readonly manageLifecycleStart?: boolean;
       readonly skipConfirmation?: boolean;
+      readonly initialResumeBoundaryOutcome?: ReadonlyArray<OpyPersistedResumeBoundaryOutcomeItem>;
       readonly execute: () => Promise<string>;
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
@@ -2914,6 +3171,10 @@ export function OpyCopilotPanel({
       return executeAppliedBoardAction({
         taskId: input.lifecycleRequest.id,
         sessionId: input.lifecycleRequest.confirmation?.sessionId ?? input.lifecycleRequest.replay.sessionId,
+        requestKind: input.lifecycleRequest.kind,
+        ...(input.initialResumeBoundaryOutcome
+          ? { initialResumeBoundaryOutcome: input.initialResumeBoundaryOutcome }
+          : {}),
         failurePrefix: input.lifecycleRequest.confirmation?.failurePrefix ?? "BOARD ACTION FAILED",
         execute: input.execute,
         ...(input.onAfterApplied
@@ -3801,6 +4062,17 @@ export function OpyCopilotPanel({
         replay: input.replay,
       });
 
+      const actionResumeBoundaryOutcome = markResumeBoundaryReran(
+        toPersistedResumeBoundaryOutcome(
+          buildTaskResumeBoundaryPlanForKind(
+            input.descriptor.sessionId,
+            lifecycleRequest.kind,
+            getTaskResumeTrail(lifecycleRequest.id).toolCalls,
+          ),
+        ),
+        "resolve_action",
+      );
+
       await trackOpyTaskToolCall({
         taskId: lifecycleRequest.id,
         sessionId: input.descriptor.sessionId,
@@ -3828,6 +4100,7 @@ export function OpyCopilotPanel({
 
       return executeBoardActionLifecycle({
         lifecycleRequest,
+        initialResumeBoundaryOutcome: actionResumeBoundaryOutcome,
         execute: () => onApplyBoardAction(input.descriptor.boardAction),
         ...(typeof input.manageLifecycleStart === "boolean"
           ? { manageLifecycleStart: input.manageLifecycleStart }
@@ -5019,6 +5292,10 @@ export function OpyCopilotPanel({
                       const isResumable = agentLifecycle.resumableTaskId === task.id;
                       const lineageDiagnostics = getTaskLineageDiagnostics(task);
                       const resumePlan = buildTaskResumeBoundaryPlan(task.sessionId, task.request, resumeTrail.toolCalls);
+                      const persistedResumeOutcome = selectPersistedResumeBoundaryOutcome(artifacts);
+                      const resumeDiagnosticsSummary = persistedResumeOutcome
+                        ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
+                        : summarizeTaskResumeBoundaryPlan(resumePlan);
                       const completedStepPreview = lineageDiagnostics.completedStepNames
                         .slice(0, 2)
                         .map(formatLineageCompletedStep)
@@ -5060,6 +5337,7 @@ export function OpyCopilotPanel({
                               {completedStepPreview.length > 0 && (
                                 <span>{`READY::${completedStepPreview}`}</span>
                               )}
+                              <span>{resumeDiagnosticsSummary}</span>
                               {isResumable && <span>RESUMABLE</span>}
                             </span>
                             <span className={styles.opyCopilotTaskMeta}>
@@ -5078,7 +5356,12 @@ export function OpyCopilotPanel({
                                   lineageDiagnostics.inheritedSegmentCount
                                 }`}
                               </p>
-                              <p className={styles.ownershipLensHint}>{summarizeTaskResumeBoundaryPlan(resumePlan)}</p>
+                              <p className={styles.ownershipLensHint}>{`RESUME PLAN::${summarizeTaskResumeBoundaryPlan(resumePlan)}`}</p>
+                              {persistedResumeOutcome && (
+                                <p className={styles.ownershipLensHint}>
+                                  {`RESUME OUTCOME::${summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)}`}
+                                </p>
+                              )}
                               {lineageDiagnostics.sessionCount > 1 && (
                                 <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
                               )}

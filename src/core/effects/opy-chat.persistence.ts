@@ -587,6 +587,7 @@ const isOpyAgentArtifactKind = (value: unknown): value is OpyAgentArtifactKind =
   || value === "board_review"
   || value === "action_descriptor"
   || value === "action_result"
+  || value === "resume_boundary_outcome"
   || value === "mutation_plan"
   || value === "checkpoint_restore_preview";
 
