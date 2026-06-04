@@ -360,19 +360,6 @@ const toArtifactDraft = (artifact: OpyAgentArtifact): OpyTaskArtifactDraft => ({
   payload: artifact.payload,
 });
 
-const selectLatestCompletedTaskToolCall = (
-  toolCalls: readonly OpyAgentToolCall[],
-  name: OpyAgentToolCallName,
-): OpyAgentToolCall | null =>
-  [...toolCalls]
-    .filter((toolCall) => toolCall.name === name && toolCall.status === "completed")
-    .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null;
-
-const hasCompletedTaskToolCall = (
-  toolCalls: readonly OpyAgentToolCall[],
-  name: OpyAgentToolCallName,
-): boolean => selectLatestCompletedTaskToolCall(toolCalls, name) !== null;
-
 const mergeArtifactDrafts = (
   left: readonly OpyTaskArtifactDraft[],
   right: readonly OpyTaskArtifactDraft[],
@@ -551,6 +538,111 @@ const formatLineageSessionScope = (
   sessionIds
     .map((sessionId) => sessionLookup[sessionId]?.title ?? sessionId.slice(0, 8))
     .join(" · ");
+
+type OpyResumeBoundaryOrigin = "current-session" | "inherited-session" | "fresh";
+
+interface OpyResumeBoundaryPlanItem {
+  readonly name: OpyAgentToolCallName;
+  readonly origin: OpyResumeBoundaryOrigin;
+}
+
+const SESSION_LOCAL_RESUME_BOUNDARIES = new Set<OpyAgentToolCallName>([
+  "persist_assistant_message",
+  "refresh_checkpoints",
+]);
+
+const RESUME_BOUNDARY_LABEL: Record<OpyAgentToolCallName, string> = {
+  assemble_context: "CONTEXT",
+  invoke_agent: "RESULT",
+  persist_assistant_message: "MESSAGE",
+  resolve_action: "ACTION",
+  execute_board_action: "APPLY",
+  refresh_checkpoints: "CHECKPOINTS",
+};
+
+const RESUME_BOUNDARY_ORIGIN_LABEL: Record<Exclude<OpyResumeBoundaryOrigin, "fresh">, string> = {
+  "current-session": "LOCAL",
+  "inherited-session": "INHERITED",
+};
+
+const getResumeBoundariesForRequest = (
+  request: OpyAgentLifecycleRequest,
+): ReadonlyArray<OpyAgentToolCallName> => {
+  switch (request.kind) {
+    case "chat":
+    case "proposal":
+    case "review":
+      return ["assemble_context", "invoke_agent", "persist_assistant_message"];
+    case "add-node":
+    case "apply-proposal":
+    case "rollback":
+      return ["resolve_action", "execute_board_action", "refresh_checkpoints", "persist_assistant_message"];
+  }
+};
+
+const selectReusableCompletedTaskToolCall = (
+  targetSessionId: string,
+  toolCalls: readonly OpyAgentToolCall[],
+  name: OpyAgentToolCallName,
+): OpyAgentToolCall | null =>
+  [...toolCalls]
+    .filter((toolCall) =>
+      toolCall.name === name
+      && toolCall.status === "completed"
+      && (
+        !SESSION_LOCAL_RESUME_BOUNDARIES.has(name)
+        || toolCall.sessionId === targetSessionId
+      )
+    )
+    .sort((left, right) => right.updatedAt - left.updatedAt || right.startedAt - left.startedAt)[0] ?? null;
+
+const buildTaskResumeBoundaryPlan = (
+  targetSessionId: string,
+  request: OpyAgentLifecycleRequest,
+  toolCalls: readonly OpyAgentToolCall[],
+): ReadonlyArray<OpyResumeBoundaryPlanItem> =>
+  getResumeBoundariesForRequest(request).map((name) => {
+    const reusableToolCall = selectReusableCompletedTaskToolCall(targetSessionId, toolCalls, name);
+    if (!reusableToolCall) {
+      return {
+        name,
+        origin: "fresh",
+      } satisfies OpyResumeBoundaryPlanItem;
+    }
+
+    return {
+      name,
+      origin: reusableToolCall.sessionId === targetSessionId ? "current-session" : "inherited-session",
+    } satisfies OpyResumeBoundaryPlanItem;
+  });
+
+const summarizeTaskResumeBoundaryPlan = (
+  plan: readonly OpyResumeBoundaryPlanItem[],
+  limit = 3,
+): string => {
+  const active = plan.filter((item) => item.origin !== "fresh").slice(0, limit);
+  const fresh = plan.filter((item) => item.origin === "fresh");
+
+  if (active.length === 0) {
+    return fresh.length > 0
+      ? `REUSE::FRESH · NEXT::${RESUME_BOUNDARY_LABEL[fresh[0]!.name]}`
+      : "REUSE::FRESH";
+  }
+
+  const reusedLabel = active
+    .map((item) =>
+      `${RESUME_BOUNDARY_LABEL[item.name]}[${
+        RESUME_BOUNDARY_ORIGIN_LABEL[item.origin as Exclude<OpyResumeBoundaryOrigin, "fresh">]
+      }]`
+    )
+    .join(" · ");
+
+  if (fresh.length === 0) {
+    return `REUSE::${reusedLabel}`;
+  }
+
+  return `REUSE::${reusedLabel} · NEXT::${RESUME_BOUNDARY_LABEL[fresh[0]!.name]}`;
+};
 
 const LIFECYCLE_TERMINAL_STATUS_LABEL: Record<
   NonNullable<ReturnType<typeof useOpyAgentMachine>["lastTerminalStatus"]>,
@@ -2160,16 +2252,21 @@ export function OpyCopilotPanel({
       }));
 
       try {
-        const { toolCalls: loadedToolCalls, artifacts: loadedArtifacts } = await loadOpyTaskDetails(taskId);
+        const task = agentTaskIndexRef.current[taskId];
+        if (task) {
+          await loadTaskLineageDetails(task);
+        } else {
+          const { toolCalls: loadedToolCalls, artifacts: loadedArtifacts } = await loadOpyTaskDetails(taskId);
 
-        setTaskToolCallsByTaskId((current) => ({
-          ...current,
-          [taskId]: loadedToolCalls,
-        }));
-        setTaskArtifactsByTaskId((current) => ({
-          ...current,
-          [taskId]: loadedArtifacts,
-        }));
+          setTaskToolCallsByTaskId((current) => ({
+            ...current,
+            [taskId]: loadedToolCalls,
+          }));
+          setTaskArtifactsByTaskId((current) => ({
+            ...current,
+            [taskId]: loadedArtifacts,
+          }));
+        }
       } catch (error) {
         setRuntimeError(`TASK DETAIL LOAD FAILED: ${toErrorMessage(error)}`);
       } finally {
@@ -2179,7 +2276,7 @@ export function OpyCopilotPanel({
         }));
       }
     },
-    [loadOpyTaskDetails],
+    [loadOpyTaskDetails, loadTaskLineageDetails],
   );
 
   const toggleExpandedTask = useCallback((taskId: string) => {
@@ -2399,7 +2496,11 @@ export function OpyCopilotPanel({
       let currentRun = run;
       try {
         const resumeTrail = getTaskResumeTrail(taskId);
-        const persistedContext = hasCompletedTaskToolCall(resumeTrail.toolCalls, "assemble_context")
+        const persistedContext = selectReusableCompletedTaskToolCall(
+          input.sessionId,
+          resumeTrail.toolCalls,
+          "assemble_context",
+        )
           ? selectPersistedContextBundle(resumeTrail.artifacts)
           : null;
         const context = persistedContext ?? await trackOpyTaskToolCall({
@@ -2421,7 +2522,11 @@ export function OpyCopilotPanel({
         });
         agentLifecycle.markContextReady();
 
-        const persistedResult = hasCompletedTaskToolCall(resumeTrail.toolCalls, "invoke_agent")
+        const persistedResult = selectReusableCompletedTaskToolCall(
+          input.sessionId,
+          resumeTrail.toolCalls,
+          "invoke_agent",
+        )
           ? selectPersistedReadResultArtifact(input.lifecycleRequest, resumeTrail.artifacts) as T | null
           : null;
         const result = persistedResult ?? await trackOpyTaskToolCall({
@@ -2441,7 +2546,11 @@ export function OpyCopilotPanel({
           stage: "persist",
         });
 
-        if (hasCompletedTaskToolCall(resumeTrail.toolCalls, "persist_assistant_message")) {
+        if (selectReusableCompletedTaskToolCall(
+          input.sessionId,
+          resumeTrail.toolCalls,
+          "persist_assistant_message",
+        )) {
           await input.onAfterPersisted?.(result);
           agentLifecycle.markPersistReady();
           await transitionAgentRun(currentRun, {
@@ -2631,7 +2740,11 @@ export function OpyCopilotPanel({
       };
 
       const resumeTrail = getTaskResumeTrail(input.taskId);
-      const completedBoardAction = hasCompletedTaskToolCall(resumeTrail.toolCalls, "execute_board_action");
+      const completedBoardAction = selectReusableCompletedTaskToolCall(
+        input.sessionId,
+        resumeTrail.toolCalls,
+        "execute_board_action",
+      );
       const persistedActionResult = selectPersistedActionResultMessage(resumeTrail.artifacts);
 
       let actionResult: string;
@@ -2667,7 +2780,7 @@ export function OpyCopilotPanel({
 
       agentLifecycle.markVerifyReady();
 
-      if (!hasCompletedTaskToolCall(resumeTrail.toolCalls, "refresh_checkpoints")) {
+      if (!selectReusableCompletedTaskToolCall(input.sessionId, resumeTrail.toolCalls, "refresh_checkpoints")) {
         try {
           if (input.onAfterApplied) {
             await trackOpyTaskToolCall({
@@ -2691,7 +2804,7 @@ export function OpyCopilotPanel({
         }
       }
 
-      if (hasCompletedTaskToolCall(resumeTrail.toolCalls, "persist_assistant_message")) {
+      if (selectReusableCompletedTaskToolCall(input.sessionId, resumeTrail.toolCalls, "persist_assistant_message")) {
         agentLifecycle.completeActiveRequest();
         return actionResult;
       }
@@ -3540,7 +3653,17 @@ export function OpyCopilotPanel({
       readonly ok: true;
       readonly value: OpyActionFlowDescriptor;
     } | null => {
-      const artifacts = taskArtifactsByTaskId[request.id] ?? [];
+      const resumeTrail = getTaskResumeTrail(request.id);
+      const reusableResolution = selectReusableCompletedTaskToolCall(
+        request.replay.sessionId,
+        resumeTrail.toolCalls,
+        "resolve_action",
+      );
+      if (!reusableResolution) {
+        return null;
+      }
+
+      const artifacts = resumeTrail.artifacts;
       const persistedDescriptorArtifact = selectLatestTaskArtifact(artifacts, "action_descriptor");
       if (
         !persistedDescriptorArtifact
@@ -3556,7 +3679,7 @@ export function OpyCopilotPanel({
         artifacts: selectResumableActionArtifacts(artifacts),
       };
     },
-    [taskArtifactsByTaskId],
+    [getTaskResumeTrail],
   );
 
   const resolveExecutableActionReplay = useCallback(
@@ -4709,6 +4832,12 @@ export function OpyCopilotPanel({
                     {activeInterruptedTasks.map((task) => {
                       const isSelected = task.id === agentLifecycle.resumableTaskId;
                       const lineageDiagnostics = getTaskLineageDiagnostics(task);
+                      const resumePlan = buildTaskResumeBoundaryPlan(
+                        task.sessionId,
+                        task.request,
+                        getTaskResumeTrail(task.id).toolCalls,
+                      );
+                      const resumePlanSummary = summarizeTaskResumeBoundaryPlan(resumePlan, 2);
                       const completedStepPreview = lineageDiagnostics.completedStepNames
                         .slice(0, 2)
                         .map(formatLineageCompletedStep)
@@ -4754,6 +4883,7 @@ export function OpyCopilotPanel({
                               {`${formatClockTime(task.updatedAt)} · ${task.id.slice(0, 8)}`}
                             </span>
                           </button>
+                          <p className={styles.ownershipLensHint}>{resumePlanSummary}</p>
                           {lineageDiagnostics.sessionCount > 1 && (
                             <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
                           )}
@@ -4780,6 +4910,11 @@ export function OpyCopilotPanel({
                   </p>
                   {selectedResumableTask && (() => {
                     const lineageDiagnostics = getTaskLineageDiagnostics(selectedResumableTask);
+                    const resumePlan = buildTaskResumeBoundaryPlan(
+                      selectedResumableTask.sessionId,
+                      selectedResumableTask.request,
+                      getTaskResumeTrail(selectedResumableTask.id).toolCalls,
+                    );
                     const completedSteps = lineageDiagnostics.completedStepNames
                       .slice(0, 3)
                       .map(formatLineageCompletedStep)
@@ -4795,6 +4930,7 @@ export function OpyCopilotPanel({
                             completedSteps.length > 0 ? completedSteps : "FRESH EXECUTION"
                           }`}
                         </p>
+                        <p className={styles.ownershipLensHint}>{summarizeTaskResumeBoundaryPlan(resumePlan)}</p>
                         {lineageDiagnostics.sessionCount > 1 && (
                           <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
                         )}
@@ -4876,11 +5012,13 @@ export function OpyCopilotPanel({
                   <div className={styles.opyCopilotTaskTimeline}>
                     {activeTasks.slice(0, 6).map((task) => {
                       const isExpanded = expandedTaskIds.includes(task.id);
+                      const resumeTrail = getTaskResumeTrail(task.id);
                       const toolCalls = taskToolCallsByTaskId[task.id] ?? [];
                       const artifacts = taskArtifactsByTaskId[task.id] ?? [];
                       const isLoading = taskDetailLoadingByTaskId[task.id] === true;
                       const isResumable = agentLifecycle.resumableTaskId === task.id;
                       const lineageDiagnostics = getTaskLineageDiagnostics(task);
+                      const resumePlan = buildTaskResumeBoundaryPlan(task.sessionId, task.request, resumeTrail.toolCalls);
                       const completedStepPreview = lineageDiagnostics.completedStepNames
                         .slice(0, 2)
                         .map(formatLineageCompletedStep)
@@ -4940,6 +5078,7 @@ export function OpyCopilotPanel({
                                   lineageDiagnostics.inheritedSegmentCount
                                 }`}
                               </p>
+                              <p className={styles.ownershipLensHint}>{summarizeTaskResumeBoundaryPlan(resumePlan)}</p>
                               {lineageDiagnostics.sessionCount > 1 && (
                                 <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
                               )}

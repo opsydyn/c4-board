@@ -48,6 +48,8 @@
 - resume trail lookup is now chain-aware, aggregating ancestor tool calls and artifacts before deciding which boundaries can be skipped
 - OPY now remembers the active resumable task per session across switch/remount flow and surfaces chain diagnostics directly in the interrupted queue and task history cards
 - OPY now extends that lineage continuity across compatible sessions on the same board/domain, so queue/history diagnostics can show inherited chain provenance beyond the currently selected session
+- OPY now distinguishes cross-session reusable boundaries from session-local ones, so continuity can reuse safe read/action preparation work without incorrectly skipping assistant-message persistence or checkpoint refresh in a different session
+- the OPY surface now shows an explicit resume-boundary plan for interrupted chains, instead of leaving reuse implicit
 - the next `RIG-402` slices should build on this with deeper multi-run continuity and richer operator diagnostics beyond cross-session chain provenance
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
@@ -281,6 +283,7 @@
   - resumed tasks now aggregate ancestor chain segments before replay, so the latest interrupted task can inherit already-completed boundaries from related prior runs
   - OPY remembers the operator-selected resumable task per session and shows chain-level diagnostics before expansion or resume
   - OPY continuity is now board/domain-aware across compatible sessions, and queue/history cards surface session count, cross-session segment count, and session-scope provenance for inherited chains
+  - resume now surfaces an explicit boundary plan and only reuses safe cross-session steps; session-local persistence/refresh boundaries remain fresh when the chain crosses sessions
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

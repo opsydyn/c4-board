@@ -244,6 +244,8 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - when the selected task belongs to a known lineage, OPY aggregates ancestor tool calls and artifacts so resume can continue from the last completed boundary across the chain
 - OPY now treats compatible sessions on the same board/domain as one continuity surface when lineage replay matches, so resumable chain provenance can span more than the currently selected session
 - interrupted queue cards, resume cards, and task history rows now surface cross-session provenance with session count, cross-session segment count, and session-scope labels when the active chain inherits work from another session
+- OPY now exposes an explicit resume-boundary plan for interrupted chains, showing which steps will be reused (`CONTEXT`, `RESULT`, `ACTION`, `APPLY`) and which remain fresh
+- session-local boundaries such as assistant-message persistence and checkpoint refresh are no longer treated as reusable across sessions, even when the broader continuity chain is inherited
 - operators can either resume the exact persisted request or dismiss it explicitly
 - when the active resumable task is dismissed or resolved, OPY auto-advances to the next interrupted task in the queue
 - starting a new OPY lifecycle supersedes any older resumable task for that session
