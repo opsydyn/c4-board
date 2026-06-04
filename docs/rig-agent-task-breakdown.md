@@ -44,7 +44,9 @@
 - OPY now surfaces per-session task history with expandable tool-call and artifact inspection in the control field
 - interrupted-task resume now rehydrates persisted artifacts into OPY state and can replay action flows from a persisted `action_descriptor` when live replay targets are unavailable
 - interrupted-task resume can now skip already-completed read/action tool-call boundaries when the persisted trail is sufficient
-- the next `RIG-402` slices should extend this baseline into deeper restart continuity beyond queue-level task selection and boundary reuse
+- OPY now persists task lineage metadata so related retries/follow-on requests can restore the correct chain segment instead of treating each interrupted task as isolated
+- resume trail lookup is now chain-aware, aggregating ancestor tool calls and artifacts before deciding which boundaries can be skipped
+- the next `RIG-402` slices should extend this baseline into cross-session chain continuity and richer chain diagnostics beyond lineage-aware boundary reuse
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -268,11 +270,13 @@
   - fifth slice complete for task execution-trail persistence, surfaced task-history UX, artifact-backed context restore, and boundary-aware task resume
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
   - OPY can hydrate a resumable interrupted-task queue for the active session, let the operator switch the active resume slot, and resume or dismiss the selected task
+  - `opy_agent_tasks` now also stores lineage metadata so related task segments can be chained through `lineage_key` and `parent_task_id`
   - `opy_agent_tool_calls` now records high-signal lifecycle steps such as context assembly, agent invoke, assistant-message persistence, action resolution, board apply, and checkpoint refresh
   - `opy_agent_artifacts` now stores grounded context bundles, response/proposal/review payloads, action descriptors, action results, mutation plans, and checkpoint restore previews
   - OPY now surfaces recent per-session task history with expandable tool-call timeline and artifact inspection
   - interrupted-task resume now rehydrates persisted grounded/action artifacts and can recover action execution from stored descriptors
   - resumed tasks can now skip already-completed read/action tool-call boundaries when the persisted trail is sufficient
+  - resumed tasks now aggregate ancestor chain segments before replay, so the latest interrupted task can inherit already-completed boundaries from related prior runs
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

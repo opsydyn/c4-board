@@ -106,6 +106,8 @@ const createTask = (
       sessionId: "session-1",
     },
   },
+  lineageKey: "review:session-1:payments api",
+  parentTaskId: null,
   stage: "planning",
   status: "running",
   createdAt: 2_000,
@@ -395,8 +397,10 @@ describe("opy-chat.persistence", () => {
     expect(upsertValues[0]).toBe("task-1");
     expect(upsertValues[1]).toBe("session-1");
     expect(JSON.parse(String(upsertValues[2]))).toEqual(task.request);
-    expect(upsertValues[3]).toBe("planning");
-    expect(upsertValues[4]).toBe("running");
+    expect(upsertValues[3]).toBe("review:session-1:payments api");
+    expect(upsertValues[4]).toBeNull();
+    expect(upsertValues[5]).toBe("planning");
+    expect(upsertValues[6]).toBe("running");
 
     const listed = await runWithDatabaseService(
       listOpyAgentTasks("session-1"),
@@ -418,6 +422,8 @@ describe("opy-chat.persistence", () => {
                 sessionId: "session-1",
               },
             }),
+            lineageKey: "chat:session-1:older",
+            parentTaskId: null,
             stage: "contextualizing",
             status: "interrupted",
             createdAt: 1_000,
@@ -429,6 +435,8 @@ describe("opy-chat.persistence", () => {
             id: task.id,
             sessionId: task.sessionId,
             requestJson: JSON.stringify(task.request),
+            lineageKey: task.lineageKey,
+            parentTaskId: task.parentTaskId,
             stage: task.stage,
             status: task.status,
             createdAt: task.createdAt,
@@ -443,6 +451,7 @@ describe("opy-chat.persistence", () => {
     expect(listed).toHaveLength(2);
     expect(listed[0]?.id).toBe("task-1");
     expect(listed[0]?.request.label).toBe("REVIEW");
+    expect(listed[0]?.lineageKey).toBe("review:session-1:payments api");
     expect(listed[1]?.status).toBe("interrupted");
   });
 
@@ -462,6 +471,8 @@ describe("opy-chat.persistence", () => {
             id: task.id,
             sessionId: task.sessionId,
             requestJson: JSON.stringify(task.request),
+            lineageKey: task.lineageKey,
+            parentTaskId: task.parentTaskId,
             stage: task.stage,
             status: task.status,
             createdAt: task.createdAt,

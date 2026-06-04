@@ -3,6 +3,7 @@ import type { RigAgentContextBundle, RigAgentCitation } from "./agent-context";
 import type { RigC4DiagramProposal } from "./ai-agent.runtime";
 import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService, NotFoundError } from "./database.base";
+import { deriveOpyAgentTaskLineageKey } from "./opy-agent.task-lineage";
 import type {
   OpyAgentLifecycleConfirmation,
   OpyAgentLifecycleMode,
@@ -60,6 +61,8 @@ export interface OpyAgentTask {
   readonly id: string;
   readonly sessionId: string;
   readonly request: OpyAgentLifecycleRequest;
+  readonly lineageKey?: string | null;
+  readonly parentTaskId?: string | null;
   readonly stage: OpyAgentTaskStage;
   readonly status: OpyAgentTaskStatus;
   readonly createdAt: number;
@@ -237,6 +240,8 @@ const LIST_AGENT_TASKS_SQL = `
     id,
     session_id AS sessionId,
     request_json AS requestJson,
+    lineage_key AS lineageKey,
+    parent_task_id AS parentTaskId,
     stage,
     status,
     created_at AS createdAt,
@@ -344,6 +349,8 @@ const LIST_RUNNING_TASKS_SQL = `
     id,
     session_id AS sessionId,
     request_json AS requestJson,
+    lineage_key AS lineageKey,
+    parent_task_id AS parentTaskId,
     stage,
     status,
     created_at AS createdAt,
@@ -395,6 +402,8 @@ const UPSERT_TASK_SQL = `
     id,
     session_id,
     request_json,
+    lineage_key,
+    parent_task_id,
     stage,
     status,
     created_at,
@@ -402,9 +411,11 @@ const UPSERT_TASK_SQL = `
     completed_at,
     error_summary
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     request_json = excluded.request_json,
+    lineage_key = excluded.lineage_key,
+    parent_task_id = excluded.parent_task_id,
     stage = excluded.stage,
     status = excluded.status,
     updated_at = excluded.updated_at,
@@ -628,6 +639,8 @@ type AgentTaskRow = {
   id: string;
   sessionId: string;
   requestJson: string;
+  lineageKey: string | null;
+  parentTaskId: string | null;
   stage: string;
   status: string;
   createdAt: number;
@@ -903,6 +916,8 @@ const decodeAgentTaskRow = (row: AgentTaskRow): OpyAgentTask | null => {
     id: row.id,
     sessionId: row.sessionId,
     request,
+    lineageKey: toNullableText(row.lineageKey) ?? deriveOpyAgentTaskLineageKey(request),
+    parentTaskId: toNullableText(row.parentTaskId),
     stage: row.stage,
     status: row.status,
     createdAt: toTimestamp(row.createdAt),
@@ -1172,6 +1187,8 @@ export const upsertOpyAgentTask = (task: OpyAgentTask) =>
       task.id,
       task.sessionId,
       JSON.stringify(task.request),
+      task.lineageKey ?? deriveOpyAgentTaskLineageKey(task.request),
+      task.parentTaskId,
       task.stage,
       task.status,
       task.createdAt,

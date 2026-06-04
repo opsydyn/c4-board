@@ -49,6 +49,12 @@ import {
   resolveOpyExecutableAddNodeActionFlow,
   resolveOpyRollbackActionFlow,
 } from "../../core/effects/opy-action.runtime";
+import {
+  buildOpyAgentTaskLineage,
+  deriveOpyAgentTaskLineageKey,
+  findOpyAgentTaskLineagePredecessor,
+  selectLatestOpyAgentTasksByLineage,
+} from "../../core/effects/opy-agent.task-lineage";
 import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
 import type {
   OpyAgentArtifact,
@@ -1044,7 +1050,10 @@ export function OpyCopilotPanel({
     [tasksBySessionId, selectedSessionId],
   );
   const activeInterruptedTasks = useMemo(
-    () => activeTasks.filter((task) => task.status === "interrupted" && isResumableTaskStage(task.stage)),
+    () =>
+      selectLatestOpyAgentTasksByLineage(
+        activeTasks.filter((task) => task.status === "interrupted" && isResumableTaskStage(task.stage)),
+      ),
     [activeTasks],
   );
   const latestTask = useMemo(
@@ -1525,34 +1534,62 @@ export function OpyCopilotPanel({
     [],
   );
 
+  const hydratePersistedTaskLineageContext = useCallback(
+    (
+      tasks: readonly OpyAgentTask[],
+      artifactsByTaskId: Readonly<Record<string, ReadonlyArray<OpyAgentArtifact> | undefined>>,
+    ): void => {
+      for (const lineageTask of tasks) {
+        hydratePersistedTaskContext(lineageTask, artifactsByTaskId[lineageTask.id] ?? []);
+      }
+    },
+    [hydratePersistedTaskContext],
+  );
+
   const activateResumableTask = useCallback(
     async (task: OpyAgentTask): Promise<void> => {
       if (!isResumableTaskStage(task.stage)) {
         return;
       }
 
-      try {
-        const cachedToolCalls = taskToolCallsByTaskId[task.id];
-        const cachedArtifacts = taskArtifactsByTaskId[task.id];
-        const details = cachedToolCalls && cachedArtifacts
-          ? {
-            toolCalls: cachedToolCalls,
-            artifacts: cachedArtifacts,
-          }
-          : await loadOpyTaskDetails(task.id);
+      const sessionTasks = tasksBySessionId[task.sessionId] ?? [];
+      const lineageTasks = buildOpyAgentTaskLineage(sessionTasks, task);
 
-        if (!cachedToolCalls || !cachedArtifacts) {
+      try {
+        const missingLineageTasks = lineageTasks.filter((lineageTask) =>
+          !taskToolCallsByTaskId[lineageTask.id] || !taskArtifactsByTaskId[lineageTask.id]
+        );
+        const loadedLineageDetails = missingLineageTasks.length > 0
+          ? await Promise.all(
+            missingLineageTasks.map(async (lineageTask) => ({
+              taskId: lineageTask.id,
+              details: await loadOpyTaskDetails(lineageTask.id),
+            })),
+          )
+          : [];
+
+        if (loadedLineageDetails.length > 0) {
           setTaskToolCallsByTaskId((current) => ({
             ...current,
-            [task.id]: details.toolCalls,
+            ...Object.fromEntries(
+              loadedLineageDetails.map(({ taskId, details }) => [taskId, details.toolCalls] as const),
+            ),
           }));
           setTaskArtifactsByTaskId((current) => ({
             ...current,
-            [task.id]: details.artifacts,
+            ...Object.fromEntries(
+              loadedLineageDetails.map(({ taskId, details }) => [taskId, details.artifacts] as const),
+            ),
           }));
         }
 
-        hydratePersistedTaskContext(task, details.artifacts);
+        const hydratedArtifactsByTaskId = {
+          ...taskArtifactsByTaskId,
+          ...Object.fromEntries(
+            loadedLineageDetails.map(({ taskId, details }) => [taskId, details.artifacts] as const),
+          ),
+        };
+        hydratePersistedTaskLineageContext(lineageTasks, hydratedArtifactsByTaskId);
       } catch (error) {
         setRuntimeError(`TASK RESUME CONTEXT RESTORE FAILED: ${toErrorMessage(error)}`);
       }
@@ -1566,10 +1603,11 @@ export function OpyCopilotPanel({
     },
     [
       agentLifecycle,
-      hydratePersistedTaskContext,
+      hydratePersistedTaskLineageContext,
       loadOpyTaskDetails,
       taskArtifactsByTaskId,
       taskToolCallsByTaskId,
+      tasksBySessionId,
     ],
   );
 
@@ -1577,11 +1615,23 @@ export function OpyCopilotPanel({
     (taskId: string): {
       readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
       readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
-    } => ({
-      artifacts: taskArtifactsByTaskId[taskId] ?? [],
-      toolCalls: taskToolCallsByTaskId[taskId] ?? [],
-    }),
-    [taskArtifactsByTaskId, taskToolCallsByTaskId],
+    } => {
+      const task = agentTaskIndexRef.current[taskId];
+      if (!task) {
+        return {
+          artifacts: taskArtifactsByTaskId[taskId] ?? [],
+          toolCalls: taskToolCallsByTaskId[taskId] ?? [],
+        };
+      }
+
+      const sessionTasks = tasksBySessionId[task.sessionId] ?? [];
+      const lineageTasks = buildOpyAgentTaskLineage(sessionTasks, task);
+      return {
+        artifacts: lineageTasks.flatMap((lineageTask) => taskArtifactsByTaskId[lineageTask.id] ?? []),
+        toolCalls: lineageTasks.flatMap((lineageTask) => taskToolCallsByTaskId[lineageTask.id] ?? []),
+      };
+    },
+    [taskArtifactsByTaskId, taskToolCallsByTaskId, tasksBySessionId],
   );
 
   const hydrateMessagesForSession = useCallback(
@@ -1633,8 +1683,10 @@ export function OpyCopilotPanel({
           ...current,
           [sessionId]: loadedCheckpoints,
         }));
-        const resumableTask = loadedTasks.find((task) => task.status === "interrupted") ?? null;
-        if (resumableTask && isResumableTaskStage(resumableTask.stage)) {
+        const resumableTask = selectLatestOpyAgentTasksByLineage(
+          loadedTasks.filter((task) => task.status === "interrupted" && isResumableTaskStage(task.stage)),
+        )[0] ?? null;
+        if (resumableTask) {
           await activateResumableTask(resumableTask);
         } else {
           agentLifecycle.clearResumableRequest();
@@ -1733,7 +1785,22 @@ export function OpyCopilotPanel({
 
   const persistOpyTask = useCallback(
     async (task: OpyAgentTask): Promise<OpyAgentTask> => {
-      const persisted = await runEffect(upsertOpyAgentTask(task));
+      const existing = agentTaskIndexRef.current[task.id];
+      const lineageKey = existing?.lineageKey ?? task.lineageKey ?? deriveOpyAgentTaskLineageKey(task.request);
+      const sessionTasks = tasksBySessionId[task.sessionId] ?? [];
+      const predecessor = existing
+        ? null
+        : findOpyAgentTaskLineagePredecessor(sessionTasks, {
+          ...task,
+          lineageKey,
+          parentTaskId: task.parentTaskId ?? null,
+        });
+      const nextTask: OpyAgentTask = {
+        ...task,
+        lineageKey,
+        parentTaskId: existing?.parentTaskId ?? task.parentTaskId ?? predecessor?.id ?? null,
+      };
+      const persisted = await runEffect(upsertOpyAgentTask(nextTask));
       agentTaskIndexRef.current = {
         ...agentTaskIndexRef.current,
         [persisted.id]: persisted,
@@ -1744,7 +1811,7 @@ export function OpyCopilotPanel({
       }));
       return persisted;
     },
-    [runEffect],
+    [runEffect, tasksBySessionId],
   );
 
   const warnOpyTracePersistFailure = useCallback((scope: string, error: unknown) => {
