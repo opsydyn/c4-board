@@ -1072,6 +1072,11 @@ globalStyle(`${opyCopilotTaskCard}[data-status="completed"]`, {
   borderColor: theme.color.status.ready,
 });
 
+globalStyle(`${opyCopilotTaskCard}[data-selected="true"]`, {
+  borderColor: theme.color.status.selected,
+  boxShadow: `0 0 0 1px ${theme.color.status.selected}`,
+});
+
 export const opyCopilotTaskToggle = style({
   display: "flex",
   alignItems: "flex-start",

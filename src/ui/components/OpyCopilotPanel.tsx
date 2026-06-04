@@ -1043,9 +1043,17 @@ export function OpyCopilotPanel({
     () => tasksBySessionId[selectedSessionId] ?? [],
     [tasksBySessionId, selectedSessionId],
   );
+  const activeInterruptedTasks = useMemo(
+    () => activeTasks.filter((task) => task.status === "interrupted" && isResumableTaskStage(task.stage)),
+    [activeTasks],
+  );
   const latestTask = useMemo(
     () => activeTasks[0] ?? null,
     [activeTasks],
+  );
+  const selectedResumableTask = useMemo(
+    () => activeInterruptedTasks.find((task) => task.id === agentLifecycle.resumableTaskId) ?? null,
+    [activeInterruptedTasks, agentLifecycle.resumableTaskId],
   );
   const activeCheckpoints = useMemo(
     () => checkpointsBySessionId[selectedSessionId] ?? [],
@@ -1517,6 +1525,54 @@ export function OpyCopilotPanel({
     [],
   );
 
+  const activateResumableTask = useCallback(
+    async (task: OpyAgentTask): Promise<void> => {
+      if (!isResumableTaskStage(task.stage)) {
+        return;
+      }
+
+      try {
+        const cachedToolCalls = taskToolCallsByTaskId[task.id];
+        const cachedArtifacts = taskArtifactsByTaskId[task.id];
+        const details = cachedToolCalls && cachedArtifacts
+          ? {
+            toolCalls: cachedToolCalls,
+            artifacts: cachedArtifacts,
+          }
+          : await loadOpyTaskDetails(task.id);
+
+        if (!cachedToolCalls || !cachedArtifacts) {
+          setTaskToolCallsByTaskId((current) => ({
+            ...current,
+            [task.id]: details.toolCalls,
+          }));
+          setTaskArtifactsByTaskId((current) => ({
+            ...current,
+            [task.id]: details.artifacts,
+          }));
+        }
+
+        hydratePersistedTaskContext(task, details.artifacts);
+      } catch (error) {
+        setRuntimeError(`TASK RESUME CONTEXT RESTORE FAILED: ${toErrorMessage(error)}`);
+      }
+
+      agentLifecycle.hydrateResumableRequest({
+        request: task.request,
+        stage: task.stage,
+        taskId: task.id,
+        updatedAt: task.updatedAt,
+      });
+    },
+    [
+      agentLifecycle,
+      hydratePersistedTaskContext,
+      loadOpyTaskDetails,
+      taskArtifactsByTaskId,
+      taskToolCallsByTaskId,
+    ],
+  );
+
   const getTaskResumeTrail = useCallback(
     (taskId: string): {
       readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
@@ -1579,28 +1635,7 @@ export function OpyCopilotPanel({
         }));
         const resumableTask = loadedTasks.find((task) => task.status === "interrupted") ?? null;
         if (resumableTask && isResumableTaskStage(resumableTask.stage)) {
-          try {
-            const { toolCalls: resumableToolCalls, artifacts: resumableArtifacts } = await loadOpyTaskDetails(
-              resumableTask.id,
-            );
-            setTaskToolCallsByTaskId((current) => ({
-              ...current,
-              [resumableTask.id]: resumableToolCalls,
-            }));
-            setTaskArtifactsByTaskId((current) => ({
-              ...current,
-              [resumableTask.id]: resumableArtifacts,
-            }));
-            hydratePersistedTaskContext(resumableTask, resumableArtifacts);
-          } catch (error) {
-            setRuntimeError(`TASK RESUME CONTEXT RESTORE FAILED: ${toErrorMessage(error)}`);
-          }
-          agentLifecycle.hydrateResumableRequest({
-            request: resumableTask.request,
-            stage: resumableTask.stage,
-            taskId: resumableTask.id,
-            updatedAt: resumableTask.updatedAt,
-          });
+          await activateResumableTask(resumableTask);
         } else {
           agentLifecycle.clearResumableRequest();
         }
@@ -1628,7 +1663,7 @@ export function OpyCopilotPanel({
         setIsMessageLoading(false);
       }
     },
-    [agentLifecycle, hydratePersistedTaskContext, loadOpyTaskDetails, runEffect],
+    [activateResumableTask, agentLifecycle, runEffect],
   );
 
   const refreshCheckpointsForSession = useCallback(
@@ -3921,6 +3956,20 @@ export function OpyCopilotPanel({
     });
   }, [agentLifecycle.resumableRequest, dismissResumableLifecycleTask]);
 
+  const handleSelectInterruptedLifecycleTask = useCallback((taskId: string) => {
+    if (isRunning) {
+      return;
+    }
+
+    const task = activeInterruptedTasks.find((candidate) => candidate.id === taskId);
+    if (!task) {
+      return;
+    }
+
+    setRuntimeError(null);
+    void activateResumableTask(task);
+  }, [activateResumableTask, activeInterruptedTasks, isRunning]);
+
   const handleRetryLastLifecycle = useCallback(() => {
     const lastRequest = agentLifecycle.lastRequest;
     if (isRunning || !lastRequest) {
@@ -3958,7 +4007,7 @@ export function OpyCopilotPanel({
   const lifecycleText = agentLifecycle.stage !== "idle"
     ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"}::${LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]}`
     : null;
-  const resumableLifecycleText = agentLifecycle.stage === "idle"
+  const resumableLifecycleText = !isRunning
       && agentLifecycle.resumableRequest
       && agentLifecycle.resumableStage
     ? `RESUME::${agentLifecycle.resumableRequest.label} · INTERRUPTED AT ${
@@ -4296,6 +4345,38 @@ export function OpyCopilotPanel({
     }
   }, [messages, selectedSessionId]);
 
+  useEffect(() => {
+    if (selectedSessionId.length === 0 || isRunning) {
+      return;
+    }
+
+    if (activeInterruptedTasks.length === 0) {
+      if (agentLifecycle.resumableRequest) {
+        agentLifecycle.clearResumableRequest();
+      }
+      return;
+    }
+
+    if (selectedResumableTask) {
+      return;
+    }
+
+    const nextInterruptedTask = activeInterruptedTasks[0];
+    if (!nextInterruptedTask) {
+      return;
+    }
+
+    void activateResumableTask(nextInterruptedTask);
+  }, [
+    activateResumableTask,
+    activeInterruptedTasks,
+    agentLifecycle.clearResumableRequest,
+    agentLifecycle.resumableRequest,
+    isRunning,
+    selectedResumableTask,
+    selectedSessionId,
+  ]);
+
   return (
     <div className={styles.opyCopilotShell}>
       <div className={styles.opyCopilotViewport}>
@@ -4368,7 +4449,7 @@ export function OpyCopilotPanel({
                   }`}
                 </p>
               )}
-              {agentLifecycle.stage === "idle" && lastLifecycleText && (
+              {!isRunning && lastLifecycleText && (
                 <p className={styles.ownershipLensHint}>
                   {lastLifecycleText}
                 </p>
@@ -4388,11 +4469,54 @@ export function OpyCopilotPanel({
                   } · ${agentLifecycle.lastError}`}
                 </p>
               )}
-              {agentLifecycle.stage === "idle" && agentLifecycle.resumableRequest && agentLifecycle.resumableStage && (
+              {!isRunning && activeInterruptedTasks.length > 0 && (
+                <section className={styles.opyCopilotPlanCard} aria-label="OPY interrupted task queue">
+                  <div className={styles.opyCopilotProposalHeader}>
+                    <span>INTERRUPTED TASKS</span>
+                    <span>{`${activeInterruptedTasks.length} PENDING`}</span>
+                  </div>
+                  <p className={styles.opyCopilotProposalSummary}>
+                    SELECT A RESUMABLE TASK. THE ACTIVE CANDIDATE WILL AUTO-ADVANCE AS TASKS ARE DISMISSED OR RESOLVED.
+                  </p>
+                  <div className={styles.opyCopilotTaskTimeline}>
+                    {activeInterruptedTasks.map((task) => {
+                      const isSelected = task.id === agentLifecycle.resumableTaskId;
+
+                      return (
+                        <article
+                          key={task.id}
+                          className={styles.opyCopilotTaskCard}
+                          data-status={task.status}
+                          data-selected={isSelected ? "true" : "false"}
+                        >
+                          <button
+                            type="button"
+                            className={styles.opyCopilotTaskToggle}
+                            onClick={() => {
+                              handleSelectInterruptedLifecycleTask(task.id);
+                            }}
+                          >
+                            <span className={styles.opyCopilotTaskToggleMain}>
+                              <span>{`${task.request.label} :: ${LIFECYCLE_STAGE_LABEL[task.stage]}`}</span>
+                              <span>{isSelected ? "ACTIVE RESUME SLOT" : "SELECT FOR RESUME"}</span>
+                            </span>
+                            <span className={styles.opyCopilotTaskMeta}>
+                              {`${formatClockTime(task.updatedAt)} · ${task.id.slice(0, 8)}`}
+                            </span>
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+              {!isRunning && agentLifecycle.resumableRequest && agentLifecycle.resumableStage && (
                 <section className={styles.opyCopilotPlanCard} aria-label="OPY resumable task">
                   <div className={styles.opyCopilotProposalHeader}>
                     <span>{`RESUME::${agentLifecycle.resumableRequest.label}`}</span>
-                    <span>{`INTERRUPTED AT ${LIFECYCLE_STAGE_LABEL[agentLifecycle.resumableStage]}`}</span>
+                    <span>{`INTERRUPTED AT ${LIFECYCLE_STAGE_LABEL[agentLifecycle.resumableStage]} · ${
+                      activeInterruptedTasks.length
+                    } PENDING`}</span>
                   </div>
                   <p className={styles.opyCopilotProposalSummary}>
                     {`TASK ${agentLifecycle.resumableTaskId?.slice(0, 8) ?? "UNKNOWN"} · ${

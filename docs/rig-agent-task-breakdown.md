@@ -39,12 +39,12 @@
 - `RIG-402` is now started:
   - active OPY lifecycle requests are persisted in `opy_agent_tasks`
   - session hydration/switch/create interrupts stale running tasks instead of losing them silently
-  - OPY can hydrate the latest interrupted request for a session and surface `resume` / `dismiss` controls back to the operator
+  - OPY can hydrate a resumable interrupted-task queue for a session, auto-select an active resume slot, and surface `resume` / `dismiss` controls back to the operator
   - OPY now persists a queryable execution trail in `opy_agent_tool_calls` plus grounded/action artifacts in `opy_agent_artifacts`
 - OPY now surfaces per-session task history with expandable tool-call and artifact inspection in the control field
 - interrupted-task resume now rehydrates persisted artifacts into OPY state and can replay action flows from a persisted `action_descriptor` when live replay targets are unavailable
 - interrupted-task resume can now skip already-completed read/action tool-call boundaries when the persisted trail is sufficient
-- the next `RIG-402` slices should extend this baseline into deeper restart continuity beyond single-task boundary reuse
+- the next `RIG-402` slices should extend this baseline into deeper restart continuity beyond queue-level task selection and boundary reuse
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -267,7 +267,7 @@
 - Current status:
   - fifth slice complete for task execution-trail persistence, surfaced task-history UX, artifact-backed context restore, and boundary-aware task resume
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
-  - OPY can hydrate the latest interrupted request for the active session and let the operator resume or dismiss it
+  - OPY can hydrate a resumable interrupted-task queue for the active session, let the operator switch the active resume slot, and resume or dismiss the selected task
   - `opy_agent_tool_calls` now records high-signal lifecycle steps such as context assembly, agent invoke, assistant-message persistence, action resolution, board apply, and checkpoint refresh
   - `opy_agent_artifacts` now stores grounded context bundles, response/proposal/review payloads, action descriptors, action results, mutation plans, and checkpoint restore previews
   - OPY now surfaces recent per-session task history with expandable tool-call timeline and artifact inspection

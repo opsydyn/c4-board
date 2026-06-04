@@ -229,14 +229,17 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 ### Current Resume Behavior
 
 - session hydration now interrupts stale running tasks from the previous mount
-- OPY loads the latest interrupted task for the active session
-- OPY hydrates the interrupted task's persisted tool-call and artifact trail before surfacing resume controls
+- OPY builds a resumable queue of interrupted tasks for the active session
+- OPY auto-selects an active resume slot from that queue when the operator is idle
+- OPY hydrates the selected interrupted task's persisted tool-call and artifact trail before surfacing resume controls
 - grounded chat, review, and proposal artifacts can repopulate in-memory OPY state during resume hydration
 - action resume can fall back to a persisted `action_descriptor` artifact when the live replay target is missing
 - read-path resume now skips completed `assemble_context`, `invoke_agent`, and `persist_assistant_message` boundaries when the matching persisted artifacts are present
 - action-path resume now skips completed `execute_board_action`, `refresh_checkpoints`, and `persist_assistant_message` boundaries when the matching persisted trail is present
-- if the interrupted task stage is resumable, OPY exposes a control-field resume card
+- if the interrupted task stage is resumable, OPY exposes both a control-field interrupted-task queue and a resume card for the active slot
+- operators can switch the active resume slot to a different interrupted task without losing the persisted trail
 - operators can either resume the exact persisted request or dismiss it explicitly
+- when the active resumable task is dismissed or resolved, OPY auto-advances to the next interrupted task in the queue
 - starting a new OPY lifecycle supersedes any older resumable task for that session
 - current persisted tool calls include context assembly, agent invoke, assistant-message persistence, action resolution, board mutation execution, and post-apply checkpoint refresh
 - current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, action results, mutation plans, and checkpoint restore previews
