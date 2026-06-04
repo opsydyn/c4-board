@@ -272,7 +272,7 @@
   - `src/ui/machines/opy-agent.machine.ts`
 - Depends on: `RIG-401`.
 - Current status:
-  - latest slice complete for persisted resume execution outcomes on top of the existing task execution trail, surfaced task-history UX, artifact-backed context restore, and boundary-aware task resume
+  - latest slice complete for chain-level resume outcome rollups on top of the existing persisted execution trail, surfaced task-history UX, artifact-backed context restore, and boundary-aware task resume
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
   - OPY can hydrate a resumable interrupted-task queue for the active session, let the operator switch the active resume slot, and resume or dismiss the selected task
   - `opy_agent_tasks` now also stores lineage metadata so related task segments can be chained through `lineage_key` and `parent_task_id`
@@ -286,6 +286,7 @@
   - OPY continuity is now board/domain-aware across compatible sessions, and queue/history cards surface session count, cross-session segment count, and session-scope provenance for inherited chains
   - resume now surfaces an explicit boundary plan and only reuses safe cross-session steps; session-local persistence/refresh boundaries remain fresh when the chain crosses sessions
   - resumed tasks now persist the actual reuse outcome for each boundary, so task history can show what was inherited versus rerun after execution
+  - OPY now aggregates those persisted outcomes across the full lineage chain, so interrupted-task cards, resume cards, and task history expose continuity efficiency at the chain level instead of only per task
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

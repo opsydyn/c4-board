@@ -248,6 +248,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - session-local boundaries such as assistant-message persistence and checkpoint refresh are no longer treated as reusable across sessions, even when the broader continuity chain is inherited
 - resumed tasks now persist a `resume_boundary_outcome` artifact so OPY can record what actually happened at execution time, not just the pre-run reuse plan
 - resume outcome tracking distinguishes reused current-session work, reused inherited-session work, and boundaries that were rerun in the active task
+- OPY now rolls those persisted outcomes up across the full lineage chain, so operators can see continuity efficiency for the whole resumable trail instead of only one task
 - operators can either resume the exact persisted request or dismiss it explicitly
 - when the active resumable task is dismissed or resolved, OPY auto-advances to the next interrupted task in the queue
 - starting a new OPY lifecycle supersedes any older resumable task for that session
@@ -262,6 +263,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - interrupted tasks are marked distinctly from failed and completed tasks
 - artifacts are rendered inline so operators can inspect grounded context, mutation plans, and restore previews after failure or resume
 - task history now shows both `RESUME PLAN` and `RESUME OUTCOME`, so operators can compare expected boundary reuse against what was actually rerun
+- interrupted-task cards, resume cards, and task-history rows now also show chain-level outcome rollups (`LOCAL`, `INHERITED`, `RERAN`, `PENDING`) aggregated across the full lineage trail
 
 ## Run Envelope and Telemetry
 

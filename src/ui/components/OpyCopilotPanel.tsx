@@ -570,6 +570,38 @@ const formatTaskLineageSummary = (input: {
 }): string =>
   `CHAIN::${input.segmentCount} · READY::${input.completedStepCount} · ARTIFACTS::${input.artifactCount}`;
 
+const formatLineageResumeOutcomeRollup = (
+  rollup: ReturnType<typeof summarizeOpyAgentTaskLineage>["resumeOutcomeRollup"],
+  options?: {
+    readonly compact?: boolean;
+  },
+): string => {
+  if (rollup.taskCount === 0 || rollup.boundaryCount === 0) {
+    return options?.compact ? "ROLLUP::PENDING" : "CHAIN OUTCOME::PENDING";
+  }
+
+  const parts = [
+    rollup.reusedCurrentSessionCount > 0
+      ? `${options?.compact ? "L" : "LOCAL"}${options?.compact ? "" : " "}${rollup.reusedCurrentSessionCount}`
+      : null,
+    rollup.reusedInheritedSessionCount > 0
+      ? `${options?.compact ? "I" : "INHERITED"}${options?.compact ? "" : " "}${rollup.reusedInheritedSessionCount}`
+      : null,
+    rollup.reranCount > 0
+      ? `${options?.compact ? "R" : "RERAN"}${options?.compact ? "" : " "}${rollup.reranCount}`
+      : null,
+    rollup.pendingCount > 0
+      ? `${options?.compact ? "P" : "PENDING"}${options?.compact ? "" : " "}${rollup.pendingCount}`
+      : null,
+  ].filter((part): part is string => part !== null);
+
+  if (parts.length === 0) {
+    return options?.compact ? "ROLLUP::PENDING" : "CHAIN OUTCOME::PENDING";
+  }
+
+  return `${options?.compact ? "ROLLUP" : "CHAIN OUTCOME"}::${parts.join(" · ")}`;
+};
+
 const formatLineageSessionScope = (
   sessionIds: readonly string[],
   sessionLookup: Readonly<Record<string, OpyChatSession | undefined>>,
@@ -5116,6 +5148,10 @@ export function OpyCopilotPanel({
                         .map(formatLineageCompletedStep)
                         .join(" · ");
                       const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
+                      const resumeOutcomeRollup = formatLineageResumeOutcomeRollup(
+                        lineageDiagnostics.resumeOutcomeRollup,
+                        { compact: true },
+                      );
 
                       return (
                         <article
@@ -5151,12 +5187,18 @@ export function OpyCopilotPanel({
                               {completedStepPreview.length > 0 && (
                                 <span>{`READY STEPS::${completedStepPreview}`}</span>
                               )}
+                              <span>{resumeOutcomeRollup}</span>
                             </span>
                             <span className={styles.opyCopilotTaskMeta}>
                               {`${formatClockTime(task.updatedAt)} · ${task.id.slice(0, 8)}`}
                             </span>
                           </button>
                           <p className={styles.ownershipLensHint}>{resumePlanSummary}</p>
+                          {lineageDiagnostics.resumeOutcomeRollup.taskCount > 0 && (
+                            <p className={styles.ownershipLensHint}>
+                              {formatLineageResumeOutcomeRollup(lineageDiagnostics.resumeOutcomeRollup)}
+                            </p>
+                          )}
                           {lineageDiagnostics.sessionCount > 1 && (
                             <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
                           )}
@@ -5193,6 +5235,10 @@ export function OpyCopilotPanel({
                       .map(formatLineageCompletedStep)
                       .join(" · ");
                     const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
+                    const resumeOutcomeRollup = formatLineageResumeOutcomeRollup(
+                      lineageDiagnostics.resumeOutcomeRollup,
+                      { compact: true },
+                    );
 
                     return (
                       <>
@@ -5204,6 +5250,7 @@ export function OpyCopilotPanel({
                           }`}
                         </p>
                         <p className={styles.ownershipLensHint}>{summarizeTaskResumeBoundaryPlan(resumePlan)}</p>
+                        <p className={styles.ownershipLensHint}>{resumeOutcomeRollup}</p>
                         {lineageDiagnostics.sessionCount > 1 && (
                           <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
                         )}
@@ -5301,6 +5348,10 @@ export function OpyCopilotPanel({
                         .map(formatLineageCompletedStep)
                         .join(" · ");
                       const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
+                      const lineageResumeOutcomeRollup = formatLineageResumeOutcomeRollup(
+                        lineageDiagnostics.resumeOutcomeRollup,
+                        { compact: true },
+                      );
 
                       return (
                         <article
@@ -5337,6 +5388,7 @@ export function OpyCopilotPanel({
                               {completedStepPreview.length > 0 && (
                                 <span>{`READY::${completedStepPreview}`}</span>
                               )}
+                              <span>{lineageResumeOutcomeRollup}</span>
                               <span>{resumeDiagnosticsSummary}</span>
                               {isResumable && <span>RESUMABLE</span>}
                             </span>
@@ -5355,6 +5407,9 @@ export function OpyCopilotPanel({
                                 } · SESSIONS::${lineageDiagnostics.sessionCount} · INHERITED::${
                                   lineageDiagnostics.inheritedSegmentCount
                                 }`}
+                              </p>
+                              <p className={styles.ownershipLensHint}>
+                                {formatLineageResumeOutcomeRollup(lineageDiagnostics.resumeOutcomeRollup)}
                               </p>
                               <p className={styles.ownershipLensHint}>{`RESUME PLAN::${summarizeTaskResumeBoundaryPlan(resumePlan)}`}</p>
                               {persistedResumeOutcome && (

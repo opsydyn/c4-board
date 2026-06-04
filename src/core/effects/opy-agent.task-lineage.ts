@@ -20,6 +20,17 @@ export interface OpyAgentTaskLineageToolCallShape {
 export interface OpyAgentTaskLineageArtifactShape {
   readonly taskId: string;
   readonly kind: OpyAgentArtifactKind;
+  readonly payload?: unknown;
+  readonly createdAt?: number;
+}
+
+export interface OpyAgentTaskLineageResumeOutcomeRollup {
+  readonly taskCount: number;
+  readonly boundaryCount: number;
+  readonly reusedCurrentSessionCount: number;
+  readonly reusedInheritedSessionCount: number;
+  readonly reranCount: number;
+  readonly pendingCount: number;
 }
 
 export interface OpyAgentTaskLineageDiagnostics {
@@ -32,6 +43,7 @@ export interface OpyAgentTaskLineageDiagnostics {
   readonly crossSessionSegmentCount: number;
   readonly completedStepNames: ReadonlyArray<OpyAgentToolCallName>;
   readonly artifactKinds: ReadonlyArray<OpyAgentArtifactKind>;
+  readonly resumeOutcomeRollup: OpyAgentTaskLineageResumeOutcomeRollup;
 }
 
 const normalizeLineageSegment = (value: string): string =>
@@ -46,6 +58,35 @@ const sortByTimelineAsc = <T extends Pick<OpyAgentTaskLineageShape, "createdAt" 
   left: T,
   right: T,
 ): number => left.createdAt - right.createdAt || left.updatedAt - right.updatedAt;
+
+type PersistedResumeBoundaryOutcome = "reused-current-session" | "reused-inherited-session" | "reran" | "pending";
+
+interface PersistedResumeBoundaryOutcomeItem {
+  readonly outcome: PersistedResumeBoundaryOutcome;
+}
+
+interface PersistedResumeBoundaryOutcomePayload {
+  readonly boundaries: ReadonlyArray<PersistedResumeBoundaryOutcomeItem>;
+}
+
+const isPersistedResumeBoundaryOutcomePayload = (
+  value: unknown,
+): value is PersistedResumeBoundaryOutcomePayload =>
+  typeof value === "object"
+  && value !== null
+  && "boundaries" in value
+  && Array.isArray(value.boundaries)
+  && value.boundaries.every((item) =>
+    typeof item === "object"
+    && item !== null
+    && "outcome" in item
+    && (
+      item.outcome === "reused-current-session"
+      || item.outcome === "reused-inherited-session"
+      || item.outcome === "reran"
+      || item.outcome === "pending"
+    )
+  );
 
 export const deriveOpyAgentTaskContinuityKeyFromReplay = (replay: OpyAgentLifecycleReplay): string => {
   switch (replay.kind) {
@@ -205,6 +246,52 @@ export const summarizeOpyAgentTaskLineage = <
     artifactKinds.push(artifact.kind);
   }
 
+  const latestResumeOutcomeByTask = new Map<string, TArtifact>();
+  for (const artifact of artifacts) {
+    if (!lineageTaskIds.has(artifact.taskId) || artifact.kind !== "resume_boundary_outcome") {
+      continue;
+    }
+
+    const existing = latestResumeOutcomeByTask.get(artifact.taskId);
+    if (!existing || (artifact.createdAt ?? 0) >= (existing.createdAt ?? 0)) {
+      latestResumeOutcomeByTask.set(artifact.taskId, artifact);
+    }
+  }
+
+  const resumeOutcomeRollup = {
+    taskCount: 0,
+    boundaryCount: 0,
+    reusedCurrentSessionCount: 0,
+    reusedInheritedSessionCount: 0,
+    reranCount: 0,
+    pendingCount: 0,
+  } satisfies OpyAgentTaskLineageResumeOutcomeRollup;
+
+  for (const artifact of latestResumeOutcomeByTask.values()) {
+    if (!isPersistedResumeBoundaryOutcomePayload(artifact.payload)) {
+      continue;
+    }
+
+    resumeOutcomeRollup.taskCount += 1;
+    for (const boundary of artifact.payload.boundaries) {
+      resumeOutcomeRollup.boundaryCount += 1;
+      switch (boundary.outcome) {
+        case "reused-current-session":
+          resumeOutcomeRollup.reusedCurrentSessionCount += 1;
+          break;
+        case "reused-inherited-session":
+          resumeOutcomeRollup.reusedInheritedSessionCount += 1;
+          break;
+        case "reran":
+          resumeOutcomeRollup.reranCount += 1;
+          break;
+        case "pending":
+          resumeOutcomeRollup.pendingCount += 1;
+          break;
+      }
+    }
+  }
+
   return {
     continuityKey: getOpyAgentTaskContinuityKey(task),
     lineageKey: getOpyAgentTaskLineageKey(task),
@@ -215,5 +302,6 @@ export const summarizeOpyAgentTaskLineage = <
     crossSessionSegmentCount: Math.max(0, lineageTasks.filter((lineageTask) => lineageTask.sessionId !== task.sessionId).length),
     completedStepNames,
     artifactKinds,
+    resumeOutcomeRollup,
   };
 };

@@ -226,10 +226,34 @@ describe("opy-agent.task-lineage", () => {
         {
           taskId: "task-root",
           kind: "context_bundle",
+          createdAt: 1_100,
         },
         {
           taskId: "task-head",
           kind: "chat_response",
+          createdAt: 2_100,
+        },
+        {
+          taskId: "task-root",
+          kind: "resume_boundary_outcome",
+          createdAt: 1_200,
+          payload: {
+            boundaries: [
+              { outcome: "reused-current-session" },
+              { outcome: "reran" },
+            ],
+          },
+        },
+        {
+          taskId: "task-head",
+          kind: "resume_boundary_outcome",
+          createdAt: 2_200,
+          payload: {
+            boundaries: [
+              { outcome: "reused-inherited-session" },
+              { outcome: "pending" },
+            ],
+          },
         },
       ],
     );
@@ -240,6 +264,60 @@ describe("opy-agent.task-lineage", () => {
     expect(summary.sessionIds).toEqual(["session-1"]);
     expect(summary.crossSessionSegmentCount).toBe(0);
     expect(summary.completedStepNames).toEqual(["assemble_context", "invoke_agent"]);
-    expect(summary.artifactKinds).toEqual(["context_bundle", "chat_response"]);
+    expect(summary.artifactKinds).toEqual(["context_bundle", "chat_response", "resume_boundary_outcome"]);
+    expect(summary.resumeOutcomeRollup).toEqual({
+      taskCount: 2,
+      boundaryCount: 4,
+      reusedCurrentSessionCount: 1,
+      reusedInheritedSessionCount: 1,
+      reranCount: 1,
+      pendingCount: 1,
+    });
+  });
+
+  it("uses the latest resume outcome artifact per lineage task", () => {
+    const task = createTask({
+      id: "task-root",
+      status: "completed",
+    });
+
+    const summary = summarizeOpyAgentTaskLineage(
+      [task],
+      task,
+      [],
+      [
+        {
+          taskId: "task-root",
+          kind: "resume_boundary_outcome",
+          createdAt: 1_100,
+          payload: {
+            boundaries: [
+              { outcome: "reran" },
+              { outcome: "pending" },
+            ],
+          },
+        },
+        {
+          taskId: "task-root",
+          kind: "resume_boundary_outcome",
+          createdAt: 1_200,
+          payload: {
+            boundaries: [
+              { outcome: "reused-current-session" },
+              { outcome: "reused-inherited-session" },
+            ],
+          },
+        },
+      ],
+    );
+
+    expect(summary.resumeOutcomeRollup).toEqual({
+      taskCount: 1,
+      boundaryCount: 2,
+      reusedCurrentSessionCount: 1,
+      reusedInheritedSessionCount: 1,
+      reranCount: 0,
+      pendingCount: 0,
+    });
   });
 });
