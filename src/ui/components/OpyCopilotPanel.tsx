@@ -2,16 +2,6 @@ import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/
 import { Effect } from "effect";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  createOpyAddNodeActionFlowDescriptor,
-  resolveOpyApplyProposalActionFlow,
-  resolveOpyExecutableAddNodeActionFlow,
-  resolveOpyRollbackActionFlow,
-  type OpyActionFlowDescriptor,
-  type OpyActionFlowIssue,
-  type OpyBoardAction,
-  type OpyC4NodeType,
-} from "../../core/effects/opy-action.runtime";
-import {
   assembleRigAgentContext,
   formatRigAgentCitationBlock,
   type RigAgentContextBundle,
@@ -49,6 +39,16 @@ import {
   summarizeAgentError,
   withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
+import {
+  createOpyAddNodeActionFlowDescriptor,
+  type OpyActionFlowDescriptor,
+  type OpyActionFlowIssue,
+  type OpyBoardAction,
+  type OpyC4NodeType,
+  resolveOpyApplyProposalActionFlow,
+  resolveOpyExecutableAddNodeActionFlow,
+  resolveOpyRollbackActionFlow,
+} from "../../core/effects/opy-action.runtime";
 import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
 import type {
   OpyAgentArtifact,
@@ -66,15 +66,15 @@ import {
   appendOpyChatMessage,
   createOpyAgentArtifact,
   createOpyAgentRun,
-  finalizeInterruptedOpyAgentRuns,
-  interruptOpyAgentToolCalls,
-  interruptOpyAgentTasks,
   createOpyChatSession,
+  finalizeInterruptedOpyAgentRuns,
+  interruptOpyAgentTasks,
+  interruptOpyAgentToolCalls,
   listOpyAgentArtifacts,
-  listOpyAgentTasks,
-  listOpyAgentToolCalls,
   listOpyAgentCheckpoints,
   listOpyAgentRuns,
+  listOpyAgentTasks,
+  listOpyAgentToolCalls,
   listOpyChatMessages,
   listOpyChatSessions,
   listOpyDiagramProposals,
@@ -95,9 +95,13 @@ import {
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
 import type { AiActionMode, OpyViewportSectionKey, OpyViewportSections } from "../../core/effects/settings.types";
-import { useOpyAgentMachine } from "../hooks/useOpyAgentMachine";
-import type { OpyAgentLifecycleNonTerminalStage, OpyAgentLifecycleRequest, OpyAgentLifecycleStage } from "../machines/opy-agent.machine";
 import { useDatabase } from "../../core/effects/useDatabase";
+import { useOpyAgentMachine } from "../hooks/useOpyAgentMachine";
+import type {
+  OpyAgentLifecycleNonTerminalStage,
+  OpyAgentLifecycleRequest,
+  OpyAgentLifecycleStage,
+} from "../machines/opy-agent.machine";
 import {
   compareOpyWidgetChromeTone,
   type OpyWidgetChromeFocusRequest,
@@ -268,6 +272,10 @@ interface OpyPersistedActionDescriptorArtifactPayload {
   readonly replay: OpyAgentLifecycleRequest["replay"];
 }
 
+interface OpyPersistedActionResultArtifactPayload {
+  readonly message: string;
+}
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -301,8 +309,7 @@ const createRunId = (): string => {
 
 const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
 const isGroundedChatResponsePayload = (value: unknown): value is OpyGroundedChatResponse =>
   isRecord(value) && isRecord(value.response) && isRecord(value.context);
@@ -320,6 +327,18 @@ const isPersistedActionDescriptorArtifactPayload = (
   && isRecord(value.descriptor)
   && isRecord(value.replay);
 
+const isPersistedActionResultArtifactPayload = (
+  value: unknown,
+): value is OpyPersistedActionResultArtifactPayload =>
+  isRecord(value) && typeof value.message === "string";
+
+const isRigAgentContextBundlePayload = (value: unknown): value is RigAgentContextBundle =>
+  isRecord(value)
+  && typeof value.promptContext === "string"
+  && Array.isArray(value.citations)
+  && typeof value.confidence === "string"
+  && typeof value.confidenceReason === "string";
+
 const selectLatestTaskArtifact = (
   artifacts: readonly OpyAgentArtifact[],
   kind: OpyAgentArtifactKind,
@@ -334,29 +353,94 @@ const toArtifactDraft = (artifact: OpyAgentArtifact): OpyTaskArtifactDraft => ({
   payload: artifact.payload,
 });
 
+const selectLatestCompletedTaskToolCall = (
+  toolCalls: readonly OpyAgentToolCall[],
+  name: OpyAgentToolCallName,
+): OpyAgentToolCall | null =>
+  [...toolCalls]
+    .filter((toolCall) => toolCall.name === name && toolCall.status === "completed")
+    .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null;
+
+const hasCompletedTaskToolCall = (
+  toolCalls: readonly OpyAgentToolCall[],
+  name: OpyAgentToolCallName,
+): boolean => selectLatestCompletedTaskToolCall(toolCalls, name) !== null;
+
 const mergeArtifactDrafts = (
   left: readonly OpyTaskArtifactDraft[],
   right: readonly OpyTaskArtifactDraft[],
-): ReadonlyArray<OpyTaskArtifactDraft> =>
-  [
-    ...left,
-    ...right.filter((candidate) =>
-      !left.some((artifact) =>
-        artifact.kind === candidate.kind
-        && artifact.summary === candidate.summary
-      )
-    ),
-  ];
+): ReadonlyArray<OpyTaskArtifactDraft> => [
+  ...left,
+  ...right.filter((candidate) =>
+    !left.some((artifact) =>
+      artifact.kind === candidate.kind
+      && artifact.summary === candidate.summary
+    )
+  ),
+];
 
 const selectResumableActionArtifacts = (
   artifacts: readonly OpyAgentArtifact[],
 ): ReadonlyArray<OpyTaskArtifactDraft> =>
   artifacts
     .filter((artifact) =>
-      artifact.kind === "mutation_plan"
+      artifact.kind === "action_result"
+      || artifact.kind === "mutation_plan"
       || artifact.kind === "checkpoint_restore_preview"
     )
     .map(toArtifactDraft);
+
+const createActionResultArtifactDraft = (message: string): OpyTaskArtifactDraft => ({
+  kind: "action_result",
+  summary: message.trim().replace(/\s+/g, " ").length > 0
+    ? message.trim().replace(/\s+/g, " ")
+    : "BOARD ACTION COMPLETE.",
+  payload: {
+    message,
+  } satisfies OpyPersistedActionResultArtifactPayload,
+});
+
+const selectPersistedReadResultArtifact = (
+  request: OpyAgentLifecycleRequest,
+  artifacts: readonly OpyAgentArtifact[],
+): OpyGroundedChatResponse | OpyGroundedDiagramProposal | OpyGroundedBoardReview | null => {
+  switch (request.kind) {
+    case "chat": {
+      const artifact = selectLatestTaskArtifact(artifacts, "chat_response");
+      return artifact && isGroundedChatResponsePayload(artifact.payload) ? artifact.payload : null;
+    }
+    case "proposal": {
+      const artifact = selectLatestTaskArtifact(artifacts, "diagram_proposal");
+      return artifact && isGroundedDiagramProposalPayload(artifact.payload) ? artifact.payload : null;
+    }
+    case "review": {
+      const artifact = selectLatestTaskArtifact(artifacts, "board_review");
+      return artifact && isGroundedBoardReviewPayload(artifact.payload) ? artifact.payload : null;
+    }
+    default:
+      return null;
+  }
+};
+
+const selectPersistedActionResultMessage = (
+  artifacts: readonly OpyAgentArtifact[],
+): string | null => {
+  const artifact = selectLatestTaskArtifact(artifacts, "action_result");
+  if (!artifact || !isPersistedActionResultArtifactPayload(artifact.payload)) {
+    return null;
+  }
+  return artifact.payload.message;
+};
+
+const selectPersistedContextBundle = (
+  artifacts: readonly OpyAgentArtifact[],
+): RigAgentContextBundle | null => {
+  const artifact = selectLatestTaskArtifact(artifacts, "context_bundle");
+  if (!artifact || !isRigAgentContextBundlePayload(artifact.payload)) {
+    return null;
+  }
+  return artifact.payload;
+};
 
 const formatClockTime = (timestamp: number): string =>
   new Intl.DateTimeFormat(undefined, {
@@ -443,7 +527,10 @@ const formatTaskStageLabel = (stage: OpyAgentTaskStage): string =>
     ? "FAILED"
     : LIFECYCLE_STAGE_LABEL[stage];
 
-const LIFECYCLE_TERMINAL_STATUS_LABEL: Record<NonNullable<ReturnType<typeof useOpyAgentMachine>["lastTerminalStatus"]>, string> = {
+const LIFECYCLE_TERMINAL_STATUS_LABEL: Record<
+  NonNullable<ReturnType<typeof useOpyAgentMachine>["lastTerminalStatus"]>,
+  string
+> = {
   completed: "COMPLETE",
   cancelled: "CANCELLED",
   failed: "FAILED",
@@ -1430,6 +1517,17 @@ export function OpyCopilotPanel({
     [],
   );
 
+  const getTaskResumeTrail = useCallback(
+    (taskId: string): {
+      readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
+      readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
+    } => ({
+      artifacts: taskArtifactsByTaskId[taskId] ?? [],
+      toolCalls: taskToolCallsByTaskId[taskId] ?? [],
+    }),
+    [taskArtifactsByTaskId, taskToolCallsByTaskId],
+  );
+
   const hydrateMessagesForSession = useCallback(
     async (sessionId: string) => {
       setIsMessageLoading(true);
@@ -1482,7 +1580,9 @@ export function OpyCopilotPanel({
         const resumableTask = loadedTasks.find((task) => task.status === "interrupted") ?? null;
         if (resumableTask && isResumableTaskStage(resumableTask.stage)) {
           try {
-            const { toolCalls: resumableToolCalls, artifacts: resumableArtifacts } = await loadOpyTaskDetails(resumableTask.id);
+            const { toolCalls: resumableToolCalls, artifacts: resumableArtifacts } = await loadOpyTaskDetails(
+              resumableTask.id,
+            );
             setTaskToolCallsByTaskId((current) => ({
               ...current,
               [resumableTask.id]: resumableToolCalls,
@@ -1746,7 +1846,10 @@ export function OpyCopilotPanel({
   const interruptActiveLifecycleTask = useCallback(
     async (errorSummary: string): Promise<void> => {
       const activeRequest = agentLifecycle.activeRequest;
-      if (!activeRequest || agentLifecycle.stage === "idle" || agentLifecycle.stage === "completed" || agentLifecycle.stage === "failed") {
+      if (
+        !activeRequest || agentLifecycle.stage === "idle" || agentLifecycle.stage === "completed"
+        || agentLifecycle.stage === "failed"
+      ) {
         return;
       }
 
@@ -2046,7 +2149,11 @@ export function OpyCopilotPanel({
 
       let currentRun = run;
       try {
-        const context = await trackOpyTaskToolCall({
+        const resumeTrail = getTaskResumeTrail(taskId);
+        const persistedContext = hasCompletedTaskToolCall(resumeTrail.toolCalls, "assemble_context")
+          ? selectPersistedContextBundle(resumeTrail.artifacts)
+          : null;
+        const context = persistedContext ?? await trackOpyTaskToolCall({
           taskId,
           sessionId: input.sessionId,
           name: "assemble_context",
@@ -2065,7 +2172,10 @@ export function OpyCopilotPanel({
         });
         agentLifecycle.markContextReady();
 
-        const result = await trackOpyTaskToolCall({
+        const persistedResult = hasCompletedTaskToolCall(resumeTrail.toolCalls, "invoke_agent")
+          ? selectPersistedReadResultArtifact(input.lifecycleRequest, resumeTrail.artifacts) as T | null
+          : null;
+        const result = persistedResult ?? await trackOpyTaskToolCall({
           taskId,
           sessionId: input.sessionId,
           name: "invoke_agent",
@@ -2081,6 +2191,19 @@ export function OpyCopilotPanel({
         currentRun = await transitionAgentRun(currentRun, {
           stage: "persist",
         });
+
+        if (hasCompletedTaskToolCall(resumeTrail.toolCalls, "persist_assistant_message")) {
+          await input.onAfterPersisted?.(result);
+          agentLifecycle.markPersistReady();
+          await transitionAgentRun(currentRun, {
+            stage: "complete",
+            status: "completed",
+            completedAt: Date.now(),
+            errorSummary: null,
+          });
+          agentLifecycle.completeActiveRequest();
+          return result;
+        }
 
         const persistedMessageCallId = createMessageId();
         const persistedMessageStartedAt = Date.now();
@@ -2224,6 +2347,7 @@ export function OpyCopilotPanel({
       appendAndPersistMessage,
       beginAgentRun,
       dismissResumableLifecycleTask,
+      getTaskResumeTrail,
       persistOpyMessage,
       persistOpyToolCall,
       trackOpyTaskToolCall,
@@ -2257,46 +2381,70 @@ export function OpyCopilotPanel({
         return null;
       };
 
+      const resumeTrail = getTaskResumeTrail(input.taskId);
+      const completedBoardAction = hasCompletedTaskToolCall(resumeTrail.toolCalls, "execute_board_action");
+      const persistedActionResult = selectPersistedActionResultMessage(resumeTrail.artifacts);
+
       let actionResult: string;
-      try {
-        actionResult = await trackOpyTaskToolCall({
-          taskId: input.taskId,
-          sessionId: input.sessionId,
-          name: "execute_board_action",
-          inputSummary: summarizeInlineText(input.failurePrefix, "BOARD ACTION"),
-          execute: input.execute,
-          outputSummary: (result) => summarizeInlineText(result, "BOARD ACTION COMPLETE."),
-        });
-      } catch (error) {
+      if (completedBoardAction && !persistedActionResult) {
         return failBoardActionLifecycle({
-          message: toErrorMessage(error),
-          phase: "apply",
-          stage: "applying",
+          message: "TASK RESUME FAILED: completed board action is missing its persisted action result artifact.",
+          phase: "verify",
+          stage: "verifying",
         });
+      }
+
+      if (completedBoardAction && persistedActionResult) {
+        actionResult = persistedActionResult;
+      } else {
+        try {
+          actionResult = await trackOpyTaskToolCall({
+            taskId: input.taskId,
+            sessionId: input.sessionId,
+            name: "execute_board_action",
+            inputSummary: summarizeInlineText(input.failurePrefix, "BOARD ACTION"),
+            execute: input.execute,
+            outputSummary: (result) => summarizeInlineText(result, "BOARD ACTION COMPLETE."),
+            artifacts: (result) => [createActionResultArtifactDraft(result)],
+          });
+        } catch (error) {
+          return failBoardActionLifecycle({
+            message: toErrorMessage(error),
+            phase: "apply",
+            stage: "applying",
+          });
+        }
       }
 
       agentLifecycle.markVerifyReady();
 
-      try {
-        if (input.onAfterApplied) {
-          await trackOpyTaskToolCall({
-            taskId: input.taskId,
-            sessionId: input.sessionId,
-            name: "refresh_checkpoints",
-            inputSummary: "Refresh OPY checkpoint history after apply.",
-            execute: async () => {
-              await input.onAfterApplied?.();
-              return null;
-            },
-            outputSummary: () => "CHECKPOINT HISTORY REFRESHED",
+      if (!hasCompletedTaskToolCall(resumeTrail.toolCalls, "refresh_checkpoints")) {
+        try {
+          if (input.onAfterApplied) {
+            await trackOpyTaskToolCall({
+              taskId: input.taskId,
+              sessionId: input.sessionId,
+              name: "refresh_checkpoints",
+              inputSummary: "Refresh OPY checkpoint history after apply.",
+              execute: async () => {
+                await input.onAfterApplied?.();
+                return null;
+              },
+              outputSummary: () => "CHECKPOINT HISTORY REFRESHED",
+            });
+          }
+        } catch (error) {
+          return failBoardActionLifecycle({
+            message: toErrorMessage(error),
+            phase: "verify",
+            stage: "verifying",
           });
         }
-      } catch (error) {
-        return failBoardActionLifecycle({
-          message: toErrorMessage(error),
-          phase: "verify",
-          stage: "verifying",
-        });
+      }
+
+      if (hasCompletedTaskToolCall(resumeTrail.toolCalls, "persist_assistant_message")) {
+        agentLifecycle.completeActiveRequest();
+        return actionResult;
       }
 
       const persistedMessageCallId = createMessageId();
@@ -2376,7 +2524,7 @@ export function OpyCopilotPanel({
       agentLifecycle.completeActiveRequest();
       return actionResult;
     },
-    [agentLifecycle, persistOpyMessage, persistOpyToolCall, trackOpyTaskToolCall],
+    [agentLifecycle, getTaskResumeTrail, persistOpyMessage, persistOpyToolCall, trackOpyTaskToolCall],
   );
 
   const executeBoardActionLifecycle = useCallback(
@@ -2581,7 +2729,16 @@ export function OpyCopilotPanel({
     return () => {
       isCancelled = true;
     };
-  }, [agentLifecycle, agentSecretStatus, diagramId, domain, hasOpenAiApiKey, hydrateMessagesForSession, interruptActiveLifecycleTask, runEffect]);
+  }, [
+    agentLifecycle,
+    agentSecretStatus,
+    diagramId,
+    domain,
+    hasOpenAiApiKey,
+    hydrateMessagesForSession,
+    interruptActiveLifecycleTask,
+    runEffect,
+  ]);
 
   const handleCreateSession = useCallback(() => {
     if (isRunning || isSessionLoading) {
@@ -2620,7 +2777,14 @@ export function OpyCopilotPanel({
           setRuntimeError(`SESSION SWITCH FAILED: ${toErrorMessage(error)}`);
         });
     },
-    [agentLifecycle, hydrateMessagesForSession, interruptActiveLifecycleTask, isRunning, isSessionLoading, selectedSessionId],
+    [
+      agentLifecycle,
+      hydrateMessagesForSession,
+      interruptActiveLifecycleTask,
+      isRunning,
+      isSessionLoading,
+      selectedSessionId,
+    ],
   );
 
   const handleRenameSession = useCallback(() => {
@@ -3251,19 +3415,19 @@ export function OpyCopilotPanel({
       readonly skipConfirmation?: boolean;
     }): Promise<string | null> => {
       const lifecycleRequest = input.lifecycleRequest ?? createLifecycleRequest({
-          confirmation: {
-            cancelMessage: input.descriptor.cancelMessage,
-            confirmationLines: input.descriptor.confirmationMessage.split("\n"),
-            failurePrefix: input.descriptor.failurePrefix,
-            sessionId: input.descriptor.sessionId,
-          },
-          id: createMessageId(),
-          mode: "action",
-          kind: input.descriptor.requestKind,
-          label: input.descriptor.requestLabel,
-          requiresConfirmation: true,
-          replay: input.replay,
-        });
+        confirmation: {
+          cancelMessage: input.descriptor.cancelMessage,
+          confirmationLines: input.descriptor.confirmationMessage.split("\n"),
+          failurePrefix: input.descriptor.failurePrefix,
+          sessionId: input.descriptor.sessionId,
+        },
+        id: createMessageId(),
+        mode: "action",
+        kind: input.descriptor.requestKind,
+        label: input.descriptor.requestLabel,
+        requiresConfirmation: true,
+        replay: input.replay,
+      });
 
       await trackOpyTaskToolCall({
         taskId: lifecycleRequest.id,
@@ -3470,18 +3634,17 @@ export function OpyCopilotPanel({
           return true;
         case "add-node":
         case "apply-proposal":
-        case "rollback":
-          {
-            const resolution = resolveExecutableActionReplay(replay, request);
-            if (!resolution) {
-              return false;
-            }
-            if (!resolution.ok) {
-              await handleOpyActionFlowIssue(replay.sessionId, resolution.issue);
-              return false;
-            }
-            return true;
+        case "rollback": {
+          const resolution = resolveExecutableActionReplay(replay, request);
+          if (!resolution) {
+            return false;
           }
+          if (!resolution.ok) {
+            await handleOpyActionFlowIssue(replay.sessionId, resolution.issue);
+            return false;
+          }
+          return true;
+        }
       }
     },
     [
@@ -3796,8 +3959,8 @@ export function OpyCopilotPanel({
     ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"}::${LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]}`
     : null;
   const resumableLifecycleText = agentLifecycle.stage === "idle"
-    && agentLifecycle.resumableRequest
-    && agentLifecycle.resumableStage
+      && agentLifecycle.resumableRequest
+      && agentLifecycle.resumableStage
     ? `RESUME::${agentLifecycle.resumableRequest.label} · INTERRUPTED AT ${
       LIFECYCLE_STAGE_LABEL[agentLifecycle.resumableStage]
     }`
@@ -3974,7 +4137,8 @@ export function OpyCopilotPanel({
       </section>
     );
   }, [toggleViewportSection, viewportSectionsOpen]);
-  const controlSectionMeta = `${sessions.length} SESSION(S) · ${boardContextHints.length} CONTEXT(S) · ${activeTasks.length} TASK(S)`;
+  const controlSectionMeta =
+    `${sessions.length} SESSION(S) · ${boardContextHints.length} CONTEXT(S) · ${activeTasks.length} TASK(S)`;
   const diagnosticsSectionMeta = latestDiagnosticsSurface
     ? `${latestDiagnosticsSurface.kind.toUpperCase()} · ${formatClockTime(latestDiagnosticsSurface.respondedAtMs)}`
     : "UNAVAILABLE";
@@ -3985,22 +4149,29 @@ export function OpyCopilotPanel({
   const proposalSectionMeta = activeDiagramProposal
     ? `${activeDiagramProposal.proposal.nodes.length} NODE(S) · ${activeDiagramProposal.proposal.edges.length} EDGE(S)`
     : "UNAVAILABLE";
-  const lastLifecycleText = agentLifecycle.lastTerminalStatus && agentLifecycle.lastRequest && agentLifecycle.lastCompletedAt
-    ? `LAST FLOW::${agentLifecycle.lastRequest.label} · ${
-      LIFECYCLE_TERMINAL_STATUS_LABEL[agentLifecycle.lastTerminalStatus]
-    } · ${formatClockTime(agentLifecycle.lastCompletedAt)}`
-    : null;
+  const lastLifecycleText =
+    agentLifecycle.lastTerminalStatus && agentLifecycle.lastRequest && agentLifecycle.lastCompletedAt
+      ? `LAST FLOW::${agentLifecycle.lastRequest.label} · ${
+        LIFECYCLE_TERMINAL_STATUS_LABEL[agentLifecycle.lastTerminalStatus]
+      } · ${formatClockTime(agentLifecycle.lastCompletedAt)}`
+      : null;
   const controlSectionSummary = summarizeInlineText(
     agentLifecycle.stage !== "idle"
-      ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"} · ${LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]} · BOARD::${currentBoardLabel}`
+      ? `FLOW::${agentLifecycle.activeRequest?.label ?? "OPY"} · ${
+        LIFECYCLE_STAGE_LABEL[agentLifecycle.stage]
+      } · BOARD::${currentBoardLabel}`
       : resumableLifecycleText
-      ?? lastLifecycleText
-      ?? (
-        latestTask
-          ? `TASK::${latestTask.request.label} · ${TASK_STATUS_LABEL[latestTask.status]} · STAGE::${formatTaskStageLabel(latestTask.stage)}`
-          : null
-      )
-      ?? `BOARD::${currentBoardLabel} · SESSION::${selectedSession?.title ?? "NONE"} · ACTION::${actionMode.toUpperCase()}`,
+        ?? lastLifecycleText
+        ?? (
+          latestTask
+            ? `TASK::${latestTask.request.label} · ${TASK_STATUS_LABEL[latestTask.status]} · STAGE::${
+              formatTaskStageLabel(latestTask.stage)
+            }`
+            : null
+        )
+        ?? `BOARD::${currentBoardLabel} · SESSION::${
+          selectedSession?.title ?? "NONE"
+        } · ACTION::${actionMode.toUpperCase()}`,
     "CONTROL SURFACE READY.",
   );
   const diagnosticsSectionSummary = latestDiagnosticsSurface
@@ -4209,10 +4380,12 @@ export function OpyCopilotPanel({
               )}
               {agentLifecycle.lastTerminalStatus === "failed" && agentLifecycle.lastError && (
                 <p className={styles.ownershipLensHint}>
-                  {`LAST FLOW FAILURE::${formatLifecycleFailureScope({
-                    stage: agentLifecycle.lastFailureStage,
-                    phase: agentLifecycle.lastFailurePhase,
-                  })} · ${agentLifecycle.lastError}`}
+                  {`LAST FLOW FAILURE::${
+                    formatLifecycleFailureScope({
+                      stage: agentLifecycle.lastFailureStage,
+                      phase: agentLifecycle.lastFailurePhase,
+                    })
+                  } · ${agentLifecycle.lastError}`}
                 </p>
               )}
               {agentLifecycle.stage === "idle" && agentLifecycle.resumableRequest && agentLifecycle.resumableStage && (
@@ -4248,7 +4421,8 @@ export function OpyCopilotPanel({
                   </div>
                 </section>
               )}
-              {pendingLifecycleConfirmation && pendingLifecycleRequest && agentLifecycle.stage === "awaiting_confirmation" && (
+              {pendingLifecycleConfirmation && pendingLifecycleRequest
+                && agentLifecycle.stage === "awaiting_confirmation" && (
                 <section className={styles.opyCopilotPlanCard} aria-label="OPY pending confirmation">
                   <div className={styles.opyCopilotProposalHeader}>
                     <span>{`CONFIRM::${pendingLifecycleRequest.label}`}</span>
@@ -4276,7 +4450,9 @@ export function OpyCopilotPanel({
                   </div>
                   <div className={styles.opyCopilotPlanActionList}>
                     {pendingLifecycleConfirmation.confirmationLines
-                      .filter((line) => line.trim().length > 0)
+                      .filter((line) =>
+                        line.trim().length > 0
+                      )
                       .map((line, index) => (
                         <article
                           key={`${pendingLifecycleRequest.id}-confirm-${index}`}
@@ -4337,43 +4513,57 @@ export function OpyCopilotPanel({
                               {task.errorSummary && (
                                 <p className={styles.opyCopilotError}>{`TASK ERROR:: ${task.errorSummary}`}</p>
                               )}
-                              {isLoading ? (
-                                <p className={styles.ownershipLensHint}>TRACE::LOADING</p>
-                              ) : (
+                              {isLoading ? <p className={styles.ownershipLensHint}>TRACE::LOADING</p> : (
                                 <>
                                   <div className={styles.opyCopilotTaskTraceGrid}>
-                                    {toolCalls.length > 0 ? toolCalls.map((toolCall) => (
-                                      <article
-                                        key={toolCall.id}
-                                        className={styles.opyCopilotTaskTraceItem}
-                                        data-status={toolCall.status}
-                                      >
-                                        <p>{`${toolCall.name.toUpperCase()} :: ${TOOL_CALL_STATUS_LABEL[toolCall.status]}`}</p>
-                                        {toolCall.inputSummary && (
-                                          <p className={styles.ownershipLensHint}>{`INPUT::${toolCall.inputSummary}`}</p>
-                                        )}
-                                        {toolCall.outputSummary && (
-                                          <p className={styles.ownershipLensHint}>{`OUTPUT::${toolCall.outputSummary}`}</p>
-                                        )}
-                                        {toolCall.errorSummary && (
-                                          <p className={styles.opyCopilotError}>{`TRACE ERROR:: ${toolCall.errorSummary}`}</p>
-                                        )}
-                                      </article>
-                                    )) : (
-                                      <p className={styles.ownershipLensHint}>NO TOOL CALL TRACE CAPTURED FOR THIS TASK.</p>
-                                    )}
+                                    {toolCalls.length > 0
+                                      ? toolCalls.map((toolCall) => (
+                                        <article
+                                          key={toolCall.id}
+                                          className={styles.opyCopilotTaskTraceItem}
+                                          data-status={toolCall.status}
+                                        >
+                                          <p>
+                                            {`${toolCall.name.toUpperCase()} :: ${
+                                              TOOL_CALL_STATUS_LABEL[toolCall.status]
+                                            }`}
+                                          </p>
+                                          {toolCall.inputSummary && (
+                                            <p className={styles.ownershipLensHint}>
+                                              {`INPUT::${toolCall.inputSummary}`}
+                                            </p>
+                                          )}
+                                          {toolCall.outputSummary && (
+                                            <p className={styles.ownershipLensHint}>
+                                              {`OUTPUT::${toolCall.outputSummary}`}
+                                            </p>
+                                          )}
+                                          {toolCall.errorSummary && (
+                                            <p className={styles.opyCopilotError}>
+                                              {`TRACE ERROR:: ${toolCall.errorSummary}`}
+                                            </p>
+                                          )}
+                                        </article>
+                                      ))
+                                      : (
+                                        <p className={styles.ownershipLensHint}>
+                                          NO TOOL CALL TRACE CAPTURED FOR THIS TASK.
+                                        </p>
+                                      )}
                                   </div>
                                   <div className={styles.opyCopilotTaskArtifactStack}>
-                                    {artifacts.length > 0 ? artifacts.map((artifact) => (
-                                      <article key={artifact.id} className={styles.opyCopilotTaskTraceItem}>
-                                        <p>{`${artifact.kind.toUpperCase()} :: ${artifact.summary}`}</p>
-                                        <pre className={styles.opyCopilotTaskArtifactPayload}>
+                                    {artifacts.length > 0
+                                      ? artifacts.map((artifact) => (
+                                        <article key={artifact.id} className={styles.opyCopilotTaskTraceItem}>
+                                          <p>{`${artifact.kind.toUpperCase()} :: ${artifact.summary}`}</p>
+                                          <pre className={styles.opyCopilotTaskArtifactPayload}>
                                           {JSON.stringify(artifact.payload, null, 2)}
-                                        </pre>
-                                      </article>
-                                    )) : (
-                                      <p className={styles.ownershipLensHint}>NO ARTIFACTS CAPTURED FOR THIS TASK.</p>
-                                    )}
+                                          </pre>
+                                        </article>
+                                      ))
+                                      : (
+                                        <p className={styles.ownershipLensHint}>NO ARTIFACTS CAPTURED FOR THIS TASK.</p>
+                                      )}
                                   </div>
                                 </>
                               )}

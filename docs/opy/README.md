@@ -233,11 +233,13 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - OPY hydrates the interrupted task's persisted tool-call and artifact trail before surfacing resume controls
 - grounded chat, review, and proposal artifacts can repopulate in-memory OPY state during resume hydration
 - action resume can fall back to a persisted `action_descriptor` artifact when the live replay target is missing
+- read-path resume now skips completed `assemble_context`, `invoke_agent`, and `persist_assistant_message` boundaries when the matching persisted artifacts are present
+- action-path resume now skips completed `execute_board_action`, `refresh_checkpoints`, and `persist_assistant_message` boundaries when the matching persisted trail is present
 - if the interrupted task stage is resumable, OPY exposes a control-field resume card
 - operators can either resume the exact persisted request or dismiss it explicitly
 - starting a new OPY lifecycle supersedes any older resumable task for that session
 - current persisted tool calls include context assembly, agent invoke, assistant-message persistence, action resolution, board mutation execution, and post-apply checkpoint refresh
-- current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, mutation plans, and checkpoint restore previews
+- current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, action results, mutation plans, and checkpoint restore previews
 
 ### Current Task History Surface
 
