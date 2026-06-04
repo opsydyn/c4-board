@@ -1,15 +1,21 @@
 import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
+import type { OpyAgentArtifact, OpyAgentToolCall } from "@/core/effects/opy-agent.trace";
 import {
+  createOpyAgentArtifact,
   createOpyAgentCheckpoint,
+  interruptOpyAgentToolCalls,
   interruptOpyAgentTasks,
   getOpyAgentCheckpoint,
+  listOpyAgentArtifacts,
   listOpyAgentTasks,
+  listOpyAgentToolCalls,
   listOpyAgentCheckpoints,
   listOpyDiagramProposals,
   type OpyAgentTask,
   type OpyAgentCheckpoint,
   type OpyPersistedDiagramProposal,
   upsertOpyAgentTask,
+  upsertOpyAgentToolCall,
   upsertOpyDiagramProposal,
 } from "@/core/effects/opy-chat.persistence";
 import { Cause, Effect, Layer, Option } from "effect";
@@ -106,6 +112,40 @@ const createTask = (
   updatedAt: 2_050,
   completedAt: null,
   errorSummary: null,
+  ...overrides,
+});
+
+const createToolCall = (
+  overrides?: Partial<OpyAgentToolCall>,
+): OpyAgentToolCall => ({
+  id: "tool-1",
+  taskId: "task-1",
+  sessionId: "session-1",
+  name: "invoke_agent",
+  status: "running",
+  startedAt: 2_020,
+  updatedAt: 2_050,
+  completedAt: null,
+  inputSummary: "Invoke board review.",
+  outputSummary: null,
+  errorSummary: null,
+  ...overrides,
+});
+
+const createArtifact = (
+  overrides?: Partial<OpyAgentArtifact>,
+): OpyAgentArtifact => ({
+  id: "artifact-1",
+  taskId: "task-1",
+  sessionId: "session-1",
+  toolCallId: "tool-1",
+  kind: "context_bundle",
+  summary: "Context bundle ready.",
+  payload: {
+    confidence: "high",
+    citations: 3,
+  },
+  createdAt: 2_060,
   ...overrides,
 });
 
@@ -445,6 +485,146 @@ describe("opy-chat.persistence", () => {
     const [updateSql, updateValues] = execute.mock.calls[0] as [string, unknown[]];
     expect(updateSql).toContain("UPDATE opy_agent_tasks");
     expect(updateValues[0]).toBe(3_000);
+    expect(updateValues[1]).toBe("INTERRUPTED DURING PREVIOUS SESSION.");
+    expect(updateValues[2]).toBe("session-1");
+  });
+
+  it("upserts and lists persisted OPY agent tool calls", async () => {
+    const execute = vi.fn();
+    const toolCall = createToolCall();
+
+    const persistedToolCall = await runWithDatabaseService(
+      upsertOpyAgentToolCall(toolCall),
+      { execute },
+    );
+
+    expect(persistedToolCall).toEqual(toolCall);
+    const [upsertSql, upsertValues] = execute.mock.calls[0] as [string, unknown[]];
+    expect(upsertSql).toContain("INSERT INTO opy_agent_tool_calls");
+    expect(upsertValues[0]).toBe("tool-1");
+    expect(upsertValues[1]).toBe("task-1");
+    expect(upsertValues[2]).toBe("session-1");
+    expect(upsertValues[3]).toBe("invoke_agent");
+
+    const listed = await runWithDatabaseService(
+      listOpyAgentToolCalls("task-1"),
+      {
+        query: () => [
+          {
+            id: "tool-older",
+            taskId: "task-1",
+            sessionId: "session-1",
+            name: "assemble_context",
+            status: "completed",
+            startedAt: 2_000,
+            updatedAt: 2_010,
+            completedAt: 2_010,
+            inputSummary: "Build context.",
+            outputSummary: "CONFIDENCE::HIGH",
+            errorSummary: null,
+          },
+          {
+            id: toolCall.id,
+            taskId: toolCall.taskId,
+            sessionId: toolCall.sessionId,
+            name: toolCall.name,
+            status: toolCall.status,
+            startedAt: toolCall.startedAt,
+            updatedAt: toolCall.updatedAt,
+            completedAt: toolCall.completedAt,
+            inputSummary: toolCall.inputSummary,
+            outputSummary: toolCall.outputSummary,
+            errorSummary: toolCall.errorSummary,
+          },
+        ],
+      },
+    );
+
+    expect(listed).toHaveLength(2);
+    expect(listed[0]?.id).toBe("tool-older");
+    expect(listed[1]?.id).toBe("tool-1");
+  });
+
+  it("creates and lists persisted OPY agent artifacts", async () => {
+    const execute = vi.fn();
+    const artifact = createArtifact();
+
+    const persistedArtifact = await runWithDatabaseService(
+      createOpyAgentArtifact(artifact),
+      { execute },
+    );
+
+    expect(persistedArtifact).toEqual(artifact);
+    const [insertSql, insertValues] = execute.mock.calls[0] as [string, unknown[]];
+    expect(insertSql).toContain("INSERT INTO opy_agent_artifacts");
+    expect(insertValues[0]).toBe("artifact-1");
+    expect(insertValues[1]).toBe("task-1");
+    expect(insertValues[4]).toBe("context_bundle");
+    expect(JSON.parse(String(insertValues[6]))).toEqual(artifact.payload);
+
+    const listed = await runWithDatabaseService(
+      listOpyAgentArtifacts("task-1"),
+      {
+        query: () => [
+          {
+            id: artifact.id,
+            taskId: artifact.taskId,
+            sessionId: artifact.sessionId,
+            toolCallId: artifact.toolCallId,
+            kind: artifact.kind,
+            summary: artifact.summary,
+            payloadJson: JSON.stringify(artifact.payload),
+            createdAt: artifact.createdAt,
+          },
+        ],
+      },
+    );
+
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toEqual(artifact);
+  });
+
+  it("interrupts running OPY agent tool calls on resume hydration", async () => {
+    const toolCall = createToolCall();
+    const execute = vi.fn();
+
+    const interrupted = await runWithDatabaseService(
+      interruptOpyAgentToolCalls({
+        sessionId: "session-1",
+        errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+        updatedAt: 3_100,
+      }),
+      {
+        query: () => [
+          {
+            id: toolCall.id,
+            taskId: toolCall.taskId,
+            sessionId: toolCall.sessionId,
+            name: toolCall.name,
+            status: toolCall.status,
+            startedAt: toolCall.startedAt,
+            updatedAt: toolCall.updatedAt,
+            completedAt: toolCall.completedAt,
+            inputSummary: toolCall.inputSummary,
+            outputSummary: toolCall.outputSummary,
+            errorSummary: toolCall.errorSummary,
+          },
+        ],
+        execute,
+      },
+    );
+
+    expect(interrupted).toHaveLength(1);
+    expect(interrupted[0]).toMatchObject({
+      id: "tool-1",
+      status: "interrupted",
+      updatedAt: 3_100,
+      errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+    });
+
+    const [updateSql, updateValues] = execute.mock.calls[0] as [string, unknown[]];
+    expect(updateSql).toContain("UPDATE opy_agent_tool_calls");
+    expect(updateValues[0]).toBe(3_100);
     expect(updateValues[1]).toBe("INTERRUPTED DURING PREVIOUS SESSION.");
     expect(updateValues[2]).toBe("session-1");
   });

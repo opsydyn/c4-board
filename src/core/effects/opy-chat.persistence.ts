@@ -10,6 +10,13 @@ import type {
   OpyAgentLifecycleReplay,
   OpyAgentLifecycleRequest,
 } from "./opy-agent.lifecycle";
+import type {
+  OpyAgentArtifact,
+  OpyAgentArtifactKind,
+  OpyAgentToolCall,
+  OpyAgentToolCallName,
+  OpyAgentToolCallStatus,
+} from "./opy-agent.trace";
 
 export type OpyChatRole = "assistant" | "user" | "system";
 export type OpyChatDomain = "c4" | "ddd";
@@ -49,9 +56,6 @@ export interface OpyAgentRun {
   readonly errorSummary: string | null;
 }
 
-export type OpyAgentTaskStatus = "running" | "interrupted" | "completed" | "failed" | "cancelled";
-export type OpyAgentTaskStage = OpyAgentLifecycleNonTerminalStage | "completed" | "failed";
-
 export interface OpyAgentTask {
   readonly id: string;
   readonly sessionId: string;
@@ -63,6 +67,9 @@ export interface OpyAgentTask {
   readonly completedAt: number | null;
   readonly errorSummary: string | null;
 }
+
+export type OpyAgentTaskStatus = "running" | "interrupted" | "completed" | "failed" | "cancelled";
+export type OpyAgentTaskStage = OpyAgentLifecycleNonTerminalStage | "completed" | "failed";
 
 export type OpyPlanDecisionStatus = "pending" | "approved" | "rejected";
 
@@ -128,6 +135,12 @@ export interface FinalizeInterruptedOpyAgentRunsInput {
 }
 
 export interface InterruptOpyAgentTasksInput {
+  readonly sessionId: string;
+  readonly errorSummary?: string;
+  readonly updatedAt?: number;
+}
+
+export interface InterruptOpyAgentToolCallsInput {
   readonly sessionId: string;
   readonly errorSummary?: string;
   readonly updatedAt?: number;
@@ -235,6 +248,39 @@ const LIST_AGENT_TASKS_SQL = `
   ORDER BY updated_at DESC, created_at DESC
 `;
 
+const LIST_AGENT_TOOL_CALLS_SQL = `
+  SELECT
+    id,
+    task_id AS taskId,
+    session_id AS sessionId,
+    name,
+    status,
+    started_at AS startedAt,
+    updated_at AS updatedAt,
+    completed_at AS completedAt,
+    input_summary AS inputSummary,
+    output_summary AS outputSummary,
+    error_summary AS errorSummary
+  FROM opy_agent_tool_calls
+  WHERE task_id = ?
+  ORDER BY started_at ASC, updated_at ASC
+`;
+
+const LIST_AGENT_ARTIFACTS_SQL = `
+  SELECT
+    id,
+    task_id AS taskId,
+    session_id AS sessionId,
+    tool_call_id AS toolCallId,
+    kind,
+    summary,
+    payload_json AS payloadJson,
+    created_at AS createdAt
+  FROM opy_agent_artifacts
+  WHERE task_id = ?
+  ORDER BY created_at ASC
+`;
+
 const LIST_DIAGRAM_PROPOSALS_SQL = `
   SELECT
     session_id AS sessionId,
@@ -310,6 +356,25 @@ const LIST_RUNNING_TASKS_SQL = `
   ORDER BY updated_at DESC, created_at DESC
 `;
 
+const LIST_RUNNING_TOOL_CALLS_SQL = `
+  SELECT
+    id,
+    task_id AS taskId,
+    session_id AS sessionId,
+    name,
+    status,
+    started_at AS startedAt,
+    updated_at AS updatedAt,
+    completed_at AS completedAt,
+    input_summary AS inputSummary,
+    output_summary AS outputSummary,
+    error_summary AS errorSummary
+  FROM opy_agent_tool_calls
+  WHERE session_id = ?
+    AND status = 'running'
+  ORDER BY started_at ASC, updated_at ASC
+`;
+
 const INSERT_RUN_SQL = `
   INSERT INTO opy_agent_runs (
     id,
@@ -347,6 +412,44 @@ const UPSERT_TASK_SQL = `
     error_summary = excluded.error_summary
 `;
 
+const UPSERT_TOOL_CALL_SQL = `
+  INSERT INTO opy_agent_tool_calls (
+    id,
+    task_id,
+    session_id,
+    name,
+    status,
+    started_at,
+    updated_at,
+    completed_at,
+    input_summary,
+    output_summary,
+    error_summary
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    status = excluded.status,
+    updated_at = excluded.updated_at,
+    completed_at = excluded.completed_at,
+    input_summary = excluded.input_summary,
+    output_summary = excluded.output_summary,
+    error_summary = excluded.error_summary
+`;
+
+const INSERT_ARTIFACT_SQL = `
+  INSERT INTO opy_agent_artifacts (
+    id,
+    task_id,
+    session_id,
+    tool_call_id,
+    kind,
+    summary,
+    payload_json,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`;
+
 const UPDATE_RUN_SQL = `
   UPDATE opy_agent_runs
   SET
@@ -370,6 +473,16 @@ const FAIL_INTERRUPTED_RUNS_SQL = `
 
 const INTERRUPT_RUNNING_TASKS_SQL = `
   UPDATE opy_agent_tasks
+  SET
+    status = 'interrupted',
+    updated_at = ?,
+    error_summary = COALESCE(error_summary, ?)
+  WHERE session_id = ?
+    AND status = 'running'
+`;
+
+const INTERRUPT_RUNNING_TOOL_CALLS_SQL = `
+  UPDATE opy_agent_tool_calls
   SET
     status = 'interrupted',
     updated_at = ?,
@@ -441,6 +554,30 @@ const isOpyAgentTaskStage = (value: unknown): value is OpyAgentTaskStage =>
   || value === "completed"
   || value === "failed";
 
+const isOpyAgentToolCallName = (value: unknown): value is OpyAgentToolCallName =>
+  value === "assemble_context"
+  || value === "invoke_agent"
+  || value === "persist_assistant_message"
+  || value === "resolve_action"
+  || value === "execute_board_action"
+  || value === "refresh_checkpoints";
+
+const isOpyAgentToolCallStatus = (value: unknown): value is OpyAgentToolCallStatus =>
+  value === "running"
+  || value === "interrupted"
+  || value === "completed"
+  || value === "failed"
+  || value === "cancelled";
+
+const isOpyAgentArtifactKind = (value: unknown): value is OpyAgentArtifactKind =>
+  value === "context_bundle"
+  || value === "chat_response"
+  || value === "diagram_proposal"
+  || value === "board_review"
+  || value === "action_descriptor"
+  || value === "mutation_plan"
+  || value === "checkpoint_restore_preview";
+
 const isOpyPlanDecisionStatus = (value: unknown): value is OpyPlanDecisionStatus =>
   value === "pending" || value === "approved" || value === "rejected";
 
@@ -496,6 +633,31 @@ type AgentTaskRow = {
   updatedAt: number;
   completedAt: number | null;
   errorSummary: string | null;
+};
+
+type AgentToolCallRow = {
+  id: string;
+  taskId: string;
+  sessionId: string;
+  name: string;
+  status: string;
+  startedAt: number;
+  updatedAt: number;
+  completedAt: number | null;
+  inputSummary: string | null;
+  outputSummary: string | null;
+  errorSummary: string | null;
+};
+
+type AgentArtifactRow = {
+  id: string;
+  taskId: string;
+  sessionId: string;
+  toolCallId: string | null;
+  kind: string;
+  summary: string;
+  payloadJson: string;
+  createdAt: number;
 };
 
 type DiagramProposalRow = {
@@ -749,6 +911,50 @@ const decodeAgentTaskRow = (row: AgentTaskRow): OpyAgentTask | null => {
   };
 };
 
+const decodeAgentToolCallRow = (row: AgentToolCallRow): OpyAgentToolCall | null => {
+  if (!isOpyAgentToolCallName(row.name) || !isOpyAgentToolCallStatus(row.status)) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    sessionId: row.sessionId,
+    name: row.name,
+    status: row.status,
+    startedAt: toTimestamp(row.startedAt),
+    updatedAt: toTimestamp(row.updatedAt),
+    completedAt: toNullableTimestamp(row.completedAt),
+    inputSummary: toNullableText(row.inputSummary),
+    outputSummary: toNullableText(row.outputSummary),
+    errorSummary: toNullableText(row.errorSummary),
+  };
+};
+
+const decodeAgentArtifactRow = (row: AgentArtifactRow): OpyAgentArtifact | null => {
+  if (!isOpyAgentArtifactKind(row.kind) || typeof row.summary !== "string") {
+    return null;
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = JSON.parse(row.payloadJson);
+  } catch {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    sessionId: row.sessionId,
+    toolCallId: row.toolCallId ?? null,
+    kind: row.kind,
+    summary: row.summary,
+    payload,
+    createdAt: toTimestamp(row.createdAt),
+  };
+};
+
 const decodeDiagramProposalRow = (row: DiagramProposalRow): OpyPersistedDiagramProposal | null => {
   if (!isOpyPlanDecisionStatus(row.decisionStatus) || typeof row.commandDescription !== "string") {
     return null;
@@ -799,6 +1005,12 @@ const sortRunsByRecency = (runs: readonly OpyAgentRun[]): OpyAgentRun[] =>
 
 const sortTasksByRecency = (tasks: readonly OpyAgentTask[]): OpyAgentTask[] =>
   [...tasks].sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt);
+
+const sortToolCallsByTimeline = (toolCalls: readonly OpyAgentToolCall[]): OpyAgentToolCall[] =>
+  [...toolCalls].sort((left, right) => left.startedAt - right.startedAt || left.updatedAt - right.updatedAt);
+
+const sortArtifactsByTimeline = (artifacts: readonly OpyAgentArtifact[]): OpyAgentArtifact[] =>
+  [...artifacts].sort((left, right) => left.createdAt - right.createdAt);
 
 export const listOpyChatSessions = (input: ListOpyChatSessionsInput) =>
   Effect.gen(function*() {
@@ -878,6 +1090,24 @@ export const listOpyAgentTasks = (sessionId: string) =>
     );
   });
 
+export const listOpyAgentToolCalls = (taskId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentToolCallRow>(LIST_AGENT_TOOL_CALLS_SQL, [taskId]);
+    return sortToolCallsByTimeline(
+      rows.map(decodeAgentToolCallRow).filter((row): row is OpyAgentToolCall => row !== null),
+    );
+  });
+
+export const listOpyAgentArtifacts = (taskId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentArtifactRow>(LIST_AGENT_ARTIFACTS_SQL, [taskId]);
+    return sortArtifactsByTimeline(
+      rows.map(decodeAgentArtifactRow).filter((row): row is OpyAgentArtifact => row !== null),
+    );
+  });
+
 export const listOpyDiagramProposals = (sessionId: string) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -950,6 +1180,43 @@ export const upsertOpyAgentTask = (task: OpyAgentTask) =>
     ]);
 
     return task;
+  });
+
+export const upsertOpyAgentToolCall = (toolCall: OpyAgentToolCall) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(UPSERT_TOOL_CALL_SQL, [
+      toolCall.id,
+      toolCall.taskId,
+      toolCall.sessionId,
+      toolCall.name,
+      toolCall.status,
+      toolCall.startedAt,
+      toolCall.updatedAt,
+      toolCall.completedAt,
+      toolCall.inputSummary,
+      toolCall.outputSummary,
+      toolCall.errorSummary,
+    ]);
+
+    return toolCall;
+  });
+
+export const createOpyAgentArtifact = (artifact: OpyAgentArtifact) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(INSERT_ARTIFACT_SQL, [
+      artifact.id,
+      artifact.taskId,
+      artifact.sessionId,
+      artifact.toolCallId,
+      artifact.kind,
+      artifact.summary,
+      JSON.stringify(artifact.payload),
+      artifact.createdAt,
+    ]);
+
+    return artifact;
   });
 
 export const upsertOpyDiagramProposal = (proposal: OpyPersistedDiagramProposal) =>
@@ -1057,6 +1324,37 @@ export const interruptOpyAgentTasks = (input: InterruptOpyAgentTasksInput) =>
 
     return activeTasks.map((task) => ({
       ...task,
+      status: "interrupted" as const,
+      updatedAt,
+      errorSummary,
+    }));
+  });
+
+export const interruptOpyAgentToolCalls = (input: InterruptOpyAgentToolCallsInput) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const updatedAt = input.updatedAt ?? Date.now();
+    const errorSummary = input.errorSummary?.trim().length
+      ? input.errorSummary.trim()
+      : "INTERRUPTED DURING PREVIOUS SESSION.";
+
+    const rows = yield* service.query<AgentToolCallRow>(LIST_RUNNING_TOOL_CALLS_SQL, [input.sessionId]);
+    const activeToolCalls = rows
+      .map(decodeAgentToolCallRow)
+      .filter((row): row is OpyAgentToolCall => row !== null);
+
+    if (activeToolCalls.length === 0) {
+      return [] as OpyAgentToolCall[];
+    }
+
+    yield* service.execute(INTERRUPT_RUNNING_TOOL_CALLS_SQL, [
+      updatedAt,
+      errorSummary,
+      input.sessionId,
+    ]);
+
+    return activeToolCalls.map((toolCall) => ({
+      ...toolCall,
       status: "interrupted" as const,
       updatedAt,
       errorSummary,

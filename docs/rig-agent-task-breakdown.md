@@ -40,7 +40,8 @@
   - active OPY lifecycle requests are persisted in `opy_agent_tasks`
   - session hydration/switch/create interrupts stale running tasks instead of losing them silently
   - OPY can hydrate the latest interrupted request for a session and surface `resume` / `dismiss` controls back to the operator
-- the next `RIG-402` slices should extend this baseline into tool-call/artifact persistence and deeper restart continuity rather than only terminal replay after failure
+  - OPY now persists a queryable execution trail in `opy_agent_tool_calls` plus grounded/action artifacts in `opy_agent_artifacts`
+- the next `RIG-402` slices should extend this baseline into deeper restart continuity and surfaced task-history UX rather than only terminal replay after failure
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -255,15 +256,18 @@
   - Resume logic from last persisted stage.
 - Primary files:
   - `src-tauri/migrations/024_create_opy_agent_tasks.sql`
+  - `src-tauri/migrations/025_create_opy_agent_tool_calls_and_artifacts.sql`
   - `src/core/effects/opy-chat.persistence.ts`
   - `src/ui/components/OpyCopilotPanel.tsx`
   - `src/ui/machines/opy-agent.machine.ts`
 - Depends on: `RIG-401`.
 - Current status:
-  - first slice complete for task persistence and resume hydration
+  - second slice complete for task execution-trail persistence
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
   - OPY can hydrate the latest interrupted request for the active session and let the operator resume or dismiss it
-  - tool-call/artifact persistence is still pending
+  - `opy_agent_tool_calls` now records high-signal lifecycle steps such as context assembly, agent invoke, assistant-message persistence, action resolution, board apply, and checkpoint refresh
+  - `opy_agent_artifacts` now stores grounded context bundles, response/proposal/review payloads, action descriptors, mutation plans, and checkpoint restore previews
+  - surfaced task history UI is still pending
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

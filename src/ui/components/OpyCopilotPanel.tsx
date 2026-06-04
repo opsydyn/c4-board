@@ -50,6 +50,12 @@ import {
   withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
 import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
+import type {
+  OpyAgentArtifact,
+  OpyAgentArtifactKind,
+  OpyAgentToolCall,
+  OpyAgentToolCallName,
+} from "../../core/effects/opy-agent.trace";
 import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import {
   buildGroundedProposalDiff,
@@ -58,8 +64,10 @@ import {
 } from "../../core/effects/opy-c4-proposals";
 import {
   appendOpyChatMessage,
+  createOpyAgentArtifact,
   createOpyAgentRun,
   finalizeInterruptedOpyAgentRuns,
+  interruptOpyAgentToolCalls,
   interruptOpyAgentTasks,
   createOpyChatSession,
   listOpyAgentTasks,
@@ -81,6 +89,7 @@ import {
   renameOpyChatSession,
   updateOpyAgentRun,
   upsertOpyAgentTask,
+  upsertOpyAgentToolCall,
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
 import type { AiActionMode, OpyViewportSectionKey, OpyViewportSections } from "../../core/effects/settings.types";
@@ -176,13 +185,81 @@ const summarizeInlineText = (value: string, fallback: string): string => {
   return normalized.length > 0 ? normalized : fallback;
 };
 
+const createChatResponseArtifactDraft = (
+  groundedChat: OpyGroundedChatResponse,
+): OpyTaskArtifactDraft => ({
+  kind: "chat_response",
+  summary: summarizeInlineText(groundedChat.response.message, "CHAT RESPONSE READY."),
+  payload: groundedChat,
+});
+
+const createDiagramProposalArtifactDraft = (
+  groundedProposal: OpyGroundedDiagramProposal,
+): OpyTaskArtifactDraft => ({
+  kind: "diagram_proposal",
+  summary: summarizeInlineText(groundedProposal.proposal.summary, "DIAGRAM PROPOSAL READY."),
+  payload: groundedProposal,
+});
+
+const createBoardReviewArtifactDraft = (
+  groundedReview: OpyGroundedBoardReview,
+): OpyTaskArtifactDraft => ({
+  kind: "board_review",
+  summary: summarizeInlineText(groundedReview.review.summary, "BOARD REVIEW READY."),
+  payload: groundedReview,
+});
+
+const createMutationPlanArtifactDraft = (input: {
+  readonly groundedProposal: ReturnType<typeof buildGroundedProposalDiff>;
+  readonly proposalSummary: ReturnType<typeof summarizeGroundedProposalDiff>;
+  readonly mutationPlan: ReturnType<typeof buildRigMutationPlanDiff>;
+}): OpyTaskArtifactDraft => ({
+  kind: "mutation_plan",
+  summary: summarizeInlineText(
+    input.mutationPlan?.plan
+      ? `PLAN::${input.mutationPlan.plan.totalActions} ACTION(S) · RISK::${input.mutationPlan.plan.highestRisk.toUpperCase()}`
+      : "MUTATION PLAN READY.",
+    "MUTATION PLAN READY.",
+  ),
+  payload: input,
+});
+
+const createCheckpointRestorePreviewArtifactDraft = (
+  preview: ReturnType<typeof buildOpyCheckpointRestorePreview>,
+): OpyTaskArtifactDraft | null => {
+  if (!preview) {
+    return null;
+  }
+
+  return {
+    kind: "checkpoint_restore_preview",
+    summary: summarizeInlineText(
+      preview.hasChanges
+        ? `RESTORE::${preview.impactedEntities.length} CHANGE(S)`
+        : "CHECKPOINT ALREADY MATCHES CURRENT BOARD.",
+      "CHECKPOINT RESTORE PREVIEW READY.",
+    ),
+    payload: preview,
+  };
+};
+
 type OpyPersistMessageResult =
   | { readonly ok: true; readonly message: OpyChatMessage }
   | { readonly ok: false; readonly errorMessage: string; readonly message: OpyChatMessage };
 
 type OpyExecutableActionReplayResolution =
-  | { readonly ok: true; readonly value: OpyActionFlowDescriptor }
+  | {
+    readonly ok: true;
+    readonly value: OpyActionFlowDescriptor;
+    readonly artifacts?: ReadonlyArray<OpyTaskArtifactDraft>;
+  }
   | { readonly ok: false; readonly issue: OpyActionFlowIssue };
+
+interface OpyTaskArtifactDraft {
+  readonly kind: OpyAgentArtifactKind;
+  readonly summary: string;
+  readonly payload: unknown;
+}
 
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
@@ -1144,6 +1221,12 @@ export function OpyCopilotPanel({
             errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
           }),
         );
+        await runEffect(
+          interruptOpyAgentToolCalls({
+            sessionId,
+            errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+          }),
+        );
         const loadedMessages = await runEffect(listOpyChatMessages(sessionId));
         const loadedRuns = await runEffect(listOpyAgentRuns(sessionId));
         const loadedTasks = await runEffect(listOpyAgentTasks(sessionId));
@@ -1275,6 +1358,127 @@ export function OpyCopilotPanel({
       return persisted;
     },
     [runEffect],
+  );
+
+  const warnOpyTracePersistFailure = useCallback((scope: string, error: unknown) => {
+    console.warn(`[opy-trace] ${scope} persistence failed`, error);
+  }, []);
+
+  const persistOpyToolCall = useCallback(
+    async (toolCall: OpyAgentToolCall): Promise<OpyAgentToolCall | null> => {
+      try {
+        return await runEffect(upsertOpyAgentToolCall(toolCall));
+      } catch (error) {
+        warnOpyTracePersistFailure(`tool call ${toolCall.name}`, error);
+        return null;
+      }
+    },
+    [runEffect, warnOpyTracePersistFailure],
+  );
+
+  const createOpyTaskArtifact = useCallback(
+    async (input: {
+      readonly taskId: string;
+      readonly sessionId: string;
+      readonly toolCallId: string | null;
+      readonly draft: OpyTaskArtifactDraft;
+    }): Promise<OpyAgentArtifact | null> => {
+      const artifact: OpyAgentArtifact = {
+        id: createMessageId(),
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        toolCallId: input.toolCallId,
+        kind: input.draft.kind,
+        summary: input.draft.summary,
+        payload: input.draft.payload,
+        createdAt: Date.now(),
+      };
+
+      try {
+        return await runEffect(createOpyAgentArtifact(artifact));
+      } catch (error) {
+        warnOpyTracePersistFailure(`artifact ${artifact.kind}`, error);
+        return null;
+      }
+    },
+    [runEffect, warnOpyTracePersistFailure],
+  );
+
+  const trackOpyTaskToolCall = useCallback(
+    async <T,>(
+      input: {
+        readonly taskId: string;
+        readonly sessionId: string;
+        readonly name: OpyAgentToolCallName;
+        readonly inputSummary: string | null;
+        readonly execute: () => Promise<T>;
+        readonly outputSummary?: (value: T) => string | null;
+        readonly artifacts?: (value: T, toolCallId: string) => ReadonlyArray<OpyTaskArtifactDraft>;
+      },
+    ): Promise<T> => {
+      const startedAt = Date.now();
+      const toolCallId = createMessageId();
+      await persistOpyToolCall({
+        id: toolCallId,
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        name: input.name,
+        status: "running",
+        startedAt,
+        updatedAt: startedAt,
+        completedAt: null,
+        inputSummary: input.inputSummary,
+        outputSummary: null,
+        errorSummary: null,
+      });
+
+      try {
+        const result = await input.execute();
+        const completedAt = Date.now();
+        await persistOpyToolCall({
+          id: toolCallId,
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          name: input.name,
+          status: "completed",
+          startedAt,
+          updatedAt: completedAt,
+          completedAt,
+          inputSummary: input.inputSummary,
+          outputSummary: input.outputSummary?.(result) ?? null,
+          errorSummary: null,
+        });
+
+        const artifacts = input.artifacts?.(result, toolCallId) ?? [];
+        for (const artifact of artifacts) {
+          await createOpyTaskArtifact({
+            taskId: input.taskId,
+            sessionId: input.sessionId,
+            toolCallId,
+            draft: artifact,
+          });
+        }
+
+        return result;
+      } catch (error) {
+        const completedAt = Date.now();
+        await persistOpyToolCall({
+          id: toolCallId,
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          name: input.name,
+          status: "failed",
+          startedAt,
+          updatedAt: completedAt,
+          completedAt,
+          inputSummary: input.inputSummary,
+          outputSummary: null,
+          errorSummary: toErrorMessage(error),
+        });
+        throw error;
+      }
+    },
+    [createOpyTaskArtifact, persistOpyToolCall],
   );
 
   const interruptActiveLifecycleTask = useCallback(
@@ -1508,9 +1712,11 @@ export function OpyCopilotPanel({
         readonly execute: (context: RigAgentContextBundle) => Promise<T>;
         readonly assistantMessage: (result: T) => string;
         readonly failurePrefix: string;
+        readonly artifactsForResult?: (result: T) => ReadonlyArray<OpyTaskArtifactDraft>;
         readonly onAfterPersisted?: (result: T) => void | Promise<void>;
       },
     ): Promise<T | null> => {
+      const taskId = input.lifecycleRequest.id;
       if (input.manageLifecycleStart !== false) {
         if (agentLifecycle.resumableTaskId && agentLifecycle.resumableTaskId !== input.lifecycleRequest.id) {
           await dismissResumableLifecycleTask("SUPERSEDED BY NEW TASK.");
@@ -1539,22 +1745,74 @@ export function OpyCopilotPanel({
 
       let currentRun = run;
       try {
-        const context = await input.contextualize();
+        const context = await trackOpyTaskToolCall({
+          taskId,
+          sessionId: input.sessionId,
+          name: "assemble_context",
+          inputSummary: summarizeInlineText(
+            `INTENT::${input.intent} · REQUEST::${input.lifecycleRequest.label}`,
+            input.intent,
+          ),
+          execute: input.contextualize,
+          outputSummary: (bundle) =>
+            `CONFIDENCE::${bundle.confidence.toUpperCase()} · CITATIONS::${bundle.citations.length}`,
+          artifacts: (bundle) => [{
+            kind: "context_bundle",
+            summary: summarizeInlineText(bundle.confidenceReason, "CONTEXT READY."),
+            payload: bundle,
+          }],
+        });
         agentLifecycle.markContextReady();
 
-        const result = await input.execute(context);
+        const result = await trackOpyTaskToolCall({
+          taskId,
+          sessionId: input.sessionId,
+          name: "invoke_agent",
+          inputSummary: summarizeInlineText(
+            `${input.lifecycleRequest.kind.toUpperCase()} · ${input.lifecycleRequest.label}`,
+            input.lifecycleRequest.label,
+          ),
+          execute: () => input.execute(context),
+          outputSummary: () => `${input.lifecycleRequest.label} RESULT READY`,
+          artifacts: (value) => input.artifactsForResult?.(value) ?? [],
+        });
         agentLifecycle.markResultReady();
         currentRun = await transitionAgentRun(currentRun, {
           stage: "persist",
         });
 
-        const persistedMessage = await persistOpyMessage(
-          input.sessionId,
-          "assistant",
-          input.assistantMessage(result),
-        );
+        const persistedMessageCallId = createMessageId();
+        const persistedMessageStartedAt = Date.now();
+        await persistOpyToolCall({
+          id: persistedMessageCallId,
+          taskId,
+          sessionId: input.sessionId,
+          name: "persist_assistant_message",
+          status: "running",
+          startedAt: persistedMessageStartedAt,
+          updatedAt: persistedMessageStartedAt,
+          completedAt: null,
+          inputSummary: "Persist assistant transcript message.",
+          outputSummary: null,
+          errorSummary: null,
+        });
+        const persistedMessage = await persistOpyMessage(input.sessionId, "assistant", input.assistantMessage(result));
 
         if (!persistedMessage) {
+          const failedAt = Date.now();
+          await persistOpyToolCall({
+            id: persistedMessageCallId,
+            taskId,
+            sessionId: input.sessionId,
+            name: "persist_assistant_message",
+            status: "failed",
+            startedAt: persistedMessageStartedAt,
+            updatedAt: failedAt,
+            completedAt: failedAt,
+            inputSummary: "Persist assistant transcript message.",
+            outputSummary: null,
+            errorSummary: "Assistant response content was empty.",
+          });
           const persistError = makeAgentRuntimeError({
             message: "Assistant response could not be persisted because the content was empty.",
             runId: currentRun.id,
@@ -1572,6 +1830,20 @@ export function OpyCopilotPanel({
         }
 
         if (!persistedMessage.ok) {
+          const failedAt = Date.now();
+          await persistOpyToolCall({
+            id: persistedMessageCallId,
+            taskId,
+            sessionId: input.sessionId,
+            name: "persist_assistant_message",
+            status: "failed",
+            startedAt: persistedMessageStartedAt,
+            updatedAt: failedAt,
+            completedAt: failedAt,
+            inputSummary: "Persist assistant transcript message.",
+            outputSummary: null,
+            errorSummary: persistedMessage.errorMessage,
+          });
           const persistError = makeAgentRuntimeError({
             message: `Assistant response could not be persisted: ${persistedMessage.errorMessage}`,
             runId: currentRun.id,
@@ -1587,6 +1859,21 @@ export function OpyCopilotPanel({
           agentLifecycle.failActiveRequest(formatAgentError(persistError), "proposing", "persist");
           return null;
         }
+
+        const persistedAt = Date.now();
+        await persistOpyToolCall({
+          id: persistedMessageCallId,
+          taskId,
+          sessionId: input.sessionId,
+          name: "persist_assistant_message",
+          status: "completed",
+          startedAt: persistedMessageStartedAt,
+          updatedAt: persistedAt,
+          completedAt: persistedAt,
+          inputSummary: "Persist assistant transcript message.",
+          outputSummary: `MESSAGE::${persistedMessage.message.id.slice(0, 8)}`,
+          errorSummary: null,
+        });
 
         await input.onAfterPersisted?.(result);
         agentLifecycle.markPersistReady();
@@ -1631,11 +1918,21 @@ export function OpyCopilotPanel({
         return null;
       }
     },
-    [agentLifecycle, appendAndPersistMessage, beginAgentRun, dismissResumableLifecycleTask, persistOpyMessage, transitionAgentRun],
+    [
+      agentLifecycle,
+      appendAndPersistMessage,
+      beginAgentRun,
+      dismissResumableLifecycleTask,
+      persistOpyMessage,
+      persistOpyToolCall,
+      trackOpyTaskToolCall,
+      transitionAgentRun,
+    ],
   );
 
   const executeAppliedBoardAction = useCallback(
     async (input: {
+      readonly taskId: string;
       readonly sessionId: string;
       readonly failurePrefix: string;
       readonly execute: () => Promise<string>;
@@ -1661,7 +1958,14 @@ export function OpyCopilotPanel({
 
       let actionResult: string;
       try {
-        actionResult = await input.execute();
+        actionResult = await trackOpyTaskToolCall({
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          name: "execute_board_action",
+          inputSummary: summarizeInlineText(input.failurePrefix, "BOARD ACTION"),
+          execute: input.execute,
+          outputSummary: (result) => summarizeInlineText(result, "BOARD ACTION COMPLETE."),
+        });
       } catch (error) {
         return failBoardActionLifecycle({
           message: toErrorMessage(error),
@@ -1673,7 +1977,19 @@ export function OpyCopilotPanel({
       agentLifecycle.markVerifyReady();
 
       try {
-        await input.onAfterApplied?.();
+        if (input.onAfterApplied) {
+          await trackOpyTaskToolCall({
+            taskId: input.taskId,
+            sessionId: input.sessionId,
+            name: "refresh_checkpoints",
+            inputSummary: "Refresh OPY checkpoint history after apply.",
+            execute: async () => {
+              await input.onAfterApplied?.();
+              return null;
+            },
+            outputSummary: () => "CHECKPOINT HISTORY REFRESHED",
+          });
+        }
       } catch (error) {
         return failBoardActionLifecycle({
           message: toErrorMessage(error),
@@ -1682,12 +1998,37 @@ export function OpyCopilotPanel({
         });
       }
 
-      const persistedAssistantMessage = await persistOpyMessage(
-        input.sessionId,
-        "assistant",
-        actionResult,
-      );
+      const persistedMessageCallId = createMessageId();
+      const persistedMessageStartedAt = Date.now();
+      await persistOpyToolCall({
+        id: persistedMessageCallId,
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        name: "persist_assistant_message",
+        status: "running",
+        startedAt: persistedMessageStartedAt,
+        updatedAt: persistedMessageStartedAt,
+        completedAt: null,
+        inputSummary: "Persist assistant transcript message.",
+        outputSummary: null,
+        errorSummary: null,
+      });
+      const persistedAssistantMessage = await persistOpyMessage(input.sessionId, "assistant", actionResult);
       if (!persistedAssistantMessage) {
+        const failedAt = Date.now();
+        await persistOpyToolCall({
+          id: persistedMessageCallId,
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          name: "persist_assistant_message",
+          status: "failed",
+          startedAt: persistedMessageStartedAt,
+          updatedAt: failedAt,
+          completedAt: failedAt,
+          inputSummary: "Persist assistant transcript message.",
+          outputSummary: null,
+          errorSummary: "Assistant confirmation content was empty.",
+        });
         return failBoardActionLifecycle({
           message: "ACTION RESULT PERSIST FAILED: assistant confirmation content was empty.",
           phase: "persist",
@@ -1695,6 +2036,20 @@ export function OpyCopilotPanel({
         });
       }
       if (!persistedAssistantMessage.ok) {
+        const failedAt = Date.now();
+        await persistOpyToolCall({
+          id: persistedMessageCallId,
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          name: "persist_assistant_message",
+          status: "failed",
+          startedAt: persistedMessageStartedAt,
+          updatedAt: failedAt,
+          completedAt: failedAt,
+          inputSummary: "Persist assistant transcript message.",
+          outputSummary: null,
+          errorSummary: persistedAssistantMessage.errorMessage,
+        });
         return failBoardActionLifecycle({
           message: `ACTION RESULT PERSIST FAILED: ${persistedAssistantMessage.errorMessage}`,
           phase: "persist",
@@ -1702,10 +2057,25 @@ export function OpyCopilotPanel({
         });
       }
 
+      const persistedAt = Date.now();
+      await persistOpyToolCall({
+        id: persistedMessageCallId,
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        name: "persist_assistant_message",
+        status: "completed",
+        startedAt: persistedMessageStartedAt,
+        updatedAt: persistedAt,
+        completedAt: persistedAt,
+        inputSummary: "Persist assistant transcript message.",
+        outputSummary: `MESSAGE::${persistedAssistantMessage.message.id.slice(0, 8)}`,
+        errorSummary: null,
+      });
+
       agentLifecycle.completeActiveRequest();
       return actionResult;
     },
-    [agentLifecycle, persistOpyMessage],
+    [agentLifecycle, persistOpyMessage, persistOpyToolCall, trackOpyTaskToolCall],
   );
 
   const executeBoardActionLifecycle = useCallback(
@@ -1731,6 +2101,7 @@ export function OpyCopilotPanel({
         agentLifecycle.confirmActiveRequest();
       }
       return executeAppliedBoardAction({
+        taskId: input.lifecycleRequest.id,
         sessionId: input.lifecycleRequest.confirmation?.sessionId ?? input.lifecycleRequest.replay.sessionId,
         failurePrefix: input.lifecycleRequest.confirmation?.failurePrefix ?? "BOARD ACTION FAILED",
         execute: input.execute,
@@ -2128,6 +2499,7 @@ export function OpyCopilotPanel({
               formatRigAgentCitationBlock(groundedProposal.context)
             }`,
           failurePrefix: "DIAGRAM PROPOSAL FAILED",
+          artifactsForResult: (groundedProposal) => [createDiagramProposalArtifactDraft(groundedProposal)],
           onAfterPersisted: async (groundedProposal) => {
             const persistedProposal: OpySessionDiagramProposal = {
               command: opyCommand.proposal,
@@ -2224,6 +2596,7 @@ export function OpyCopilotPanel({
               formatRigAgentCitationBlock(groundedReview.context)
             }`,
           failurePrefix: "BOARD REVIEW FAILED",
+          artifactsForResult: (groundedReview) => [createBoardReviewArtifactDraft(groundedReview)],
           onAfterPersisted: (groundedReview) => {
             setBoardReviewsBySessionId((current) => ({
               ...current,
@@ -2286,6 +2659,7 @@ export function OpyCopilotPanel({
         assistantMessage: (groundedChat) =>
           `${groundedChat.response.message}\n${formatRigAgentCitationBlock(groundedChat.context)}`,
         failurePrefix: "AGENT RUNTIME ERROR",
+        artifactsForResult: (groundedChat) => [createChatResponseArtifactDraft(groundedChat)],
         onAfterPersisted: (groundedChat) => {
           setGroundedChatsBySessionId((current) => ({
             ...current,
@@ -2458,15 +2832,36 @@ export function OpyCopilotPanel({
             ? {
               ok: true,
               value: resolution.value.descriptor,
+              artifacts: [
+                createMutationPlanArtifactDraft({
+                  groundedProposal: resolution.value.groundedProposal,
+                  proposalSummary: resolution.value.proposalSummary,
+                  mutationPlan: resolution.value.mutationPlan,
+                }),
+              ],
             }
             : resolution;
         }
-        case "rollback":
-          return resolveOpyRollbackActionFlow({
+        case "rollback": {
+          const checkpoint = findCheckpointForReplay(replay.sessionId, replay.checkpointId);
+          const resolution = resolveOpyRollbackActionFlow({
             actionMode,
-            checkpoint: findCheckpointForReplay(replay.sessionId, replay.checkpointId),
+            checkpoint,
             sessionId: replay.sessionId,
           });
+          if (!resolution.ok) {
+            return resolution;
+          }
+
+          const previewArtifact = createCheckpointRestorePreviewArtifactDraft(
+            checkpoint ? buildOpyCheckpointRestorePreview(checkpoint, boardSummary) : null,
+          );
+          return {
+            ok: true,
+            value: resolution.value,
+            ...(previewArtifact ? { artifacts: [previewArtifact] } : {}),
+          };
+        }
         default:
           return null;
       }
@@ -2485,11 +2880,11 @@ export function OpyCopilotPanel({
       readonly descriptor: OpyActionFlowDescriptor;
       readonly lifecycleRequest?: OpyAgentLifecycleRequest;
       readonly manageLifecycleStart?: boolean;
+      readonly artifacts?: ReadonlyArray<OpyTaskArtifactDraft>;
       readonly replay: OpyAgentLifecycleRequest["replay"];
       readonly skipConfirmation?: boolean;
-    }): Promise<string | null> =>
-      executeBoardActionLifecycle({
-        lifecycleRequest: input.lifecycleRequest ?? createLifecycleRequest({
+    }): Promise<string | null> => {
+      const lifecycleRequest = input.lifecycleRequest ?? createLifecycleRequest({
           confirmation: {
             cancelMessage: input.descriptor.cancelMessage,
             confirmationLines: input.descriptor.confirmationMessage.split("\n"),
@@ -2502,7 +2897,35 @@ export function OpyCopilotPanel({
           label: input.descriptor.requestLabel,
           requiresConfirmation: true,
           replay: input.replay,
-        }),
+        });
+
+      await trackOpyTaskToolCall({
+        taskId: lifecycleRequest.id,
+        sessionId: input.descriptor.sessionId,
+        name: "resolve_action",
+        inputSummary: summarizeInlineText(
+          `${input.descriptor.requestLabel} · ${input.descriptor.boardAction.kind}`,
+          input.descriptor.requestLabel,
+        ),
+        execute: async () => input.descriptor,
+        outputSummary: () => "ACTION DESCRIPTOR READY",
+        artifacts: () => [
+          {
+            kind: "action_descriptor",
+            summary: summarizeInlineText(input.descriptor.confirmationMessage, input.descriptor.requestLabel),
+            payload: {
+              descriptor: input.descriptor,
+              replay: input.replay,
+            },
+          },
+          ...(input.artifacts ?? []).map((artifact) => ({
+            ...artifact,
+          })),
+        ],
+      });
+
+      return executeBoardActionLifecycle({
+        lifecycleRequest,
         execute: () => onApplyBoardAction(input.descriptor.boardAction),
         ...(typeof input.manageLifecycleStart === "boolean"
           ? { manageLifecycleStart: input.manageLifecycleStart }
@@ -2517,8 +2940,9 @@ export function OpyCopilotPanel({
             },
           }
           : {}),
-      }),
-    [executeBoardActionLifecycle, onApplyBoardAction, refreshCheckpointsForSession],
+      });
+    },
+    [executeBoardActionLifecycle, onApplyBoardAction, refreshCheckpointsForSession, trackOpyTaskToolCall],
   );
 
   const handleApplyActiveProposal = useCallback(async () => {
@@ -2548,6 +2972,13 @@ export function OpyCopilotPanel({
     setRuntimeError(null);
     await executeOpyActionFlow({
       descriptor: resolution.value.descriptor,
+      artifacts: [
+        createMutationPlanArtifactDraft({
+          groundedProposal: resolution.value.groundedProposal,
+          proposalSummary: resolution.value.proposalSummary,
+          mutationPlan: resolution.value.mutationPlan,
+        }),
+      ],
       replay: {
         kind: "apply-proposal",
         proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
@@ -2581,8 +3012,12 @@ export function OpyCopilotPanel({
     }
 
     setRuntimeError(null);
+    const previewArtifact = createCheckpointRestorePreviewArtifactDraft(
+      buildOpyCheckpointRestorePreview(checkpoint, boardSummary),
+    );
     await executeOpyActionFlow({
       descriptor: resolution.value,
+      ...(previewArtifact ? { artifacts: [previewArtifact] } : {}),
       replay: {
         checkpointId: checkpoint.id,
         kind: "rollback",
@@ -2722,6 +3157,7 @@ export function OpyCopilotPanel({
             assistantMessage: (groundedChat) =>
               `${groundedChat.response.message}\n${formatRigAgentCitationBlock(groundedChat.context)}`,
             failurePrefix: "AGENT RUNTIME ERROR",
+            artifactsForResult: (groundedChat) => [createChatResponseArtifactDraft(groundedChat)],
             onAfterPersisted: (groundedChat) => {
               setGroundedChatsBySessionId((current) => ({
                 ...current,
@@ -2755,6 +3191,7 @@ export function OpyCopilotPanel({
                 formatRigAgentCitationBlock(groundedProposal.context)
               }`,
             failurePrefix: "DIAGRAM PROPOSAL FAILED",
+            artifactsForResult: (groundedProposal) => [createDiagramProposalArtifactDraft(groundedProposal)],
             onAfterPersisted: async (groundedProposal) => {
               const persistedProposal: OpySessionDiagramProposal = {
                 command: {
@@ -2815,6 +3252,7 @@ export function OpyCopilotPanel({
                 formatRigAgentCitationBlock(groundedReview.context)
               }`,
             failurePrefix: "BOARD REVIEW FAILED",
+            artifactsForResult: (groundedReview) => [createBoardReviewArtifactDraft(groundedReview)],
             onAfterPersisted: (groundedReview) => {
               setBoardReviewsBySessionId((current) => ({
                 ...current,
@@ -2852,6 +3290,7 @@ export function OpyCopilotPanel({
           }
           await executeOpyActionFlow({
             descriptor: resolution.value,
+            ...(resolution.artifacts ? { artifacts: resolution.artifacts } : {}),
             lifecycleRequest: request,
             manageLifecycleStart: false,
             replay,
@@ -2896,6 +3335,7 @@ export function OpyCopilotPanel({
     setRuntimeError(null);
     await executeOpyActionFlow({
       descriptor: resolution.value,
+      ...(resolution.artifacts ? { artifacts: resolution.artifacts } : {}),
       lifecycleRequest: request,
       manageLifecycleStart: false,
       replay: request.replay,

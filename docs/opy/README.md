@@ -219,9 +219,12 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 ### Current Task Persistence
 
 - OPY persists active lifecycle requests in `opy_agent_tasks`
+- OPY persists per-task execution trail rows in `opy_agent_tool_calls`
+- OPY persists durable context/result/action artifacts in `opy_agent_artifacts`
 - persisted task fields include `request`, `stage`, `status`, timestamps, and error summary
 - non-terminal stages are tracked as `running`
 - interrupted work is marked as `interrupted` instead of disappearing on remount
+- trace persistence is best-effort and does not block operator flows if the local trail write fails
 
 ### Current Resume Behavior
 
@@ -230,6 +233,8 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - if the interrupted task stage is resumable, OPY exposes a control-field resume card
 - operators can either resume the exact persisted request or dismiss it explicitly
 - starting a new OPY lifecycle supersedes any older resumable task for that session
+- current persisted tool calls include context assembly, agent invoke, assistant-message persistence, action resolution, board mutation execution, and post-apply checkpoint refresh
+- current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, mutation plans, and checkpoint restore previews
 
 ## Run Envelope and Telemetry
 
