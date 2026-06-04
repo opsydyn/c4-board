@@ -171,6 +171,10 @@ const summarizeInlineText = (value: string, fallback: string): string => {
   return normalized.length > 0 ? normalized : fallback;
 };
 
+type OpyPersistMessageResult =
+  | { readonly ok: true; readonly message: OpyChatMessage }
+  | { readonly ok: false; readonly errorMessage: string; readonly message: OpyChatMessage };
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -270,6 +274,21 @@ const LIFECYCLE_TERMINAL_STATUS_LABEL: Record<NonNullable<ReturnType<typeof useO
   completed: "COMPLETE",
   cancelled: "CANCELLED",
   failed: "FAILED",
+};
+
+const formatLifecycleFailureScope = (input: {
+  readonly stage: ReturnType<typeof useOpyAgentMachine>["lastFailureStage"];
+  readonly phase: ReturnType<typeof useOpyAgentMachine>["lastFailurePhase"];
+}): string => {
+  const stageLabel = input.stage?.toUpperCase() ?? "UNKNOWN";
+  if (!input.phase) {
+    return stageLabel;
+  }
+
+  const phaseLabel = input.phase.toUpperCase();
+  return input.phase === "verify"
+    ? `${stageLabel}/${phaseLabel}`
+    : `${stageLabel}::${phaseLabel}`;
 };
 
 const sortRunsByRecency = (runs: readonly OpyAgentRun[]): OpyAgentRun[] =>
@@ -1199,12 +1218,12 @@ export function OpyCopilotPanel({
     [runEffect],
   );
 
-  const appendAndPersistMessage = useCallback(
+  const persistOpyMessage = useCallback(
     async (
       sessionId: string,
       role: OpyChatRole,
       content: string,
-    ): Promise<OpyChatMessage | null> => {
+    ): Promise<OpyPersistMessageResult | null> => {
       const normalizedContent = content.trim();
       if (normalizedContent.length === 0) {
         return null;
@@ -1235,13 +1254,37 @@ export function OpyCopilotPanel({
             ),
           )
         );
-        return message;
+        return {
+          ok: true,
+          message,
+        };
       } catch (error) {
-        setRuntimeError(`MESSAGE SAVE FAILED: ${toErrorMessage(error)}`);
-        return null;
+        const errorMessage = `MESSAGE SAVE FAILED: ${toErrorMessage(error)}`;
+        setRuntimeError(errorMessage);
+        return {
+          ok: false,
+          errorMessage,
+          message,
+        };
       }
     },
     [runEffect],
+  );
+
+  const appendAndPersistMessage = useCallback(
+    async (
+      sessionId: string,
+      role: OpyChatRole,
+      content: string,
+    ): Promise<OpyChatMessage | null> => {
+      const persisted = await persistOpyMessage(sessionId, role, content);
+      if (!persisted || !persisted.ok) {
+        return null;
+      }
+
+      return persisted.message;
+    },
+    [persistOpyMessage],
   );
 
   const appendAgentNotice = useCallback(
@@ -1381,29 +1424,71 @@ export function OpyCopilotPanel({
       readonly execute: () => Promise<string>;
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
-      try {
-        const actionResult = await input.execute();
-        agentLifecycle.markVerifyReady();
-        await input.onAfterApplied?.();
-        await appendAndPersistMessage(input.sessionId, "assistant", actionResult);
-        agentLifecycle.completeActiveRequest();
-        return actionResult;
-      } catch (error) {
-        const message = toErrorMessage(error);
-        setRuntimeError(message);
-        await appendAndPersistMessage(
+      const failBoardActionLifecycle = async (failure: {
+        readonly message: string;
+        readonly phase: "apply" | "verify" | "persist";
+        readonly stage: Extract<OpyAgentLifecycleStage, "applying" | "verifying">;
+      }): Promise<null> => {
+        setRuntimeError(failure.message);
+        const persistedFailure = await persistOpyMessage(
           input.sessionId,
           "system",
-          `${input.failurePrefix}: ${message}`,
+          `${input.failurePrefix}: ${failure.message}`,
         );
-        agentLifecycle.failActiveRequest(
-          message,
-          agentLifecycle.stage === "verifying" ? "verifying" : "applying",
-        );
+        if (persistedFailure && !persistedFailure.ok) {
+          setRuntimeError(`${failure.message} · ${persistedFailure.errorMessage}`);
+        }
+        agentLifecycle.failActiveRequest(failure.message, failure.stage, failure.phase);
         return null;
+      };
+
+      let actionResult: string;
+      try {
+        actionResult = await input.execute();
+      } catch (error) {
+        return failBoardActionLifecycle({
+          message: toErrorMessage(error),
+          phase: "apply",
+          stage: "applying",
+        });
       }
+
+      agentLifecycle.markVerifyReady();
+
+      try {
+        await input.onAfterApplied?.();
+      } catch (error) {
+        return failBoardActionLifecycle({
+          message: toErrorMessage(error),
+          phase: "verify",
+          stage: "verifying",
+        });
+      }
+
+      const persistedAssistantMessage = await persistOpyMessage(
+        input.sessionId,
+        "assistant",
+        actionResult,
+      );
+      if (!persistedAssistantMessage) {
+        return failBoardActionLifecycle({
+          message: "ACTION RESULT PERSIST FAILED: assistant confirmation content was empty.",
+          phase: "persist",
+          stage: "verifying",
+        });
+      }
+      if (!persistedAssistantMessage.ok) {
+        return failBoardActionLifecycle({
+          message: `ACTION RESULT PERSIST FAILED: ${persistedAssistantMessage.errorMessage}`,
+          phase: "persist",
+          stage: "verifying",
+        });
+      }
+
+      agentLifecycle.completeActiveRequest();
+      return actionResult;
     },
-    [agentLifecycle, appendAndPersistMessage],
+    [agentLifecycle, persistOpyMessage],
   );
 
   const executeBoardActionLifecycle = useCallback(
@@ -3014,7 +3099,10 @@ export function OpyCopilotPanel({
               )}
               {agentLifecycle.lastTerminalStatus === "failed" && agentLifecycle.lastError && (
                 <p className={styles.ownershipLensHint}>
-                  {`LAST FLOW FAILURE::${agentLifecycle.lastFailureStage?.toUpperCase() ?? "UNKNOWN"} · ${agentLifecycle.lastError}`}
+                  {`LAST FLOW FAILURE::${formatLifecycleFailureScope({
+                    stage: agentLifecycle.lastFailureStage,
+                    phase: agentLifecycle.lastFailurePhase,
+                  })} · ${agentLifecycle.lastError}`}
                 </p>
               )}
               {pendingLifecycleConfirmation && pendingLifecycleRequest && agentLifecycle.stage === "awaiting_confirmation" && (

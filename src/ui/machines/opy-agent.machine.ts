@@ -13,6 +13,7 @@ export type OpyAgentLifecycleStage =
 
 export type OpyAgentLifecycleMode = "read" | "action";
 export type OpyAgentLifecycleStatus = "completed" | "cancelled" | "failed" | null;
+export type OpyAgentLifecycleFailurePhase = "apply" | "verify" | "persist";
 
 export interface OpyAgentLifecycleConfirmation {
   readonly cancelMessage: string;
@@ -68,6 +69,7 @@ export interface OpyAgentMachineContext {
   readonly activeRequest: OpyAgentLifecycleRequest | null;
   readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastError: string | null;
+  readonly lastFailurePhase: OpyAgentLifecycleFailurePhase | null;
   readonly lastFailureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> | null;
   readonly lastCompletedAt: number | null;
   readonly lastTerminalStatus: OpyAgentLifecycleStatus;
@@ -85,6 +87,7 @@ export type OpyAgentMachineEvent =
   | {
     type: "FAIL";
     message: string;
+    phase?: OpyAgentLifecycleFailurePhase | null;
     stage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed">;
   }
   | { type: "CANCEL" }
@@ -97,6 +100,7 @@ const initialContext: OpyAgentMachineContext = {
   activeRequest: null,
   lastRequest: null,
   lastError: null,
+  lastFailurePhase: null,
   lastFailureStage: null,
   lastCompletedAt: null,
   lastTerminalStatus: null,
@@ -123,6 +127,7 @@ const opyAgentMachineSetup = setup({
         activeRequest: event.request,
         lastRequest: event.request,
         lastError: null,
+        lastFailurePhase: null,
         lastFailureStage: null,
         lastCompletedAt: null,
         lastTerminalStatus: null,
@@ -130,6 +135,7 @@ const opyAgentMachineSetup = setup({
     }),
     clearFailure: assign(() => ({
       lastError: null,
+      lastFailurePhase: null,
       lastFailureStage: null,
       lastTerminalStatus: null,
     })),
@@ -137,6 +143,7 @@ const opyAgentMachineSetup = setup({
       activeRequest: null,
       lastRequest: context.activeRequest ?? context.lastRequest,
       lastError: null,
+      lastFailurePhase: null,
       lastFailureStage: null,
       lastCompletedAt: Date.now(),
       lastTerminalStatus: "completed" as const,
@@ -145,6 +152,7 @@ const opyAgentMachineSetup = setup({
       activeRequest: null,
       lastRequest: context.activeRequest ?? context.lastRequest,
       lastError: null,
+      lastFailurePhase: null,
       lastFailureStage: null,
       lastCompletedAt: Date.now(),
       lastTerminalStatus: "cancelled" as const,
@@ -158,6 +166,7 @@ const opyAgentMachineSetup = setup({
         activeRequest: null,
         lastRequest: context.activeRequest ?? context.lastRequest,
         lastError: toErrorMessage(event.message),
+        lastFailurePhase: event.phase ?? null,
         lastFailureStage: event.stage,
         lastCompletedAt: Date.now(),
         lastTerminalStatus: "failed" as const,

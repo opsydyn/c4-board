@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { emitOpyAgentFlowTelemetry } from "../../core/effects/opy-agent.telemetry";
 import {
   createOpyAgentMachine,
+  type OpyAgentLifecycleFailurePhase,
   type OpyAgentLifecycleRequest,
   type OpyAgentLifecycleStage,
 } from "../machines/opy-agent.machine";
@@ -19,6 +20,7 @@ export interface UseOpyAgentMachineResult {
   readonly isBusy: boolean;
   readonly lastCompletedAt: number | null;
   readonly lastError: string | null;
+  readonly lastFailurePhase: OpyAgentLifecycleFailurePhase | null;
   readonly lastFailureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> | null;
   readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastTerminalStatus: "completed" | "cancelled" | "failed" | null;
@@ -26,7 +28,11 @@ export interface UseOpyAgentMachineResult {
   readonly stage: OpyAgentLifecycleStage;
   readonly cancelActiveRequest: () => void;
   readonly completeActiveRequest: () => void;
-  readonly failActiveRequest: (message: string, stage?: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed">) => void;
+  readonly failActiveRequest: (
+    message: string,
+    stage?: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed">,
+    phase?: OpyAgentLifecycleFailurePhase | null,
+  ) => void;
   readonly markContextReady: () => void;
   readonly markPersistReady: () => void;
   readonly markResultReady: () => void;
@@ -84,6 +90,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
       emitOpyAgentFlowTelemetry({
         activeRequest: snapshot.context.activeRequest,
         errorSummary: snapshot.context.lastError,
+        failurePhase: snapshot.context.lastFailurePhase,
         failureStage: snapshot.context.lastFailureStage,
         fromStage: previousState.stage,
         lastCompletedAt: snapshot.context.lastCompletedAt,
@@ -98,6 +105,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     snapshot.context.activeRequest,
     snapshot.context.lastCompletedAt,
     snapshot.context.lastError,
+    snapshot.context.lastFailurePhase,
     snapshot.context.lastFailureStage,
     snapshot.context.lastRequest,
     snapshot.context.lastTerminalStatus,
@@ -146,10 +154,12 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
       failureStage: Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed"> = (
         snapshot.value as Exclude<OpyAgentLifecycleStage, "idle" | "completed" | "failed">
       ),
+      failurePhase: OpyAgentLifecycleFailurePhase | null = null,
     ) => {
       sendRef.current({
         type: "FAIL",
         message,
+        phase: failurePhase,
         stage: failureStage,
       });
     },
@@ -170,6 +180,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     isBusy,
     lastCompletedAt: snapshot.context.lastCompletedAt,
     lastError: snapshot.context.lastError,
+    lastFailurePhase: snapshot.context.lastFailurePhase,
     lastFailureStage: snapshot.context.lastFailureStage,
     lastRequest: snapshot.context.lastRequest,
     lastTerminalStatus: snapshot.context.lastTerminalStatus,

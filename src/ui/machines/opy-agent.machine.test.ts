@@ -127,11 +127,33 @@ describe("opyAgentMachine", () => {
     expect(snapshot.context.lastTerminalStatus).toBe("failed");
     expect(snapshot.context.lastError).toBe("planner offline");
     expect(snapshot.context.lastFailureStage).toBe("planning");
+    expect(snapshot.context.lastFailurePhase).toBeNull();
 
     actor.send({ type: "RETRY" });
     snapshot = actor.getSnapshot();
     expect(snapshot.value).toBe("contextualizing");
     expect(snapshot.context.lastError).toBeNull();
+    expect(snapshot.context.lastFailurePhase).toBeNull();
     expect(snapshot.context.lastFailureStage).toBeNull();
+  });
+
+  test("records action failure provenance separately from lifecycle stage", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_ACTION", request: createActionRequest() });
+    actor.send({ type: "CONFIRM" });
+    actor.send({ type: "VERIFY_READY" });
+    actor.send({
+      type: "FAIL",
+      message: "assistant confirmation could not be stored",
+      phase: "persist",
+      stage: "verifying",
+    });
+
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("failed");
+    expect(snapshot.context.lastFailureStage).toBe("verifying");
+    expect(snapshot.context.lastFailurePhase).toBe("persist");
   });
 });

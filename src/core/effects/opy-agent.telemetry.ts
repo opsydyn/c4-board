@@ -38,6 +38,7 @@ export interface OpyAgentFlowTelemetryPayload {
   readonly requestKind: string | null;
   readonly requestLabel: string | null;
   readonly requestMode: string | null;
+  readonly failurePhase: string | null;
   readonly fromStage: string | null;
   readonly toStage: string;
   readonly terminalStatus: "completed" | "cancelled" | "failed" | null;
@@ -121,6 +122,7 @@ const toFlowTelemetryEvent = (
 export const emitOpyAgentFlowTelemetry = (payload: {
   readonly activeRequest: OpyAgentFlowTelemetryRequest | null;
   readonly errorSummary: string | null;
+  readonly failurePhase: string | null;
   readonly failureStage: string | null;
   readonly fromStage: string | null;
   readonly lastCompletedAt: number | null;
@@ -140,6 +142,7 @@ export const emitOpyAgentFlowTelemetry = (payload: {
     requestKind: request?.kind ?? null,
     requestLabel: request?.label ?? null,
     requestMode: request?.mode ?? null,
+    failurePhase: payload.failurePhase,
     fromStage: payload.fromStage,
     toStage: payload.toStage,
     terminalStatus: payload.terminalStatus,

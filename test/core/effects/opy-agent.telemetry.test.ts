@@ -51,6 +51,7 @@ describe("opy-agent.telemetry", () => {
         mode: "read",
       },
       errorSummary: null,
+      failurePhase: null,
       failureStage: null,
       fromStage: "idle",
       lastCompletedAt: null,
@@ -80,6 +81,7 @@ describe("opy-agent.telemetry", () => {
     emitOpyAgentFlowTelemetry({
       activeRequest: null,
       errorSummary: null,
+      failurePhase: null,
       failureStage: null,
       fromStage: "awaiting_confirmation",
       lastCompletedAt: 500,
@@ -99,6 +101,40 @@ describe("opy-agent.telemetry", () => {
       terminalStatus: "cancelled",
       completedAt: 500,
       toStage: "completed",
+    });
+  });
+
+  test("emits failure provenance for action persist failures", () => {
+    let detail: Record<string, unknown> | null = null;
+    const handleEvent = (event: Event) => {
+      detail = (event as CustomEvent<Record<string, unknown>>).detail;
+    };
+
+    window.addEventListener(getOpyAgentFlowTelemetryEventName(), handleEvent, { once: true });
+
+    emitOpyAgentFlowTelemetry({
+      activeRequest: null,
+      errorSummary: "ACTION RESULT PERSIST FAILED: MESSAGE SAVE FAILED: database locked",
+      failurePhase: "persist",
+      failureStage: "verifying",
+      fromStage: "verifying",
+      lastCompletedAt: 700,
+      lastRequest: {
+        id: "request-3",
+        kind: "apply-proposal",
+        label: "APPLY",
+        mode: "action",
+      },
+      terminalStatus: "failed",
+      toStage: "failed",
+    });
+
+    expect(detail).toMatchObject({
+      event: "opy_flow_failed",
+      requestId: "request-3",
+      failurePhase: "persist",
+      failureStage: "verifying",
+      terminalStatus: "failed",
     });
   });
 });
