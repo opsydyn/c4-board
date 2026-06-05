@@ -57,7 +57,8 @@
 - that spotlight now includes explicit per-boundary continuity drilldown and `HEALTH DRIVERS` output, so operators can see which boundaries were inherited, rerun, or are still pending before deciding whether to resume, inspect, or discard the chain
 - app restart/session hydration now restore stale run, task, and tool-call state through one transactional persistence boundary, and that recovery path now has focused restart-proof test coverage
 - confirmed action tasks interrupted after confirmation now resume at the apply boundary instead of dropping back to the confirmation gate, with machine coverage for both `applying` and `verifying` interruptions
-- the next `RIG-402` slices should build on this with deeper multi-run continuity and richer operator diagnostics beyond cross-session chain provenance
+- continuity spotlight ranking, boundary drilldown, and health-driver diagnostics now have direct pure test coverage instead of relying only on panel-level manual verification
+- `RIG-402` is now effectively complete for the current OPY scope: restart-proof hydration, stage-aware resume, continuity spotlight/drilldown, exact artifact focus routing, and persistence coverage are all in place
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -303,6 +304,7 @@
   - when the currently surfaced review, proposal/plan, or checkpoint matches the selected task row, those quick actions now deep-link to the exact live artifact card instead of stopping at the enclosing section shell
   - exact-artifact deep links now promote that live artifact into OPY focus state, so the card stays visually highlighted and the widget chrome carries a `FOCUS::...` signal until the operator navigates elsewhere
   - operators can now clear that focus state directly from the `FOCUS::...` chrome preview or the focused card, so OPY focus behaves like explicit operator state rather than only implicit navigation residue
+  - continuity spotlight ranking, resume-boundary drilldown, and health-driver diagnostics now sit in `src/core/effects/opy-agent.resume.ts` with dedicated unit coverage
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.
@@ -355,11 +357,9 @@
 
 ## 8) Next Recommended Execution Order
 
-1. `RIG-401` Orchestration Machine.
-2. `RIG-402` Persistent Task Lifecycle.
-3. `RIG-501` Policy Controls in Settings.
-4. `RIG-502` Evaluation Harness.
-5. `RIG-503` Rollout Controls + Audit View.
+1. `RIG-501` Policy Controls in Settings.
+2. `RIG-502` Evaluation Harness.
+3. `RIG-503` Rollout Controls + Audit View.
 
 ## 9) Definition of Ready / Done
 

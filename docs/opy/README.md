@@ -27,6 +27,7 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - Hydration and recovery effects must depend on stable refs or stable lifecycle methods, not whole hook-returned lifecycle objects or mutable session/task maps.
 - Resumable task auto-activation must be idempotent per task id.
 - Board window resize must not force `fitViewToGraph`; OPY/container geometry work should trail resize activity instead of firing every frame.
+- Continuity spotlight ranking and boundary drilldown rules now live behind pure test coverage rather than only panel-local rendering paths.
 
 ### Presence States
 

@@ -60,6 +60,22 @@ import {
   summarizeOpyAgentTaskLineage,
 } from "../../core/effects/opy-agent.task-lineage";
 import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
+import {
+  buildResumeBoundaryDrilldownFromOutcome,
+  buildResumeBoundaryDrilldownFromPlan,
+  calculateReuseEfficiencyRatio,
+  formatReuseEfficiency,
+  formatLineageResumeOutcomeRollup,
+  LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD,
+  summarizeOpyTaskLineageAttention,
+  summarizeResumeBoundaryHealthDrivers,
+  type OpyPersistedResumeBoundaryOutcomeItem,
+  type OpyPersistedResumeBoundaryOutcomePayload,
+  type OpyResumeBoundaryOrigin,
+  type OpyResumeBoundaryOutcome,
+  type OpyResumeBoundaryPlanItem,
+  type OpyTaskLineageAttentionSummary,
+} from "../../core/effects/opy-agent.resume";
 import type {
   OpyAgentArtifact,
   OpyAgentArtifactKind,
@@ -212,18 +228,6 @@ interface OpyChainHistoryEntry {
   readonly resumableTask: OpyAgentTask | null;
 }
 
-interface OpyChainHistoryAttentionSummary {
-  readonly headline: string;
-  readonly reasons: ReadonlyArray<string>;
-  readonly score: number;
-}
-
-interface OpyResumeBoundaryDrilldownItem {
-  readonly name: OpyAgentToolCallName;
-  readonly label: string;
-  readonly status: "LOCAL" | "INHERITED" | "RERAN" | "PENDING";
-}
-
 type OpyArtifactFocusTarget =
   | {
     readonly kind: "diagnostics";
@@ -262,7 +266,6 @@ const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
 const TASK_HISTORY_CHAIN_FILTER_ALL = "all";
 const TASK_HISTORY_BOUNDARY_FILTER_ALL = "all";
 const TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL = "all";
-const LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD = 0.5;
 const DEFAULT_TASK_HISTORY_FILTER_STATE: OpyTaskHistoryFilterState = {
   chain: TASK_HISTORY_CHAIN_FILTER_ALL,
   boundary: TASK_HISTORY_BOUNDARY_FILTER_ALL,
@@ -405,23 +408,6 @@ interface OpyPersistedActionDescriptorArtifactPayload {
 
 interface OpyPersistedActionResultArtifactPayload {
   readonly message: string;
-}
-
-type OpyResumeBoundaryOutcome =
-  | "reused-current-session"
-  | "reused-inherited-session"
-  | "reran"
-  | "pending";
-
-interface OpyPersistedResumeBoundaryOutcomeItem {
-  readonly name: OpyAgentToolCallName;
-  readonly outcome: OpyResumeBoundaryOutcome;
-}
-
-interface OpyPersistedResumeBoundaryOutcomePayload {
-  readonly boundaries: ReadonlyArray<OpyPersistedResumeBoundaryOutcomeItem>;
-  readonly requestKind: OpyAgentLifecycleRequest["kind"];
-  readonly updatedAt: number;
 }
 
 interface OpyCopilotPanelProps {
@@ -696,53 +682,6 @@ const formatTaskLineageSummary = (input: {
 }): string =>
   `CHAIN::${input.segmentCount} · READY::${input.completedStepCount} · ARTIFACTS::${input.artifactCount}`;
 
-const formatLineageResumeOutcomeRollup = (
-  rollup: ReturnType<typeof summarizeOpyAgentTaskLineage>["resumeOutcomeRollup"],
-  options?: {
-    readonly compact?: boolean;
-  },
-): string => {
-  if (rollup.taskCount === 0 || rollup.boundaryCount === 0) {
-    return options?.compact ? "ROLLUP::PENDING" : "CHAIN OUTCOME::PENDING";
-  }
-
-  const parts = [
-    rollup.reusedCurrentSessionCount > 0
-      ? `${options?.compact ? "L" : "LOCAL"}${options?.compact ? "" : " "}${rollup.reusedCurrentSessionCount}`
-      : null,
-    rollup.reusedInheritedSessionCount > 0
-      ? `${options?.compact ? "I" : "INHERITED"}${options?.compact ? "" : " "}${rollup.reusedInheritedSessionCount}`
-      : null,
-    rollup.reranCount > 0
-      ? `${options?.compact ? "R" : "RERAN"}${options?.compact ? "" : " "}${rollup.reranCount}`
-      : null,
-    rollup.pendingCount > 0
-      ? `${options?.compact ? "P" : "PENDING"}${options?.compact ? "" : " "}${rollup.pendingCount}`
-      : null,
-  ].filter((part): part is string => part !== null);
-
-  if (parts.length === 0) {
-    return options?.compact ? "ROLLUP::PENDING" : "CHAIN OUTCOME::PENDING";
-  }
-
-  return `${options?.compact ? "ROLLUP" : "CHAIN OUTCOME"}::${parts.join(" · ")}`;
-};
-
-const formatReuseEfficiency = (ratio: number | null): string =>
-  ratio === null ? "PENDING" : `${Math.round(ratio * 100)}%`;
-
-const calculateReuseEfficiencyRatio = (
-  rollup: ReturnType<typeof summarizeOpyAgentTaskLineage>["resumeOutcomeRollup"],
-): number | null => {
-  const resolvedBoundaryCount = rollup.reusedCurrentSessionCount
-    + rollup.reusedInheritedSessionCount
-    + rollup.reranCount;
-
-  return resolvedBoundaryCount > 0
-    ? (rollup.reusedCurrentSessionCount + rollup.reusedInheritedSessionCount) / resolvedBoundaryCount
-    : null;
-};
-
 const formatLineageSessionScope = (
   sessionIds: readonly string[],
   sessionLookup: Readonly<Record<string, OpyChatSession | undefined>>,
@@ -811,56 +750,12 @@ const matchesTaskHistoryChainScopeFilter = (
 
 const summarizeTaskHistoryChainAttention = (
   entry: OpyChainHistoryEntry,
-): OpyChainHistoryAttentionSummary => {
-  const { latestEntry, resumableTask } = entry;
-  const { task, lineageDiagnostics } = latestEntry;
-  const reasons: string[] = [];
-  let score = 0;
-
-  if (resumableTask !== null || task.status === "interrupted") {
-    score += 100;
-    reasons.push("RESUME READY");
-  } else if (task.status === "running") {
-    score += 80;
-    reasons.push("ACTIVE RUN");
-  }
-
-  if (lineageDiagnostics.crossSessionSegmentCount > 0) {
-    score += 24;
-    reasons.push(`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`);
-  }
-
-  const reuseEfficiencyRatio = calculateReuseEfficiencyRatio(lineageDiagnostics.resumeOutcomeRollup);
-  if (reuseEfficiencyRatio !== null && reuseEfficiencyRatio < LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD) {
-    score += 18;
-    reasons.push(`EFFICIENCY::${formatReuseEfficiency(reuseEfficiencyRatio)}`);
-  }
-
-  if (lineageDiagnostics.resumeOutcomeRollup.pendingCount > 0) {
-    score += 12;
-    reasons.push(`PENDING::${lineageDiagnostics.resumeOutcomeRollup.pendingCount}`);
-  }
-
-  if (lineageDiagnostics.inheritedSegmentCount > 0) {
-    score += 6;
-    reasons.push(`INHERITS::${lineageDiagnostics.inheritedSegmentCount}`);
-  }
-
-  const headline = resumableTask !== null || task.status === "interrupted"
-    ? "INTERRUPTED RESUME CHAIN"
-    : task.status === "running"
-      ? "ACTIVE CONTINUITY CHAIN"
-      : reuseEfficiencyRatio !== null && reuseEfficiencyRatio < LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD
-        ? "LOW EFFICIENCY CHAIN"
-        : lineageDiagnostics.crossSessionSegmentCount > 0
-          ? "CROSS-SESSION CONTINUITY"
-          : "STABLE CONTINUITY CHAIN";
-
-  return {
-    headline,
-    reasons: reasons.length > 0 ? reasons : ["RECENT LINEAGE"],
-    score,
-  };
+): OpyTaskLineageAttentionSummary => {
+  return summarizeOpyTaskLineageAttention({
+    hasResumableTask: entry.resumableTask !== null,
+    status: entry.latestEntry.task.status,
+    lineageDiagnostics: entry.latestEntry.lineageDiagnostics,
+  });
 };
 
 const compareTaskHistoryChainAttention = (
@@ -920,13 +815,6 @@ const formatArtifactFocusSignalLabel = (target: OpyArtifactFocusTarget): string 
       return "FOCUS::CHECKPOINT";
   }
 };
-
-type OpyResumeBoundaryOrigin = "current-session" | "inherited-session" | "fresh";
-
-interface OpyResumeBoundaryPlanItem {
-  readonly name: OpyAgentToolCallName;
-  readonly origin: OpyResumeBoundaryOrigin;
-}
 
 const SESSION_LOCAL_RESUME_BOUNDARIES = new Set<OpyAgentToolCallName>([
   "persist_assistant_message",
@@ -1113,44 +1001,6 @@ const summarizePersistedResumeBoundaryOutcome = (
   }
 
   return `OUTCOME::${active} · NEXT::${RESUME_BOUNDARY_LABEL[pending[0]!.name]}`;
-};
-
-const buildResumeBoundaryDrilldownFromPlan = (
-  plan: readonly OpyResumeBoundaryPlanItem[],
-): ReadonlyArray<OpyResumeBoundaryDrilldownItem> =>
-  plan.map((item) => ({
-    name: item.name,
-    label: RESUME_BOUNDARY_LABEL[item.name],
-    status: item.origin === "current-session"
-      ? "LOCAL"
-      : item.origin === "inherited-session"
-      ? "INHERITED"
-      : "PENDING",
-  }));
-
-const buildResumeBoundaryDrilldownFromOutcome = (
-  payload: OpyPersistedResumeBoundaryOutcomePayload,
-): ReadonlyArray<OpyResumeBoundaryDrilldownItem> =>
-  payload.boundaries.map((item) => ({
-    name: item.name,
-    label: RESUME_BOUNDARY_LABEL[item.name],
-    status: item.outcome === "reused-current-session"
-      ? "LOCAL"
-      : item.outcome === "reused-inherited-session"
-      ? "INHERITED"
-      : item.outcome === "reran"
-      ? "RERAN"
-      : "PENDING",
-  }));
-
-const summarizeResumeBoundaryHealthDrivers = (
-  items: readonly OpyResumeBoundaryDrilldownItem[],
-): string | null => {
-  const drivers = items
-    .filter((item) => item.status === "RERAN" || item.status === "PENDING")
-    .map((item) => `${item.label}::${item.status}`);
-
-  return drivers.length > 0 ? drivers.join(" · ") : null;
 };
 
 const createResumeBoundaryOutcomeArtifactDraft = (
