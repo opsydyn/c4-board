@@ -51,6 +51,7 @@ import {
 } from "../../core/effects/opy-action.runtime";
 import {
   buildOpyAgentTaskLineage,
+  deriveOpyAgentTaskContinuityKey,
   deriveOpyAgentTaskLineageKey,
   findOpyAgentTaskLineagePredecessor,
   selectLatestOpyAgentTasksByLineage,
@@ -696,6 +697,37 @@ const matchesTaskHistoryBoundaryFilter = (
       return rollup.reranCount > 0;
     case "pending":
       return rollup.taskCount === 0 || rollup.pendingCount > 0;
+  }
+};
+
+const resolveTaskHistoryFocusSection = (task: OpyAgentTask): OpyViewportSectionKey => {
+  switch (task.request.kind) {
+    case "chat":
+      return "diagnostics";
+    case "proposal":
+    case "apply-proposal":
+      return "proposal";
+    case "review":
+      return "review";
+    case "rollback":
+      return "checkpoints";
+    case "add-node":
+      return "control";
+  }
+};
+
+const formatTaskHistoryFocusLabel = (section: OpyViewportSectionKey): string => {
+  switch (section) {
+    case "control":
+      return "OPEN CONTROL";
+    case "diagnostics":
+      return "OPEN DIAGNOSTICS";
+    case "checkpoints":
+      return "OPEN CHECKPOINTS";
+    case "review":
+      return "OPEN REVIEW";
+    case "proposal":
+      return "OPEN PROPOSAL";
   }
 };
 
@@ -1387,6 +1419,7 @@ export function OpyCopilotPanel({
   >({});
   const selectedSessionIdRef = useRef<string>("");
   const viewportSectionRefs = useRef<Partial<Record<OpyViewportSectionKey, HTMLElement | null>>>({});
+  const taskHistoryCardRefs = useRef<Record<string, HTMLElement | null>>({});
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const [viewportSectionsOpen, setViewportSectionsOpen] = useState<OpyViewportSections>(
     viewportSections,
@@ -1446,6 +1479,13 @@ export function OpyCopilotPanel({
         activeTasks.filter((task) => task.status === "interrupted" && isResumableTaskStage(task.stage)),
       ),
     [activeTasks],
+  );
+  const resumableTaskByContinuityKey = useMemo(
+    () =>
+      new Map(
+        activeInterruptedTasks.map((task) => [deriveOpyAgentTaskContinuityKey(task.request), task] as const),
+      ),
+    [activeInterruptedTasks],
   );
   const latestTask = useMemo(
     () => activeTasks[0] ?? null,
@@ -4761,7 +4801,6 @@ export function OpyCopilotPanel({
     );
     agentLifecycle.cancelActiveRequest();
   }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
-
   const handleResumeInterruptedLifecycle = useCallback(() => {
     const request = agentLifecycle.resumableRequest;
     if (isRunning || !request) {
@@ -4930,23 +4969,21 @@ export function OpyCopilotPanel({
       [key]: !current[key],
     }));
   }, [clearViewportSectionUnseen, commitViewportSections, viewportSectionsOpen]);
-  useEffect(() => {
-    if (!chromeSectionRequest) {
-      return;
-    }
+  const revealViewportSection = useCallback(
+    (
+      targetSection: OpyViewportSectionKey,
+      targetNodeResolver?: () => HTMLElement | null,
+    ) => {
+      if (!viewportSectionsOpen[targetSection]) {
+        clearViewportSectionUnseen(targetSection);
+        commitViewportSections((current) => ({
+          ...current,
+          [targetSection]: true,
+        }));
+      }
 
-    const targetSection = chromeSectionRequest.section;
-    if (!viewportSectionsOpen[targetSection]) {
-      clearViewportSectionUnseen(targetSection);
-      commitViewportSections((current) => ({
-        ...current,
-        [targetSection]: true,
-      }));
-    }
-
-    const animationFrameId = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const node = viewportSectionRefs.current[targetSection];
+      const scrollToTarget = () => {
+        const node = targetNodeResolver?.() ?? viewportSectionRefs.current[targetSection] ?? null;
         if (!node) {
           return;
         }
@@ -4955,18 +4992,37 @@ export function OpyCopilotPanel({
           block: "start",
           behavior: "smooth",
         });
-      });
-    });
+      };
 
-    return () => {
-      window.cancelAnimationFrame(animationFrameId);
-    };
-  }, [
-    chromeSectionRequest,
-    clearViewportSectionUnseen,
-    commitViewportSections,
-    viewportSectionsOpen,
-  ]);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(scrollToTarget);
+      });
+    },
+    [clearViewportSectionUnseen, commitViewportSections, viewportSectionsOpen],
+  );
+  const handleOpenTaskHistoryDetail = useCallback((taskId: string) => {
+    setExpandedTaskIds((current) => current.includes(taskId) ? current : [...current, taskId]);
+    revealViewportSection("control", () => taskHistoryCardRefs.current[taskId] ?? null);
+  }, [revealViewportSection]);
+  const handleOpenTaskHistoryChain = useCallback((task: OpyAgentTask) => {
+    const resumableTask = resumableTaskByContinuityKey.get(deriveOpyAgentTaskContinuityKey(task.request));
+    if (!resumableTask || isRunning) {
+      return;
+    }
+
+    handleSelectInterruptedLifecycleTask(resumableTask.id);
+    revealViewportSection("control");
+  }, [handleSelectInterruptedLifecycleTask, isRunning, revealViewportSection, resumableTaskByContinuityKey]);
+  const handleOpenTaskHistoryFocusSection = useCallback((task: OpyAgentTask) => {
+    revealViewportSection(resolveTaskHistoryFocusSection(task));
+  }, [revealViewportSection]);
+  useEffect(() => {
+    if (!chromeSectionRequest) {
+      return;
+    }
+
+    revealViewportSection(chromeSectionRequest.section);
+  }, [chromeSectionRequest, revealViewportSection]);
   const renderViewportSection = useCallback((input: {
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;
@@ -5568,6 +5624,8 @@ export function OpyCopilotPanel({
                       const isExpanded = expandedTaskIds.includes(task.id);
                       const isLoading = taskDetailLoadingByTaskId[task.id] === true;
                       const isResumable = agentLifecycle.resumableTaskId === task.id;
+                      const resumableChainTask = resumableTaskByContinuityKey.get(lineageDiagnostics.continuityKey) ?? null;
+                      const focusSection = resolveTaskHistoryFocusSection(task);
                       const resumeDiagnosticsSummary = persistedResumeOutcome
                         ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
                         : summarizeTaskResumeBoundaryPlan(resumePlan);
@@ -5587,6 +5645,9 @@ export function OpyCopilotPanel({
                           className={styles.opyCopilotTaskCard}
                           data-status={task.status}
                           data-expanded={isExpanded ? "true" : "false"}
+                          ref={(node) => {
+                            taskHistoryCardRefs.current[task.id] = node;
+                          }}
                         >
                           <button
                             type="button"
@@ -5624,6 +5685,36 @@ export function OpyCopilotPanel({
                               {`${formatClockTime(task.updatedAt)} · ${task.id.slice(0, 8)}`}
                             </span>
                           </button>
+                          <div className={styles.opyCopilotProposalActions}>
+                            <button
+                              type="button"
+                              className={styles.ownershipLensToggleButton}
+                              onClick={() => {
+                                handleOpenTaskHistoryDetail(task.id);
+                              }}
+                            >
+                              OPEN DETAIL
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.ownershipLensToggleButton}
+                              onClick={() => {
+                                handleOpenTaskHistoryChain(task);
+                              }}
+                              disabled={!resumableChainTask || isRunning}
+                            >
+                              {resumableChainTask ? "OPEN CHAIN" : "NO CHAIN"}
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.ownershipLensToggleButton}
+                              onClick={() => {
+                                handleOpenTaskHistoryFocusSection(task);
+                              }}
+                            >
+                              {formatTaskHistoryFocusLabel(focusSection)}
+                            </button>
+                          </div>
                           {isExpanded && (
                             <div className={styles.opyCopilotTaskDetail}>
                               <p className={styles.ownershipLensHint}>
