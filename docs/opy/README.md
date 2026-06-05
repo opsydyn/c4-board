@@ -267,6 +267,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - task history now supports operator-facing filtering by continuity chain and boundary state, so larger lineage trails can be narrowed to one chain or one reuse/rerun condition without losing the persisted diagnostics
 - task-history filters are now remembered per session, so switching away and back restores the operator’s last chain/boundary view for that session instead of resetting to `ALL`
 - task-history rows now expose quick actions to open the full row detail, jump to the matching resumable chain when one exists, or reveal the most relevant OPY section for that task kind
+- when the current session is already surfacing the matching review, proposal, plan, or checkpoint artifact, those task-history quick actions now scroll directly to that exact card instead of only opening the parent section
 
 ## Run Envelope and Telemetry
 

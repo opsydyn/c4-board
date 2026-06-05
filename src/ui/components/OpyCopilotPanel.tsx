@@ -716,18 +716,20 @@ const resolveTaskHistoryFocusSection = (task: OpyAgentTask): OpyViewportSectionK
   }
 };
 
-const formatTaskHistoryFocusLabel = (section: OpyViewportSectionKey): string => {
-  switch (section) {
-    case "control":
-      return "OPEN CONTROL";
-    case "diagnostics":
+const formatTaskHistoryFocusLabel = (task: OpyAgentTask): string => {
+  switch (task.request.kind) {
+    case "chat":
       return "OPEN DIAGNOSTICS";
-    case "checkpoints":
-      return "OPEN CHECKPOINTS";
-    case "review":
-      return "OPEN REVIEW";
     case "proposal":
       return "OPEN PROPOSAL";
+    case "apply-proposal":
+      return "OPEN PLAN";
+    case "review":
+      return "OPEN REVIEW";
+    case "rollback":
+      return "OPEN CHECKPOINT";
+    case "add-node":
+      return "OPEN CONTROL";
   }
 };
 
@@ -1420,6 +1422,11 @@ export function OpyCopilotPanel({
   const selectedSessionIdRef = useRef<string>("");
   const viewportSectionRefs = useRef<Partial<Record<OpyViewportSectionKey, HTMLElement | null>>>({});
   const taskHistoryCardRefs = useRef<Record<string, HTMLElement | null>>({});
+  const checkpointCardRefs = useRef<Record<string, HTMLElement | null>>({});
+  const diagnosticsCardRef = useRef<HTMLElement | null>(null);
+  const reviewCardRef = useRef<HTMLElement | null>(null);
+  const proposalCardRef = useRef<HTMLElement | null>(null);
+  const proposalPlanCardRef = useRef<HTMLElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const [viewportSectionsOpen, setViewportSectionsOpen] = useState<OpyViewportSections>(
     viewportSections,
@@ -4969,6 +4976,53 @@ export function OpyCopilotPanel({
       [key]: !current[key],
     }));
   }, [clearViewportSectionUnseen, commitViewportSections, viewportSectionsOpen]);
+  const resolveTaskHistoryArtifactNode = useCallback((entry: OpyTaskHistoryEntry): HTMLElement | null => {
+    switch (entry.task.request.kind) {
+      case "chat": {
+        const persistedChat = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
+        return persistedChat
+          && isGroundedChatResponsePayload(persistedChat)
+          && latestDiagnosticsSurface?.kind === "chat"
+          && latestDiagnosticsSurface.respondedAtMs === persistedChat.response.respondedAtMs
+          ? diagnosticsCardRef.current
+          : null;
+      }
+      case "review": {
+        const persistedReview = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
+        return persistedReview
+          && isGroundedBoardReviewPayload(persistedReview)
+          && activeBoardReview
+          && activeBoardReview.review.respondedAtMs === persistedReview.review.respondedAtMs
+          ? reviewCardRef.current
+          : null;
+      }
+      case "proposal": {
+        const persistedProposal = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
+        return persistedProposal
+          && isGroundedDiagramProposalPayload(persistedProposal)
+          && activeDiagramProposal
+          && activeDiagramProposal.proposal.respondedAtMs === persistedProposal.proposal.respondedAtMs
+          ? proposalCardRef.current
+          : null;
+      }
+      case "apply-proposal": {
+        const replay = entry.task.request.replay;
+        return replay.kind === "apply-proposal"
+          && activeDiagramProposal
+          && activeDiagramProposal.proposal.respondedAtMs === replay.proposalRespondedAtMs
+          ? proposalPlanCardRef.current ?? proposalCardRef.current
+          : null;
+      }
+      case "rollback": {
+        const replay = entry.task.request.replay;
+        return replay.kind === "rollback"
+          ? checkpointCardRefs.current[replay.checkpointId] ?? null
+          : null;
+      }
+      case "add-node":
+        return null;
+    }
+  }, [activeBoardReview, activeDiagramProposal, latestDiagnosticsSurface]);
   const revealViewportSection = useCallback(
     (
       targetSection: OpyViewportSectionKey,
@@ -5013,9 +5067,10 @@ export function OpyCopilotPanel({
     handleSelectInterruptedLifecycleTask(resumableTask.id);
     revealViewportSection("control");
   }, [handleSelectInterruptedLifecycleTask, isRunning, revealViewportSection, resumableTaskByContinuityKey]);
-  const handleOpenTaskHistoryFocusSection = useCallback((task: OpyAgentTask) => {
-    revealViewportSection(resolveTaskHistoryFocusSection(task));
-  }, [revealViewportSection]);
+  const handleOpenTaskHistoryFocusSection = useCallback((entry: OpyTaskHistoryEntry) => {
+    const targetSection = resolveTaskHistoryFocusSection(entry.task);
+    revealViewportSection(targetSection, () => resolveTaskHistoryArtifactNode(entry));
+  }, [resolveTaskHistoryArtifactNode, revealViewportSection]);
   useEffect(() => {
     if (!chromeSectionRequest) {
       return;
@@ -5625,7 +5680,6 @@ export function OpyCopilotPanel({
                       const isLoading = taskDetailLoadingByTaskId[task.id] === true;
                       const isResumable = agentLifecycle.resumableTaskId === task.id;
                       const resumableChainTask = resumableTaskByContinuityKey.get(lineageDiagnostics.continuityKey) ?? null;
-                      const focusSection = resolveTaskHistoryFocusSection(task);
                       const resumeDiagnosticsSummary = persistedResumeOutcome
                         ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
                         : summarizeTaskResumeBoundaryPlan(resumePlan);
@@ -5709,10 +5763,10 @@ export function OpyCopilotPanel({
                               type="button"
                               className={styles.ownershipLensToggleButton}
                               onClick={() => {
-                                handleOpenTaskHistoryFocusSection(task);
+                                handleOpenTaskHistoryFocusSection(entry);
                               }}
                             >
-                              {formatTaskHistoryFocusLabel(focusSection)}
+                              {formatTaskHistoryFocusLabel(task)}
                             </button>
                           </div>
                           {isExpanded && (
@@ -5915,7 +5969,13 @@ export function OpyCopilotPanel({
             tone: diagnosticsSectionTone,
             isUnseen: viewportSectionsUnseen.diagnostics,
             children: (
-              <section className={styles.opyCopilotDiagnosticsCard} aria-label="Latest OPY diagnostics">
+              <section
+                ref={(node) => {
+                  diagnosticsCardRef.current = node;
+                }}
+                className={styles.opyCopilotDiagnosticsCard}
+                aria-label="Latest OPY diagnostics"
+              >
                 <div className={styles.opyCopilotProposalHeader}>
                   <span>{`DIAGNOSTICS::${latestDiagnosticsSurface.title}`}</span>
                   <span>{formatClockTime(latestDiagnosticsSurface.respondedAtMs)}</span>
@@ -6020,7 +6080,13 @@ export function OpyCopilotPanel({
                       const checkpointProposal = findProposalForCheckpoint(checkpoint, activeProposalHistory);
                       const checkpointPreview = checkpointRestorePreviewById.get(checkpoint.id) ?? null;
                       return (
-                        <article key={checkpoint.id} className={styles.opyCopilotProposalItem}>
+                        <article
+                          key={checkpoint.id}
+                          ref={(node) => {
+                            checkpointCardRefs.current[checkpoint.id] = node;
+                          }}
+                          className={styles.opyCopilotProposalItem}
+                        >
                           <div className={styles.opyCopilotProposalItemMeta}>
                             <span>{`CHECKPOINT::${checkpoint.id.slice(0, 8)}`}</span>
                             <span>{index === 0 ? "LATEST" : checkpoint.checkpointType.toUpperCase()}</span>
@@ -6138,7 +6204,13 @@ export function OpyCopilotPanel({
             tone: reviewSectionTone,
             isUnseen: viewportSectionsUnseen.review,
             children: (
-              <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY board review">
+              <section
+                ref={(node) => {
+                  reviewCardRef.current = node;
+                }}
+                className={styles.opyCopilotProposalCard}
+                aria-label="Latest OPY board review"
+              >
                 <div className={styles.opyCopilotProposalHeader}>
                   <span>REVIEW::C4</span>
                   <span>{formatClockTime(activeBoardReview.review.respondedAtMs)}</span>
@@ -6324,7 +6396,13 @@ export function OpyCopilotPanel({
             tone: proposalSectionTone,
             isUnseen: viewportSectionsUnseen.proposal,
             children: (
-              <section className={styles.opyCopilotProposalCard} aria-label="Latest OPY diagram proposal">
+              <section
+                ref={(node) => {
+                  proposalCardRef.current = node;
+                }}
+                className={styles.opyCopilotProposalCard}
+                aria-label="Latest OPY diagram proposal"
+              >
                 <div className={styles.opyCopilotProposalHeader}>
                   <span>PROPOSAL::C4</span>
                   <span>{formatClockTime(activeDiagramProposal.proposal.respondedAtMs)}</span>
@@ -6360,7 +6438,13 @@ export function OpyCopilotPanel({
                   </div>
                 )}
                 {activeMutationPlan && activePlanDecision && (
-                  <section className={styles.opyCopilotPlanCard} aria-label="Typed mutation plan">
+                  <section
+                    ref={(node) => {
+                      proposalPlanCardRef.current = node;
+                    }}
+                    className={styles.opyCopilotPlanCard}
+                    aria-label="Typed mutation plan"
+                  >
                     <div className={styles.opyCopilotProposalHeader}>
                       <span>{`PLAN::${PLAN_DECISION_LABEL[activePlanDecision.status]}`}</span>
                       <span>{activeMutationPlan.canApprove ? "SAFE TO APPROVE" : "BLOCKED"}</span>

@@ -290,6 +290,7 @@
   - task history now supports continuity-chain and boundary-state filters so operators can isolate one lineage or one reuse/rerun condition as the persisted trail grows
   - those task-history filters are now remembered per session through app settings, so OPY restores the operator’s last history view when returning to a session
   - filtered task-history rows now expose direct quick actions into row detail, the matching resumable chain, or the most relevant OPY section for that task kind
+  - when the currently surfaced review, proposal/plan, or checkpoint matches the selected task row, those quick actions now deep-link to the exact live artifact card instead of stopping at the enclosing section shell
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.
