@@ -132,6 +132,39 @@ export const OpyViewportSectionsSchema = Schema.Struct({
 
 export type OpyViewportSections = Schema.Schema.Type<typeof OpyViewportSectionsSchema>;
 
+export const OpyTaskHistoryBoundaryFilterSchema = Schema.Literal(
+  "all",
+  "reused-current-session",
+  "reused-inherited-session",
+  "reran",
+  "pending",
+);
+export type OpyTaskHistoryBoundaryFilter = Schema.Schema.Type<typeof OpyTaskHistoryBoundaryFilterSchema>;
+
+const OpyTaskHistoryChainFilterSchema = pipe(
+  Schema.String,
+  Schema.filter(
+    (value) => value.length > 0 && value.length <= 512,
+    {
+      message: () => "opyTaskHistory chain filter must be between 1 and 512 characters",
+    },
+  ),
+);
+
+export const OpyTaskHistoryFilterStateSchema = Schema.Struct({
+  chain: OpyTaskHistoryChainFilterSchema,
+  boundary: OpyTaskHistoryBoundaryFilterSchema,
+});
+
+export type OpyTaskHistoryFilterState = Schema.Schema.Type<typeof OpyTaskHistoryFilterStateSchema>;
+
+export const OpyTaskHistoryFiltersBySessionSchema = Schema.Record({
+  key: Schema.String,
+  value: OpyTaskHistoryFilterStateSchema,
+});
+
+export type OpyTaskHistoryFiltersBySession = Schema.Schema.Type<typeof OpyTaskHistoryFiltersBySessionSchema>;
+
 export const OpyWidgetSnapTargetSchema = Schema.Literal(
   "free",
   "center",
@@ -208,6 +241,7 @@ export const AppSettingsSchema = Schema.Struct({
   opyWidgetLayout: OpyWidgetLayoutSchema,
   opyWidgetModeLayouts: OpyWidgetModeLayoutsSchema,
   opyViewportSections: OpyViewportSectionsSchema,
+  opyTaskHistoryFiltersBySession: OpyTaskHistoryFiltersBySessionSchema,
   masterVolume: MasterVolumeSchema,
   autosaveEnabled: Schema.Boolean,
   autosaveIntervalMs: AutosaveIntervalMsSchema,
@@ -271,6 +305,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     review: false,
     proposal: false,
   },
+  opyTaskHistoryFiltersBySession: {},
   masterVolume: 0.8,
   autosaveEnabled: true,
   autosaveIntervalMs: 1_500,

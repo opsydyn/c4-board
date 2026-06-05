@@ -101,7 +101,14 @@ import {
   upsertOpyAgentToolCall,
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
-import type { AiActionMode, OpyViewportSectionKey, OpyViewportSections } from "../../core/effects/settings.types";
+import type {
+  AiActionMode,
+  OpyTaskHistoryBoundaryFilter,
+  OpyTaskHistoryFilterState,
+  OpyTaskHistoryFiltersBySession,
+  OpyViewportSectionKey,
+  OpyViewportSections,
+} from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { useOpyAgentMachine } from "../hooks/useOpyAgentMachine";
 import type {
@@ -184,12 +191,6 @@ interface OpyActionModeSurface {
 }
 
 type OpyTaskHistoryChainFilter = "all" | string;
-type OpyTaskHistoryBoundaryFilter =
-  | "all"
-  | "reused-current-session"
-  | "reused-inherited-session"
-  | "reran"
-  | "pending";
 
 interface OpyTaskHistoryEntry {
   readonly task: OpyAgentTask;
@@ -214,6 +215,10 @@ const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
 
 const TASK_HISTORY_CHAIN_FILTER_ALL = "all";
 const TASK_HISTORY_BOUNDARY_FILTER_ALL = "all";
+const DEFAULT_TASK_HISTORY_FILTER_STATE: OpyTaskHistoryFilterState = {
+  chain: TASK_HISTORY_CHAIN_FILTER_ALL,
+  boundary: TASK_HISTORY_BOUNDARY_FILTER_ALL,
+};
 
 const TASK_HISTORY_BOUNDARY_OPTIONS: ReadonlyArray<TacticalSelectOption> = [
   {
@@ -358,6 +363,8 @@ interface OpyCopilotPanelProps {
   readonly actionMode: AiActionMode;
   readonly viewportSections: OpyViewportSections;
   readonly onViewportSectionsChange: (sections: OpyViewportSections) => void;
+  readonly taskHistoryFiltersBySession: OpyTaskHistoryFiltersBySession;
+  readonly onTaskHistoryFiltersBySessionChange: (filtersBySession: OpyTaskHistoryFiltersBySession) => void;
   readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
   readonly onChromeStatusChange: (status: OpyWidgetChromeStatus) => void;
@@ -1297,6 +1304,8 @@ export function OpyCopilotPanel({
   actionMode,
   viewportSections,
   onViewportSectionsChange,
+  taskHistoryFiltersBySession,
+  onTaskHistoryFiltersBySessionChange,
   onApplyBoardAction,
   onOpenAiSettings,
   onChromeStatusChange,
@@ -1427,6 +1436,10 @@ export function OpyCopilotPanel({
     () => tasksBySessionId[selectedSessionId] ?? [],
     [tasksBySessionId, selectedSessionId],
   );
+  const persistedTaskHistoryFilterState = useMemo<OpyTaskHistoryFilterState>(
+    () => taskHistoryFiltersBySession[selectedSessionId] ?? DEFAULT_TASK_HISTORY_FILTER_STATE,
+    [selectedSessionId, taskHistoryFiltersBySession],
+  );
   const activeInterruptedTasks = useMemo(
     () =>
       selectLatestOpyAgentTasksByLineage(
@@ -1486,6 +1499,11 @@ export function OpyCopilotPanel({
   useEffect(() => {
     setViewportSectionsOpen(viewportSections);
   }, [viewportSections]);
+
+  useEffect(() => {
+    setTaskHistoryChainFilter(persistedTaskHistoryFilterState.chain);
+    setTaskHistoryBoundaryFilter(persistedTaskHistoryFilterState.boundary);
+  }, [persistedTaskHistoryFilterState]);
 
   const activeProposalSignal = activeDiagramProposal?.proposal.respondedAtMs ?? null;
   const activeReviewSignal = activeBoardReview?.review.respondedAtMs ?? null;
@@ -2142,14 +2160,32 @@ export function OpyCopilotPanel({
     [taskHistoryBoundaryFilter, taskHistoryChainFilter, taskHistoryEntries],
   );
 
+  const commitTaskHistoryFilterState = useCallback(
+    (nextState: OpyTaskHistoryFilterState) => {
+      if (!selectedSessionId) {
+        return;
+      }
+
+      onTaskHistoryFiltersBySessionChange({
+        ...taskHistoryFiltersBySession,
+        [selectedSessionId]: nextState,
+      });
+    },
+    [onTaskHistoryFiltersBySessionChange, selectedSessionId, taskHistoryFiltersBySession],
+  );
+
   useEffect(() => {
     if (
       taskHistoryChainFilter !== TASK_HISTORY_CHAIN_FILTER_ALL
       && !taskHistoryChainOptions.some((option) => option.value === taskHistoryChainFilter)
     ) {
       setTaskHistoryChainFilter(TASK_HISTORY_CHAIN_FILTER_ALL);
+      commitTaskHistoryFilterState({
+        chain: TASK_HISTORY_CHAIN_FILTER_ALL,
+        boundary: taskHistoryBoundaryFilter,
+      });
     }
-  }, [taskHistoryChainFilter, taskHistoryChainOptions]);
+  }, [commitTaskHistoryFilterState, taskHistoryBoundaryFilter, taskHistoryChainFilter, taskHistoryChainOptions]);
 
   const hydrateMessagesForSession = useCallback(
     async (sessionId: string) => {
@@ -5493,6 +5529,10 @@ export function OpyCopilotPanel({
                         options={taskHistoryChainOptions}
                         onChange={(value) => {
                           setTaskHistoryChainFilter(value);
+                          commitTaskHistoryFilterState({
+                            chain: value,
+                            boundary: taskHistoryBoundaryFilter,
+                          });
                         }}
                       />
                     </div>
@@ -5503,7 +5543,12 @@ export function OpyCopilotPanel({
                         value={taskHistoryBoundaryFilter}
                         options={TASK_HISTORY_BOUNDARY_OPTIONS}
                         onChange={(value) => {
-                          setTaskHistoryBoundaryFilter(value as OpyTaskHistoryBoundaryFilter);
+                          const nextBoundary = value as OpyTaskHistoryBoundaryFilter;
+                          setTaskHistoryBoundaryFilter(nextBoundary);
+                          commitTaskHistoryFilterState({
+                            chain: taskHistoryChainFilter,
+                            boundary: nextBoundary,
+                          });
                         }}
                       />
                     </div>

@@ -319,6 +319,20 @@ export function C4CanvasContainer() {
     [runEffect, settingsV1Enabled],
   );
 
+  const persistOpyTaskHistoryFiltersBySession = useCallback(
+    async (filtersBySession: typeof appSettings.opyTaskHistoryFiltersBySession): Promise<void> => {
+      if (!settingsV1Enabled) {
+        return;
+      }
+      await runEffect(
+        patchSettings({
+          opyTaskHistoryFiltersBySession: filtersBySession,
+        }),
+      );
+    },
+    [runEffect, settingsV1Enabled],
+  );
+
   const {
     azurePanelVisible: isAzurePanelOpen,
     ownershipLensVisible: isOwnershipLensOpen,
@@ -2492,6 +2506,10 @@ export function C4CanvasContainer() {
             viewportSections={appSettings.opyViewportSections}
             onViewportSectionsChange={(nextSections) => {
               void persistOpyViewportSections(nextSections);
+            }}
+            taskHistoryFiltersBySession={appSettings.opyTaskHistoryFiltersBySession}
+            onTaskHistoryFiltersBySessionChange={(nextFiltersBySession) => {
+              void persistOpyTaskHistoryFiltersBySession(nextFiltersBySession);
             }}
             onApplyBoardAction={handleApplyOpyBoardAction}
             onOpenAiSettings={() => {
