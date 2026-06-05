@@ -77,17 +77,14 @@ import {
   createOpyAgentArtifact,
   createOpyAgentRun,
   createOpyChatSession,
-  finalizeInterruptedOpyAgentRuns,
-  interruptOpyAgentTasks,
-  interruptOpyAgentToolCalls,
   listOpyAgentArtifacts,
   listOpyAgentCheckpoints,
-  listOpyAgentRuns,
   listOpyAgentTasks,
   listOpyAgentToolCalls,
   listOpyChatMessages,
   listOpyChatSessions,
   listOpyDiagramProposals,
+  restoreInterruptedOpyAgentSessionState,
   type OpyAgentCheckpoint,
   type OpyAgentRun,
   type OpyAgentRunIntent,
@@ -2687,30 +2684,20 @@ export function OpyCopilotPanel({
     async (sessionId: string) => {
       setIsMessageLoading(true);
       try {
-        const interruptedRuns = await runEffect(
-          finalizeInterruptedOpyAgentRuns({
+        const restoredSessionState = await runEffect(
+          restoreInterruptedOpyAgentSessionState({
             sessionId,
-            errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+            runErrorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+            taskErrorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
+            toolCallErrorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
           }),
         );
-        interruptedRuns.forEach(emitOpyAgentRunTelemetry);
-        await runEffect(
-          interruptOpyAgentTasks({
-            sessionId,
-            errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
-          }),
-        );
-        await runEffect(
-          interruptOpyAgentToolCalls({
-            sessionId,
-            errorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
-          }),
-        );
+        restoredSessionState.finalizedRuns.forEach(emitOpyAgentRunTelemetry);
         const loadedMessages = await runEffect(listOpyChatMessages(sessionId));
-        const loadedRuns = await runEffect(listOpyAgentRuns(sessionId));
-        const loadedTasks = await runEffect(listOpyAgentTasks(sessionId));
         const loadedProposals = await runEffect(listOpyDiagramProposals(sessionId));
         const loadedCheckpoints = await runEffect(listOpyAgentCheckpoints(sessionId));
+        const loadedRuns = restoredSessionState.runs;
+        const loadedTasks = restoredSessionState.tasks;
         agentTaskIndexRef.current = {
           ...agentTaskIndexRef.current,
           ...Object.fromEntries(loadedTasks.map((task) => [task.id, task])),

@@ -149,6 +149,23 @@ export interface InterruptOpyAgentToolCallsInput {
   readonly updatedAt?: number;
 }
 
+export interface RestoreInterruptedOpyAgentSessionStateInput {
+  readonly sessionId: string;
+  readonly runErrorSummary?: string;
+  readonly taskErrorSummary?: string;
+  readonly toolCallErrorSummary?: string;
+  readonly completedAt?: number;
+  readonly updatedAt?: number;
+}
+
+export interface OpyInterruptedAgentSessionState {
+  readonly finalizedRuns: ReadonlyArray<OpyAgentRun>;
+  readonly interruptedTasks: ReadonlyArray<OpyAgentTask>;
+  readonly interruptedToolCalls: ReadonlyArray<OpyAgentToolCall>;
+  readonly runs: ReadonlyArray<OpyAgentRun>;
+  readonly tasks: ReadonlyArray<OpyAgentTask>;
+}
+
 const LIST_SESSIONS_SQL = `
   SELECT
     id,
@@ -1378,6 +1395,46 @@ export const interruptOpyAgentToolCalls = (input: InterruptOpyAgentToolCallsInpu
       updatedAt,
       errorSummary,
     }));
+  });
+
+export const restoreInterruptedOpyAgentSessionState = (
+  input: RestoreInterruptedOpyAgentSessionStateInput,
+) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const completedAt = input.completedAt ?? Date.now();
+    const updatedAt = input.updatedAt ?? completedAt;
+
+    return yield* service.transaction(
+      Effect.gen(function*() {
+        const finalizedRuns = yield* finalizeInterruptedOpyAgentRuns({
+          sessionId: input.sessionId,
+          completedAt,
+          ...(input.runErrorSummary === undefined ? {} : { errorSummary: input.runErrorSummary }),
+        });
+        const interruptedTasks = yield* interruptOpyAgentTasks({
+          sessionId: input.sessionId,
+          updatedAt,
+          ...(input.taskErrorSummary === undefined ? {} : { errorSummary: input.taskErrorSummary }),
+        });
+        const interruptedToolCalls = yield* interruptOpyAgentToolCalls({
+          sessionId: input.sessionId,
+          updatedAt,
+          ...(input.toolCallErrorSummary === undefined ? {} : { errorSummary: input.toolCallErrorSummary }),
+        });
+
+        const runs = yield* listOpyAgentRuns(input.sessionId);
+        const tasks = yield* listOpyAgentTasks(input.sessionId);
+
+        return {
+          finalizedRuns,
+          interruptedTasks,
+          interruptedToolCalls,
+          runs,
+          tasks,
+        } satisfies OpyInterruptedAgentSessionState;
+      }),
+    );
   });
 
 export const appendOpyChatMessage = (message: OpyChatMessage) =>

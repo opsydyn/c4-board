@@ -110,6 +110,7 @@ Each OPY session persists:
 - rename sessions
 - resume prior sessions
 - restore the latest transcript and artifact context
+- app relaunch and session hydration now restore stale run/task/tool-call state through one persistence transaction before the surface rehydrates
 - hydrate each board/session identity once even while task maps and lifecycle state are being restored
 - guard automatic resumable-task activation so one interrupted task cannot fan out duplicate lineage loads
 - dev and installed runtimes share the same persistent app storage root
@@ -240,6 +241,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 ### Current Resume Behavior
 
 - session hydration now interrupts stale running tasks from the previous mount
+- app restart and session hydration now finalize stale runs, interrupt stale task/tool-call rows, and fetch the restored run/task state through one transactional recovery boundary
 - OPY builds a resumable queue of interrupted tasks for the active session
 - OPY auto-selects an active resume slot from that queue when the operator is idle
 - OPY now remembers the last selected resume slot per session, so switching away and back preserves the operator's active interrupted chain when possible
@@ -265,6 +267,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - starting a new OPY lifecycle supersedes any older resumable task for that session
 - current persisted tool calls include context assembly, agent invoke, assistant-message persistence, action resolution, board mutation execution, and post-apply checkpoint refresh
 - current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, action results, resume boundary outcomes, mutation plans, and checkpoint restore previews
+- restart recovery is covered by a persistence-level test that proves interrupted runs become failed, interrupted tasks/tool calls remain resumable, and persisted artifacts survive relaunch hydration
 
 ### Current Task History Surface
 

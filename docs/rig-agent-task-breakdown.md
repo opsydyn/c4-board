@@ -1,6 +1,6 @@
 # Rig Agent Task Breakdown (Execution Plan)
 
-**Last Updated**: 2026-06-04
+**Last Updated**: 2026-06-05
 **Source ADR**: `docs/adr/008-rig-agent-platform-orchestration.md`
 **Delivery Horizon**: 6 phases across 2026-Q1/Q2
 
@@ -55,6 +55,7 @@
 - OPY chain history now supports persisted scope filtering (`active`, `interrupted`, `cross-session`, `low-efficiency`) so operators can narrow continuity analysis to the chain class that matters most for the current session
 - OPY now prioritizes those filtered continuity chains by attention score and surfaces a continuity spotlight card for the highest-urgency chain, instead of leaving operators to visually triage the strip unaided
 - that spotlight now includes explicit per-boundary continuity drilldown and `HEALTH DRIVERS` output, so operators can see which boundaries were inherited, rerun, or are still pending before deciding whether to resume, inspect, or discard the chain
+- app restart/session hydration now restore stale run, task, and tool-call state through one transactional persistence boundary, and that recovery path now has focused restart-proof test coverage
 - the next `RIG-402` slices should build on this with deeper multi-run continuity and richer operator diagnostics beyond cross-session chain provenance
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
@@ -277,6 +278,8 @@
   - `src/ui/machines/opy-agent.machine.ts`
 - Depends on: `RIG-401`.
 - Current status:
+  - restart recovery is now centralized in `restoreInterruptedOpyAgentSessionState`, so app relaunch/session hydration finalize stale runs, interrupt stale task/tool-call rows, and hydrate the restored run/task view through one persistence transaction
+  - persistence coverage now proves that interrupted runs become failed, interrupted tasks/tool calls remain resumable, and grounded artifacts survive relaunch recovery
   - latest slice complete for chain-level resume outcome rollups on top of the existing persisted execution trail, surfaced task-history UX, artifact-backed context restore, and boundary-aware task resume
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
   - OPY can hydrate a resumable interrupted-task queue for the active session, let the operator switch the active resume slot, and resume or dismiss the selected task
