@@ -247,6 +247,7 @@ export function C4CanvasContainer() {
   const pageHideSaveCompletedRef = useRef(false);
   const settingsSeededRef = useRef(false);
   const saveRequestCounterRef = useRef(0);
+  const fitViewResizeFrameRef = useRef<number | null>(null);
   const saveInputOverridesByRequestIdRef = useRef(
     new Map<number, SaveDiagramPayload>(),
   );
@@ -2108,18 +2109,30 @@ export function C4CanvasContainer() {
     }
 
     const handleResize = () => {
-      canvasRef.current?.fitViewToGraph();
+      if (fitViewResizeFrameRef.current !== null) {
+        cancelAnimationFrame(fitViewResizeFrameRef.current);
+      }
+      fitViewResizeFrameRef.current = requestAnimationFrame(() => {
+        fitViewResizeFrameRef.current = null;
+        canvasRef.current?.fitViewToGraph({ animated: false });
+      });
     };
 
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (fitViewResizeFrameRef.current !== null) {
+        cancelAnimationFrame(fitViewResizeFrameRef.current);
+        fitViewResizeFrameRef.current = null;
+      }
+    };
   }, [state.context.nodes.length]);
 
   useEffect(() => {
     if (state.context.nodes.length === 0) {
       return;
     }
-    canvasRef.current?.fitViewToGraph();
+    canvasRef.current?.fitViewToGraph({ animated: false });
   }, [isSidebarOpen, isDetailsOpen, state.context.nodes.length]);
 
   useEffect(() => {

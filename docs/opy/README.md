@@ -19,6 +19,8 @@ The current implementation is strongest in **C4 mode**. Read-only chat is broade
 
 OPY is no longer tied to the fixed sidebar. It runs as a floating widget with persisted presence and layout memory.
 
+- live board-window resize now uses frame-throttled widget bounds sync and non-animated canvas refit, so OPY stays responsive in dev while the main canvas is being resized
+
 ### Presence States
 
 - `launcher`: entry point when OPY is hidden

@@ -426,6 +426,7 @@ export function OpyFloatingWidget({
   const [openOrb, setOpenOrb] = useState<string | null>(null);
   const [activeChromeSignalKey, setActiveChromeSignalKey] = useState<OpyWidgetChromeSignal["key"] | null>(null);
   const widgetRootRef = useRef<HTMLDivElement | null>(null);
+  const boundsMeasureFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     setLiveLayout(layout);
@@ -446,21 +447,41 @@ export function OpyFloatingWidget({
     }
 
     const measure = () => {
-      setBounds({
-        width: container.clientWidth,
-        height: container.clientHeight,
+      const nextWidth = container.clientWidth;
+      const nextHeight = container.clientHeight;
+      setBounds((current) =>
+        current.width === nextWidth && current.height === nextHeight
+          ? current
+          : {
+              width: nextWidth,
+              height: nextHeight,
+            }
+      );
+    };
+
+    const scheduleMeasure = () => {
+      if (boundsMeasureFrameRef.current !== null) {
+        return;
+      }
+      boundsMeasureFrameRef.current = window.requestAnimationFrame(() => {
+        boundsMeasureFrameRef.current = null;
+        measure();
       });
     };
 
     measure();
 
     const resizeObserver = new ResizeObserver(() => {
-      measure();
+      scheduleMeasure();
     });
     resizeObserver.observe(container);
 
     return () => {
       resizeObserver.disconnect();
+      if (boundsMeasureFrameRef.current !== null) {
+        cancelAnimationFrame(boundsMeasureFrameRef.current);
+        boundsMeasureFrameRef.current = null;
+      }
     };
   }, [containerRef]);
 

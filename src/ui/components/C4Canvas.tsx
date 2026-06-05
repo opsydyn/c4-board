@@ -106,7 +106,7 @@ interface C4CanvasProps {
 
 export interface C4CanvasRef {
 	fitViewToNode: (nodeId: string) => void;
-	fitViewToGraph: () => void;
+	fitViewToGraph: (options?: { animated?: boolean }) => void;
 }
 
 function C4CanvasInner(
@@ -161,10 +161,13 @@ function C4CanvasInner(
 				);
 			}
 		},
-		fitViewToGraph: () => {
-			fitView({ padding: 0.2, duration: 600 });
-		},
-	}));
+			fitViewToGraph: (options) => {
+				fitView({
+					padding: 0.2,
+					duration: options?.animated === false ? 0 : 600,
+				});
+			},
+		}));
 
 	// Define custom node types for C4 and DDD elements
 	const nodeTypes = useMemo(
