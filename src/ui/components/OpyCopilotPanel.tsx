@@ -1590,6 +1590,28 @@ export function OpyCopilotPanel({
       return next;
     });
   }, [selectedSessionId]);
+  const clearArtifactFocusTarget = useCallback(() => {
+    commitArtifactFocusTarget(null);
+  }, [commitArtifactFocusTarget]);
+  const renderArtifactFocusClearButton = useCallback((input: {
+    readonly isFocused: boolean;
+    readonly ariaLabel: string;
+  }) => {
+    if (!input.isFocused) {
+      return null;
+    }
+
+    return (
+      <button
+        type="button"
+        className={styles.opyCopilotFocusClearButton}
+        onClick={clearArtifactFocusTarget}
+        aria-label={input.ariaLabel}
+      >
+        CLEAR FOCUS
+      </button>
+    );
+  }, [clearArtifactFocusTarget]);
   const activeRun = useMemo(
     () => activeRuns.find((run) => run.status === "running") ?? null,
     [activeRuns],
@@ -5309,12 +5331,25 @@ export function OpyCopilotPanel({
       return;
     }
 
+    if (chromeSectionRequest.action === "clear-focus") {
+      if (chromeSectionRequest.signalKey === "focus") {
+        clearArtifactFocusTarget();
+      }
+      return;
+    }
+
     const targetNodeResolver = activeArtifactFocusTarget
       && activeArtifactFocusTarget.section === chromeSectionRequest.section
       ? () => resolveFocusedArtifactNode(activeArtifactFocusTarget)
       : undefined;
     revealViewportSection(chromeSectionRequest.section, targetNodeResolver);
-  }, [activeArtifactFocusTarget, chromeSectionRequest, resolveFocusedArtifactNode, revealViewportSection]);
+  }, [
+    activeArtifactFocusTarget,
+    chromeSectionRequest,
+    clearArtifactFocusTarget,
+    resolveFocusedArtifactNode,
+    revealViewportSection,
+  ]);
   const renderViewportSection = useCallback((input: {
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;
@@ -6216,7 +6251,13 @@ export function OpyCopilotPanel({
               >
                 <div className={styles.opyCopilotProposalHeader}>
                   <span>{`DIAGNOSTICS::${latestDiagnosticsSurface.title}`}</span>
-                  <span>{formatClockTime(latestDiagnosticsSurface.respondedAtMs)}</span>
+                  <span className={styles.opyCopilotProposalHeaderMetaGroup}>
+                    <span>{formatClockTime(latestDiagnosticsSurface.respondedAtMs)}</span>
+                    {renderArtifactFocusClearButton({
+                      isFocused: activeArtifactFocusTarget?.kind === "diagnostics",
+                      ariaLabel: "Clear diagnostics focus",
+                    })}
+                  </span>
                 </div>
                 <p className={styles.opyCopilotProposalSummary}>{latestDiagnosticsSurface.summary}</p>
                 <p className={styles.opyCopilotProposalHint}>{latestDiagnosticsSurface.detail}</p>
@@ -6333,7 +6374,15 @@ export function OpyCopilotPanel({
                         >
                           <div className={styles.opyCopilotProposalItemMeta}>
                             <span>{`CHECKPOINT::${checkpoint.id.slice(0, 8)}`}</span>
-                            <span>{index === 0 ? "LATEST" : checkpoint.checkpointType.toUpperCase()}</span>
+                            <span className={styles.opyCopilotProposalHeaderMetaGroup}>
+                              <span>{index === 0 ? "LATEST" : checkpoint.checkpointType.toUpperCase()}</span>
+                              {renderArtifactFocusClearButton({
+                                isFocused:
+                                  activeArtifactFocusTarget?.kind === "checkpoint"
+                                  && activeArtifactFocusTarget.checkpointId === checkpoint.id,
+                                ariaLabel: `Clear focus for checkpoint ${checkpoint.id.slice(0, 8)}`,
+                              })}
+                            </span>
                           </div>
                           <p>{formatOpyRollbackSummary(checkpoint)}</p>
                           <div className={styles.opyCopilotProposalStats}>
@@ -6458,7 +6507,13 @@ export function OpyCopilotPanel({
               >
                 <div className={styles.opyCopilotProposalHeader}>
                   <span>REVIEW::C4</span>
-                  <span>{formatClockTime(activeBoardReview.review.respondedAtMs)}</span>
+                  <span className={styles.opyCopilotProposalHeaderMetaGroup}>
+                    <span>{formatClockTime(activeBoardReview.review.respondedAtMs)}</span>
+                    {renderArtifactFocusClearButton({
+                      isFocused: activeArtifactFocusTarget?.kind === "review",
+                      ariaLabel: "Clear review focus",
+                    })}
+                  </span>
                 </div>
                 <p className={styles.opyCopilotProposalSummary}>{activeBoardReview.review.summary}</p>
                 <p className={styles.opyCopilotProposalHint}>
@@ -6651,7 +6706,13 @@ export function OpyCopilotPanel({
               >
                 <div className={styles.opyCopilotProposalHeader}>
                   <span>PROPOSAL::C4</span>
-                  <span>{formatClockTime(activeDiagramProposal.proposal.respondedAtMs)}</span>
+                  <span className={styles.opyCopilotProposalHeaderMetaGroup}>
+                    <span>{formatClockTime(activeDiagramProposal.proposal.respondedAtMs)}</span>
+                    {renderArtifactFocusClearButton({
+                      isFocused: activeArtifactFocusTarget?.kind === "proposal",
+                      ariaLabel: "Clear proposal focus",
+                    })}
+                  </span>
                 </div>
                 <p className={styles.opyCopilotProposalSummary}>{activeDiagramProposal.proposal.summary}</p>
                 <p className={styles.opyCopilotProposalRationale}>{activeDiagramProposal.proposal.rationale}</p>
@@ -6694,7 +6755,13 @@ export function OpyCopilotPanel({
                   >
                     <div className={styles.opyCopilotProposalHeader}>
                       <span>{`PLAN::${PLAN_DECISION_LABEL[activePlanDecision.status]}`}</span>
-                      <span>{activeMutationPlan.canApprove ? "SAFE TO APPROVE" : "BLOCKED"}</span>
+                      <span className={styles.opyCopilotProposalHeaderMetaGroup}>
+                        <span>{activeMutationPlan.canApprove ? "SAFE TO APPROVE" : "BLOCKED"}</span>
+                        {renderArtifactFocusClearButton({
+                          isFocused: activeArtifactFocusTarget?.kind === "plan",
+                          ariaLabel: "Clear plan focus",
+                        })}
+                      </span>
                     </div>
                     <p className={styles.opyCopilotProposalHint}>
                       {formatPlanDecisionHint(activePlanDecision.status)}

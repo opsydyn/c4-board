@@ -17,7 +17,9 @@ export interface OpyWidgetChromeStatus {
 }
 
 export interface OpyWidgetChromeFocusRequest {
+  readonly action: "focus-section" | "clear-focus";
   readonly section: OpyViewportSectionKey;
+  readonly signalKey?: OpyWidgetChromeSignal["key"];
   readonly nonce: number;
 }
 

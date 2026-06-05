@@ -292,6 +292,7 @@
   - filtered task-history rows now expose direct quick actions into row detail, the matching resumable chain, or the most relevant OPY section for that task kind
   - when the currently surfaced review, proposal/plan, or checkpoint matches the selected task row, those quick actions now deep-link to the exact live artifact card instead of stopping at the enclosing section shell
   - exact-artifact deep links now promote that live artifact into OPY focus state, so the card stays visually highlighted and the widget chrome carries a `FOCUS::...` signal until the operator navigates elsewhere
+  - operators can now clear that focus state directly from the `FOCUS::...` chrome preview or the focused card, so OPY focus behaves like explicit operator state rather than only implicit navigation residue
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.

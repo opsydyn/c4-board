@@ -861,6 +861,36 @@ export const opyCopilotProposalHeader = style({
   fontSize: theme.typography.size.xs,
 });
 
+export const opyCopilotProposalHeaderMetaGroup = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: theme.spacing["1"],
+  flexWrap: "wrap",
+});
+
+export const opyCopilotFocusClearButton = style([
+  toolbarButton,
+  {
+    flexShrink: 0,
+    borderColor: theme.color.status.selected,
+    backgroundColor: "rgba(9, 16, 13, 0.94)",
+    boxShadow: "none",
+    padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
+    color: theme.color.status.selected,
+    fontSize: theme.typography.size.xs,
+
+    selectors: {
+      "&:hover": {
+        borderColor: theme.color.status.selected,
+        boxShadow: theme.effect.glow.sm,
+        backgroundColor: `color-mix(in srgb, ${theme.color.status.selected} 10%, rgba(9, 16, 13, 0.96))`,
+        textShadow: "none",
+      },
+    },
+  },
+]);
+
 export const opyCopilotProposalSummary = style({
   margin: 0,
   lineHeight: theme.typography.lineHeight.normal,

@@ -75,6 +75,7 @@ interface OpyFloatingWidgetProps {
     presence: OpyWidgetPresence;
   }) => void;
   readonly onChromeSignalAction: (signal: OpyWidgetChromeSignal) => void;
+  readonly onChromeSignalClearAction: (signal: OpyWidgetChromeSignal) => void;
   readonly onOpenSettings: () => void;
   readonly onOpenSavedDiagrams: () => void;
   readonly onOpenPostee: () => void;
@@ -412,6 +413,7 @@ export function OpyFloatingWidget({
   onOpen,
   onStateCommit,
   onChromeSignalAction,
+  onChromeSignalClearAction,
   onOpenSettings,
   onOpenSavedDiagrams,
   onOpenPostee,
@@ -1269,7 +1271,22 @@ export function OpyFloatingWidget({
                       >
                         <div className={styles.widgetSignalPreviewHeader}>
                           <span>{activeChromeSignal.label}</span>
-                          <span>{`OPEN::${activeChromeSignal.targetSection.toUpperCase()}`}</span>
+                          <span className={styles.widgetSignalPreviewActions}>
+                            <span>{`OPEN::${activeChromeSignal.targetSection.toUpperCase()}`}</span>
+                            {activeChromeSignal.key === "focus" && (
+                              <button
+                                type="button"
+                                className={styles.widgetSignalPreviewActionButton}
+                                aria-label="Clear OPY focus target"
+                                data-opy-stop-drag="true"
+                                onClick={() => {
+                                  onChromeSignalClearAction(activeChromeSignal);
+                                }}
+                              >
+                                CLEAR FOCUS
+                              </button>
+                            )}
+                          </span>
                         </div>
                         <p className={styles.widgetSignalPreviewDetail}>{activeChromeSignal.detail}</p>
                       </div>

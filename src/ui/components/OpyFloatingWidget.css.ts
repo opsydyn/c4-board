@@ -366,6 +366,41 @@ export const widgetSignalPreviewHeader = style({
   fontSize: theme.typography.size.xs,
 });
 
+export const widgetSignalPreviewActions = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: theme.spacing["1"],
+  flexWrap: "wrap",
+});
+
+export const widgetSignalPreviewActionButton = style({
+  appearance: "none",
+  border: `${theme.border.width.thin} solid ${theme.color.status.selected}`,
+  backgroundColor: "rgba(8, 14, 11, 0.92)",
+  color: theme.color.status.selected,
+  cursor: "pointer",
+  clipPath: theme.clipPath.sm,
+  padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.tight,
+  transition: theme.transition.base,
+
+  selectors: {
+    "&:hover": {
+      boxShadow: theme.effect.glow.sm,
+      backgroundColor: `color-mix(in srgb, ${theme.color.status.selected} 12%, rgba(8, 14, 11, 0.94))`,
+    },
+    "&:focus-visible": {
+      outline: `${theme.border.width.thin} solid ${theme.color.border.focus}`,
+      outlineOffset: "1px",
+    },
+  },
+});
+
 export const widgetSignalPreviewDetail = style({
   margin: 0,
   color: theme.color.foreground.primary,

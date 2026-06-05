@@ -2480,7 +2480,17 @@ export function C4CanvasContainer() {
           }}
           onChromeSignalAction={(signal) => {
             setOpyChromeSectionRequest({
+              action: "focus-section",
               section: signal.targetSection,
+              signalKey: signal.key,
+              nonce: Date.now(),
+            });
+          }}
+          onChromeSignalClearAction={(signal) => {
+            setOpyChromeSectionRequest({
+              action: "clear-focus",
+              section: signal.targetSection,
+              signalKey: signal.key,
               nonce: Date.now(),
             });
           }}
