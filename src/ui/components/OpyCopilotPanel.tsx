@@ -107,6 +107,7 @@ import {
 import type {
   AiActionMode,
   OpyTaskHistoryBoundaryFilter,
+  OpyTaskHistoryChainScopeFilter,
   OpyTaskHistoryFilterState,
   OpyTaskHistoryFiltersBySession,
   OpyViewportSectionKey,
@@ -251,9 +252,11 @@ const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
 
 const TASK_HISTORY_CHAIN_FILTER_ALL = "all";
 const TASK_HISTORY_BOUNDARY_FILTER_ALL = "all";
+const TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL = "all";
 const DEFAULT_TASK_HISTORY_FILTER_STATE: OpyTaskHistoryFilterState = {
   chain: TASK_HISTORY_CHAIN_FILTER_ALL,
   boundary: TASK_HISTORY_BOUNDARY_FILTER_ALL,
+  chainScope: TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL,
 };
 
 const TASK_HISTORY_BOUNDARY_OPTIONS: ReadonlyArray<TacticalSelectOption> = [
@@ -276,6 +279,29 @@ const TASK_HISTORY_BOUNDARY_OPTIONS: ReadonlyArray<TacticalSelectOption> = [
   {
     value: "pending",
     label: "PENDING",
+  },
+];
+
+const TASK_HISTORY_CHAIN_SCOPE_OPTIONS: ReadonlyArray<TacticalSelectOption> = [
+  {
+    value: TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL,
+    label: "ALL CHAINS",
+  },
+  {
+    value: "active",
+    label: "ACTIVE",
+  },
+  {
+    value: "interrupted",
+    label: "INTERRUPTED",
+  },
+  {
+    value: "cross-session",
+    label: "CROSS-SESSION",
+  },
+  {
+    value: "low-efficiency",
+    label: "LOW EFFICIENCY",
   },
 ];
 
@@ -695,6 +721,18 @@ const formatLineageResumeOutcomeRollup = (
 const formatReuseEfficiency = (ratio: number | null): string =>
   ratio === null ? "PENDING" : `${Math.round(ratio * 100)}%`;
 
+const calculateReuseEfficiencyRatio = (
+  rollup: ReturnType<typeof summarizeOpyAgentTaskLineage>["resumeOutcomeRollup"],
+): number | null => {
+  const resolvedBoundaryCount = rollup.reusedCurrentSessionCount
+    + rollup.reusedInheritedSessionCount
+    + rollup.reranCount;
+
+  return resolvedBoundaryCount > 0
+    ? (rollup.reusedCurrentSessionCount + rollup.reusedInheritedSessionCount) / resolvedBoundaryCount
+    : null;
+};
+
 const formatLineageSessionScope = (
   sessionIds: readonly string[],
   sessionLookup: Readonly<Record<string, OpyChatSession | undefined>>,
@@ -735,6 +773,29 @@ const matchesTaskHistoryBoundaryFilter = (
       return rollup.reranCount > 0;
     case "pending":
       return rollup.taskCount === 0 || rollup.pendingCount > 0;
+  }
+};
+
+const matchesTaskHistoryChainScopeFilter = (
+  entry: OpyChainHistoryEntry,
+  filter: OpyTaskHistoryChainScopeFilter,
+): boolean => {
+  const { latestEntry, resumableTask } = entry;
+  const { task, lineageDiagnostics } = latestEntry;
+
+  switch (filter) {
+    case "all":
+      return true;
+    case "active":
+      return task.status === "running" || task.status === "interrupted";
+    case "interrupted":
+      return resumableTask !== null || task.status === "interrupted";
+    case "cross-session":
+      return lineageDiagnostics.crossSessionSegmentCount > 0;
+    case "low-efficiency": {
+      const ratio = calculateReuseEfficiencyRatio(lineageDiagnostics.resumeOutcomeRollup);
+      return ratio !== null && ratio < 0.5;
+    }
   }
 };
 
@@ -1458,6 +1519,9 @@ export function OpyCopilotPanel({
   const [taskHistoryChainFilter, setTaskHistoryChainFilter] = useState<OpyTaskHistoryChainFilter>(
     TASK_HISTORY_CHAIN_FILTER_ALL,
   );
+  const [taskHistoryChainScopeFilter, setTaskHistoryChainScopeFilter] = useState<OpyTaskHistoryChainScopeFilter>(
+    TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL,
+  );
   const [taskHistoryBoundaryFilter, setTaskHistoryBoundaryFilter] = useState<OpyTaskHistoryBoundaryFilter>(
     TASK_HISTORY_BOUNDARY_FILTER_ALL,
   );
@@ -1651,6 +1715,7 @@ export function OpyCopilotPanel({
 
   useEffect(() => {
     setTaskHistoryChainFilter(persistedTaskHistoryFilterState.chain);
+    setTaskHistoryChainScopeFilter(persistedTaskHistoryFilterState.chainScope);
     setTaskHistoryBoundaryFilter(persistedTaskHistoryFilterState.boundary);
   }, [persistedTaskHistoryFilterState]);
 
@@ -2430,22 +2495,6 @@ export function OpyCopilotPanel({
     [taskHistoryBoundaryFilter, taskHistoryChainFilter, taskHistoryEntries],
   );
 
-  const filteredTaskHistorySummary = useMemo(
-    () =>
-      summarizeOpyAgentTaskLineageCollection(
-        filteredTaskHistoryEntries.map((entry) => ({
-          continuityKey: entry.lineageDiagnostics.continuityKey,
-          createdAt: entry.task.createdAt,
-          updatedAt: entry.task.updatedAt,
-          sessionIds: entry.lineageDiagnostics.sessionIds,
-          crossSessionSegmentCount: entry.lineageDiagnostics.crossSessionSegmentCount,
-          status: entry.task.status,
-          resumeOutcomeRollup: entry.lineageDiagnostics.resumeOutcomeRollup,
-        })),
-      ),
-    [filteredTaskHistoryEntries],
-  );
-
   const filteredChainHistoryEntries = useMemo<ReadonlyArray<OpyChainHistoryEntry>>(
     () =>
       selectLatestOpyAgentTaskLineageCollectionEntries(
@@ -2463,8 +2512,24 @@ export function OpyCopilotPanel({
         continuityKey: entry.continuityKey,
         latestEntry: entry.latestEntry,
         resumableTask: resumableTaskByContinuityKey.get(entry.continuityKey) ?? null,
-      })),
-    [filteredTaskHistoryEntries, resumableTaskByContinuityKey],
+      })).filter((entry) => matchesTaskHistoryChainScopeFilter(entry, taskHistoryChainScopeFilter)),
+    [filteredTaskHistoryEntries, resumableTaskByContinuityKey, taskHistoryChainScopeFilter],
+  );
+
+  const filteredChainHistorySummary = useMemo(
+    () =>
+      summarizeOpyAgentTaskLineageCollection(
+        filteredChainHistoryEntries.map((entry) => ({
+          continuityKey: entry.continuityKey,
+          createdAt: entry.latestEntry.task.createdAt,
+          updatedAt: entry.latestEntry.task.updatedAt,
+          sessionIds: entry.latestEntry.lineageDiagnostics.sessionIds,
+          crossSessionSegmentCount: entry.latestEntry.lineageDiagnostics.crossSessionSegmentCount,
+          status: entry.latestEntry.task.status,
+          resumeOutcomeRollup: entry.latestEntry.lineageDiagnostics.resumeOutcomeRollup,
+        })),
+      ),
+    [filteredChainHistoryEntries],
   );
 
   const commitTaskHistoryFilterState = useCallback(
@@ -2489,10 +2554,17 @@ export function OpyCopilotPanel({
       setTaskHistoryChainFilter(TASK_HISTORY_CHAIN_FILTER_ALL);
       commitTaskHistoryFilterState({
         chain: TASK_HISTORY_CHAIN_FILTER_ALL,
+        chainScope: taskHistoryChainScopeFilter,
         boundary: taskHistoryBoundaryFilter,
       });
     }
-  }, [commitTaskHistoryFilterState, taskHistoryBoundaryFilter, taskHistoryChainFilter, taskHistoryChainOptions]);
+  }, [
+    commitTaskHistoryFilterState,
+    taskHistoryBoundaryFilter,
+    taskHistoryChainFilter,
+    taskHistoryChainOptions,
+    taskHistoryChainScopeFilter,
+  ]);
 
   const hydrateMessagesForSession = useCallback(
     async (sessionId: string) => {
@@ -5371,6 +5443,7 @@ export function OpyCopilotPanel({
     setTaskHistoryChainFilter(input.continuityKey);
     commitTaskHistoryFilterState({
       chain: input.continuityKey,
+      chainScope: taskHistoryChainScopeFilter,
       boundary: taskHistoryBoundaryFilter,
     });
     setExpandedTaskIds((current) => current.includes(input.taskId) ? current : [...current, input.taskId]);
@@ -5380,6 +5453,7 @@ export function OpyCopilotPanel({
     commitTaskHistoryFilterState,
     revealViewportSection,
     taskHistoryBoundaryFilter,
+    taskHistoryChainScopeFilter,
   ]);
   const handleOpenTaskHistoryChain = useCallback((task: OpyAgentTask) => {
     const resumableTask = resumableTaskByContinuityKey.get(deriveOpyAgentTaskContinuityKey(task.request));
@@ -6009,25 +6083,25 @@ export function OpyCopilotPanel({
                     PERSISTED TASKS, TOOL CALLS, AND ARTIFACTS FOR THIS SESSION.
                   </p>
                   <p className={styles.ownershipLensHint}>
-                    {`CONTINUITY::${filteredTaskHistorySummary.chainCount} CHAINS · ${
-                      filteredTaskHistorySummary.activeChainCount
-                    } ACTIVE · ${filteredTaskHistorySummary.interruptedChainCount} INTERRUPTED · ${
-                      filteredTaskHistorySummary.pendingChainCount
+                    {`CONTINUITY::${filteredChainHistorySummary.chainCount} CHAINS · ${
+                      filteredChainHistorySummary.activeChainCount
+                    } ACTIVE · ${filteredChainHistorySummary.interruptedChainCount} INTERRUPTED · ${
+                      filteredChainHistorySummary.pendingChainCount
                     } PENDING`}
                   </p>
                   <p className={styles.ownershipLensHint}>
-                    {`REUSE EFFICIENCY::${formatReuseEfficiency(filteredTaskHistorySummary.reuseEfficiencyRatio)} · RESOLVED::${
-                      filteredTaskHistorySummary.resolvedBoundaryCount
-                    }/${filteredTaskHistorySummary.boundaryCount} · LOCAL::${
-                      filteredTaskHistorySummary.reusedCurrentSessionCount
-                    } · INHERITED::${filteredTaskHistorySummary.reusedInheritedSessionCount} · RERAN::${
-                      filteredTaskHistorySummary.reranCount
+                    {`REUSE EFFICIENCY::${formatReuseEfficiency(filteredChainHistorySummary.reuseEfficiencyRatio)} · RESOLVED::${
+                      filteredChainHistorySummary.resolvedBoundaryCount
+                    }/${filteredChainHistorySummary.boundaryCount} · LOCAL::${
+                      filteredChainHistorySummary.reusedCurrentSessionCount
+                    } · INHERITED::${filteredChainHistorySummary.reusedInheritedSessionCount} · RERAN::${
+                      filteredChainHistorySummary.reranCount
                     }`}
                   </p>
                   <p className={styles.ownershipLensHint}>
-                    {`SESSION REACH::${filteredTaskHistorySummary.sessionCount} · CROSS-SESSION CHAINS::${
-                      filteredTaskHistorySummary.crossSessionChainCount
-                    } · PENDING BOUNDARIES::${filteredTaskHistorySummary.pendingCount}`}
+                    {`SESSION REACH::${filteredChainHistorySummary.sessionCount} · CROSS-SESSION CHAINS::${
+                      filteredChainHistorySummary.crossSessionChainCount
+                    } · PENDING BOUNDARIES::${filteredChainHistorySummary.pendingCount}`}
                   </p>
                   {filteredChainHistoryEntries.length > 0 && (
                     <>
@@ -6037,6 +6111,32 @@ export function OpyCopilotPanel({
                       </div>
                       <p className={styles.ownershipLensHint}>
                         DEDUPED CONTINUITY CHAINS FOR THE CURRENT FILTER SCOPE. USE THESE TO RESUME OR DRILL INTO ONE LINEAGE.
+                      </p>
+                      <div className={styles.formInlineRow}>
+                        <div className={styles.inputGrow}>
+                          <TacticalSelect
+                            id="opy-task-history-chain-scope-filter"
+                            ariaLabel="Filter OPY chain history by scope"
+                            value={taskHistoryChainScopeFilter}
+                            options={TASK_HISTORY_CHAIN_SCOPE_OPTIONS}
+                            onChange={(value) => {
+                              const nextScope = value as OpyTaskHistoryChainScopeFilter;
+                              setTaskHistoryChainScopeFilter(nextScope);
+                              commitTaskHistoryFilterState({
+                                chain: taskHistoryChainFilter,
+                                chainScope: nextScope,
+                                boundary: taskHistoryBoundaryFilter,
+                              });
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <p className={styles.ownershipLensHint}>
+                        {`CHAIN SCOPE::${
+                          taskHistoryChainScopeFilter === TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL
+                            ? "ALL"
+                            : taskHistoryChainScopeFilter.toUpperCase().replaceAll("-", " ")
+                        }`}
                       </p>
                       <div className={styles.opyCopilotTaskTimeline}>
                         {filteredChainHistoryEntries.slice(0, 4).map((chainEntry) => {
@@ -6134,6 +6234,7 @@ export function OpyCopilotPanel({
                           setTaskHistoryChainFilter(value);
                           commitTaskHistoryFilterState({
                             chain: value,
+                            chainScope: taskHistoryChainScopeFilter,
                             boundary: taskHistoryBoundaryFilter,
                           });
                         }}
@@ -6150,6 +6251,7 @@ export function OpyCopilotPanel({
                           setTaskHistoryBoundaryFilter(nextBoundary);
                           commitTaskHistoryFilterState({
                             chain: taskHistoryChainFilter,
+                            chainScope: taskHistoryChainScopeFilter,
                             boundary: nextBoundary,
                           });
                         }}
@@ -6163,6 +6265,10 @@ export function OpyCopilotPanel({
                       taskHistoryBoundaryFilter === TASK_HISTORY_BOUNDARY_FILTER_ALL
                         ? "ALL"
                         : taskHistoryBoundaryFilter.toUpperCase().replaceAll("-", " ")
+                    } · CHAIN SCOPE::${
+                      taskHistoryChainScopeFilter === TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL
+                        ? "ALL"
+                        : taskHistoryChainScopeFilter.toUpperCase().replaceAll("-", " ")
                     }`}
                   </p>
                   <div className={styles.opyCopilotTaskTimeline}>

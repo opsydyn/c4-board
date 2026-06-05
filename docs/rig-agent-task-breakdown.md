@@ -52,6 +52,7 @@
 - the OPY surface now shows an explicit resume-boundary plan for interrupted chains, instead of leaving reuse implicit
 - OPY task history now starts with a deduplicated chain summary for the current filter scope, so operators can see continuity efficiency and cross-session reach without mentally aggregating individual task cards
 - OPY task history now also exposes a chain-level control strip with direct `focus`, `open`, and `resume latest` actions per continuity chain
+- OPY chain history now supports persisted scope filtering (`active`, `interrupted`, `cross-session`, `low-efficiency`) so operators can narrow continuity analysis to the chain class that matters most for the current session
 - the next `RIG-402` slices should build on this with deeper multi-run continuity and richer operator diagnostics beyond cross-session chain provenance
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 

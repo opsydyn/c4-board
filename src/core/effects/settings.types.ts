@@ -141,6 +141,15 @@ export const OpyTaskHistoryBoundaryFilterSchema = Schema.Literal(
 );
 export type OpyTaskHistoryBoundaryFilter = Schema.Schema.Type<typeof OpyTaskHistoryBoundaryFilterSchema>;
 
+export const OpyTaskHistoryChainScopeFilterSchema = Schema.Literal(
+  "all",
+  "active",
+  "interrupted",
+  "cross-session",
+  "low-efficiency",
+);
+export type OpyTaskHistoryChainScopeFilter = Schema.Schema.Type<typeof OpyTaskHistoryChainScopeFilterSchema>;
+
 const OpyTaskHistoryChainFilterSchema = pipe(
   Schema.String,
   Schema.filter(
@@ -154,6 +163,9 @@ const OpyTaskHistoryChainFilterSchema = pipe(
 export const OpyTaskHistoryFilterStateSchema = Schema.Struct({
   chain: OpyTaskHistoryChainFilterSchema,
   boundary: OpyTaskHistoryBoundaryFilterSchema,
+  chainScope: Schema.optionalWith(OpyTaskHistoryChainScopeFilterSchema, {
+    default: () => "all" as const,
+  }),
 });
 
 export type OpyTaskHistoryFilterState = Schema.Schema.Type<typeof OpyTaskHistoryFilterStateSchema>;
