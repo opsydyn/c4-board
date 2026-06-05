@@ -221,6 +221,12 @@ interface OpyChainHistoryAttentionSummary {
   readonly score: number;
 }
 
+interface OpyResumeBoundaryDrilldownItem {
+  readonly name: OpyAgentToolCallName;
+  readonly label: string;
+  readonly status: "LOCAL" | "INHERITED" | "RERAN" | "PENDING";
+}
+
 type OpyArtifactFocusTarget =
   | {
     readonly kind: "diagnostics";
@@ -1110,6 +1116,44 @@ const summarizePersistedResumeBoundaryOutcome = (
   }
 
   return `OUTCOME::${active} · NEXT::${RESUME_BOUNDARY_LABEL[pending[0]!.name]}`;
+};
+
+const buildResumeBoundaryDrilldownFromPlan = (
+  plan: readonly OpyResumeBoundaryPlanItem[],
+): ReadonlyArray<OpyResumeBoundaryDrilldownItem> =>
+  plan.map((item) => ({
+    name: item.name,
+    label: RESUME_BOUNDARY_LABEL[item.name],
+    status: item.origin === "current-session"
+      ? "LOCAL"
+      : item.origin === "inherited-session"
+      ? "INHERITED"
+      : "PENDING",
+  }));
+
+const buildResumeBoundaryDrilldownFromOutcome = (
+  payload: OpyPersistedResumeBoundaryOutcomePayload,
+): ReadonlyArray<OpyResumeBoundaryDrilldownItem> =>
+  payload.boundaries.map((item) => ({
+    name: item.name,
+    label: RESUME_BOUNDARY_LABEL[item.name],
+    status: item.outcome === "reused-current-session"
+      ? "LOCAL"
+      : item.outcome === "reused-inherited-session"
+      ? "INHERITED"
+      : item.outcome === "reran"
+      ? "RERAN"
+      : "PENDING",
+  }));
+
+const summarizeResumeBoundaryHealthDrivers = (
+  items: readonly OpyResumeBoundaryDrilldownItem[],
+): string | null => {
+  const drivers = items
+    .filter((item) => item.status === "RERAN" || item.status === "PENDING")
+    .map((item) => `${item.label}::${item.status}`);
+
+  return drivers.length > 0 ? drivers.join(" · ") : null;
 };
 
 const createResumeBoundaryOutcomeArtifactDraft = (
@@ -6228,6 +6272,10 @@ export function OpyCopilotPanel({
                         const resumeDiagnosticsSummary = persistedResumeOutcome
                           ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
                           : summarizeTaskResumeBoundaryPlan(resumePlan);
+                        const boundaryDrilldown = persistedResumeOutcome
+                          ? buildResumeBoundaryDrilldownFromOutcome(persistedResumeOutcome)
+                          : buildResumeBoundaryDrilldownFromPlan(resumePlan);
+                        const healthDrivers = summarizeResumeBoundaryHealthDrivers(boundaryDrilldown);
 
                         return (
                           <section className={styles.opyCopilotPlanCard} aria-label="OPY continuity spotlight">
@@ -6251,6 +6299,14 @@ export function OpyCopilotPanel({
                             <p className={styles.ownershipLensHint}>
                               {resumeDiagnosticsSummary}
                             </p>
+                            <div className={styles.opyCopilotProposalStats}>
+                              {boundaryDrilldown.map((item) => (
+                                <span key={item.name}>{`${item.label}::${item.status}`}</span>
+                              ))}
+                            </div>
+                            {healthDrivers && (
+                              <p className={styles.ownershipLensHint}>{`HEALTH DRIVERS::${healthDrivers}`}</p>
+                            )}
                             {lineageDiagnostics.sessionCount > 1 && (
                               <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
                             )}
