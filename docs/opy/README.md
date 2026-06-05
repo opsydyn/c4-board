@@ -19,7 +19,14 @@ The current implementation is strongest in **C4 mode**. Read-only chat is broade
 
 OPY is no longer tied to the fixed sidebar. It runs as a floating widget with persisted presence and layout memory.
 
-- live board-window resize now uses frame-throttled widget bounds sync and non-animated canvas refit, so OPY stays responsive in dev while the main canvas is being resized
+- live board-window resize uses trailing bounds synchronization and leaves React Flow viewport ownership intact, avoiding repeated OPY renders and destructive auto-fit work
+
+## Operational Memory
+
+- Postmortem: [`2026-06-05 OPY native board interaction regression`](../postmortems/2026-06-05-opy-native-board-interaction-regression.md)
+- Hydration and recovery effects must depend on stable refs or stable lifecycle methods, not whole hook-returned lifecycle objects or mutable session/task maps.
+- Resumable task auto-activation must be idempotent per task id.
+- Board window resize must not force `fitViewToGraph`; OPY/container geometry work should trail resize activity instead of firing every frame.
 
 ### Presence States
 
@@ -103,6 +110,8 @@ Each OPY session persists:
 - rename sessions
 - resume prior sessions
 - restore the latest transcript and artifact context
+- hydrate each board/session identity once even while task maps and lifecycle state are being restored
+- guard automatic resumable-task activation so one interrupted task cannot fan out duplicate lineage loads
 - dev and installed runtimes share the same persistent app storage root
 
 ## Action Modes
@@ -266,6 +275,8 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - artifacts are rendered inline so operators can inspect grounded context, mutation plans, and restore previews after failure or resume
 - task history now shows both `RESUME PLAN` and `RESUME OUTCOME`, so operators can compare expected boundary reuse against what was actually rerun
 - interrupted-task cards, resume cards, and task-history rows now also show chain-level outcome rollups (`LOCAL`, `INHERITED`, `RERAN`, `PENDING`) aggregated across the full lineage trail
+- task history now starts with a deduplicated continuity summary for the current filter scope, showing active/interrupted chain count, cross-session reach, and reuse efficiency without double-counting older chain segments
+- task history now also includes a `CHAIN HISTORY` strip with one actionable row per continuity chain, including `FOCUS TASKS`, `OPEN CHAIN`, and `RESUME LATEST` controls when an interrupted resumable segment exists
 - task history now supports operator-facing filtering by continuity chain and boundary state, so larger lineage trails can be narrowed to one chain or one reuse/rerun condition without losing the persisted diagnostics
 - task-history filters are now remembered per session, so switching away and back restores the operator’s last chain/boundary view for that session instead of resetting to `ALL`
 - task-history rows now expose quick actions to open the full row detail, jump to the matching resumable chain when one exists, or reveal the most relevant OPY section for that task kind

@@ -54,7 +54,9 @@ import {
   deriveOpyAgentTaskContinuityKey,
   deriveOpyAgentTaskLineageKey,
   findOpyAgentTaskLineagePredecessor,
+  selectLatestOpyAgentTaskLineageCollectionEntries,
   selectLatestOpyAgentTasksByLineage,
+  summarizeOpyAgentTaskLineageCollection,
   summarizeOpyAgentTaskLineage,
 } from "../../core/effects/opy-agent.task-lineage";
 import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
@@ -204,6 +206,12 @@ interface OpyTaskHistoryEntry {
   readonly lineageDiagnostics: ReturnType<typeof summarizeOpyAgentTaskLineage>;
   readonly resumePlan: ReadonlyArray<OpyResumeBoundaryPlanItem>;
   readonly persistedResumeOutcome: OpyPersistedResumeBoundaryOutcomePayload | null;
+}
+
+interface OpyChainHistoryEntry {
+  readonly continuityKey: string;
+  readonly latestEntry: OpyTaskHistoryEntry;
+  readonly resumableTask: OpyAgentTask | null;
 }
 
 type OpyArtifactFocusTarget =
@@ -683,6 +691,9 @@ const formatLineageResumeOutcomeRollup = (
 
   return `${options?.compact ? "ROLLUP" : "CHAIN OUTCOME"}::${parts.join(" · ")}`;
 };
+
+const formatReuseEfficiency = (ratio: number | null): string =>
+  ratio === null ? "PENDING" : `${Math.round(ratio * 100)}%`;
 
 const formatLineageSessionScope = (
   sessionIds: readonly string[],
@@ -1390,6 +1401,7 @@ export function OpyCopilotPanel({
   const { runEffect } = useDatabase();
   const pendingViewportBaselineRef = useRef(true);
   const agentTaskIndexRef = useRef<Record<string, OpyAgentTask>>({});
+  const resumableTaskActivationRef = useRef<string | null>(null);
   const lifecycleTaskSyncRef = useRef<{
     activeRequestId: string | null;
     errorSummary: string | null;
@@ -2305,10 +2317,14 @@ export function OpyCopilotPanel({
         setRuntimeError(`TASK RESUME CONTEXT RESTORE FAILED: ${toErrorMessage(error)}`);
       }
 
-      setResumableTaskPreferenceBySessionId((current) => ({
-        ...current,
-        [task.sessionId]: task.id,
-      }));
+      setResumableTaskPreferenceBySessionId((current) =>
+        current[task.sessionId] === task.id
+          ? current
+          : {
+              ...current,
+              [task.sessionId]: task.id,
+            }
+      );
       agentLifecycle.hydrateResumableRequest({
         request: task.request,
         stage: task.stage,
@@ -2317,7 +2333,7 @@ export function OpyCopilotPanel({
       });
     },
     [
-      agentLifecycle,
+      agentLifecycle.hydrateResumableRequest,
       hydratePersistedTaskLineageContext,
       loadTaskLineageDetails,
     ],
@@ -2412,6 +2428,43 @@ export function OpyCopilotPanel({
         && matchesTaskHistoryBoundaryFilter(entry.lineageDiagnostics.resumeOutcomeRollup, taskHistoryBoundaryFilter)
       )),
     [taskHistoryBoundaryFilter, taskHistoryChainFilter, taskHistoryEntries],
+  );
+
+  const filteredTaskHistorySummary = useMemo(
+    () =>
+      summarizeOpyAgentTaskLineageCollection(
+        filteredTaskHistoryEntries.map((entry) => ({
+          continuityKey: entry.lineageDiagnostics.continuityKey,
+          createdAt: entry.task.createdAt,
+          updatedAt: entry.task.updatedAt,
+          sessionIds: entry.lineageDiagnostics.sessionIds,
+          crossSessionSegmentCount: entry.lineageDiagnostics.crossSessionSegmentCount,
+          status: entry.task.status,
+          resumeOutcomeRollup: entry.lineageDiagnostics.resumeOutcomeRollup,
+        })),
+      ),
+    [filteredTaskHistoryEntries],
+  );
+
+  const filteredChainHistoryEntries = useMemo<ReadonlyArray<OpyChainHistoryEntry>>(
+    () =>
+      selectLatestOpyAgentTaskLineageCollectionEntries(
+        filteredTaskHistoryEntries.map((entry) => ({
+          continuityKey: entry.lineageDiagnostics.continuityKey,
+          createdAt: entry.task.createdAt,
+          updatedAt: entry.task.updatedAt,
+          sessionIds: entry.lineageDiagnostics.sessionIds,
+          crossSessionSegmentCount: entry.lineageDiagnostics.crossSessionSegmentCount,
+          status: entry.task.status,
+          resumeOutcomeRollup: entry.lineageDiagnostics.resumeOutcomeRollup,
+          latestEntry: entry,
+        })),
+      ).map((entry) => ({
+        continuityKey: entry.continuityKey,
+        latestEntry: entry.latestEntry,
+        resumableTask: resumableTaskByContinuityKey.get(entry.continuityKey) ?? null,
+      })),
+    [filteredTaskHistoryEntries, resumableTaskByContinuityKey],
   );
 
   const commitTaskHistoryFilterState = useCallback(
@@ -2526,7 +2579,12 @@ export function OpyCopilotPanel({
         setIsMessageLoading(false);
       }
     },
-    [activateResumableTask, agentLifecycle, resumableTaskPreferenceBySessionId, runEffect],
+    [
+      activateResumableTask,
+      agentLifecycle.clearResumableRequest,
+      resumableTaskPreferenceBySessionId,
+      runEffect,
+    ],
   );
 
   useEffect(() => {
@@ -3713,6 +3771,11 @@ export function OpyCopilotPanel({
     }));
   }, [diagramId, domain, hasOpenAiApiKey, runEffect]);
 
+  const hydrateMessagesForSessionRef = useRef(hydrateMessagesForSession);
+  const interruptActiveLifecycleTaskRef = useRef(interruptActiveLifecycleTask);
+  hydrateMessagesForSessionRef.current = hydrateMessagesForSession;
+  interruptActiveLifecycleTaskRef.current = interruptActiveLifecycleTask;
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -3721,7 +3784,7 @@ export function OpyCopilotPanel({
         return;
       }
 
-      await interruptActiveLifecycleTask("INTERRUPTED BY SESSION HYDRATION.");
+      await interruptActiveLifecycleTaskRef.current("INTERRUPTED BY SESSION HYDRATION.");
       agentLifecycle.resetLifecycle();
       setIsSessionLoading(true);
       setRuntimeError(null);
@@ -3798,7 +3861,7 @@ export function OpyCopilotPanel({
         setSelectedSessionId(resumeSessionId);
 
         if (resumeSessionId.length > 0) {
-          await hydrateMessagesForSession(resumeSessionId);
+          await hydrateMessagesForSessionRef.current(resumeSessionId);
         } else {
           setMessages([]);
           setRunsBySessionId({});
@@ -3830,13 +3893,11 @@ export function OpyCopilotPanel({
       isCancelled = true;
     };
   }, [
-    agentLifecycle,
+    agentLifecycle.resetLifecycle,
     agentSecretStatus,
     diagramId,
     domain,
     hasOpenAiApiKey,
-    hydrateMessagesForSession,
-    interruptActiveLifecycleTask,
     runEffect,
   ]);
 
@@ -5302,6 +5363,24 @@ export function OpyCopilotPanel({
     setExpandedTaskIds((current) => current.includes(taskId) ? current : [...current, taskId]);
     revealViewportSection("control", () => taskHistoryCardRefs.current[taskId] ?? null);
   }, [commitArtifactFocusTarget, revealViewportSection]);
+  const handleFocusTaskHistoryChain = useCallback((input: {
+    readonly continuityKey: string;
+    readonly taskId: string;
+  }) => {
+    commitArtifactFocusTarget(null);
+    setTaskHistoryChainFilter(input.continuityKey);
+    commitTaskHistoryFilterState({
+      chain: input.continuityKey,
+      boundary: taskHistoryBoundaryFilter,
+    });
+    setExpandedTaskIds((current) => current.includes(input.taskId) ? current : [...current, input.taskId]);
+    revealViewportSection("control", () => taskHistoryCardRefs.current[input.taskId] ?? null);
+  }, [
+    commitArtifactFocusTarget,
+    commitTaskHistoryFilterState,
+    revealViewportSection,
+    taskHistoryBoundaryFilter,
+  ]);
   const handleOpenTaskHistoryChain = useCallback((task: OpyAgentTask) => {
     const resumableTask = resumableTaskByContinuityKey.get(deriveOpyAgentTaskContinuityKey(task.request));
     if (!resumableTask || isRunning) {
@@ -5318,6 +5397,26 @@ export function OpyCopilotPanel({
     revealViewportSection,
     resumableTaskByContinuityKey,
   ]);
+  const handleResumeTaskHistoryChain = useCallback((task: OpyAgentTask | null) => {
+    if (isRunning || !task) {
+      return;
+    }
+
+    setRuntimeError(null);
+    void activateResumableTask(task)
+      .then(() => prepareLifecycleReplay(task.request))
+      .then((canReplay) => {
+        if (!canReplay) {
+          return;
+        }
+
+        agentLifecycle.resumeResumableRequest();
+        return replayLifecycleRequest(task.request);
+      })
+      .catch((error) => {
+        setRuntimeError(`CHAIN RESUME FAILED: ${toErrorMessage(error)}`);
+      });
+  }, [activateResumableTask, agentLifecycle, isRunning, prepareLifecycleReplay, replayLifecycleRequest]);
   const handleOpenTaskHistoryFocusSection = useCallback((entry: OpyTaskHistoryEntry) => {
     const focusTarget = resolveTaskHistoryArtifactFocusTarget(entry);
     commitArtifactFocusTarget(focusTarget);
@@ -5567,6 +5666,7 @@ export function OpyCopilotPanel({
     }
 
     if (activeInterruptedTasks.length === 0) {
+      resumableTaskActivationRef.current = null;
       setResumableTaskPreferenceBySessionId((current) => {
         if (!(selectedSessionId in current)) {
           return current;
@@ -5583,6 +5683,7 @@ export function OpyCopilotPanel({
     }
 
     if (selectedResumableTask) {
+      resumableTaskActivationRef.current = selectedResumableTask.id;
       return;
     }
 
@@ -5594,6 +5695,10 @@ export function OpyCopilotPanel({
       return;
     }
 
+    if (resumableTaskActivationRef.current === nextInterruptedTask.id) {
+      return;
+    }
+    resumableTaskActivationRef.current = nextInterruptedTask.id;
     void activateResumableTask(nextInterruptedTask);
   }, [
     activateResumableTask,
@@ -5903,6 +6008,121 @@ export function OpyCopilotPanel({
                   <p className={styles.opyCopilotProposalSummary}>
                     PERSISTED TASKS, TOOL CALLS, AND ARTIFACTS FOR THIS SESSION.
                   </p>
+                  <p className={styles.ownershipLensHint}>
+                    {`CONTINUITY::${filteredTaskHistorySummary.chainCount} CHAINS · ${
+                      filteredTaskHistorySummary.activeChainCount
+                    } ACTIVE · ${filteredTaskHistorySummary.interruptedChainCount} INTERRUPTED · ${
+                      filteredTaskHistorySummary.pendingChainCount
+                    } PENDING`}
+                  </p>
+                  <p className={styles.ownershipLensHint}>
+                    {`REUSE EFFICIENCY::${formatReuseEfficiency(filteredTaskHistorySummary.reuseEfficiencyRatio)} · RESOLVED::${
+                      filteredTaskHistorySummary.resolvedBoundaryCount
+                    }/${filteredTaskHistorySummary.boundaryCount} · LOCAL::${
+                      filteredTaskHistorySummary.reusedCurrentSessionCount
+                    } · INHERITED::${filteredTaskHistorySummary.reusedInheritedSessionCount} · RERAN::${
+                      filteredTaskHistorySummary.reranCount
+                    }`}
+                  </p>
+                  <p className={styles.ownershipLensHint}>
+                    {`SESSION REACH::${filteredTaskHistorySummary.sessionCount} · CROSS-SESSION CHAINS::${
+                      filteredTaskHistorySummary.crossSessionChainCount
+                    } · PENDING BOUNDARIES::${filteredTaskHistorySummary.pendingCount}`}
+                  </p>
+                  {filteredChainHistoryEntries.length > 0 && (
+                    <>
+                      <div className={styles.opyCopilotProposalHeader}>
+                        <span>CHAIN HISTORY</span>
+                        <span>{`${filteredChainHistoryEntries.length} CHAIN(S)`}</span>
+                      </div>
+                      <p className={styles.ownershipLensHint}>
+                        DEDUPED CONTINUITY CHAINS FOR THE CURRENT FILTER SCOPE. USE THESE TO RESUME OR DRILL INTO ONE LINEAGE.
+                      </p>
+                      <div className={styles.opyCopilotTaskTimeline}>
+                        {filteredChainHistoryEntries.slice(0, 4).map((chainEntry) => {
+                          const { continuityKey, latestEntry, resumableTask } = chainEntry;
+                          const { task, lineageDiagnostics, persistedResumeOutcome, resumePlan } = latestEntry;
+                          const isFilterTarget = taskHistoryChainFilter === continuityKey;
+                          const isResumableChain = resumableTask !== null;
+                          const isSelectedResumableChain = selectedResumableTask !== null
+                            && deriveOpyAgentTaskContinuityKey(selectedResumableTask.request) === continuityKey;
+                          const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
+                          const lineageResumeOutcomeRollup = formatLineageResumeOutcomeRollup(
+                            lineageDiagnostics.resumeOutcomeRollup,
+                            { compact: true },
+                          );
+                          const resumeDiagnosticsSummary = persistedResumeOutcome
+                            ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
+                            : summarizeTaskResumeBoundaryPlan(resumePlan);
+
+                          return (
+                            <article
+                              key={continuityKey}
+                              className={styles.opyCopilotTaskCard}
+                              data-status={task.status}
+                              data-selected={isFilterTarget || isSelectedResumableChain ? "true" : "false"}
+                            >
+                              <div className={styles.opyCopilotTaskToggle}>
+                                <span className={styles.opyCopilotTaskToggleMain}>
+                                  <span>{formatTaskHistoryChainFilterLabel(task)}</span>
+                                  <span>{`LATEST::${TASK_STATUS_LABEL[task.status]} · ${formatTaskStageLabel(task.stage)}`}</span>
+                                  <span>{`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount}`}</span>
+                                  {lineageDiagnostics.crossSessionSegmentCount > 0 && (
+                                    <span>{`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`}</span>
+                                  )}
+                                  <span>{lineageResumeOutcomeRollup}</span>
+                                  <span>{resumeDiagnosticsSummary}</span>
+                                  {isFilterTarget && <span>FILTERED</span>}
+                                  {isSelectedResumableChain && <span>ACTIVE RESUME SLOT</span>}
+                                  {isResumableChain && !isSelectedResumableChain && <span>RESUMABLE</span>}
+                                </span>
+                                <span className={styles.opyCopilotTaskMeta}>
+                                  {`${formatClockTime(task.updatedAt)} · ${task.id.slice(0, 8)}`}
+                                </span>
+                              </div>
+                              {lineageDiagnostics.sessionCount > 1 && (
+                                <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
+                              )}
+                              <div className={styles.opyCopilotProposalActions}>
+                                <button
+                                  type="button"
+                                  className={styles.ownershipLensToggleButton}
+                                  onClick={() => {
+                                    handleFocusTaskHistoryChain({
+                                      continuityKey,
+                                      taskId: task.id,
+                                    });
+                                  }}
+                                >
+                                  FOCUS TASKS
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.ownershipLensToggleButton}
+                                  onClick={() => {
+                                    handleOpenTaskHistoryChain(task);
+                                  }}
+                                  disabled={!isResumableChain || isRunning}
+                                >
+                                  {isResumableChain ? "OPEN CHAIN" : "NO CHAIN"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.toolbarButton}
+                                  onClick={() => {
+                                    handleResumeTaskHistoryChain(resumableTask);
+                                  }}
+                                  disabled={!isResumableChain || isRunning}
+                                >
+                                  {isResumableChain ? "RESUME LATEST" : "NO RESUME"}
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                   <div className={styles.formInlineRow}>
                     <div className={styles.inputGrow}>
                       <TacticalSelect

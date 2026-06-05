@@ -50,6 +50,8 @@
 - OPY now extends that lineage continuity across compatible sessions on the same board/domain, so queue/history diagnostics can show inherited chain provenance beyond the currently selected session
 - OPY now distinguishes cross-session reusable boundaries from session-local ones, so continuity can reuse safe read/action preparation work without incorrectly skipping assistant-message persistence or checkpoint refresh in a different session
 - the OPY surface now shows an explicit resume-boundary plan for interrupted chains, instead of leaving reuse implicit
+- OPY task history now starts with a deduplicated chain summary for the current filter scope, so operators can see continuity efficiency and cross-session reach without mentally aggregating individual task cards
+- OPY task history now also exposes a chain-level control strip with direct `focus`, `open`, and `resume latest` actions per continuity chain
 - the next `RIG-402` slices should build on this with deeper multi-run continuity and richer operator diagnostics beyond cross-session chain provenance
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 

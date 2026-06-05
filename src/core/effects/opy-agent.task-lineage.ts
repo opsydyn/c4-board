@@ -46,6 +46,32 @@ export interface OpyAgentTaskLineageDiagnostics {
   readonly resumeOutcomeRollup: OpyAgentTaskLineageResumeOutcomeRollup;
 }
 
+export interface OpyAgentTaskLineageCollectionEntry {
+  readonly continuityKey: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly sessionIds: ReadonlyArray<string>;
+  readonly crossSessionSegmentCount: number;
+  readonly status: "running" | "interrupted" | "completed" | "failed" | "cancelled";
+  readonly resumeOutcomeRollup: OpyAgentTaskLineageResumeOutcomeRollup;
+}
+
+export interface OpyAgentTaskLineageCollectionSummary {
+  readonly chainCount: number;
+  readonly sessionCount: number;
+  readonly crossSessionChainCount: number;
+  readonly interruptedChainCount: number;
+  readonly activeChainCount: number;
+  readonly pendingChainCount: number;
+  readonly boundaryCount: number;
+  readonly resolvedBoundaryCount: number;
+  readonly reusedCurrentSessionCount: number;
+  readonly reusedInheritedSessionCount: number;
+  readonly reranCount: number;
+  readonly pendingCount: number;
+  readonly reuseEfficiencyRatio: number | null;
+}
+
 const normalizeLineageSegment = (value: string): string =>
   value.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -303,5 +329,91 @@ export const summarizeOpyAgentTaskLineage = <
     completedStepNames,
     artifactKinds,
     resumeOutcomeRollup,
+  };
+};
+
+export const selectLatestOpyAgentTaskLineageCollectionEntries = <
+  TEntry extends OpyAgentTaskLineageCollectionEntry,
+>(
+  entries: readonly TEntry[],
+): ReadonlyArray<TEntry> => {
+  const latestByContinuity = new Map<string, TEntry>();
+
+  for (const entry of entries) {
+    const existing = latestByContinuity.get(entry.continuityKey);
+    if (!existing || sortByRecencyDesc(entry, existing) < 0) {
+      latestByContinuity.set(entry.continuityKey, entry);
+    }
+  }
+
+  return [...latestByContinuity.values()].sort(sortByRecencyDesc);
+};
+
+export const summarizeOpyAgentTaskLineageCollection = <
+  TEntry extends OpyAgentTaskLineageCollectionEntry,
+>(
+  entries: readonly TEntry[],
+): OpyAgentTaskLineageCollectionSummary => {
+  const dedupedEntries = selectLatestOpyAgentTaskLineageCollectionEntries(entries);
+  const sessionIds = new Set<string>();
+  let crossSessionChainCount = 0;
+  let interruptedChainCount = 0;
+  let activeChainCount = 0;
+  let pendingChainCount = 0;
+  let boundaryCount = 0;
+  let reusedCurrentSessionCount = 0;
+  let reusedInheritedSessionCount = 0;
+  let reranCount = 0;
+  let pendingCount = 0;
+
+  for (const entry of dedupedEntries) {
+    entry.sessionIds.forEach((sessionId) => {
+      sessionIds.add(sessionId);
+    });
+
+    if (entry.crossSessionSegmentCount > 0) {
+      crossSessionChainCount += 1;
+    }
+
+    if (entry.status === "interrupted") {
+      interruptedChainCount += 1;
+    }
+
+    if (entry.status === "running" || entry.status === "interrupted") {
+      activeChainCount += 1;
+    }
+
+    if (
+      entry.resumeOutcomeRollup.taskCount === 0
+      || entry.resumeOutcomeRollup.pendingCount > 0
+    ) {
+      pendingChainCount += 1;
+    }
+
+    boundaryCount += entry.resumeOutcomeRollup.boundaryCount;
+    reusedCurrentSessionCount += entry.resumeOutcomeRollup.reusedCurrentSessionCount;
+    reusedInheritedSessionCount += entry.resumeOutcomeRollup.reusedInheritedSessionCount;
+    reranCount += entry.resumeOutcomeRollup.reranCount;
+    pendingCount += entry.resumeOutcomeRollup.pendingCount;
+  }
+
+  const resolvedBoundaryCount = reusedCurrentSessionCount + reusedInheritedSessionCount + reranCount;
+
+  return {
+    chainCount: dedupedEntries.length,
+    sessionCount: sessionIds.size,
+    crossSessionChainCount,
+    interruptedChainCount,
+    activeChainCount,
+    pendingChainCount,
+    boundaryCount,
+    resolvedBoundaryCount,
+    reusedCurrentSessionCount,
+    reusedInheritedSessionCount,
+    reranCount,
+    pendingCount,
+    reuseEfficiencyRatio: resolvedBoundaryCount > 0
+      ? (reusedCurrentSessionCount + reusedInheritedSessionCount) / resolvedBoundaryCount
+      : null,
   };
 };

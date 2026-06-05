@@ -2,16 +2,16 @@ import { CloudIcon, GearSixIcon, RobotIcon, UsersFourIcon } from "@phosphor-icon
 import { animated, useTransition } from "@react-spring/web";
 import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { type Position, Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
+import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import type {
   OpyWidgetLayout,
-  OpyWidgetModeLayouts,
   OpyWidgetMode,
+  OpyWidgetModeLayouts,
   OpyWidgetPresence,
   OpyWidgetSnapTarget,
 } from "../../core/effects/settings.types";
-import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
-import type { OpyWidgetChromeSignal, OpyWidgetChromeStatus } from "./opyChromeStatus";
 import { OpyAvatar } from "./OpyAvatar";
+import type { OpyWidgetChromeSignal, OpyWidgetChromeStatus } from "./opyChromeStatus";
 import * as styles from "./OpyFloatingWidget.css";
 
 const DEFAULT_BOUNDS = {
@@ -128,8 +128,8 @@ const getEffectiveSnapTarget = (layout: OpyWidgetLayout): OpyWidgetSnapTarget =>
   layout.snapTarget !== "free"
     ? layout.snapTarget
     : layout.placement === "centered"
-      ? "center"
-      : "free";
+    ? "center"
+    : "free";
 
 const getAnchoredPosition = (
   snapTarget: Exclude<OpyWidgetSnapTarget, "free">,
@@ -270,12 +270,13 @@ const areModeLayoutsEqual = (
 const getLayoutForMode = (
   modeLayouts: OpyWidgetModeLayouts,
   mode: OpyWidgetMode,
-): OpyWidgetLayout => mode === "mission"
-  ? {
+): OpyWidgetLayout =>
+  mode === "mission"
+    ? {
       ...modeLayouts.mission,
       mode: "mission",
     }
-  : {
+    : {
       ...modeLayouts.field,
       mode: "field",
     };
@@ -283,15 +284,16 @@ const getLayoutForMode = (
 const syncModeLayoutsWithLayout = (
   modeLayouts: OpyWidgetModeLayouts,
   layout: OpyWidgetLayout,
-): OpyWidgetModeLayouts => layout.mode === "mission"
-  ? {
+): OpyWidgetModeLayouts =>
+  layout.mode === "mission"
+    ? {
       ...modeLayouts,
       mission: {
         ...layout,
         mode: "mission",
       },
     }
-  : {
+    : {
       ...modeLayouts,
       field: {
         ...layout,
@@ -427,6 +429,7 @@ export function OpyFloatingWidget({
   const [activeChromeSignalKey, setActiveChromeSignalKey] = useState<OpyWidgetChromeSignal["key"] | null>(null);
   const widgetRootRef = useRef<HTMLDivElement | null>(null);
   const boundsMeasureFrameRef = useRef<number | null>(null);
+  const boundsMeasureTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setLiveLayout(layout);
@@ -453,20 +456,23 @@ export function OpyFloatingWidget({
         current.width === nextWidth && current.height === nextHeight
           ? current
           : {
-              width: nextWidth,
-              height: nextHeight,
-            }
+            width: nextWidth,
+            height: nextHeight,
+          }
       );
     };
 
     const scheduleMeasure = () => {
-      if (boundsMeasureFrameRef.current !== null) {
-        return;
+      if (boundsMeasureTimeoutRef.current !== null) {
+        window.clearTimeout(boundsMeasureTimeoutRef.current);
       }
-      boundsMeasureFrameRef.current = window.requestAnimationFrame(() => {
-        boundsMeasureFrameRef.current = null;
-        measure();
-      });
+      boundsMeasureTimeoutRef.current = window.setTimeout(() => {
+        boundsMeasureTimeoutRef.current = null;
+        boundsMeasureFrameRef.current = window.requestAnimationFrame(() => {
+          boundsMeasureFrameRef.current = null;
+          measure();
+        });
+      }, 120);
     };
 
     measure();
@@ -478,6 +484,10 @@ export function OpyFloatingWidget({
 
     return () => {
       resizeObserver.disconnect();
+      if (boundsMeasureTimeoutRef.current !== null) {
+        window.clearTimeout(boundsMeasureTimeoutRef.current);
+        boundsMeasureTimeoutRef.current = null;
+      }
       if (boundsMeasureFrameRef.current !== null) {
         cancelAnimationFrame(boundsMeasureFrameRef.current);
         boundsMeasureFrameRef.current = null;
@@ -504,8 +514,8 @@ export function OpyFloatingWidget({
   const renderState: WidgetRenderState = !visible
     ? "launcher"
     : currentPresence === "orb"
-      ? "orb"
-      : "surface";
+    ? "orb"
+    : "surface";
   const orbPosition = useMemo(
     () => getOrbPosition(resolvedLayout, bounds),
     [bounds, resolvedLayout],
@@ -513,8 +523,8 @@ export function OpyFloatingWidget({
   const telemetryDensity = resolvedLayout.width < 580
     ? "collapsed"
     : resolvedLayout.width < 760
-      ? "compact"
-      : "wide";
+    ? "compact"
+    : "wide";
   const primaryTelemetry = useMemo(
     () => [
       `MODE::${getModeLabel(currentMode)}`,
@@ -532,7 +542,8 @@ export function OpyFloatingWidget({
     [edgeCount, nodeCount, resolvedLayout.height, resolvedLayout.width],
   );
   const collapsedTelemetrySummary = useMemo(
-    () => `BOARD::${nodeCount}N/${edgeCount}E · ${Math.round(resolvedLayout.width)}×${Math.round(resolvedLayout.height)}`,
+    () =>
+      `BOARD::${nodeCount}N/${edgeCount}E · ${Math.round(resolvedLayout.width)}×${Math.round(resolvedLayout.height)}`,
     [edgeCount, nodeCount, resolvedLayout.height, resolvedLayout.width],
   );
   const visibleChromeSignals = useMemo(() => {
@@ -701,19 +712,19 @@ export function OpyFloatingWidget({
 
       const contextScopeActions = boardContext
         ? boardContext.scopes.map<OrbMenuAction>((scope) => ({
-            id: `context:${scope.id}`,
-            label: scope.label,
-            hint: scope.hint,
-            disabled: true,
-          }))
+          id: `context:${scope.id}`,
+          label: scope.label,
+          hint: scope.hint,
+          disabled: true,
+        }))
         : [
-            {
-              id: "context:board",
-              label: `${domain.toUpperCase()} · ${normalizedDiagramName}`,
-              hint: `Board footprint ${nodeCount} nodes / ${edgeCount} edges.`,
-              disabled: true,
-            },
-          ];
+          {
+            id: "context:board",
+            label: `${domain.toUpperCase()} · ${normalizedDiagramName}`,
+            hint: `Board footprint ${nodeCount} nodes / ${edgeCount} edges.`,
+            disabled: true,
+          },
+        ];
 
       return [...layoutActions, ...contextScopeActions];
     },
