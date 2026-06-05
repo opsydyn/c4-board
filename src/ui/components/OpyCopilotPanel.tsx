@@ -215,6 +215,12 @@ interface OpyChainHistoryEntry {
   readonly resumableTask: OpyAgentTask | null;
 }
 
+interface OpyChainHistoryAttentionSummary {
+  readonly headline: string;
+  readonly reasons: ReadonlyArray<string>;
+  readonly score: number;
+}
+
 type OpyArtifactFocusTarget =
   | {
     readonly kind: "diagnostics";
@@ -253,6 +259,7 @@ const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
 const TASK_HISTORY_CHAIN_FILTER_ALL = "all";
 const TASK_HISTORY_BOUNDARY_FILTER_ALL = "all";
 const TASK_HISTORY_CHAIN_SCOPE_FILTER_ALL = "all";
+const LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD = 0.5;
 const DEFAULT_TASK_HISTORY_FILTER_STATE: OpyTaskHistoryFilterState = {
   chain: TASK_HISTORY_CHAIN_FILTER_ALL,
   boundary: TASK_HISTORY_BOUNDARY_FILTER_ALL,
@@ -794,9 +801,73 @@ const matchesTaskHistoryChainScopeFilter = (
       return lineageDiagnostics.crossSessionSegmentCount > 0;
     case "low-efficiency": {
       const ratio = calculateReuseEfficiencyRatio(lineageDiagnostics.resumeOutcomeRollup);
-      return ratio !== null && ratio < 0.5;
+      return ratio !== null && ratio < LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD;
     }
   }
+};
+
+const summarizeTaskHistoryChainAttention = (
+  entry: OpyChainHistoryEntry,
+): OpyChainHistoryAttentionSummary => {
+  const { latestEntry, resumableTask } = entry;
+  const { task, lineageDiagnostics } = latestEntry;
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (resumableTask !== null || task.status === "interrupted") {
+    score += 100;
+    reasons.push("RESUME READY");
+  } else if (task.status === "running") {
+    score += 80;
+    reasons.push("ACTIVE RUN");
+  }
+
+  if (lineageDiagnostics.crossSessionSegmentCount > 0) {
+    score += 24;
+    reasons.push(`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`);
+  }
+
+  const reuseEfficiencyRatio = calculateReuseEfficiencyRatio(lineageDiagnostics.resumeOutcomeRollup);
+  if (reuseEfficiencyRatio !== null && reuseEfficiencyRatio < LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD) {
+    score += 18;
+    reasons.push(`EFFICIENCY::${formatReuseEfficiency(reuseEfficiencyRatio)}`);
+  }
+
+  if (lineageDiagnostics.resumeOutcomeRollup.pendingCount > 0) {
+    score += 12;
+    reasons.push(`PENDING::${lineageDiagnostics.resumeOutcomeRollup.pendingCount}`);
+  }
+
+  if (lineageDiagnostics.inheritedSegmentCount > 0) {
+    score += 6;
+    reasons.push(`INHERITS::${lineageDiagnostics.inheritedSegmentCount}`);
+  }
+
+  const headline = resumableTask !== null || task.status === "interrupted"
+    ? "INTERRUPTED RESUME CHAIN"
+    : task.status === "running"
+      ? "ACTIVE CONTINUITY CHAIN"
+      : reuseEfficiencyRatio !== null && reuseEfficiencyRatio < LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD
+        ? "LOW EFFICIENCY CHAIN"
+        : lineageDiagnostics.crossSessionSegmentCount > 0
+          ? "CROSS-SESSION CONTINUITY"
+          : "STABLE CONTINUITY CHAIN";
+
+  return {
+    headline,
+    reasons: reasons.length > 0 ? reasons : ["RECENT LINEAGE"],
+    score,
+  };
+};
+
+const compareTaskHistoryChainAttention = (
+  left: OpyChainHistoryEntry,
+  right: OpyChainHistoryEntry,
+): number => {
+  const scoreDifference = summarizeTaskHistoryChainAttention(right).score - summarizeTaskHistoryChainAttention(left).score;
+  return scoreDifference !== 0
+    ? scoreDifference
+    : right.latestEntry.task.updatedAt - left.latestEntry.task.updatedAt;
 };
 
 const resolveTaskHistoryFocusSection = (task: OpyAgentTask): OpyViewportSectionKey => {
@@ -2512,7 +2583,9 @@ export function OpyCopilotPanel({
         continuityKey: entry.continuityKey,
         latestEntry: entry.latestEntry,
         resumableTask: resumableTaskByContinuityKey.get(entry.continuityKey) ?? null,
-      })).filter((entry) => matchesTaskHistoryChainScopeFilter(entry, taskHistoryChainScopeFilter)),
+      }))
+        .filter((entry) => matchesTaskHistoryChainScopeFilter(entry, taskHistoryChainScopeFilter))
+        .sort(compareTaskHistoryChainAttention),
     [filteredTaskHistoryEntries, resumableTaskByContinuityKey, taskHistoryChainScopeFilter],
   );
 
@@ -6138,6 +6211,86 @@ export function OpyCopilotPanel({
                             : taskHistoryChainScopeFilter.toUpperCase().replaceAll("-", " ")
                         }`}
                       </p>
+                      {(() => {
+                        const spotlightChain = filteredChainHistoryEntries[0];
+                        if (!spotlightChain) {
+                          return null;
+                        }
+
+                        const { continuityKey, latestEntry, resumableTask } = spotlightChain;
+                        const { task, lineageDiagnostics, persistedResumeOutcome, resumePlan } = latestEntry;
+                        const attention = summarizeTaskHistoryChainAttention(spotlightChain);
+                        const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
+                        const lineageResumeOutcomeRollup = formatLineageResumeOutcomeRollup(
+                          lineageDiagnostics.resumeOutcomeRollup,
+                          { compact: true },
+                        );
+                        const resumeDiagnosticsSummary = persistedResumeOutcome
+                          ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
+                          : summarizeTaskResumeBoundaryPlan(resumePlan);
+
+                        return (
+                          <section className={styles.opyCopilotPlanCard} aria-label="OPY continuity spotlight">
+                            <div className={styles.opyCopilotProposalHeader}>
+                              <span>CONTINUITY SPOTLIGHT</span>
+                              <span>{attention.headline}</span>
+                            </div>
+                            <p className={styles.opyCopilotProposalSummary}>
+                              {`${formatTaskHistoryChainFilterLabel(task)} · LATEST::${TASK_STATUS_LABEL[task.status]} · ${
+                                formatTaskStageLabel(task.stage)
+                              }`}
+                            </p>
+                            <p className={styles.ownershipLensHint}>
+                              {attention.reasons.join(" · ")}
+                            </p>
+                            <p className={styles.ownershipLensHint}>
+                              {`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount} · ${
+                                lineageResumeOutcomeRollup
+                              }`}
+                            </p>
+                            <p className={styles.ownershipLensHint}>
+                              {resumeDiagnosticsSummary}
+                            </p>
+                            {lineageDiagnostics.sessionCount > 1 && (
+                              <p className={styles.ownershipLensHint}>{`SESSION SCOPE::${sessionScope}`}</p>
+                            )}
+                            <div className={styles.opyCopilotProposalActions}>
+                              <button
+                                type="button"
+                                className={styles.ownershipLensToggleButton}
+                                onClick={() => {
+                                  handleFocusTaskHistoryChain({
+                                    continuityKey,
+                                    taskId: task.id,
+                                  });
+                                }}
+                              >
+                                FOCUS TASKS
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.ownershipLensToggleButton}
+                                onClick={() => {
+                                  handleOpenTaskHistoryChain(task);
+                                }}
+                                disabled={!resumableTask || isRunning}
+                              >
+                                {resumableTask ? "OPEN CHAIN" : "NO CHAIN"}
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.toolbarButton}
+                                onClick={() => {
+                                  handleResumeTaskHistoryChain(resumableTask);
+                                }}
+                                disabled={!resumableTask || isRunning}
+                              >
+                                RESUME LATEST
+                              </button>
+                            </div>
+                          </section>
+                        );
+                      })()}
                       <div className={styles.opyCopilotTaskTimeline}>
                         {filteredChainHistoryEntries.slice(0, 4).map((chainEntry) => {
                           const { continuityKey, latestEntry, resumableTask } = chainEntry;
@@ -6146,6 +6299,7 @@ export function OpyCopilotPanel({
                           const isResumableChain = resumableTask !== null;
                           const isSelectedResumableChain = selectedResumableTask !== null
                             && deriveOpyAgentTaskContinuityKey(selectedResumableTask.request) === continuityKey;
+                          const attention = summarizeTaskHistoryChainAttention(chainEntry);
                           const sessionScope = formatLineageSessionScope(lineageDiagnostics.sessionIds, sessionLookup);
                           const lineageResumeOutcomeRollup = formatLineageResumeOutcomeRollup(
                             lineageDiagnostics.resumeOutcomeRollup,
@@ -6170,6 +6324,7 @@ export function OpyCopilotPanel({
                                   {lineageDiagnostics.crossSessionSegmentCount > 0 && (
                                     <span>{`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`}</span>
                                   )}
+                                  <span>{attention.headline}</span>
                                   <span>{lineageResumeOutcomeRollup}</span>
                                   <span>{resumeDiagnosticsSummary}</span>
                                   {isFilterTarget && <span>FILTERED</span>}

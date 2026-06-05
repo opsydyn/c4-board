@@ -279,6 +279,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - task history now also includes a `CHAIN HISTORY` strip with one actionable row per continuity chain, including `FOCUS TASKS`, `OPEN CHAIN`, and `RESUME LATEST` controls when an interrupted resumable segment exists
 - task history now supports operator-facing filtering by continuity chain and boundary state, so larger lineage trails can be narrowed to one chain or one reuse/rerun condition without losing the persisted diagnostics
 - chain history now also supports scope filtering (`ALL CHAINS`, `ACTIVE`, `INTERRUPTED`, `CROSS-SESSION`, `LOW EFFICIENCY`) so operators can isolate the most important continuity trails without expanding every row
+- chain history is now ordered by operator attention, and OPY surfaces a `CONTINUITY SPOTLIGHT` card that pulls the most urgent chain to the top with explicit reasons like `RESUME READY`, `CROSS-SESSION`, or low reuse efficiency
 - task-history filters are now remembered per session, so switching away and back restores the operator’s last chain/boundary view for that session instead of resetting to `ALL`
 - that per-session memory now includes the chain-history scope filter, so OPY restores the exact continuity lens the operator last used for a session
 - task-history rows now expose quick actions to open the full row detail, jump to the matching resumable chain when one exists, or reveal the most relevant OPY section for that task kind
