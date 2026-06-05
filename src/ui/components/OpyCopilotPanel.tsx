@@ -206,6 +206,33 @@ interface OpyTaskHistoryEntry {
   readonly persistedResumeOutcome: OpyPersistedResumeBoundaryOutcomePayload | null;
 }
 
+type OpyArtifactFocusTarget =
+  | {
+    readonly kind: "diagnostics";
+    readonly respondedAtMs: number;
+    readonly section: "diagnostics";
+  }
+  | {
+    readonly kind: "review";
+    readonly respondedAtMs: number;
+    readonly section: "review";
+  }
+  | {
+    readonly kind: "proposal";
+    readonly respondedAtMs: number;
+    readonly section: "proposal";
+  }
+  | {
+    readonly kind: "plan";
+    readonly proposalRespondedAtMs: number;
+    readonly section: "proposal";
+  }
+  | {
+    readonly kind: "checkpoint";
+    readonly checkpointId: string;
+    readonly section: "checkpoints";
+  };
+
 const EMPTY_VIEWPORT_SECTION_STATE: OpyViewportSections = {
   control: false,
   diagnostics: false,
@@ -730,6 +757,21 @@ const formatTaskHistoryFocusLabel = (task: OpyAgentTask): string => {
       return "OPEN CHECKPOINT";
     case "add-node":
       return "OPEN CONTROL";
+  }
+};
+
+const formatArtifactFocusSignalLabel = (target: OpyArtifactFocusTarget): string => {
+  switch (target.kind) {
+    case "diagnostics":
+      return "FOCUS::CHAT";
+    case "review":
+      return "FOCUS::REVIEW";
+    case "proposal":
+      return "FOCUS::PROPOSAL";
+    case "plan":
+      return "FOCUS::PLAN";
+    case "checkpoint":
+      return "FOCUS::CHECKPOINT";
   }
 };
 
@@ -1407,6 +1449,9 @@ export function OpyCopilotPanel({
   const [taskHistoryBoundaryFilter, setTaskHistoryBoundaryFilter] = useState<OpyTaskHistoryBoundaryFilter>(
     TASK_HISTORY_BOUNDARY_FILTER_ALL,
   );
+  const [artifactFocusTargetsBySessionId, setArtifactFocusTargetsBySessionId] = useState<
+    Readonly<Record<string, OpyArtifactFocusTarget | undefined>>
+  >({});
   const [groundedChatsBySessionId, setGroundedChatsBySessionId] = useState<
     Readonly<Record<string, OpyGroundedChatResponse | undefined>>
   >({});
@@ -1506,6 +1551,10 @@ export function OpyCopilotPanel({
     () => checkpointsBySessionId[selectedSessionId] ?? [],
     [checkpointsBySessionId, selectedSessionId],
   );
+  const activeCheckpointById = useMemo(
+    () => new Map(activeCheckpoints.map((checkpoint) => [checkpoint.id, checkpoint] as const)),
+    [activeCheckpoints],
+  );
   const latestCheckpoint = useMemo(
     () => selectLatestOpyAgentCheckpoint(activeCheckpoints),
     [activeCheckpoints],
@@ -1522,6 +1571,25 @@ export function OpyCopilotPanel({
       ),
     [activeCheckpoints, boardSummary],
   );
+  const activeArtifactFocusTarget = useMemo(
+    () => artifactFocusTargetsBySessionId[selectedSessionId] ?? null,
+    [artifactFocusTargetsBySessionId, selectedSessionId],
+  );
+  const commitArtifactFocusTarget = useCallback((target: OpyArtifactFocusTarget | null) => {
+    if (!selectedSessionId) {
+      return;
+    }
+
+    setArtifactFocusTargetsBySessionId((current) => {
+      const next = { ...current };
+      if (target) {
+        next[selectedSessionId] = target;
+      } else {
+        delete next[selectedSessionId];
+      }
+      return next;
+    });
+  }, [selectedSessionId]);
   const activeRun = useMemo(
     () => activeRuns.find((run) => run.status === "running") ?? null,
     [activeRuns],
@@ -1786,14 +1854,128 @@ export function OpyCopilotPanel({
       isFresh: viewportSectionsUnseen.checkpoints,
     };
   }, [checkpointRestorePreviewById, latestCheckpoint, viewportSectionsUnseen.checkpoints]);
+  const controlSectionTone = policyChromeSignal?.tone ?? "neutral";
+  const diagnosticsSectionTone = latestRun?.status === "failed"
+    ? "critical"
+    : latestDiagnosticsSurface?.context.confidence === "low"
+    ? "caution"
+    : latestDiagnosticsSurface
+    ? "ready"
+    : "neutral";
+  const checkpointsSectionTone = checkpointChromeSignal?.tone ?? "neutral";
+  const reviewSectionTone = reviewChromeSignal?.tone ?? "neutral";
+  const proposalSectionTone = proposalChromeSignal?.tone ?? "neutral";
+  const isArtifactFocusTargetActive = useCallback((target: OpyArtifactFocusTarget): boolean => {
+    switch (target.kind) {
+      case "diagnostics":
+        return latestDiagnosticsSurface?.kind === "chat"
+          && latestDiagnosticsSurface.respondedAtMs === target.respondedAtMs;
+      case "review":
+        return activeBoardReview?.review.respondedAtMs === target.respondedAtMs;
+      case "proposal":
+        return activeDiagramProposal?.proposal.respondedAtMs === target.respondedAtMs;
+      case "plan":
+        return activeDiagramProposal?.proposal.respondedAtMs === target.proposalRespondedAtMs
+          && activeMutationPlan !== null
+          && activePlanDecision !== null;
+      case "checkpoint":
+        return activeCheckpointById.has(target.checkpointId);
+    }
+  }, [
+    activeBoardReview,
+    activeCheckpointById,
+    activeDiagramProposal,
+    activeMutationPlan,
+    activePlanDecision,
+    latestDiagnosticsSurface,
+  ]);
+  const focusChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
+    if (!activeArtifactFocusTarget || !isArtifactFocusTargetActive(activeArtifactFocusTarget)) {
+      return null;
+    }
+
+    switch (activeArtifactFocusTarget.kind) {
+      case "diagnostics":
+        return latestDiagnosticsSurface
+          ? {
+            key: "focus",
+            targetSection: "diagnostics",
+            label: formatArtifactFocusSignalLabel(activeArtifactFocusTarget),
+            detail: latestDiagnosticsSurface.summary,
+            tone: diagnosticsSectionTone,
+            isFresh: false,
+          }
+          : null;
+      case "review":
+        return activeBoardReview
+          ? {
+            key: "focus",
+            targetSection: "review",
+            label: formatArtifactFocusSignalLabel(activeArtifactFocusTarget),
+            detail: activeBoardReview.review.summary,
+            tone: reviewSectionTone,
+            isFresh: false,
+          }
+          : null;
+      case "proposal":
+        return activeDiagramProposal
+          ? {
+            key: "focus",
+            targetSection: "proposal",
+            label: formatArtifactFocusSignalLabel(activeArtifactFocusTarget),
+            detail: activeDiagramProposal.proposal.summary,
+            tone: proposalSectionTone,
+            isFresh: false,
+          }
+          : null;
+      case "plan":
+        return activeDiagramProposal && activeMutationPlan
+          ? {
+            key: "focus",
+            targetSection: "proposal",
+            label: formatArtifactFocusSignalLabel(activeArtifactFocusTarget),
+            detail: `PLAN ${activeMutationPlan.plan.totalActions} ACTION(S) · ${activeDiagramProposal.proposal.summary}`,
+            tone: proposalSectionTone,
+            isFresh: false,
+          }
+          : null;
+      case "checkpoint": {
+        const checkpoint = activeCheckpointById.get(activeArtifactFocusTarget.checkpointId) ?? null;
+        return checkpoint
+          ? {
+            key: "focus",
+            targetSection: "checkpoints",
+            label: formatArtifactFocusSignalLabel(activeArtifactFocusTarget),
+            detail: formatOpyRollbackSummary(checkpoint),
+            tone: checkpointsSectionTone,
+            isFresh: false,
+          }
+          : null;
+      }
+    }
+  }, [
+    activeArtifactFocusTarget,
+    activeBoardReview,
+    activeCheckpointById,
+    activeDiagramProposal,
+    activeMutationPlan,
+    checkpointsSectionTone,
+    diagnosticsSectionTone,
+    isArtifactFocusTargetActive,
+    latestDiagnosticsSurface,
+    proposalSectionTone,
+    reviewSectionTone,
+  ]);
   const chromeStatus = useMemo<OpyWidgetChromeStatus>(() => {
     const priorities: Record<OpyWidgetChromeSignal["key"], number> = {
-      review: 0,
-      proposal: 1,
-      checkpoint: 2,
-      policy: 3,
+      focus: 0,
+      review: 1,
+      proposal: 2,
+      checkpoint: 3,
+      policy: 4,
     };
     const signals = [
+      focusChromeSignal,
       reviewChromeSignal,
       proposalChromeSignal,
       checkpointChromeSignal,
@@ -1801,6 +1983,12 @@ export function OpyCopilotPanel({
     ]
       .filter((signal): signal is OpyWidgetChromeSignal => signal !== null)
       .sort((left, right) => {
+        if (left.key === "focus" && right.key !== "focus") {
+          return -1;
+        }
+        if (right.key === "focus" && left.key !== "focus") {
+          return 1;
+        }
         const toneDelta = compareOpyWidgetChromeTone(left.tone, right.tone);
         if (toneDelta !== 0) {
           return toneDelta;
@@ -1818,18 +2006,15 @@ export function OpyCopilotPanel({
       ),
       signals,
     };
-  }, [checkpointChromeSignal, policyChromeSignal, proposalChromeSignal, reviewChromeSignal]);
-  const controlSectionTone = policyChromeSignal?.tone ?? "neutral";
-  const diagnosticsSectionTone = latestRun?.status === "failed"
-    ? "critical"
-    : latestDiagnosticsSurface?.context.confidence === "low"
-    ? "caution"
-    : latestDiagnosticsSurface
-    ? "ready"
-    : "neutral";
-  const checkpointsSectionTone = checkpointChromeSignal?.tone ?? "neutral";
-  const reviewSectionTone = reviewChromeSignal?.tone ?? "neutral";
-  const proposalSectionTone = proposalChromeSignal?.tone ?? "neutral";
+  }, [checkpointChromeSignal, focusChromeSignal, policyChromeSignal, proposalChromeSignal, reviewChromeSignal]);
+
+  useEffect(() => {
+    if (!activeArtifactFocusTarget || isArtifactFocusTargetActive(activeArtifactFocusTarget)) {
+      return;
+    }
+
+    commitArtifactFocusTarget(null);
+  }, [activeArtifactFocusTarget, commitArtifactFocusTarget, isArtifactFocusTargetActive]);
 
   useEffect(() => {
     onChromeStatusChange(chromeStatus);
@@ -4968,6 +5153,7 @@ export function OpyCopilotPanel({
     );
   }, []);
   const toggleViewportSection = useCallback((key: OpyViewportSectionKey) => {
+    commitArtifactFocusTarget(null);
     if (!viewportSectionsOpen[key]) {
       clearViewportSectionUnseen(key);
     }
@@ -4975,8 +5161,22 @@ export function OpyCopilotPanel({
       ...current,
       [key]: !current[key],
     }));
-  }, [clearViewportSectionUnseen, commitViewportSections, viewportSectionsOpen]);
-  const resolveTaskHistoryArtifactNode = useCallback((entry: OpyTaskHistoryEntry): HTMLElement | null => {
+  }, [clearViewportSectionUnseen, commitArtifactFocusTarget, commitViewportSections, viewportSectionsOpen]);
+  const resolveFocusedArtifactNode = useCallback((target: OpyArtifactFocusTarget): HTMLElement | null => {
+    switch (target.kind) {
+      case "diagnostics":
+        return diagnosticsCardRef.current;
+      case "review":
+        return reviewCardRef.current;
+      case "proposal":
+        return proposalCardRef.current;
+      case "plan":
+        return proposalPlanCardRef.current ?? proposalCardRef.current;
+      case "checkpoint":
+        return checkpointCardRefs.current[target.checkpointId] ?? null;
+    }
+  }, []);
+  const resolveTaskHistoryArtifactFocusTarget = useCallback((entry: OpyTaskHistoryEntry): OpyArtifactFocusTarget | null => {
     switch (entry.task.request.kind) {
       case "chat": {
         const persistedChat = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
@@ -4984,7 +5184,11 @@ export function OpyCopilotPanel({
           && isGroundedChatResponsePayload(persistedChat)
           && latestDiagnosticsSurface?.kind === "chat"
           && latestDiagnosticsSurface.respondedAtMs === persistedChat.response.respondedAtMs
-          ? diagnosticsCardRef.current
+          ? {
+            kind: "diagnostics",
+            respondedAtMs: persistedChat.response.respondedAtMs,
+            section: "diagnostics",
+          }
           : null;
       }
       case "review": {
@@ -4993,7 +5197,11 @@ export function OpyCopilotPanel({
           && isGroundedBoardReviewPayload(persistedReview)
           && activeBoardReview
           && activeBoardReview.review.respondedAtMs === persistedReview.review.respondedAtMs
-          ? reviewCardRef.current
+          ? {
+            kind: "review",
+            respondedAtMs: persistedReview.review.respondedAtMs,
+            section: "review",
+          }
           : null;
       }
       case "proposal": {
@@ -5002,7 +5210,11 @@ export function OpyCopilotPanel({
           && isGroundedDiagramProposalPayload(persistedProposal)
           && activeDiagramProposal
           && activeDiagramProposal.proposal.respondedAtMs === persistedProposal.proposal.respondedAtMs
-          ? proposalCardRef.current
+          ? {
+            kind: "proposal",
+            respondedAtMs: persistedProposal.proposal.respondedAtMs,
+            section: "proposal",
+          }
           : null;
       }
       case "apply-proposal": {
@@ -5010,19 +5222,28 @@ export function OpyCopilotPanel({
         return replay.kind === "apply-proposal"
           && activeDiagramProposal
           && activeDiagramProposal.proposal.respondedAtMs === replay.proposalRespondedAtMs
-          ? proposalPlanCardRef.current ?? proposalCardRef.current
+          ? {
+            kind: "plan",
+            proposalRespondedAtMs: replay.proposalRespondedAtMs,
+            section: "proposal",
+          }
           : null;
       }
       case "rollback": {
         const replay = entry.task.request.replay;
         return replay.kind === "rollback"
-          ? checkpointCardRefs.current[replay.checkpointId] ?? null
+          && activeCheckpointById.has(replay.checkpointId)
+          ? {
+            kind: "checkpoint",
+            checkpointId: replay.checkpointId,
+            section: "checkpoints",
+          }
           : null;
       }
       case "add-node":
         return null;
     }
-  }, [activeBoardReview, activeDiagramProposal, latestDiagnosticsSurface]);
+  }, [activeBoardReview, activeCheckpointById, activeDiagramProposal, latestDiagnosticsSurface]);
   const revealViewportSection = useCallback(
     (
       targetSection: OpyViewportSectionKey,
@@ -5055,29 +5276,45 @@ export function OpyCopilotPanel({
     [clearViewportSectionUnseen, commitViewportSections, viewportSectionsOpen],
   );
   const handleOpenTaskHistoryDetail = useCallback((taskId: string) => {
+    commitArtifactFocusTarget(null);
     setExpandedTaskIds((current) => current.includes(taskId) ? current : [...current, taskId]);
     revealViewportSection("control", () => taskHistoryCardRefs.current[taskId] ?? null);
-  }, [revealViewportSection]);
+  }, [commitArtifactFocusTarget, revealViewportSection]);
   const handleOpenTaskHistoryChain = useCallback((task: OpyAgentTask) => {
     const resumableTask = resumableTaskByContinuityKey.get(deriveOpyAgentTaskContinuityKey(task.request));
     if (!resumableTask || isRunning) {
       return;
     }
 
+    commitArtifactFocusTarget(null);
     handleSelectInterruptedLifecycleTask(resumableTask.id);
     revealViewportSection("control");
-  }, [handleSelectInterruptedLifecycleTask, isRunning, revealViewportSection, resumableTaskByContinuityKey]);
+  }, [
+    commitArtifactFocusTarget,
+    handleSelectInterruptedLifecycleTask,
+    isRunning,
+    revealViewportSection,
+    resumableTaskByContinuityKey,
+  ]);
   const handleOpenTaskHistoryFocusSection = useCallback((entry: OpyTaskHistoryEntry) => {
-    const targetSection = resolveTaskHistoryFocusSection(entry.task);
-    revealViewportSection(targetSection, () => resolveTaskHistoryArtifactNode(entry));
-  }, [resolveTaskHistoryArtifactNode, revealViewportSection]);
+    const focusTarget = resolveTaskHistoryArtifactFocusTarget(entry);
+    commitArtifactFocusTarget(focusTarget);
+    revealViewportSection(
+      focusTarget?.section ?? resolveTaskHistoryFocusSection(entry.task),
+      focusTarget ? () => resolveFocusedArtifactNode(focusTarget) : undefined,
+    );
+  }, [commitArtifactFocusTarget, resolveFocusedArtifactNode, resolveTaskHistoryArtifactFocusTarget, revealViewportSection]);
   useEffect(() => {
     if (!chromeSectionRequest) {
       return;
     }
 
-    revealViewportSection(chromeSectionRequest.section);
-  }, [chromeSectionRequest, revealViewportSection]);
+    const targetNodeResolver = activeArtifactFocusTarget
+      && activeArtifactFocusTarget.section === chromeSectionRequest.section
+      ? () => resolveFocusedArtifactNode(activeArtifactFocusTarget)
+      : undefined;
+    revealViewportSection(chromeSectionRequest.section, targetNodeResolver);
+  }, [activeArtifactFocusTarget, chromeSectionRequest, resolveFocusedArtifactNode, revealViewportSection]);
   const renderViewportSection = useCallback((input: {
     readonly keyId: OpyViewportSectionKey;
     readonly title: string;
@@ -5974,6 +6211,7 @@ export function OpyCopilotPanel({
                   diagnosticsCardRef.current = node;
                 }}
                 className={styles.opyCopilotDiagnosticsCard}
+                data-focused={activeArtifactFocusTarget?.kind === "diagnostics" ? "true" : "false"}
                 aria-label="Latest OPY diagnostics"
               >
                 <div className={styles.opyCopilotProposalHeader}>
@@ -6086,6 +6324,12 @@ export function OpyCopilotPanel({
                             checkpointCardRefs.current[checkpoint.id] = node;
                           }}
                           className={styles.opyCopilotProposalItem}
+                          data-focused={
+                            activeArtifactFocusTarget?.kind === "checkpoint"
+                              && activeArtifactFocusTarget.checkpointId === checkpoint.id
+                              ? "true"
+                              : "false"
+                          }
                         >
                           <div className={styles.opyCopilotProposalItemMeta}>
                             <span>{`CHECKPOINT::${checkpoint.id.slice(0, 8)}`}</span>
@@ -6209,6 +6453,7 @@ export function OpyCopilotPanel({
                   reviewCardRef.current = node;
                 }}
                 className={styles.opyCopilotProposalCard}
+                data-focused={activeArtifactFocusTarget?.kind === "review" ? "true" : "false"}
                 aria-label="Latest OPY board review"
               >
                 <div className={styles.opyCopilotProposalHeader}>
@@ -6401,6 +6646,7 @@ export function OpyCopilotPanel({
                   proposalCardRef.current = node;
                 }}
                 className={styles.opyCopilotProposalCard}
+                data-focused={activeArtifactFocusTarget?.kind === "proposal" ? "true" : "false"}
                 aria-label="Latest OPY diagram proposal"
               >
                 <div className={styles.opyCopilotProposalHeader}>
@@ -6443,6 +6689,7 @@ export function OpyCopilotPanel({
                       proposalPlanCardRef.current = node;
                     }}
                     className={styles.opyCopilotPlanCard}
+                    data-focused={activeArtifactFocusTarget?.kind === "plan" ? "true" : "false"}
                     aria-label="Typed mutation plan"
                   >
                     <div className={styles.opyCopilotProposalHeader}>

@@ -815,6 +815,18 @@ export const opyCopilotDiagnosticsCard = style([
   },
 ]);
 
+globalStyle(`${opyCopilotProposalCard}[data-focused="true"]`, {
+  borderColor: theme.color.status.selected,
+  boxShadow: `0 0 0 1px ${theme.color.status.selected}, ${theme.effect.glow.sm}`,
+  backgroundColor: "rgba(10, 18, 15, 0.98)",
+});
+
+globalStyle(`${opyCopilotDiagnosticsCard}[data-focused="true"]`, {
+  borderColor: theme.color.status.selected,
+  boxShadow: `0 0 0 1px ${theme.color.status.selected}, ${theme.effect.glow.sm}`,
+  backgroundColor: "rgba(9, 17, 15, 0.98)",
+});
+
 export const opyCopilotModeBanner = style({
   display: "flex",
   flexDirection: "column",
@@ -933,6 +945,12 @@ export const opyCopilotProposalItem = style({
   padding: theme.spacing["2"],
 });
 
+globalStyle(`${opyCopilotProposalItem}[data-focused="true"]`, {
+  borderColor: theme.color.status.selected,
+  boxShadow: `0 0 0 1px ${theme.color.status.selected}`,
+  backgroundColor: "rgba(10, 17, 14, 0.98)",
+});
+
 export const opyCopilotProposalItemMeta = style({
   display: "flex",
   alignItems: "center",
@@ -1024,6 +1042,12 @@ export const opyCopilotPlanCard = style({
   border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
   backgroundColor: "rgba(7, 13, 10, 0.92)",
   padding: theme.spacing["2"],
+});
+
+globalStyle(`${opyCopilotPlanCard}[data-focused="true"]`, {
+  borderColor: theme.color.status.selected,
+  boxShadow: `0 0 0 1px ${theme.color.status.selected}, ${theme.effect.glow.sm}`,
+  backgroundColor: "rgba(8, 15, 12, 0.97)",
 });
 
 export const opyCopilotPlanIssueList = style({

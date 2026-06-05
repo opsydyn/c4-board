@@ -3,7 +3,7 @@ import type { OpyViewportSectionKey } from "../../core/effects/settings.types";
 export type OpyWidgetChromeTone = "neutral" | "ready" | "caution" | "critical";
 
 export interface OpyWidgetChromeSignal {
-  readonly key: "policy" | "review" | "proposal" | "checkpoint";
+  readonly key: "focus" | "policy" | "review" | "proposal" | "checkpoint";
   readonly targetSection: OpyViewportSectionKey;
   readonly label: string;
   readonly detail: string;

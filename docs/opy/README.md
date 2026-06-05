@@ -268,6 +268,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - task-history filters are now remembered per session, so switching away and back restores the operator’s last chain/boundary view for that session instead of resetting to `ALL`
 - task-history rows now expose quick actions to open the full row detail, jump to the matching resumable chain when one exists, or reveal the most relevant OPY section for that task kind
 - when the current session is already surfacing the matching review, proposal, plan, or checkpoint artifact, those task-history quick actions now scroll directly to that exact card instead of only opening the parent section
+- those exact-artifact deep links now also set an active OPY focus target, so the matched live card stays highlighted and the widget chrome surfaces a `FOCUS::...` signal until another navigation path replaces it or the operator changes context
 
 ## Run Envelope and Telemetry
 
