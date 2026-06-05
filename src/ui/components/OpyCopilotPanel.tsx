@@ -5015,7 +5015,14 @@ export function OpyCopilotPanel({
   );
 
   const replayLifecycleRequest = useCallback(
-    async (request: OpyAgentLifecycleRequest): Promise<void> => {
+    async (
+      request: OpyAgentLifecycleRequest,
+      options?: {
+        readonly resumeStage?: OpyAgentLifecycleNonTerminalStage | null;
+      },
+    ): Promise<void> => {
+      const resumeStage = options?.resumeStage ?? null;
+      const resumeBeyondConfirmation = resumeStage === "applying" || resumeStage === "verifying";
       const replay = request.replay;
       switch (replay.kind) {
         case "chat":
@@ -5173,7 +5180,7 @@ export function OpyCopilotPanel({
             );
             return;
           }
-          if (request.requiresConfirmation) {
+          if (request.requiresConfirmation && !resumeBeyondConfirmation) {
             return;
           }
           await executeOpyActionFlow({
@@ -5182,6 +5189,7 @@ export function OpyCopilotPanel({
             lifecycleRequest: request,
             manageLifecycleStart: false,
             replay,
+            ...(resumeBeyondConfirmation ? { skipConfirmation: true } : {}),
           });
           return;
         }
@@ -5254,7 +5262,8 @@ export function OpyCopilotPanel({
   }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
   const handleResumeInterruptedLifecycle = useCallback(() => {
     const request = agentLifecycle.resumableRequest;
-    if (isRunning || !request) {
+    const resumeStage = agentLifecycle.resumableStage;
+    if (isRunning || !request || !resumeStage) {
       return;
     }
 
@@ -5265,7 +5274,9 @@ export function OpyCopilotPanel({
       }
 
       agentLifecycle.resumeResumableRequest();
-      return replayLifecycleRequest(request);
+      return replayLifecycleRequest(request, {
+        resumeStage,
+      });
     });
   }, [agentLifecycle, isRunning, prepareLifecycleReplay, replayLifecycleRequest]);
 
@@ -5579,7 +5590,11 @@ export function OpyCopilotPanel({
     if (isRunning || !task) {
       return;
     }
+    if (!isResumableTaskStage(task.stage)) {
+      return;
+    }
 
+    const resumeStage = task.stage;
     setRuntimeError(null);
     void activateResumableTask(task)
       .then(() => prepareLifecycleReplay(task.request))
@@ -5589,7 +5604,9 @@ export function OpyCopilotPanel({
         }
 
         agentLifecycle.resumeResumableRequest();
-        return replayLifecycleRequest(task.request);
+        return replayLifecycleRequest(task.request, {
+          resumeStage,
+        });
       })
       .catch((error) => {
         setRuntimeError(`CHAIN RESUME FAILED: ${toErrorMessage(error)}`);

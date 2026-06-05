@@ -251,6 +251,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - action resume can fall back to a persisted `action_descriptor` artifact when the live replay target is missing
 - read-path resume now skips completed `assemble_context`, `invoke_agent`, and `persist_assistant_message` boundaries when the matching persisted artifacts are present
 - action-path resume now skips completed `execute_board_action`, `refresh_checkpoints`, and `persist_assistant_message` boundaries when the matching persisted trail is present
+- confirmed action tasks interrupted during `applying` or `verifying` now resume directly into the apply boundary instead of returning to the confirmation gate
 - if the interrupted task stage is resumable, OPY exposes both a control-field interrupted-task queue and a resume card for the active slot
 - operators can switch the active resume slot to a different interrupted task without losing the persisted trail
 - interrupted queue cards and task history cards now show chain diagnostics before expansion, including segment count, inherited segments, completed reusable boundaries, and captured artifact count

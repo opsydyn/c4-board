@@ -56,6 +56,7 @@
 - OPY now prioritizes those filtered continuity chains by attention score and surfaces a continuity spotlight card for the highest-urgency chain, instead of leaving operators to visually triage the strip unaided
 - that spotlight now includes explicit per-boundary continuity drilldown and `HEALTH DRIVERS` output, so operators can see which boundaries were inherited, rerun, or are still pending before deciding whether to resume, inspect, or discard the chain
 - app restart/session hydration now restore stale run, task, and tool-call state through one transactional persistence boundary, and that recovery path now has focused restart-proof test coverage
+- confirmed action tasks interrupted after confirmation now resume at the apply boundary instead of dropping back to the confirmation gate, with machine coverage for both `applying` and `verifying` interruptions
 - the next `RIG-402` slices should build on this with deeper multi-run continuity and richer operator diagnostics beyond cross-session chain provenance
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
@@ -289,6 +290,7 @@
   - OPY now surfaces recent per-session task history with expandable tool-call timeline and artifact inspection
   - interrupted-task resume now rehydrates persisted grounded/action artifacts and can recover action execution from stored descriptors
   - resumed tasks can now skip already-completed read/action tool-call boundaries when the persisted trail is sufficient
+  - confirmed action tasks interrupted during `applying` or `verifying` now resume directly into the apply boundary rather than forcing a second operator confirmation
   - resumed tasks now aggregate ancestor chain segments before replay, so the latest interrupted task can inherit already-completed boundaries from related prior runs
   - OPY remembers the operator-selected resumable task per session and shows chain-level diagnostics before expansion or resume
   - OPY continuity is now board/domain-aware across compatible sessions, and queue/history cards surface session count, cross-session segment count, and session-scope provenance for inherited chains

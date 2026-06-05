@@ -86,7 +86,9 @@ const opyAgentMachineSetup = setup({
     lastRequestWasRead: ({ context }) => context.lastRequest?.mode === "read",
     hasRetryableRequest: ({ context }) => context.lastRequest !== null,
     hasResumableRequest: ({ context }) => context.resumableRequest !== null,
-    resumableRequestNeedsConfirmation: ({ context }) => context.resumableRequest?.requiresConfirmation === true,
+    resumableRequestNeedsConfirmation: ({ context }) =>
+      context.resumableRequest?.requiresConfirmation === true
+      && context.resumableStage === "awaiting_confirmation",
     resumableRequestWasRead: ({ context }) => context.resumableRequest?.mode === "read",
   },
   actions: {

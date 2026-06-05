@@ -183,4 +183,27 @@ describe("opyAgentMachine", () => {
     expect(snapshot.context.resumableRequest).toBeNull();
     expect(snapshot.context.resumableTaskId).toBeNull();
   });
+
+  test.each(["applying", "verifying"] as const)(
+    "resumes a confirmed action directly into applying when interrupted during %s",
+    (stage) => {
+      const actor = createActor(createOpyAgentMachine());
+      actor.start();
+
+      actor.send({
+        type: "HYDRATE_RESUMABLE",
+        request: createActionRequest(),
+        stage,
+        taskId: "task-2",
+        updatedAt: 750,
+      });
+
+      actor.send({ type: "RESUME" });
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toBe("applying");
+      expect(snapshot.context.activeRequest?.id).toBe("action-1");
+      expect(snapshot.context.resumableRequest).toBeNull();
+      expect(snapshot.context.resumableTaskId).toBeNull();
+    },
+  );
 });
