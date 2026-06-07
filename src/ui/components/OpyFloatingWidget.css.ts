@@ -64,6 +64,18 @@ export const widgetChrome = style({
   height: "100%",
 });
 
+export const widgetInteractionLock = style({});
+
+globalStyle(`html.${widgetInteractionLock}, body.${widgetInteractionLock}`, {
+  userSelect: "none",
+  WebkitUserSelect: "none",
+});
+
+globalStyle(`body.${widgetInteractionLock} *`, {
+  userSelect: "none",
+  WebkitUserSelect: "none",
+});
+
 export const widgetOrbLauncherMount = style({
   position: "absolute",
   zIndex: theme.zIndex.overlay,
@@ -159,6 +171,11 @@ export const widgetHandle = style({
       borderBottomColor: theme.color.status.critical,
     },
   },
+});
+
+globalStyle(`${widgetHandle}, ${widgetHandle} *`, {
+  userSelect: "none",
+  WebkitUserSelect: "none",
 });
 
 export const widgetHandleMission = style({

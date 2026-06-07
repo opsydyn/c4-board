@@ -513,6 +513,8 @@ describe("opy-chat.persistence", () => {
     expect(persistedTask).toEqual(task);
     const [upsertSql, upsertValues] = execute.mock.calls[0] as [string, unknown[]];
     expect(upsertSql).toContain("INSERT INTO opy_agent_tasks");
+    const valuesClause = upsertSql.match(/VALUES\s*\(([^)]+)\)/i)?.[1] ?? "";
+    expect(valuesClause.match(/\?/g)?.length ?? 0).toBe(upsertValues.length);
     expect(upsertValues[0]).toBe("task-1");
     expect(upsertValues[1]).toBe("session-1");
     expect(JSON.parse(String(upsertValues[2]))).toEqual(task.request);
@@ -572,6 +574,53 @@ describe("opy-chat.persistence", () => {
     expect(listed[0]?.request.label).toBe("REVIEW");
     expect(listed[0]?.lineageKey).toBe("review:session-1:payments api");
     expect(listed[1]?.status).toBe("interrupted");
+  });
+
+  it("upserts OPY action task envelopes before action tool calls", async () => {
+    const execute = vi.fn();
+    const actionTask = createTask({
+      request: {
+        confirmation: {
+          cancelMessage: "PROPOSAL APPLY CANCELLED BY OPERATOR.",
+          confirmationLines: ["Apply OPY diagram proposal?"],
+          failurePrefix: "PROPOSAL APPLY FAILED",
+          sessionId: "session-1",
+        },
+        id: "task-apply-1",
+        mode: "action",
+        kind: "apply-proposal",
+        label: "APPLY PROPOSAL",
+        requiresConfirmation: true,
+        replay: {
+          kind: "apply-proposal",
+          proposalRespondedAtMs: 2_000,
+          sessionId: "session-1",
+        },
+      },
+      id: "task-apply-1",
+      lineageKey: "apply-proposal:session-1:2000",
+      stage: "awaiting_confirmation",
+    });
+
+    const persistedTask = await runWithDatabaseService(
+      upsertOpyAgentTask(actionTask),
+      { execute },
+    );
+
+    expect(persistedTask).toEqual(actionTask);
+    const [upsertSql, upsertValues] = execute.mock.calls[0] as [string, unknown[]];
+    expect(upsertSql).toContain("INSERT INTO opy_agent_tasks");
+    expect(upsertValues[0]).toBe("task-apply-1");
+    expect(upsertValues[5]).toBe("awaiting_confirmation");
+    expect(upsertValues[6]).toBe("running");
+    expect(JSON.parse(String(upsertValues[2]))).toMatchObject({
+      kind: "apply-proposal",
+      mode: "action",
+      replay: {
+        kind: "apply-proposal",
+        proposalRespondedAtMs: 2_000,
+      },
+    });
   });
 
   it("lists persisted OPY agent tasks across sessions for audit views", async () => {

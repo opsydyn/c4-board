@@ -484,7 +484,7 @@ const UPSERT_TASK_SQL = `
     completed_at,
     error_summary
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     request_json = excluded.request_json,
     lineage_key = excluded.lineage_key,

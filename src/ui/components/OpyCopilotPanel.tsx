@@ -28,6 +28,20 @@ import {
   type OpyCheckpointRestoreImpactStatus,
   selectLatestOpyAgentCheckpoint,
 } from "../../core/effects/agent-rollback.runtime";
+import {
+  detectOpyCommandToken,
+  formatOpyStructuredCommandDraft,
+  getOpyCommandAvailabilityForOption,
+  getOpyDraftCommandFeedback,
+  getOpySlashCommandSuggestions,
+  getOpyStructuredCommandDraft,
+  OPY_COMMAND_CONTROL_HINTS,
+  parseOpyCommand,
+  type OpyBoardReviewCommand,
+  type OpyDiagramProposalCommand,
+  type OpySlashCommandOption,
+  type OpyStructuredCommandDraft,
+} from "../../core/effects/opy-command-registry";
 import type {
   RigApplyLayoutValidationSummary,
   RigCreateEdgesValidationSummary,
@@ -58,7 +72,6 @@ import {
   type OpyActionFlowDescriptor,
   type OpyActionFlowIssue,
   type OpyBoardAction,
-  type OpyC4NodeType,
   resolveOpyApplyProposalActionFlow,
   resolveOpyExecutableAddNodeActionFlow,
   resolveOpyRollbackActionFlow,
@@ -171,27 +184,6 @@ import {
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
 
-interface OpyDiagramProposalCommand {
-  readonly kind: "plan-c4-diagram";
-  readonly description: string;
-}
-
-interface OpyBoardReviewCommand {
-  readonly kind: "review-c4-board";
-  readonly focus: string | null;
-}
-
-type OpySlashCommandToken = "/add" | "/diagram" | "/review";
-
-interface OpySlashCommandOption {
-  readonly id: string;
-  readonly command: OpySlashCommandToken;
-  readonly template: string;
-  readonly example: string;
-  readonly detail: string;
-  readonly keywords: ReadonlyArray<string>;
-}
-
 interface OpySessionDiagramProposal {
   readonly command: OpyDiagramProposalCommand;
   readonly proposal: RigC4DiagramProposal;
@@ -220,6 +212,17 @@ interface OpyGroundedBoardReview {
   readonly review: RigC4BoardReview;
   readonly context: RigAgentContextBundle;
 }
+
+const formatDiagramProposalAssistantMessage = (
+  groundedProposal: OpyGroundedDiagramProposal,
+): string => {
+  const warningsBlock = groundedProposal.proposal.warnings.length > 0
+    ? `\nWARNINGS:: ${groundedProposal.proposal.warnings.join(" | ")}`
+    : "";
+  return `PROPOSAL READY:: ${groundedProposal.proposal.summary}\nNO BOARD CHANGES WERE APPLIED.${warningsBlock}\n${
+    formatRigAgentCitationBlock(groundedProposal.context)
+  }`;
+};
 
 interface OpyTranscriptDiagnostics {
   readonly body: string;
@@ -554,6 +557,7 @@ interface OpyCopilotPanelProps {
   readonly onTaskHistoryFiltersBySessionChange: (filtersBySession: OpyTaskHistoryFiltersBySession) => void;
   readonly onApplyBoardAction: (action: OpyBoardAction) => Promise<string>;
   readonly onOpenAiSettings: () => void;
+  readonly onHide: () => void;
   readonly onChromeStatusChange: (status: OpyWidgetChromeStatus) => void;
   readonly chromeSectionRequest: OpyWidgetChromeFocusRequest | null;
 }
@@ -1294,219 +1298,6 @@ const buildBootstrapMessage = (hasOpenAiApiKey: boolean): { role: OpyChatRole; c
 const sortSessionsByRecency = (sessions: readonly OpyChatSession[]): OpyChatSession[] =>
   [...sessions].sort((left, right) => right.updatedAt - left.updatedAt);
 
-const C4_NODE_TYPE_ALIASES: Record<string, OpyC4NodeType> = {
-  person: "person",
-  people: "person",
-  system: "system",
-  external: "externalSystem",
-  "external-system": "externalSystem",
-  externalsystem: "externalSystem",
-  container: "container",
-  component: "component",
-};
-
-const OPY_SLASH_COMMAND_OPTIONS: ReadonlyArray<OpySlashCommandOption> = [
-  {
-    id: "diagram",
-    command: "/diagram",
-    template: "/diagram ",
-    example: "/diagram <architecture description>",
-    detail: "Generate a grounded C4 proposal from natural language.",
-    keywords: ["diagram", "plan", "proposal", "architecture"],
-  },
-  {
-    id: "review",
-    command: "/review",
-    template: "/review ",
-    example: "/review [focus area]",
-    detail: "Run a read-only architecture review of the active C4 board.",
-    keywords: ["review", "diagnostics", "risk", "focus"],
-  },
-  {
-    id: "add-person",
-    command: "/add",
-    template: "/add person ",
-    example: "/add person <label>",
-    detail: "Add a person node directly on the current C4 board.",
-    keywords: ["add", "person", "actor", "node"],
-  },
-  {
-    id: "add-system",
-    command: "/add",
-    template: "/add system ",
-    example: "/add system <label>",
-    detail: "Add a system node directly on the current C4 board.",
-    keywords: ["add", "system", "service", "node"],
-  },
-  {
-    id: "add-external",
-    command: "/add",
-    template: "/add external ",
-    example: "/add external <label>",
-    detail: "Add an external system node directly on the current C4 board.",
-    keywords: ["add", "external", "system", "node"],
-  },
-  {
-    id: "add-container",
-    command: "/add",
-    template: "/add container ",
-    example: "/add container <label>",
-    detail: "Add a container node directly on the current C4 board.",
-    keywords: ["add", "container", "runtime", "node"],
-  },
-  {
-    id: "add-component",
-    command: "/add",
-    template: "/add component ",
-    example: "/add component <label>",
-    detail: "Add a component node directly on the current C4 board.",
-    keywords: ["add", "component", "module", "node"],
-  },
-];
-
-type ParseOpyCommandResult =
-  | { readonly type: "none" }
-  | { readonly type: "invalid"; readonly reason: string }
-  | { readonly type: "action"; readonly action: Extract<OpyBoardAction, { kind: "add-node" }> }
-  | { readonly type: "diagram-proposal"; readonly proposal: OpyDiagramProposalCommand }
-  | { readonly type: "board-review"; readonly review: OpyBoardReviewCommand };
-
-const normalizeNodeTypeToken = (value: string): string => value.trim().toLowerCase();
-
-const stripWrappingQuotes = (value: string): string => {
-  const trimmed = value.trim();
-  if (trimmed.length >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
-    return trimmed.slice(1, -1).trim();
-  }
-  return trimmed;
-};
-
-const parseOpyCommand = (value: string): ParseOpyCommandResult => {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("/")) {
-    return { type: "none" };
-  }
-
-  const normalized = trimmed.toLowerCase();
-  if (normalized === "/review" || normalized.startsWith("/review ")) {
-    const focus = stripWrappingQuotes(trimmed.slice("/review".length).trim());
-    return {
-      type: "board-review",
-      review: {
-        kind: "review-c4-board",
-        focus: focus.length > 0 ? focus : null,
-      },
-    };
-  }
-
-  if (normalized.startsWith("/diagram ") || normalized.startsWith("/plan ")) {
-    const payload = normalized.startsWith("/diagram ")
-      ? trimmed.slice("/diagram".length).trim()
-      : trimmed.slice("/plan".length).trim();
-
-    if (payload.length === 0) {
-      return {
-        type: "invalid",
-        reason: "MISSING DESCRIPTION. USE /diagram <architecture description>.",
-      };
-    }
-
-    return {
-      type: "diagram-proposal",
-      proposal: {
-        kind: "plan-c4-diagram",
-        description: payload,
-      },
-    };
-  }
-
-  if (!normalized.startsWith("/add ")) {
-    return {
-      type: "invalid",
-      reason:
-        "UNKNOWN COMMAND. USE /add <person|system|external|container|component> <label>, /diagram <description>, OR /review [focus].",
-    };
-  }
-
-  const payload = trimmed.slice(5).trim();
-  const separator = payload.indexOf(" ");
-  if (separator < 1) {
-    return {
-      type: "invalid",
-      reason: "MISSING LABEL. USE /add <type> <label>.",
-    };
-  }
-
-  const rawType = payload.slice(0, separator);
-  const rawLabel = payload.slice(separator + 1);
-  const nodeType = C4_NODE_TYPE_ALIASES[normalizeNodeTypeToken(rawType)];
-  if (!nodeType) {
-    return {
-      type: "invalid",
-      reason: `UNSUPPORTED TYPE '${rawType}'. USE person/system/external/container/component.`,
-    };
-  }
-
-  const label = stripWrappingQuotes(rawLabel);
-  if (label.length === 0) {
-    return {
-      type: "invalid",
-      reason: "LABEL CANNOT BE EMPTY.",
-    };
-  }
-
-  return {
-    type: "action",
-    action: {
-      kind: "add-node",
-      nodeType,
-      label,
-    },
-  };
-};
-
-const detectCommandToken = (value: string): "/add" | "/diagram" | "/review" | null => {
-  const trimmed = value.trimStart().toLowerCase();
-  if (trimmed.startsWith("/add")) {
-    return "/add";
-  }
-  if (trimmed.startsWith("/review")) {
-    return "/review";
-  }
-  if (trimmed.startsWith("/diagram") || trimmed.startsWith("/plan")) {
-    return "/diagram";
-  }
-  return null;
-};
-
-const getSlashCommandQuery = (value: string): string | null => {
-  const trimmed = value.trimStart().toLowerCase();
-  if (!trimmed.startsWith("/")) {
-    return null;
-  }
-  return trimmed.slice(1).trim();
-};
-
-const getSlashCommandSuggestions = (value: string): ReadonlyArray<OpySlashCommandOption> => {
-  const query = getSlashCommandQuery(value);
-  if (query === null) {
-    return [];
-  }
-
-  if (query.length === 0) {
-    return OPY_SLASH_COMMAND_OPTIONS;
-  }
-
-  return OPY_SLASH_COMMAND_OPTIONS.filter((option) => {
-    const haystacks = [
-      option.command.slice(1),
-      option.example.slice(1).toLowerCase(),
-      ...option.keywords,
-    ];
-    return haystacks.some((candidate) => candidate.startsWith(query) || candidate.includes(query));
-  });
-};
-
 const formatReviewFocus = (focus: string | null | undefined): string =>
   focus && focus.trim().length > 0 ? focus.trim() : "WHOLE BOARD";
 
@@ -1791,6 +1582,7 @@ export function OpyCopilotPanel({
   onTaskHistoryFiltersBySessionChange,
   onApplyBoardAction,
   onOpenAiSettings,
+  onHide,
   onChromeStatusChange,
   chromeSectionRequest,
 }: OpyCopilotPanelProps) {
@@ -2130,6 +1922,32 @@ export function OpyCopilotPanel({
       decidedAtMs: activeDiagramProposal.decidedAtMs,
     };
   }, [activeDiagramProposal]);
+  const activeProposalLifecycleRequest = useMemo(() => {
+    if (!activeDiagramProposal) {
+      return null;
+    }
+
+    const activeRequest = agentLifecycle.activeRequest;
+    if (
+      !activeRequest
+      || activeRequest.replay.kind !== "apply-proposal"
+      || activeRequest.replay.sessionId !== selectedSessionId
+      || activeRequest.replay.proposalRespondedAtMs !== activeDiagramProposal.proposal.respondedAtMs
+    ) {
+      return null;
+    }
+
+    return activeRequest;
+  }, [
+    activeDiagramProposal,
+    agentLifecycle.activeRequest,
+    selectedSessionId,
+  ]);
+  const isActiveProposalAwaitingConfirmation = activeProposalLifecycleRequest !== null
+    && agentLifecycle.stage === "awaiting_confirmation"
+    && pendingLifecycleRequest?.id === activeProposalLifecycleRequest.id;
+  const isActiveProposalApplying = activeProposalLifecycleRequest !== null
+    && (agentLifecycle.stage === "applying" || agentLifecycle.stage === "verifying");
   const hasOpenAiRuntimeProvider = aiSettings.provider === "openai";
   const rigExecutionPolicyViolation = useMemo(
     () =>
@@ -3476,7 +3294,7 @@ export function OpyCopilotPanel({
     ): Promise<T> => {
       const startedAt = Date.now();
       const toolCallId = createMessageId();
-      await persistOpyToolCall({
+      const persistedStartedToolCall = await persistOpyToolCall({
         id: toolCallId,
         taskId: input.taskId,
         sessionId: input.sessionId,
@@ -3489,6 +3307,7 @@ export function OpyCopilotPanel({
         outputSummary: null,
         errorSummary: null,
       });
+      const persistedToolCallId = persistedStartedToolCall?.id ?? null;
 
       try {
         const result = await input.execute();
@@ -3506,19 +3325,21 @@ export function OpyCopilotPanel({
           inputSummary: input.inputSummary,
           outputSummary,
         });
-        await persistOpyToolCall({
-          id: toolCallId,
-          taskId: input.taskId,
-          sessionId: input.sessionId,
-          name: input.name,
-          status: "completed",
-          startedAt,
-          updatedAt: completedAt,
-          completedAt,
-          inputSummary: input.inputSummary,
-          outputSummary,
-          errorSummary: null,
-        });
+        if (persistedToolCallId) {
+          await persistOpyToolCall({
+            id: persistedToolCallId,
+            taskId: input.taskId,
+            sessionId: input.sessionId,
+            name: input.name,
+            status: "completed",
+            startedAt,
+            updatedAt: completedAt,
+            completedAt,
+            inputSummary: input.inputSummary,
+            outputSummary,
+            errorSummary: null,
+          });
+        }
 
         const artifacts = input.artifacts?.(result, toolCallId) ?? [];
         const anomalyArtifacts = toolTraceAssessment.severity === "none"
@@ -3538,7 +3359,7 @@ export function OpyCopilotPanel({
           await createOpyTaskArtifact({
             taskId: input.taskId,
             sessionId: input.sessionId,
-            toolCallId,
+            toolCallId: persistedToolCallId,
             draft: artifact,
           });
         }
@@ -3551,19 +3372,21 @@ export function OpyCopilotPanel({
           : input.lifecycleRequestId
           ? resolveLifecycleRequestStaleError(input.lifecycleRequestId)
           : null;
-        await persistOpyToolCall({
-          id: toolCallId,
-          taskId: input.taskId,
-          sessionId: input.sessionId,
-          name: input.name,
-          status: staleLifecycleError?.terminalStatus === "cancelled" ? "cancelled" : "failed",
-          startedAt,
-          updatedAt: completedAt,
-          completedAt,
-          inputSummary: input.inputSummary,
-          outputSummary: null,
-          errorSummary: staleLifecycleError?.message ?? toErrorMessage(error),
-        });
+        if (persistedToolCallId) {
+          await persistOpyToolCall({
+            id: persistedToolCallId,
+            taskId: input.taskId,
+            sessionId: input.sessionId,
+            name: input.name,
+            status: staleLifecycleError?.terminalStatus === "cancelled" ? "cancelled" : "failed",
+            startedAt,
+            updatedAt: completedAt,
+            completedAt,
+            inputSummary: input.inputSummary,
+            outputSummary: null,
+            errorSummary: staleLifecycleError?.message ?? toErrorMessage(error),
+          });
+        }
         throw error;
       }
     },
@@ -4680,11 +4503,52 @@ export function OpyCopilotPanel({
       readonly execute: () => Promise<string>;
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
+      const sessionId = input.lifecycleRequest.confirmation?.sessionId ?? input.lifecycleRequest.replay.sessionId;
+      const persistActionTaskEnvelope = async (stage: Extract<OpyAgentTaskStage, "awaiting_confirmation" | "applying">) => {
+        const now = Date.now();
+        const existingTask = agentTaskIndexRef.current[input.lifecycleRequest.id];
+        await persistOpyTask({
+          id: input.lifecycleRequest.id,
+          sessionId,
+          request: input.lifecycleRequest,
+          stage,
+          status: "running",
+          createdAt: existingTask?.createdAt ?? now,
+          updatedAt: now,
+          completedAt: null,
+          errorSummary: null,
+        });
+      };
+
       if (input.manageLifecycleStart !== false) {
         if (agentLifecycle.resumableTaskId && agentLifecycle.resumableTaskId !== input.lifecycleRequest.id) {
           await dismissResumableLifecycleTask("SUPERSEDED BY NEW TASK.");
         }
         agentLifecycle.startActionRequest(input.lifecycleRequest);
+      }
+
+      try {
+        await persistActionTaskEnvelope(
+          input.lifecycleRequest.requiresConfirmation && input.skipConfirmation !== true
+            ? "awaiting_confirmation"
+            : "applying",
+        );
+      } catch (error) {
+        const envelopeError = makeAgentRuntimeError({
+          message: `Action task envelope persistence failed: ${toErrorMessage(error)}`,
+          stage: "persist",
+          recommendedAction: "Check local database runtime status and retry.",
+          cause: error,
+        });
+        const formattedError = formatAgentError(envelopeError);
+        setRuntimeError(formattedError);
+        await appendAndPersistMessage(
+          sessionId,
+          "system",
+          summarizeAgentError(envelopeError),
+        );
+        agentLifecycle.failActiveRequest(formattedError, "awaiting_confirmation", "persist");
+        return null;
       }
 
       if (input.lifecycleRequest.requiresConfirmation && input.skipConfirmation !== true) {
@@ -4693,10 +4557,29 @@ export function OpyCopilotPanel({
 
       if (input.lifecycleRequest.requiresConfirmation) {
         agentLifecycle.confirmActiveRequest();
+        try {
+          await persistActionTaskEnvelope("applying");
+        } catch (error) {
+          const envelopeError = makeAgentRuntimeError({
+            message: `Action apply envelope persistence failed: ${toErrorMessage(error)}`,
+            stage: "persist",
+            recommendedAction: "Check local database runtime status and retry.",
+            cause: error,
+          });
+          const formattedError = formatAgentError(envelopeError);
+          setRuntimeError(formattedError);
+          await appendAndPersistMessage(
+            sessionId,
+            "system",
+            summarizeAgentError(envelopeError),
+          );
+          agentLifecycle.failActiveRequest(formattedError, "applying", "persist");
+          return null;
+        }
       }
       return executeAppliedBoardAction({
         taskId: input.lifecycleRequest.id,
-        sessionId: input.lifecycleRequest.confirmation?.sessionId ?? input.lifecycleRequest.replay.sessionId,
+        sessionId,
         requestKind: input.lifecycleRequest.kind,
         ...(input.initialResumeBoundaryOutcome
           ? { initialResumeBoundaryOutcome: input.initialResumeBoundaryOutcome }
@@ -4708,7 +4591,13 @@ export function OpyCopilotPanel({
           : {}),
       });
     },
-    [agentLifecycle, dismissResumableLifecycleTask, executeAppliedBoardAction],
+    [
+      agentLifecycle,
+      appendAndPersistMessage,
+      dismissResumableLifecycleTask,
+      executeAppliedBoardAction,
+      persistOpyTask,
+    ],
   );
 
   const createAndActivateSession = useCallback(async (): Promise<void> => {
@@ -5187,10 +5076,7 @@ export function OpyCopilotPanel({
               context,
             } satisfies OpyGroundedDiagramProposal;
           },
-          assistantMessage: (groundedProposal) =>
-            `PROPOSAL READY:: ${groundedProposal.proposal.summary}\nNO BOARD CHANGES WERE APPLIED.\n${
-              formatRigAgentCitationBlock(groundedProposal.context)
-            }`,
+          assistantMessage: formatDiagramProposalAssistantMessage,
           failurePrefix: "DIAGRAM PROPOSAL FAILED",
           artifactsForResult: (groundedProposal) => {
             const plannerPlanArtifact = createPlannerPlanArtifactDraftFromGroundedProposal(
@@ -5820,8 +5706,40 @@ export function OpyCopilotPanel({
       );
 
       try {
+        const now = Date.now();
+        const existingTask = agentTaskIndexRef.current[lifecycleRequest.id];
+        await persistOpyTask({
+          id: lifecycleRequest.id,
+          sessionId: input.descriptor.sessionId,
+          request: lifecycleRequest,
+          stage: lifecycleRequest.requiresConfirmation && input.skipConfirmation !== true
+            ? "awaiting_confirmation"
+            : "applying",
+          status: "running",
+          createdAt: existingTask?.createdAt ?? now,
+          updatedAt: now,
+          completedAt: null,
+          errorSummary: null,
+        });
+      } catch (error) {
+        const envelopeError = makeAgentRuntimeError({
+          message: `Action task envelope persistence failed: ${toErrorMessage(error)}`,
+          stage: "persist",
+          recommendedAction: "Check local database runtime status and retry.",
+          cause: error,
+        });
+        const formattedError = formatAgentError(envelopeError);
+        setRuntimeError(formattedError);
+        await appendAndPersistMessage(
+          input.descriptor.sessionId,
+          "system",
+          summarizeAgentError(envelopeError),
+        );
+        return null;
+      }
+
+      try {
         await trackOpyTaskToolCall({
-          lifecycleRequestId: lifecycleRequest.id,
           taskId: lifecycleRequest.id,
           sessionId: input.descriptor.sessionId,
           name: "resolve_action",
@@ -6184,10 +6102,7 @@ export function OpyCopilotPanel({
                 context,
               } satisfies OpyGroundedDiagramProposal;
             },
-            assistantMessage: (groundedProposal) =>
-              `PROPOSAL READY:: ${groundedProposal.proposal.summary}\nNO BOARD CHANGES WERE APPLIED.\n${
-                formatRigAgentCitationBlock(groundedProposal.context)
-              }`,
+            assistantMessage: formatDiagramProposalAssistantMessage,
             failurePrefix: "DIAGRAM PROPOSAL FAILED",
             artifactsForResult: (groundedProposal) => {
               const plannerPlanArtifact = createPlannerPlanArtifactDraftFromGroundedProposal(
@@ -6565,9 +6480,32 @@ export function OpyCopilotPanel({
     ? `LAST::${RUN_STATUS_LABEL[latestRun.status]}::${RUN_STAGE_LABEL[latestRun.stage]}`
     : "RUN::IDLE";
   const actionModeText = actionBoundaryText;
-  const activeCommandToken = detectCommandToken(draftPrompt);
+  const activeCommandToken = detectOpyCommandToken(draftPrompt);
   const slashCommandSuggestions = useMemo(
-    () => getSlashCommandSuggestions(draftPrompt),
+    () => getOpySlashCommandSuggestions(draftPrompt),
+    [draftPrompt],
+  );
+  const slashCommandSuggestionStates = useMemo(
+    () =>
+      slashCommandSuggestions.map((option) => ({
+        option,
+        availability: getOpyCommandAvailabilityForOption(option, {
+          actionMode,
+          domain,
+        }),
+      })),
+    [actionMode, domain, slashCommandSuggestions],
+  );
+  const draftCommandFeedback = useMemo(
+    () =>
+      getOpyDraftCommandFeedback(draftPrompt, {
+        actionMode,
+        domain,
+      }),
+    [actionMode, domain, draftPrompt],
+  );
+  const structuredCommandDraft = useMemo(
+    () => getOpyStructuredCommandDraft(draftPrompt),
     [draftPrompt],
   );
   const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
@@ -6583,6 +6521,10 @@ export function OpyCopilotPanel({
       textarea.focus();
       textarea.setSelectionRange(option.template.length, option.template.length);
     });
+  }, []);
+  const applyStructuredCommandDraft = useCallback((nextDraft: OpyStructuredCommandDraft) => {
+    setDraftPrompt(formatOpyStructuredCommandDraft(nextDraft));
+    setActiveSlashCommandIndex(0);
   }, []);
   const commitViewportSections = useCallback(
     (
@@ -7162,13 +7104,24 @@ export function OpyCopilotPanel({
   return (
     <div className={styles.opyCopilotShell}>
       <div className={styles.opyCopilotViewport}>
-        <div className={styles.ownershipLensStats}>
-          <span>MODE::ASSIST</span>
-          <span>{statusText}</span>
-          <span>{runText}</span>
-          <span>{actionModeText}</span>
-          <span>{`SESSIONS::${sessions.length}`}</span>
-          <span>{`ACTIVE::${selectedSession ? "ONLINE" : "NONE"}`}</span>
+        <div className={styles.opyCopilotTopline}>
+          <div className={styles.ownershipLensStats}>
+            <span>MODE::ASSIST</span>
+            <span>{statusText}</span>
+            <span>{runText}</span>
+            <span>{actionModeText}</span>
+            <span>{`SESSIONS::${sessions.length}`}</span>
+            <span>{`ACTIVE::${selectedSession ? "ONLINE" : "NONE"}`}</span>
+          </div>
+          <button
+            type="button"
+            className={styles.opyCopilotHideButton}
+            onClick={onHide}
+            aria-label="Hide OPY pane"
+            title="Hide OPY pane"
+          >
+            HIDE
+          </button>
         </div>
         {runtimeError && (
           <div className={styles.opyCopilotActions}>
@@ -7194,15 +7147,11 @@ export function OpyCopilotPanel({
           isUnseen: viewportSectionsUnseen.control,
           children: (
             <>
-              <p className={styles.ownershipLensHint}>
-                {"COMMAND::/add person|system|external|container|component <label>"}
-              </p>
-              <p className={styles.ownershipLensHint}>
-                {"COMMAND::/diagram <architecture description>"}
-              </p>
-              <p className={styles.ownershipLensHint}>
-                {"COMMAND::/review [focus area]"}
-              </p>
+              {OPY_COMMAND_CONTROL_HINTS.map((hint) => (
+                <p key={hint} className={styles.ownershipLensHint}>
+                  {`COMMAND::${hint}`}
+                </p>
+              ))}
               <p className={styles.ownershipLensHint}>
                 {`BOARD::${currentBoardLabel}`}
               </p>
@@ -8811,23 +8760,65 @@ export function OpyCopilotPanel({
                             type="button"
                             className={styles.toolbarButton}
                             onClick={() => {
-                              void handleApplyActiveProposal();
+                              if (isActiveProposalAwaitingConfirmation) {
+                                void handleConfirmPendingLifecycleAction();
+                                return;
+                              }
+
+                              if (activePlanDecision.status === "approved") {
+                                void handleApplyActiveProposal();
+                                return;
+                              }
+
+                              void handleSetPlanDecision("approved");
                             }}
-                            disabled={isRunning
+                            disabled={(isRunning && !isActiveProposalAwaitingConfirmation)
                               || !activeProposalSummary.canApply
                               || !activeProposalSummary.hasChanges
-                              || !activeMutationPlan.canApprove
-                              || activePlanDecision.status !== "approved"}
+                              || !activeMutationPlan.canApprove}
                           >
-                            {isRunning ? "APPLYING..." : "APPLY PROPOSAL"}
+                            {isActiveProposalAwaitingConfirmation
+                              ? "CONFIRM ACTION"
+                              : isActiveProposalApplying
+                              ? "APPLYING..."
+                              : isRunning
+                              ? activePlanDecision.status === "approved" ? "BUSY..." : "APPROVING..."
+                              : activePlanDecision.status === "approved" ? "APPLY PROPOSAL" : "APPROVE PLAN"}
                           </button>
+                          {isActiveProposalAwaitingConfirmation && (
+                            <button
+                              type="button"
+                              className={styles.ownershipLensToggleButton}
+                              onClick={handleCancelPendingLifecycleAction}
+                            >
+                              CANCEL ACTION
+                            </button>
+                          )}
                           <p className={styles.opyCopilotProposalHint}>
-                            {activePlanDecision.status === "approved"
+                            {isActiveProposalAwaitingConfirmation
+                              ? "CONFIRMATION REQUIRED:: REVIEW THE CONFIRM LINES BELOW, THEN CONFIRM OR CANCEL."
+                              : isActiveProposalApplying
+                              ? "APPLY IN PROGRESS:: BOARD MUTATION AND SAVE BOUNDARY ACTIVE."
+                              : activePlanDecision.status === "approved"
                               ? "APPROVED PLAN READY FOR CONFIRMED APPLY."
                               : activePlanDecision.status === "rejected"
-                              ? "PLAN REJECTED. APPROVE A NEW OR UPDATED PLAN TO APPLY."
-                              : "APPROVE PLAN TO ENABLE APPLY."}
+                              ? "PLAN REJECTED. APPROVE THIS PLAN AGAIN OR GENERATE A NEW ONE."
+                              : "NEXT STEP::APPROVE PLAN. APPLY WILL REMAIN CONFIRMATION-GATED."}
                           </p>
+                          {isActiveProposalAwaitingConfirmation && pendingLifecycleConfirmation && (
+                            <div className={styles.opyCopilotPlanActionList}>
+                              {pendingLifecycleConfirmation.confirmationLines
+                                .filter((line) => line.trim().length > 0)
+                                .map((line, index) => (
+                                  <article
+                                    key={`${activeProposalLifecycleRequest?.id ?? "active-proposal"}-inline-confirm-${index}`}
+                                    className={styles.opyCopilotProposalItem}
+                                  >
+                                    <p>{line}</p>
+                                  </article>
+                                ))}
+                            </div>
+                          )}
                         </>
                       )
                       : (
@@ -8914,18 +8905,121 @@ export function OpyCopilotPanel({
               autoFocus={false}
             />
           </CopilotChatConfigurationProvider>
-          {slashCommandSuggestions.length > 0 && (
+          {structuredCommandDraft && (
+            <div
+              className={styles.opyCopilotCommandDraftRail}
+              data-tone={draftCommandFeedback?.tone ?? "ready"}
+            >
+              <div className={styles.opyCopilotCommandDraftHeader}>
+                <span className={styles.opyCopilotCommandDraftTitle}>
+                  {`ARGUMENT RAIL::${structuredCommandDraft.token}`}
+                </span>
+                {draftCommandFeedback && (
+                  <span
+                    className={styles.opyCopilotCommandDraftStatus}
+                    data-tone={draftCommandFeedback.tone}
+                  >
+                    {draftCommandFeedback.label}
+                  </span>
+                )}
+              </div>
+              <p className={styles.opyCopilotCommandDraftHint}>
+                STRUCTURED CONTROLS STAY SYNCED WITH THE RAW SLASH PROMPT ABOVE.
+              </p>
+              {structuredCommandDraft.kind === "action" && (
+                <div className={styles.opyCopilotCommandDraftFields}>
+                  <div className={`${styles.formGroup} ${styles.inputGrow}`}>
+                    <label className={styles.label} htmlFor="opy-command-add-type">
+                      Node Type
+                    </label>
+                    <TacticalSelect
+                      id="opy-command-add-type"
+                      ariaLabel="Select OPY add-node type"
+                      value={structuredCommandDraft.typeToken}
+                      options={structuredCommandDraft.typeOptions}
+                      onChange={(nextType) => {
+                        applyStructuredCommandDraft({
+                          ...structuredCommandDraft,
+                          typeToken: nextType,
+                        });
+                      }}
+                    />
+                  </div>
+                  <div className={`${styles.formGroup} ${styles.inputGrow}`}>
+                    <label className={styles.label} htmlFor="opy-command-add-label">
+                      Label
+                    </label>
+                    <input
+                      id="opy-command-add-label"
+                      type="text"
+                      className={`${styles.input} ${styles.inputGrow}`}
+                      value={structuredCommandDraft.label}
+                      placeholder="PAYMENTS API"
+                      disabled={structuredCommandDraft.typeToken.trim().length === 0}
+                      onChange={(event) => {
+                        applyStructuredCommandDraft({
+                          ...structuredCommandDraft,
+                          label: event.target.value,
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              {structuredCommandDraft.kind === "diagram-proposal" && (
+                <div className={styles.formGroup}>
+                  <label className={styles.label} htmlFor="opy-command-diagram-description">
+                    Architecture Description
+                  </label>
+                  <textarea
+                    id="opy-command-diagram-description"
+                    className={`${styles.textarea} ${styles.opyCopilotCommandDraftTextarea}`}
+                    value={structuredCommandDraft.description}
+                    placeholder="EVENT-DRIVEN PAYMENTS FLOW USING SERVICE BUS AND COSMOS DB"
+                    onChange={(event) => {
+                      applyStructuredCommandDraft({
+                        ...structuredCommandDraft,
+                        description: event.target.value,
+                      });
+                    }}
+                  />
+                </div>
+              )}
+              {structuredCommandDraft.kind === "board-review" && (
+                <div className={styles.formGroup}>
+                  <label className={styles.label} htmlFor="opy-command-review-focus">
+                    Focus Area
+                  </label>
+                  <input
+                    id="opy-command-review-focus"
+                    type="text"
+                    className={`${styles.input} ${styles.inputGrow}`}
+                    value={structuredCommandDraft.focus}
+                    placeholder="OPTIONAL NODE, BOUNDARY, OR HOTSPOT"
+                    onChange={(event) => {
+                      applyStructuredCommandDraft({
+                        ...structuredCommandDraft,
+                        focus: event.target.value,
+                      });
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          {(slashCommandSuggestionStates.length > 0 || draftCommandFeedback) && (
             <div
               className={styles.opyCopilotCommandPalette}
               role="listbox"
               aria-label="OPY slash command suggestions"
             >
-              {slashCommandSuggestions.map((option, index) => (
+              {slashCommandSuggestionStates.map(({ option, availability }, index) => (
                 <button
                   key={option.id}
                   type="button"
                   className={styles.opyCopilotCommandSuggestion}
                   data-active={index === activeSlashCommandIndex ? "true" : "false"}
+                  data-tone={availability.tone}
                   onMouseDown={(event) => {
                     event.preventDefault();
                   }}
@@ -8936,14 +9030,38 @@ export function OpyCopilotPanel({
                     applySlashCommandSuggestion(option);
                   }}
                 >
-                  <span className={styles.opyCopilotCommandSuggestionLabel}>
-                    {`COMMAND::${option.example}`}
+                  <div className={styles.opyCopilotCommandSuggestionMeta}>
+                    <span className={styles.opyCopilotCommandSuggestionLabel}>
+                      {`COMMAND::${option.example}`}
+                    </span>
+                    <span
+                      className={styles.opyCopilotCommandSuggestionStatus}
+                      data-tone={availability.tone}
+                    >
+                      {availability.label}
+                    </span>
+                  </div>
+                  <span className={styles.opyCopilotCommandSuggestionSummary}>
+                    {option.detail}
                   </span>
                   <span className={styles.opyCopilotCommandSuggestionDetail}>
-                    {option.detail}
+                    {availability.detail}
                   </span>
                 </button>
               ))}
+              {draftCommandFeedback && (
+                <div
+                  className={styles.opyCopilotCommandFeedback}
+                  data-tone={draftCommandFeedback.tone}
+                >
+                  <span className={styles.opyCopilotCommandFeedbackLabel}>
+                    {draftCommandFeedback.label}
+                  </span>
+                  <span className={styles.opyCopilotCommandFeedbackDetail}>
+                    {draftCommandFeedback.detail}
+                  </span>
+                </div>
+              )}
               <p className={styles.opyCopilotCommandSuggestionHint}>
                 TAB TO ACCEPT · ARROWS TO PREVIEW
               </p>

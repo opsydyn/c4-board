@@ -2653,6 +2653,7 @@ export function C4CanvasContainer() {
             onOpenAiSettings={() => {
               void navigateWithSave("/settings");
             }}
+            onHide={toggleOpyCopilot}
             onChromeStatusChange={(nextStatus) => {
               setOpyChromeStatus((current) =>
                 areOpyWidgetChromeStatusesEqual(current, nextStatus) ? current : nextStatus

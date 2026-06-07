@@ -521,6 +521,25 @@ export const ownershipLensStats = style({
   fontSize: theme.typography.size.xs,
 });
 
+export const opyCopilotTopline = style({
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  alignItems: "start",
+  gap: theme.spacing["2"],
+});
+
+export const opyCopilotHideButton = style([
+  ownershipLensToggleButton,
+  {
+    minWidth: "4.5rem",
+    padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+    borderColor: theme.color.border.secondary,
+    backgroundColor: "rgba(6, 13, 10, 0.92)",
+    color: theme.color.foreground.secondary,
+    fontSize: theme.typography.size.xs,
+  },
+]);
+
 export const opyCopilotShell = style({
   display: "grid",
   gridTemplateRows: "minmax(0, 1fr) clamp(14rem, 36%, 24rem)",
@@ -1298,6 +1317,84 @@ export const opyCopilotCommandPalette = style({
   padding: theme.spacing["2"],
 });
 
+export const opyCopilotCommandDraftRail = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(9, 15, 12, 0.95)",
+  padding: theme.spacing["2"],
+  selectors: {
+    '&[data-tone="ready"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.ready} 36%, ${theme.color.border.secondary})`,
+    },
+    '&[data-tone="caution"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.caution} 42%, ${theme.color.border.secondary})`,
+    },
+    '&[data-tone="critical"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.critical} 48%, ${theme.color.border.secondary})`,
+    },
+  },
+});
+
+export const opyCopilotCommandDraftHeader = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  flexWrap: "wrap",
+});
+
+export const opyCopilotCommandDraftTitle = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.interactive.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.bold,
+});
+
+export const opyCopilotCommandDraftStatus = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  color: theme.color.foreground.secondary,
+  selectors: {
+    '&[data-tone="ready"]': {
+      color: theme.color.status.ready,
+    },
+    '&[data-tone="caution"]': {
+      color: theme.color.status.caution,
+    },
+    '&[data-tone="critical"]': {
+      color: theme.color.status.critical,
+    },
+  },
+});
+
+export const opyCopilotCommandDraftHint = style({
+  margin: 0,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.relaxed,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const opyCopilotCommandDraftFields = style({
+  display: "flex",
+  gap: theme.spacing["2"],
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+});
+
+export const opyCopilotCommandDraftTextarea = style({
+  minHeight: "88px",
+});
+
 export const opyCopilotCommandSuggestion = style({
   display: "flex",
   flexDirection: "column",
@@ -1323,7 +1420,24 @@ export const opyCopilotCommandSuggestion = style({
       boxShadow: theme.effect.glow.sm,
       backgroundColor: "rgba(17, 28, 22, 0.98)",
     },
+    "&[data-tone=\"ready\"]": {
+      borderColor: `color-mix(in srgb, ${theme.color.status.ready} 38%, ${theme.color.border.secondary})`,
+    },
+    "&[data-tone=\"caution\"]": {
+      borderColor: `color-mix(in srgb, ${theme.color.status.caution} 42%, ${theme.color.border.secondary})`,
+    },
+    "&[data-tone=\"critical\"]": {
+      borderColor: `color-mix(in srgb, ${theme.color.status.critical} 52%, ${theme.color.border.secondary})`,
+    },
   },
+});
+
+export const opyCopilotCommandSuggestionMeta = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  width: "100%",
 });
 
 export const opyCopilotCommandSuggestionLabel = style({
@@ -1335,7 +1449,73 @@ export const opyCopilotCommandSuggestionLabel = style({
   fontWeight: theme.typography.weight.bold,
 });
 
+export const opyCopilotCommandSuggestionStatus = style({
+  flexShrink: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  color: theme.color.foreground.secondary,
+  selectors: {
+    '&[data-tone="ready"]': {
+      color: theme.color.status.ready,
+    },
+    '&[data-tone="caution"]': {
+      color: theme.color.status.caution,
+    },
+    '&[data-tone="critical"]': {
+      color: theme.color.status.critical,
+    },
+  },
+});
+
+export const opyCopilotCommandSuggestionSummary = style({
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.relaxed,
+});
+
 export const opyCopilotCommandSuggestionDetail = style({
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.relaxed,
+});
+
+export const opyCopilotCommandFeedback = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(11, 18, 14, 0.94)",
+  padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  selectors: {
+    '&[data-tone="ready"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.ready} 44%, ${theme.color.border.secondary})`,
+    },
+    '&[data-tone="caution"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.caution} 48%, ${theme.color.border.secondary})`,
+      backgroundColor: `color-mix(in srgb, ${theme.color.status.caution} 10%, rgba(11, 18, 14, 0.94))`,
+    },
+    '&[data-tone="critical"]': {
+      borderColor: `color-mix(in srgb, ${theme.color.status.critical} 56%, ${theme.color.border.secondary})`,
+      backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} 10%, rgba(11, 18, 14, 0.94))`,
+    },
+  },
+});
+
+export const opyCopilotCommandFeedbackLabel = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.bold,
+  color: theme.color.foreground.primary,
+});
+
+export const opyCopilotCommandFeedbackDetail = style({
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,

@@ -1,7 +1,13 @@
 import { CloudIcon, GearSixIcon, RobotIcon, UsersFourIcon } from "@phosphor-icons/react";
 import { animated, useTransition } from "@react-spring/web";
-import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
-import { type Position, Rnd, type RndDragCallback, type RndResizeCallback } from "react-rnd";
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Position,
+  Rnd,
+  type RndDragCallback,
+  type RndResizeCallback,
+  type RndResizeStartCallback,
+} from "react-rnd";
 import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import type {
   OpyWidgetLayout,
@@ -430,6 +436,40 @@ export function OpyFloatingWidget({
   const widgetRootRef = useRef<HTMLDivElement | null>(null);
   const boundsMeasureFrameRef = useRef<number | null>(null);
   const boundsMeasureTimeoutRef = useRef<number | null>(null);
+  const interactionLockDepthRef = useRef(0);
+
+  const clearTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+    selection.removeAllRanges();
+  }, []);
+
+  const setInteractionSelectionLock = useCallback((locked: boolean) => {
+    document.documentElement.classList.toggle(styles.widgetInteractionLock, locked);
+    document.body.classList.toggle(styles.widgetInteractionLock, locked);
+    if (locked) {
+      clearTextSelection();
+    }
+  }, [clearTextSelection]);
+
+  const beginInteractionSelectionLock = useCallback(() => {
+    interactionLockDepthRef.current += 1;
+    if (interactionLockDepthRef.current === 1) {
+      setInteractionSelectionLock(true);
+    }
+  }, [setInteractionSelectionLock]);
+
+  const endInteractionSelectionLock = useCallback(() => {
+    if (interactionLockDepthRef.current === 0) {
+      return;
+    }
+    interactionLockDepthRef.current -= 1;
+    if (interactionLockDepthRef.current === 0) {
+      setInteractionSelectionLock(false);
+    }
+  }, [setInteractionSelectionLock]);
 
   useEffect(() => {
     setLiveLayout(layout);
@@ -442,6 +482,14 @@ export function OpyFloatingWidget({
   useEffect(() => {
     setLivePresence(presence);
   }, [presence]);
+
+  useEffect(
+    () => () => {
+      interactionLockDepthRef.current = 0;
+      setInteractionSelectionLock(false);
+    },
+    [setInteractionSelectionLock],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -986,6 +1034,10 @@ export function OpyFloatingWidget({
     }
   };
 
+  const handleDragStart: RndDragCallback = () => {
+    beginInteractionSelectionLock();
+  };
+
   const handleDrag: RndDragCallback = (_event, data) => {
     setLiveLayout((current) => ({
       ...current,
@@ -997,6 +1049,7 @@ export function OpyFloatingWidget({
   };
 
   const handleDragStop: RndDragCallback = (_event, data) => {
+    endInteractionSelectionLock();
     const nextSnapTarget = getNearestSnapTarget(
       { x: data.x, y: data.y },
       {
@@ -1023,7 +1076,11 @@ export function OpyFloatingWidget({
       snapTarget: nextSnapTarget,
       x: 0,
       y: 0,
-    });
+      });
+  };
+
+  const handleResizeStart: RndResizeStartCallback = () => {
+    beginInteractionSelectionLock();
   };
 
   const handleResize: RndResizeCallback = (_event, _direction, elementRef, _delta, position) => {
@@ -1037,6 +1094,7 @@ export function OpyFloatingWidget({
   };
 
   const handleResizeStop: RndResizeCallback = (_event, _direction, elementRef, _delta, position) => {
+    endInteractionSelectionLock();
     commitWidgetState({
       ...resolvedLayout,
       placement: currentSnapTarget === "center" ? "centered" : "custom",
@@ -1178,8 +1236,10 @@ export function OpyFloatingWidget({
               dragHandleClassName={styles.widgetHandle}
               dragGrid={DRAG_GRID}
               cancel={"button, input, textarea, select, [role=\"button\"], [role=\"menu\"], [data-opy-stop-drag=\"true\"], [data-opy-stop-drag=\"true\"] *"}
+              onDragStart={handleDragStart}
               onDrag={handleDrag}
               onDragStop={handleDragStop}
+              onResizeStart={handleResizeStart}
               onResize={handleResize}
               onResizeStop={handleResizeStop}
               resizeHandleStyles={resizeHandleStyles}

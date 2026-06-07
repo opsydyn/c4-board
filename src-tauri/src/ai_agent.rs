@@ -558,6 +558,8 @@ When current-board context shows an existing node already fits the request, pref
 Use the warnings field for ambiguity, assumptions, guessed boundaries, or unresolved relationships.
 Do not describe implementation code, database tables, deployment YAML, or anything outside C4 concepts.
 Node keys must be unique kebab-case identifiers.
+Define each node key once, then reuse that exact key in every edge.
+Never invent a new source or target key inside an edge that is not present in the node list.
 Every edge must reference valid node keys and include a concise relationship label.
 Prefer 2 to 8 nodes unless the operator explicitly asks for more detail.
 Treat this as preview mode only. No board mutation is being applied."
@@ -854,6 +856,34 @@ fn execute_rig_read_tool(input: RigReadToolRequest) -> Result<RigReadToolRespons
     }
 }
 
+fn normalize_proposal_key(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+
+    for character in value.trim().chars() {
+        if character.is_alphanumeric() {
+            for lowered in character.to_lowercase() {
+                normalized.push(lowered);
+            }
+            last_was_separator = false;
+            continue;
+        }
+
+        if normalized.is_empty() || last_was_separator {
+            continue;
+        }
+
+        normalized.push('-');
+        last_was_separator = true;
+    }
+
+    while normalized.ends_with('-') {
+        normalized.pop();
+    }
+
+    normalized
+}
+
 fn validate_c4_diagram_plan(proposal: &RigC4DiagramProposalPayload) -> Result<(), String> {
     if proposal.summary.trim().is_empty() {
         return Err("Proposal summary cannot be empty.".to_string());
@@ -882,6 +912,12 @@ fn validate_c4_diagram_plan(proposal: &RigC4DiagramProposalPayload) -> Result<()
             return Err("Proposal contains a node with an empty key.".to_string());
         }
 
+        if key != normalize_proposal_key(key) {
+            return Err(format!(
+                "Proposal node key '{key}' is not normalized kebab-case."
+            ));
+        }
+
         if !node_keys.insert(key.to_string()) {
             return Err(format!("Proposal contains duplicate node key '{key}'."));
         }
@@ -900,6 +936,18 @@ fn validate_c4_diagram_plan(proposal: &RigC4DiagramProposalPayload) -> Result<()
             return Err(
                 "Proposal contains an edge with an empty source or target key.".to_string(),
             );
+        }
+
+        if source_key != normalize_proposal_key(source_key) {
+            return Err(format!(
+                "Proposal edge source key '{source_key}' is not normalized kebab-case."
+            ));
+        }
+
+        if target_key != normalize_proposal_key(target_key) {
+            return Err(format!(
+                "Proposal edge target key '{target_key}' is not normalized kebab-case."
+            ));
         }
 
         if !node_keys.contains(source_key) {
@@ -944,7 +992,7 @@ fn sanitize_c4_diagram_plan(
 
     let mut node_keys = HashSet::new();
     for node in &mut proposal.nodes {
-        node.key = node.key.trim().to_string();
+        node.key = normalize_proposal_key(&node.key);
         node.label = node.label.trim().to_string();
         node.description = normalize_optional_content(node.description.take());
 
@@ -966,8 +1014,8 @@ fn sanitize_c4_diagram_plan(
 
     let mut filtered_edges = Vec::with_capacity(proposal.edges.len());
     for mut edge in proposal.edges.into_iter() {
-        edge.source_key = edge.source_key.trim().to_string();
-        edge.target_key = edge.target_key.trim().to_string();
+        edge.source_key = normalize_proposal_key(&edge.source_key);
+        edge.target_key = normalize_proposal_key(&edge.target_key);
         edge.label = edge.label.trim().to_string();
 
         if edge.source_key.is_empty() || edge.target_key.is_empty() || edge.label.is_empty() {
@@ -1478,6 +1526,7 @@ mod tests {
     #[test]
     fn sanitize_c4_diagram_plan_drops_edges_with_unknown_node_keys() {
         let mut proposal = create_proposal();
+        let missing_key = normalize_proposal_key("component-5iaM5sXpKx1t");
         proposal.edges.push(RigC4ProposalEdge {
             source_key: "component-5iaM5sXpKx1t".to_string(),
             target_key: "event-bus".to_string(),
@@ -1491,7 +1540,24 @@ mod tests {
         assert!(sanitized
             .warnings
             .iter()
-            .any(|warning| warning.contains("component-5iaM5sXpKx1t")));
+            .any(|warning| warning.contains(&missing_key)));
+        validate_c4_diagram_plan(&sanitized).expect("sanitized proposal should validate");
+    }
+
+    #[test]
+    fn sanitize_c4_diagram_plan_normalizes_node_and_edge_keys() {
+        let mut proposal = create_proposal();
+        proposal.nodes[0].key = "Publisher Service".to_string();
+        proposal.nodes[1].key = "EVENT_BUS".to_string();
+        proposal.edges[0].source_key = "publisher_service".to_string();
+        proposal.edges[0].target_key = "event bus".to_string();
+
+        let sanitized = sanitize_c4_diagram_plan(proposal).expect("proposal should sanitize");
+
+        assert_eq!(sanitized.nodes[0].key, "publisher-service");
+        assert_eq!(sanitized.nodes[1].key, "event-bus");
+        assert_eq!(sanitized.edges[0].source_key, "publisher-service");
+        assert_eq!(sanitized.edges[0].target_key, "event-bus");
         validate_c4_diagram_plan(&sanitized).expect("sanitized proposal should validate");
     }
 

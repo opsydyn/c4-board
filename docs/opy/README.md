@@ -153,6 +153,9 @@ OPY currently supports three primary operator command patterns.
 - typing `/` in the composer opens the available command list in place
 - palette entries currently cover `/diagram`, `/review`, and typed `/add` scaffolds for every supported C4 node kind
 - selecting an entry inserts the command template directly into the composer so the operator can fill the remaining argument inline
+- parser rules, aliases, palette entries, and control-field command hints now resolve from one typed OPY command registry instead of parallel panel-local definitions
+- the palette now surfaces live action-mode availability and inline missing-argument guidance before submit
+- active slash commands now expose a structured argument rail so `/add`, `/diagram`, and `/review` can be edited through typed fields while staying synced to the raw prompt string
 
 ### `/add <type> <label>`
 
@@ -174,8 +177,9 @@ Also accepts:
 
 Planner recovery behavior:
 
+- proposal node and edge keys are normalized to stable kebab-case before validation so casing or punctuation drift from the model does not break edge resolution
 - invalid or dangling proposal edges are dropped during sanitization instead of aborting the whole proposal
-- OPY records a warning when an edge references a node key that is not present in the final proposal payload
+- OPY records a warning when an edge references a node key that is not present in the final proposal payload, and now surfaces those warnings in the proposal-ready transcript
 
 ### `/review [focus]`
 
@@ -442,6 +446,7 @@ Board changes flow through the existing save boundary rather than bypassing boar
 ### Apply Safety
 
 - apply only in `apply-with-confirmation`
+- proposal CTA advances through the safe sequence: `APPROVE PLAN` while pending or rejected, `APPLY PROPOSAL` after approval, then inline `CONFIRM ACTION` or `CANCEL ACTION` while the lifecycle waits for operator confirmation
 - apply blocked when plan is unresolved or ambiguous
 - save failure keeps board recoverable
 
@@ -533,10 +538,11 @@ The current happy path is:
 2. Ask a question, run `/review`, or request `/diagram`.
 3. Inspect diagnostics, citations, and confidence.
 4. For proposals, inspect the typed plan and blockers.
-5. Approve the plan.
-6. Apply in `apply-with-confirmation`.
-7. Inspect the restore diff preview if you need to recover.
-8. Use checkpoint history to restore deliberately through the save boundary.
+5. Approve the plan with `APPROVE PLAN`.
+6. Request the approved apply with `APPLY PROPOSAL` in `apply-with-confirmation`.
+7. Confirm or cancel the pending board mutation from the proposal card.
+8. Inspect the restore diff preview if you need to recover.
+9. Use checkpoint history to restore deliberately through the save boundary.
 
 ## Key Files
 
