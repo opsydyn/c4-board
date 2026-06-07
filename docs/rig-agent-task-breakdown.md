@@ -379,9 +379,10 @@
 
 ## 8) Next Recommended Execution Order
 
-1. `RIG-501` Policy Controls in Settings.
-2. `RIG-502` Evaluation Harness.
-3. `RIG-503` Rollout Controls + Audit View.
+1. Introduce explicit role separation in Rig flows (`planner`, `analyst`, `executor`, `verifier`) and require a persisted planner artifact before any executable mutation batch.
+2. Add per-stage iteration budgets, hard timeouts, and surfaced cancellation/retry semantics so long-running agent chains cannot loop or stall silently.
+3. Build the local retrieval index over board/session/governance artifacts with domain/scope filters and redaction-aware prompt assembly.
+4. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
 
 ## 9) Definition of Ready / Done
 
