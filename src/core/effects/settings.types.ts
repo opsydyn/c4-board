@@ -198,9 +198,9 @@ export type OpyWidgetSnapTarget = Schema.Schema.Type<typeof OpyWidgetSnapTargetS
 const OpyWidgetWidthSchema = pipe(
   Schema.Number,
   Schema.filter(
-    (value) => Number.isFinite(value) && value >= 360 && value <= 960,
+    (value) => Number.isFinite(value) && value >= 360 && value <= 4_096,
     {
-      message: () => "opyWidgetLayout.width must be between 360 and 960",
+      message: () => "opyWidgetLayout.width must be between 360 and 4096",
     },
   ),
 );
@@ -208,9 +208,9 @@ const OpyWidgetWidthSchema = pipe(
 const OpyWidgetHeightSchema = pipe(
   Schema.Number,
   Schema.filter(
-    (value) => Number.isFinite(value) && value >= 420 && value <= 960,
+    (value) => Number.isFinite(value) && value >= 420 && value <= 4_096,
     {
-      message: () => "opyWidgetLayout.height must be between 420 and 960",
+      message: () => "opyWidgetLayout.height must be between 420 and 4096",
     },
   ),
 );

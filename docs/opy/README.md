@@ -45,6 +45,8 @@ OPY is no longer tied to the fixed sidebar. It runs as a floating widget with pe
 - draggable within the canvas region
 - resizable
 - snap-aware
+- opens a slash-command palette inside the composer when the operator types `/`
+- lets the operator preview command scaffolds with arrow keys and accept them with `Tab` or click
 - keeps the transcript and composer pinned in a dedicated bottom conversation strip
 - scrolls diagnostics, plan cards, and session controls independently above the composer
 - collapses upper control and diagnostics sections by default so conversation stays primary
@@ -111,6 +113,7 @@ Each OPY session persists:
 - rename sessions
 - resume prior sessions
 - restore the latest transcript and artifact context
+- persist the OPY task envelope before tool-call trace rows so lifecycle telemetry, artifact writes, and resume state stay foreign-key safe even when no preflight artifacts exist
 - app relaunch and session hydration now restore stale run/task/tool-call state through one persistence transaction before the surface rehydrates
 - hydrate each board/session identity once even while task maps and lifecycle state are being restored
 - guard automatic resumable-task activation so one interrupted task cannot fan out duplicate lineage loads
@@ -145,6 +148,12 @@ OPY is policy-gated by action mode.
 
 OPY currently supports three primary operator command patterns.
 
+### Slash Command Palette
+
+- typing `/` in the composer opens the available command list in place
+- palette entries currently cover `/diagram`, `/review`, and typed `/add` scaffolds for every supported C4 node kind
+- selecting an entry inserts the command template directly into the composer so the operator can fill the remaining argument inline
+
 ### `/add <type> <label>`
 
 Direct board add action for:
@@ -162,6 +171,11 @@ Request a C4 change proposal from natural language.
 Also accepts:
 
 - `/plan <description>`
+
+Planner recovery behavior:
+
+- invalid or dangling proposal edges are dropped during sanitization instead of aborting the whole proposal
+- OPY records a warning when an edge references a node key that is not present in the final proposal payload
 
 ### `/review [focus]`
 
@@ -242,6 +256,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 
 - read flows (`chat`, `review`, `proposal`) move through context, planning, proposal persistence, and verification explicitly
 - confirmed board mutations (`/add`, proposal apply, checkpoint rollback) move through confirmation, apply, and verify explicitly
+- planner and verifier trace rows now persist under the expanded OPY trace schema used by session resume, artifact history, and audit reporting
 - mutation-side action descriptors and blockers are now resolved through a shared `opy-action.runtime.ts` boundary before the panel executes them
 - confirmation for board mutations now happens inside OPY itself rather than through blocking browser dialogs
 - the confirmation card is now derived from the active machine request metadata rather than separate panel-local state
@@ -258,6 +273,12 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - switching or creating sessions resets the active OPY lifecycle boundary so stale flow state does not bleed across sessions
 - the runtime error strip can retry the last OPY flow after a terminal failure
 - late async completions from cancelled, timed-out, failed, or superseded flows are now dropped instead of mutating the active OPY state after the machine has moved on
+
+## Settings Compatibility
+
+- OPY widget layout hydration normalizes legacy presence aliases such as `launcher` and `surface` into the current `orb` and `field` model
+- oversized persisted OPY widget dimensions are clamped back into schema-safe bounds before settings validation runs
+- OPY-specific viewport sections, task-history filters, and per-mode layouts are normalized before decode so legacy or partially-written dev state does not fail closed during boot
 - active OPY lifecycle requests are now persisted as resumable agent tasks, interrupted on session hydration/switch/create, and surfaced back to the operator as `RESUME TASK` / `DISMISS TASK` controls
 
 ## Resumable Task Lifecycle

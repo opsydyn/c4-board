@@ -13,6 +13,184 @@ const LEGACY_APP_SETTING_KEY_ALIASES: Readonly<Record<string, AppSettingKey>> = 
   saveChimeEnabled: "saveVolEnabled",
 };
 
+const OPY_WIDGET_WIDTH_MIN = 360;
+const OPY_WIDGET_WIDTH_MAX = 4_096;
+const OPY_WIDGET_HEIGHT_MIN = 420;
+const OPY_WIDGET_HEIGHT_MAX = 4_096;
+const OPY_WIDGET_COORDINATE_MIN = 0;
+const OPY_WIDGET_COORDINATE_MAX = 16_384;
+
+const OPY_WIDGET_PRESENCE_ALIASES = {
+  launcher: "orb",
+  surface: "field",
+} as const satisfies Partial<Record<string, AppSettings["opyWidgetPresence"]>>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const clampNumber = (value: number, min: number, max: number): number =>
+  Math.min(Math.max(value, min), max);
+
+const normalizeEnumValue = <TValue extends string>(
+  value: unknown,
+  allowed: ReadonlyArray<TValue>,
+  fallback: TValue,
+  aliases?: Partial<Record<string, TValue>>,
+): TValue => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  if ((allowed as ReadonlyArray<string>).includes(value)) {
+    return value as TValue;
+  }
+
+  return aliases?.[value] ?? fallback;
+};
+
+const normalizeBooleanValue = (value: unknown, fallback: boolean): boolean =>
+  typeof value === "boolean" ? value : fallback;
+
+const normalizeNumberValue = (
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return clampNumber(value, min, max);
+};
+
+const normalizeOpyWidgetLayout = (
+  value: unknown,
+  fallback: AppSettings["opyWidgetLayout"],
+): AppSettings["opyWidgetLayout"] => {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    placement: normalizeEnumValue(record.placement, ["centered", "custom"], fallback.placement),
+    mode: normalizeEnumValue(record.mode, ["field", "mission"], fallback.mode),
+    snapTarget: normalizeEnumValue(
+      record.snapTarget,
+      ["free", "center", "left-rail", "right-rail", "bottom-dock"],
+      fallback.snapTarget,
+    ),
+    x: normalizeNumberValue(
+      record.x,
+      fallback.x,
+      OPY_WIDGET_COORDINATE_MIN,
+      OPY_WIDGET_COORDINATE_MAX,
+    ),
+    y: normalizeNumberValue(
+      record.y,
+      fallback.y,
+      OPY_WIDGET_COORDINATE_MIN,
+      OPY_WIDGET_COORDINATE_MAX,
+    ),
+    width: normalizeNumberValue(
+      record.width,
+      fallback.width,
+      OPY_WIDGET_WIDTH_MIN,
+      OPY_WIDGET_WIDTH_MAX,
+    ),
+    height: normalizeNumberValue(
+      record.height,
+      fallback.height,
+      OPY_WIDGET_HEIGHT_MIN,
+      OPY_WIDGET_HEIGHT_MAX,
+    ),
+  };
+};
+
+const normalizeOpyWidgetModeLayouts = (
+  value: unknown,
+  fallback: AppSettings["opyWidgetModeLayouts"],
+): AppSettings["opyWidgetModeLayouts"] => {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    field: normalizeOpyWidgetLayout(record.field, fallback.field),
+    mission: normalizeOpyWidgetLayout(record.mission, fallback.mission),
+  };
+};
+
+const normalizeOpyViewportSections = (
+  value: unknown,
+  fallback: AppSettings["opyViewportSections"],
+): AppSettings["opyViewportSections"] => {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    control: normalizeBooleanValue(record.control, fallback.control),
+    diagnostics: normalizeBooleanValue(record.diagnostics, fallback.diagnostics),
+    checkpoints: normalizeBooleanValue(record.checkpoints, fallback.checkpoints),
+    review: normalizeBooleanValue(record.review, fallback.review),
+    proposal: normalizeBooleanValue(record.proposal, fallback.proposal),
+  };
+};
+
+const normalizeOpyTaskHistoryFiltersBySession = (
+  value: unknown,
+): AppSettings["opyTaskHistoryFiltersBySession"] => {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([sessionId, rawFilter]) => {
+      const record = isRecord(rawFilter) ? rawFilter : {};
+      const normalizedChain = typeof record.chain === "string" && record.chain.trim().length > 0
+        ? record.chain.trim()
+        : "all";
+
+      return [
+        sessionId,
+        {
+          chain: normalizedChain,
+          boundary: normalizeEnumValue(
+            record.boundary,
+            ["all", "reused-current-session", "reused-inherited-session", "reran", "pending"],
+            "all",
+          ),
+          chainScope: normalizeEnumValue(
+            record.chainScope,
+            ["all", "active", "interrupted", "cross-session", "low-efficiency"],
+            "all",
+          ),
+        },
+      ];
+    }),
+  );
+};
+
+export const normalizeAppSettingsCandidate = (
+  input: Partial<Record<AppSettingKey, unknown>>,
+  fallback: AppSettings,
+): Partial<Record<AppSettingKey, unknown>> => ({
+  ...input,
+  opyWidgetPresence: normalizeEnumValue(
+    input.opyWidgetPresence,
+    ["orb", "field", "mission"],
+    fallback.opyWidgetPresence,
+    OPY_WIDGET_PRESENCE_ALIASES,
+  ),
+  opyWidgetLayout: normalizeOpyWidgetLayout(input.opyWidgetLayout, fallback.opyWidgetLayout),
+  opyWidgetModeLayouts: normalizeOpyWidgetModeLayouts(
+    input.opyWidgetModeLayouts,
+    fallback.opyWidgetModeLayouts,
+  ),
+  opyViewportSections: normalizeOpyViewportSections(
+    input.opyViewportSections,
+    fallback.opyViewportSections,
+  ),
+  opyTaskHistoryFiltersBySession: normalizeOpyTaskHistoryFiltersBySession(
+    input.opyTaskHistoryFiltersBySession,
+  ),
+});
+
 const SELECT_APP_SETTINGS_SQL = `
 	SELECT key, value, updated_at
 	FROM app_settings
@@ -124,10 +302,10 @@ const hydrateSettings = (
       overrides[key] = parsedValue;
     }
 
-    return yield* decodeSettings({
+    return yield* decodeSettings(normalizeAppSettingsCandidate({
       ...DEFAULT_APP_SETTINGS,
       ...overrides,
-    });
+    }, DEFAULT_APP_SETTINGS));
   });
 
 const serializeSettingValue = (
@@ -177,10 +355,10 @@ export const patchSettings = (
 ): Effect.Effect<AppSettings, DatabaseError | SettingsValidationError, DatabaseService> =>
   Effect.gen(function*() {
     const currentSettings = yield* getSettings();
-    const mergedCandidate = {
+    const mergedCandidate = normalizeAppSettingsCandidate({
       ...currentSettings,
       ...patch,
-    };
+    }, currentSettings);
     const nextSettings = yield* decodeSettings(mergedCandidate);
     const changedKeys = APP_SETTING_KEYS.filter(
       (key) => !areSettingValuesEqual(currentSettings[key], nextSettings[key]),

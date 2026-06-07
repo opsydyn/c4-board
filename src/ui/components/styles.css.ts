@@ -1288,6 +1288,69 @@ export const opyCopilotInput = style({
   padding: theme.spacing["2"],
 });
 
+export const opyCopilotCommandPalette = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  clipPath: theme.clipPath.base,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(9, 15, 12, 0.95)",
+  padding: theme.spacing["2"],
+});
+
+export const opyCopilotCommandSuggestion = style({
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: theme.spacing["1"],
+  transition: theme.transition.base,
+  width: "100%",
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "rgba(11, 18, 14, 0.94)",
+  cursor: "pointer",
+  padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  textAlign: "left",
+
+  selectors: {
+    "&:hover": {
+      borderColor: theme.color.border.focus,
+      boxShadow: theme.effect.glow.sm,
+      backgroundColor: "rgba(14, 24, 18, 0.98)",
+    },
+    "&[data-active=\"true\"]": {
+      borderColor: theme.color.border.focus,
+      boxShadow: theme.effect.glow.sm,
+      backgroundColor: "rgba(17, 28, 22, 0.98)",
+    },
+  },
+});
+
+export const opyCopilotCommandSuggestionLabel = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.interactive.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.bold,
+});
+
+export const opyCopilotCommandSuggestionDetail = style({
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  lineHeight: theme.typography.lineHeight.relaxed,
+});
+
+export const opyCopilotCommandSuggestionHint = style({
+  margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
 globalStyle(`${opyCopilotInput} *`, {
   boxSizing: "border-box",
 });

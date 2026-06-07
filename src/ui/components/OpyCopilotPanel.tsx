@@ -181,6 +181,17 @@ interface OpyBoardReviewCommand {
   readonly focus: string | null;
 }
 
+type OpySlashCommandToken = "/add" | "/diagram" | "/review";
+
+interface OpySlashCommandOption {
+  readonly id: string;
+  readonly command: OpySlashCommandToken;
+  readonly template: string;
+  readonly example: string;
+  readonly detail: string;
+  readonly keywords: ReadonlyArray<string>;
+}
+
 interface OpySessionDiagramProposal {
   readonly command: OpyDiagramProposalCommand;
   readonly proposal: RigC4DiagramProposal;
@@ -1294,6 +1305,65 @@ const C4_NODE_TYPE_ALIASES: Record<string, OpyC4NodeType> = {
   component: "component",
 };
 
+const OPY_SLASH_COMMAND_OPTIONS: ReadonlyArray<OpySlashCommandOption> = [
+  {
+    id: "diagram",
+    command: "/diagram",
+    template: "/diagram ",
+    example: "/diagram <architecture description>",
+    detail: "Generate a grounded C4 proposal from natural language.",
+    keywords: ["diagram", "plan", "proposal", "architecture"],
+  },
+  {
+    id: "review",
+    command: "/review",
+    template: "/review ",
+    example: "/review [focus area]",
+    detail: "Run a read-only architecture review of the active C4 board.",
+    keywords: ["review", "diagnostics", "risk", "focus"],
+  },
+  {
+    id: "add-person",
+    command: "/add",
+    template: "/add person ",
+    example: "/add person <label>",
+    detail: "Add a person node directly on the current C4 board.",
+    keywords: ["add", "person", "actor", "node"],
+  },
+  {
+    id: "add-system",
+    command: "/add",
+    template: "/add system ",
+    example: "/add system <label>",
+    detail: "Add a system node directly on the current C4 board.",
+    keywords: ["add", "system", "service", "node"],
+  },
+  {
+    id: "add-external",
+    command: "/add",
+    template: "/add external ",
+    example: "/add external <label>",
+    detail: "Add an external system node directly on the current C4 board.",
+    keywords: ["add", "external", "system", "node"],
+  },
+  {
+    id: "add-container",
+    command: "/add",
+    template: "/add container ",
+    example: "/add container <label>",
+    detail: "Add a container node directly on the current C4 board.",
+    keywords: ["add", "container", "runtime", "node"],
+  },
+  {
+    id: "add-component",
+    command: "/add",
+    template: "/add component ",
+    example: "/add component <label>",
+    detail: "Add a component node directly on the current C4 board.",
+    keywords: ["add", "component", "module", "node"],
+  },
+];
+
 type ParseOpyCommandResult =
   | { readonly type: "none" }
   | { readonly type: "invalid"; readonly reason: string }
@@ -1407,6 +1477,34 @@ const detectCommandToken = (value: string): "/add" | "/diagram" | "/review" | nu
     return "/diagram";
   }
   return null;
+};
+
+const getSlashCommandQuery = (value: string): string | null => {
+  const trimmed = value.trimStart().toLowerCase();
+  if (!trimmed.startsWith("/")) {
+    return null;
+  }
+  return trimmed.slice(1).trim();
+};
+
+const getSlashCommandSuggestions = (value: string): ReadonlyArray<OpySlashCommandOption> => {
+  const query = getSlashCommandQuery(value);
+  if (query === null) {
+    return [];
+  }
+
+  if (query.length === 0) {
+    return OPY_SLASH_COMMAND_OPTIONS;
+  }
+
+  return OPY_SLASH_COMMAND_OPTIONS.filter((option) => {
+    const haystacks = [
+      option.command.slice(1),
+      option.example.slice(1).toLowerCase(),
+      ...option.keywords,
+    ];
+    return haystacks.some((candidate) => candidate.startsWith(query) || candidate.includes(query));
+  });
 };
 
 const formatReviewFocus = (focus: string | null | undefined): string =>
@@ -1793,12 +1891,14 @@ export function OpyCopilotPanel({
   const proposalCardRef = useRef<HTMLElement | null>(null);
   const proposalPlanCardRef = useRef<HTMLElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
   const [viewportSectionsOpen, setViewportSectionsOpen] = useState<OpyViewportSections>(
     viewportSections,
   );
   const [viewportSectionsUnseen, setViewportSectionsUnseen] = useState<OpyViewportSections>(
     EMPTY_VIEWPORT_SECTION_STATE,
   );
+  const [activeSlashCommandIndex, setActiveSlashCommandIndex] = useState(0);
   const buildTelemetryContextForSessionId = useCallback(
     (sessionId: string | null): Omit<OpyAgentTelemetryContext, "requiresConfirmation"> => {
       const latestAnomaly = sessionId ? latestAnomalyBySessionId[sessionId] ?? null : null;
@@ -3911,7 +4011,7 @@ export function OpyCopilotPanel({
         }
         agentLifecycle.startReadRequest(input.lifecycleRequest);
       }
-      if (input.preflightArtifacts && input.preflightArtifacts.length > 0) {
+      try {
         const now = Date.now();
         await persistOpyTask({
           id: input.lifecycleRequest.id,
@@ -3925,7 +4025,7 @@ export function OpyCopilotPanel({
           errorSummary: null,
         });
 
-        for (const artifact of input.preflightArtifacts) {
+        for (const artifact of input.preflightArtifacts ?? []) {
           await createOpyTaskArtifact({
             taskId: input.lifecycleRequest.id,
             sessionId: input.sessionId,
@@ -3933,6 +4033,21 @@ export function OpyCopilotPanel({
             draft: artifact,
           });
         }
+      } catch (error) {
+        const envelopeError = makeAgentRuntimeError({
+          message: `Task envelope persistence failed: ${toErrorMessage(error)}`,
+          stage: "persist",
+          recommendedAction: "Check local database runtime status and retry.",
+          cause: error,
+        });
+        setRuntimeError(formatAgentError(envelopeError));
+        await appendAndPersistMessage(
+          input.sessionId,
+          "system",
+          summarizeAgentError(envelopeError),
+        );
+        agentLifecycle.failActiveRequest(formatAgentError(envelopeError), "contextualizing", "persist");
+        return null;
       }
       let run: OpyAgentRun;
       try {
@@ -6451,8 +6566,24 @@ export function OpyCopilotPanel({
     : "RUN::IDLE";
   const actionModeText = actionBoundaryText;
   const activeCommandToken = detectCommandToken(draftPrompt);
+  const slashCommandSuggestions = useMemo(
+    () => getSlashCommandSuggestions(draftPrompt),
+    [draftPrompt],
+  );
   const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
   const currentBoardLabel = diagramName.trim().length > 0 ? diagramName.trim() : "UNTITLED BOARD";
+  const applySlashCommandSuggestion = useCallback((option: OpySlashCommandOption) => {
+    setDraftPrompt(option.template);
+    setActiveSlashCommandIndex(0);
+    window.requestAnimationFrame(() => {
+      const textarea = composerRef.current?.querySelector("textarea");
+      if (!(textarea instanceof HTMLTextAreaElement)) {
+        return;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(option.template.length, option.template.length);
+    });
+  }, []);
   const commitViewportSections = useCallback(
     (
       updater: OpyViewportSections | ((current: OpyViewportSections) => OpyViewportSections),
@@ -6686,6 +6817,62 @@ export function OpyCopilotPanel({
       focusTarget ? () => resolveFocusedArtifactNode(focusTarget) : undefined,
     );
   }, [commitArtifactFocusTarget, resolveFocusedArtifactNode, resolveTaskHistoryArtifactFocusTarget, revealViewportSection]);
+  useEffect(() => {
+    if (slashCommandSuggestions.length === 0) {
+      if (activeSlashCommandIndex !== 0) {
+        setActiveSlashCommandIndex(0);
+      }
+      return;
+    }
+
+    setActiveSlashCommandIndex((current) =>
+      current < slashCommandSuggestions.length ? current : 0
+    );
+  }, [activeSlashCommandIndex, slashCommandSuggestions]);
+
+  useEffect(() => {
+    if (slashCommandSuggestions.length === 0) {
+      return;
+    }
+
+    const textarea = composerRef.current?.querySelector("textarea");
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveSlashCommandIndex((current) =>
+          current >= slashCommandSuggestions.length - 1 ? 0 : current + 1
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveSlashCommandIndex((current) =>
+          current <= 0 ? slashCommandSuggestions.length - 1 : current - 1
+        );
+        return;
+      }
+
+      if (event.key === "Tab") {
+        const selected = slashCommandSuggestions[activeSlashCommandIndex] ?? slashCommandSuggestions[0];
+        if (!selected) {
+          return;
+        }
+        event.preventDefault();
+        applySlashCommandSuggestion(selected);
+      }
+    };
+
+    textarea.addEventListener("keydown", handleKeyDown);
+    return () => {
+      textarea.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeSlashCommandIndex, applySlashCommandSuggestion, slashCommandSuggestions]);
+
   useEffect(() => {
     if (!chromeSectionRequest) {
       return;
@@ -8712,7 +8899,7 @@ export function OpyCopilotPanel({
               );
             })}
         </div>
-        <div className={styles.opyCopilotComposer}>
+        <div ref={composerRef} className={styles.opyCopilotComposer}>
           <CopilotChatConfigurationProvider
             agentId="opy-9000"
             labels={copilotChatLabels}
@@ -8727,6 +8914,41 @@ export function OpyCopilotPanel({
               autoFocus={false}
             />
           </CopilotChatConfigurationProvider>
+          {slashCommandSuggestions.length > 0 && (
+            <div
+              className={styles.opyCopilotCommandPalette}
+              role="listbox"
+              aria-label="OPY slash command suggestions"
+            >
+              {slashCommandSuggestions.map((option, index) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={styles.opyCopilotCommandSuggestion}
+                  data-active={index === activeSlashCommandIndex ? "true" : "false"}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  onMouseEnter={() => {
+                    setActiveSlashCommandIndex(index);
+                  }}
+                  onClick={() => {
+                    applySlashCommandSuggestion(option);
+                  }}
+                >
+                  <span className={styles.opyCopilotCommandSuggestionLabel}>
+                    {`COMMAND::${option.example}`}
+                  </span>
+                  <span className={styles.opyCopilotCommandSuggestionDetail}>
+                    {option.detail}
+                  </span>
+                </button>
+              ))}
+              <p className={styles.opyCopilotCommandSuggestionHint}>
+                TAB TO ACCEPT · ARROWS TO PREVIEW
+              </p>
+            </div>
+          )}
           <div className={styles.opyCopilotActions}>
             <button
               type="button"

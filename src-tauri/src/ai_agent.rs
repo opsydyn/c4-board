@@ -327,6 +327,17 @@ fn normalize_optional_string(value: Option<String>) -> Option<String> {
     value.and_then(|raw| normalize_secret(&raw))
 }
 
+fn normalize_optional_content(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 fn normalize_temperature(value: Option<f64>) -> Option<f64> {
     match value {
         Some(raw) if raw.is_finite() && (MIN_TEMPERATURE..=MAX_TEMPERATURE).contains(&raw) => {
@@ -913,6 +924,83 @@ fn validate_c4_diagram_plan(proposal: &RigC4DiagramProposalPayload) -> Result<()
     Ok(())
 }
 
+fn sanitize_c4_diagram_plan(
+    mut proposal: RigC4DiagramProposalPayload,
+) -> Result<RigC4DiagramProposalPayload, String> {
+    proposal.summary = proposal.summary.trim().to_string();
+    proposal.rationale = proposal.rationale.trim().to_string();
+    proposal.warnings = proposal
+        .warnings
+        .into_iter()
+        .filter_map(|warning| {
+            let trimmed = warning.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect();
+
+    let mut node_keys = HashSet::new();
+    for node in &mut proposal.nodes {
+        node.key = node.key.trim().to_string();
+        node.label = node.label.trim().to_string();
+        node.description = normalize_optional_content(node.description.take());
+
+        if node.key.is_empty() {
+            return Err("Proposal contains a node with an empty key.".to_string());
+        }
+
+        if node.label.is_empty() {
+            return Err(format!("Proposal node '{}' has an empty label.", node.key));
+        }
+
+        if !node_keys.insert(node.key.clone()) {
+            return Err(format!(
+                "Proposal contains duplicate node key '{}'.",
+                node.key
+            ));
+        }
+    }
+
+    let mut filtered_edges = Vec::with_capacity(proposal.edges.len());
+    for mut edge in proposal.edges.into_iter() {
+        edge.source_key = edge.source_key.trim().to_string();
+        edge.target_key = edge.target_key.trim().to_string();
+        edge.label = edge.label.trim().to_string();
+
+        if edge.source_key.is_empty() || edge.target_key.is_empty() || edge.label.is_empty() {
+            proposal.warnings.push(
+                "Dropped a proposal relationship with an empty source, target, or label."
+                    .to_string(),
+            );
+            continue;
+        }
+
+        if !node_keys.contains(&edge.source_key) {
+            proposal.warnings.push(format!(
+                "Dropped proposal relationship '{} -> {}' because source key '{}' was not returned with the final node set.",
+                edge.source_key, edge.target_key, edge.source_key
+            ));
+            continue;
+        }
+
+        if !node_keys.contains(&edge.target_key) {
+            proposal.warnings.push(format!(
+                "Dropped proposal relationship '{} -> {}' because target key '{}' was not returned with the final node set.",
+                edge.source_key, edge.target_key, edge.target_key
+            ));
+            continue;
+        }
+
+        filtered_edges.push(edge);
+    }
+
+    proposal.edges = filtered_edges;
+    Ok(proposal)
+}
+
 fn validate_review_note(note: &RigC4ReviewNote, field_name: &str) -> Result<(), String> {
     if note.title.trim().is_empty() {
         return Err(format!(
@@ -1240,6 +1328,7 @@ pub async fn rig_agent_plan_c4_diagram(
         .await
         .map_err(|error| format!("rig_agent_plan_c4_diagram failed: {error}"))?;
 
+    let proposal = sanitize_c4_diagram_plan(proposal)?;
     validate_c4_diagram_plan(&proposal)?;
 
     Ok(RigC4DiagramPlanResponse {
@@ -1326,6 +1415,33 @@ pub async fn rig_agent_review_c4_board(
 mod tests {
     use super::*;
 
+    fn create_proposal() -> RigC4DiagramProposalPayload {
+        RigC4DiagramProposalPayload {
+            summary: "Event flow".to_string(),
+            rationale: "Capture the event-driven boundary.".to_string(),
+            warnings: vec![],
+            nodes: vec![
+                RigC4ProposalNode {
+                    key: "publisher".to_string(),
+                    node_type: RigC4ProposalNodeType::System,
+                    label: "Publisher".to_string(),
+                    description: Some("Publishes domain events.".to_string()),
+                },
+                RigC4ProposalNode {
+                    key: "event-bus".to_string(),
+                    node_type: RigC4ProposalNodeType::Container,
+                    label: "Event Bus".to_string(),
+                    description: Some("Azure Event Grid or Service Bus.".to_string()),
+                },
+            ],
+            edges: vec![RigC4ProposalEdge {
+                source_key: "publisher".to_string(),
+                target_key: "event-bus".to_string(),
+                label: "publishes".to_string(),
+            }],
+        }
+    }
+
     fn create_valid_review() -> RigC4BoardReviewPayload {
         RigC4BoardReviewPayload {
             summary: "Clear external actor coverage, but boundary naming is inconsistent."
@@ -1357,6 +1473,50 @@ mod tests {
                 priority: RigC4ReviewPriority::Medium,
             }],
         }
+    }
+
+    #[test]
+    fn sanitize_c4_diagram_plan_drops_edges_with_unknown_node_keys() {
+        let mut proposal = create_proposal();
+        proposal.edges.push(RigC4ProposalEdge {
+            source_key: "component-5iaM5sXpKx1t".to_string(),
+            target_key: "event-bus".to_string(),
+            label: "forwards".to_string(),
+        });
+
+        let sanitized = sanitize_c4_diagram_plan(proposal).expect("proposal should sanitize");
+
+        assert_eq!(sanitized.edges.len(), 1);
+        assert_eq!(sanitized.edges[0].source_key, "publisher");
+        assert!(sanitized
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("component-5iaM5sXpKx1t")));
+        validate_c4_diagram_plan(&sanitized).expect("sanitized proposal should validate");
+    }
+
+    #[test]
+    fn sanitize_c4_diagram_plan_trims_and_drops_empty_edges() {
+        let mut proposal = create_proposal();
+        proposal.summary = "  Event flow  ".to_string();
+        proposal.rationale = "  Capture the event-driven boundary.  ".to_string();
+        proposal.nodes[0].description = Some("   ".to_string());
+        proposal.edges.push(RigC4ProposalEdge {
+            source_key: "publisher".to_string(),
+            target_key: "event-bus".to_string(),
+            label: "   ".to_string(),
+        });
+
+        let sanitized = sanitize_c4_diagram_plan(proposal).expect("proposal should sanitize");
+
+        assert_eq!(sanitized.summary, "Event flow");
+        assert_eq!(sanitized.rationale, "Capture the event-driven boundary.");
+        assert_eq!(sanitized.nodes[0].description, None);
+        assert_eq!(sanitized.edges.len(), 1);
+        assert!(sanitized
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("empty source, target, or label")));
     }
 
     #[test]
