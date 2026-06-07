@@ -94,7 +94,9 @@ import {
   type OpyTaskLineageAttentionSummary,
 } from "../../core/effects/opy-agent.resume";
 import {
+  assessOpyMutationPlanAnomaly,
   assessOpyRequestAnomaly,
+  assessOpyToolTraceAnomaly,
   type OpyAnomalyAssessment,
   type OpyAnomalyRequestKind,
 } from "../../core/effects/opy-anomaly";
@@ -3394,6 +3396,16 @@ export function OpyCopilotPanel({
           throwIfLifecycleRequestInactive(input.lifecycleRequestId);
         }
         const completedAt = Date.now();
+        const outputSummary = input.outputSummary?.(result) ?? null;
+        const toolTraceText = [
+          input.inputSummary ?? "",
+          outputSummary ?? "",
+        ].filter((value) => value.trim().length > 0).join(" :: ");
+        const toolTraceAssessment = assessOpyToolTraceAnomaly({
+          toolName: input.name,
+          inputSummary: input.inputSummary,
+          outputSummary,
+        });
         await persistOpyToolCall({
           id: toolCallId,
           taskId: input.taskId,
@@ -3404,12 +3416,25 @@ export function OpyCopilotPanel({
           updatedAt: completedAt,
           completedAt,
           inputSummary: input.inputSummary,
-          outputSummary: input.outputSummary?.(result) ?? null,
+          outputSummary,
           errorSummary: null,
         });
 
         const artifacts = input.artifacts?.(result, toolCallId) ?? [];
-        for (const artifact of artifacts) {
+        const anomalyArtifacts = toolTraceAssessment.severity === "none"
+          ? []
+          : [createAnomalyAssessmentArtifactDraft({
+            assessment: toolTraceAssessment,
+            requestText: toolTraceText.length > 0 ? toolTraceText : input.name,
+          })];
+        if (toolTraceAssessment.severity !== "none") {
+          recordLatestAnomalyAssessment(
+            input.sessionId,
+            toolTraceAssessment,
+            toolTraceText.length > 0 ? toolTraceText : input.name,
+          );
+        }
+        for (const artifact of mergeArtifactDrafts(artifacts, anomalyArtifacts)) {
           await createOpyTaskArtifact({
             taskId: input.taskId,
             sessionId: input.sessionId,
@@ -3442,7 +3467,13 @@ export function OpyCopilotPanel({
         throw error;
       }
     },
-    [createOpyTaskArtifact, persistOpyToolCall, resolveLifecycleRequestStaleError, throwIfLifecycleRequestInactive],
+    [
+      createOpyTaskArtifact,
+      persistOpyToolCall,
+      recordLatestAnomalyAssessment,
+      resolveLifecycleRequestStaleError,
+      throwIfLifecycleRequestInactive,
+    ],
   );
 
   const interruptActiveLifecycleTask = useCallback(
@@ -5595,6 +5626,72 @@ export function OpyCopilotPanel({
         requiresConfirmation: true,
         replay: input.replay,
       });
+      let actionArtifacts = input.artifacts ?? [];
+      const mutationPlanArtifact = actionArtifacts.find((artifact) =>
+        artifact.kind === "mutation_plan" && isPersistedPlannerPlanArtifactPayload(artifact.payload)
+      );
+      if (
+        mutationPlanArtifact
+        && isPersistedPlannerPlanArtifactPayload(mutationPlanArtifact.payload)
+      ) {
+        const { mutationPlan } = mutationPlanArtifact.payload;
+        const mutationPlanTraceText = [
+          mutationPlan.proposalSummary,
+          mutationPlan.rationale,
+          ...mutationPlan.warnings,
+          ...mutationPlan.issues.map((issue) => `${issue.title} :: ${issue.detail}`),
+          ...mutationPlan.impactedEntities.map((impact) => `${impact.title} :: ${impact.detail}`),
+        ].filter((value) => value.trim().length > 0).join("\n");
+        const mutationPlanAssessment = assessOpyMutationPlanAnomaly({
+          proposalSummary: mutationPlan.proposalSummary,
+          rationale: mutationPlan.rationale,
+          warnings: mutationPlan.warnings,
+          issueDetails: mutationPlan.issues.map((issue) => `${issue.title} :: ${issue.detail}`),
+          impactDetails: mutationPlan.impactedEntities.map((impact) => `${impact.title} :: ${impact.detail}`),
+          totalActions: mutationPlan.plan.totalActions,
+          totalNodesCreated: mutationPlan.plan.totalNodesCreated,
+          totalEdgesCreated: mutationPlan.plan.totalEdgesCreated,
+          highestRisk: mutationPlan.plan.highestRisk,
+        });
+
+        if (mutationPlanAssessment.severity !== "none") {
+          recordLatestAnomalyAssessment(
+            input.descriptor.sessionId,
+            mutationPlanAssessment,
+            mutationPlanTraceText.length > 0 ? mutationPlanTraceText : mutationPlan.proposalSummary,
+          );
+
+          if (mutationPlanAssessment.blocked) {
+            await persistBlockedOpyAnomalyAssessment({
+              request: lifecycleRequest,
+              assessment: mutationPlanAssessment,
+              requestText: mutationPlanTraceText.length > 0
+                ? mutationPlanTraceText
+                : mutationPlan.proposalSummary,
+            });
+            await appendAgentNotice(
+              input.descriptor.sessionId,
+              makeAgentPolicyError({
+                message: mutationPlanAssessment.summary,
+                recommendedAction: mutationPlanAssessment.recommendedAction,
+              }),
+            );
+            return null;
+          }
+
+          actionArtifacts = mergeArtifactDrafts(actionArtifacts, [createAnomalyAssessmentArtifactDraft({
+            assessment: mutationPlanAssessment,
+            requestText: mutationPlanTraceText.length > 0
+              ? mutationPlanTraceText
+              : mutationPlan.proposalSummary,
+          })]);
+          await appendAndPersistMessage(
+            input.descriptor.sessionId,
+            "system",
+            formatAnomalyAssessmentMessage(mutationPlanAssessment),
+          );
+        }
+      }
 
       const actionResumeBoundaryOutcome = markResumeBoundaryReran(
         toPersistedResumeBoundaryOutcome(
@@ -5628,7 +5725,7 @@ export function OpyCopilotPanel({
                 replay: input.replay,
               },
             },
-            ...(input.artifacts ?? []).map((artifact) => ({
+            ...actionArtifacts.map((artifact) => ({
               ...artifact,
             })),
           ],
@@ -5664,9 +5761,14 @@ export function OpyCopilotPanel({
     },
     [
       appendRigKillSwitchNotice,
+      appendAgentNotice,
+      appendAndPersistMessage,
       executeBoardActionLifecycle,
+      formatAnomalyAssessmentMessage,
       onApplyBoardAction,
+      persistBlockedOpyAnomalyAssessment,
       refreshCheckpointsForSession,
+      recordLatestAnomalyAssessment,
       trackOpyTaskToolCall,
     ],
   );

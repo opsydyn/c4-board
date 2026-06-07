@@ -469,17 +469,19 @@
 - Status:
   - added a pure `assessOpyRequestAnomaly` boundary covering instruction override attempts, hidden-prompt extraction, secret/credential exfiltration, policy-bypass language, and broad destructive board mutations
   - chat, review, proposal, and `/add` action flows now run anomaly preflight before execution, with critical findings blocking the request and caution findings continuing under visible warning
+  - completed tool-call traces now emit anomaly artifacts when summaries reference secret material, policy bypass, or broad destructive scope, so suspicious runtime boundaries surface into chrome/task history without waiting for manual inspection
+  - proposal apply now re-screens persisted planner mutation plans for unsafe language plus oversized/high-risk batches before `resolve_action`, blocking suspicious plans before any board mutation is staged
   - anomaly assessments now persist as `anomaly_assessment` OPY task artifacts and surface into widget chrome via `ANOMALY::BLOCKED` / `ANOMALY::CAUTION`
   - lifecycle and terminal-run telemetry now carry anomaly severity/score alongside provider/model, max-token budget, rollout, action-mode, confirmation, and cancellation context for rollout scoring
 - Acceptance:
   - Critical hostile requests do not reach model invocation or action resolution.
-  - Operators can see anomaly outcomes without opening task-history internals.
-  - Focused tests cover safe, caution, and blocked anomaly paths.
+  - Operators can see anomaly outcomes without opening task-history internals, including suspicious tool-trace or mutation-plan surfaces.
+  - Focused tests cover safe, caution, and blocked anomaly paths across request preflight, tool traces, and mutation-plan analysis.
 
 ## 8) Next Recommended Execution Order
 
-1. Deepen anomaly detection from request preflight into tool-trace and mutation-plan pattern analysis before wider mutation rollout.
-2. Add deterministic stage-transition logging per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`) so audit/eval can reason over exact orchestration flow.
+1. Add deterministic stage-transition logging per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`) so audit/eval can reason over exact orchestration flow.
+2. Extend persisted OPY sessions/task rows with first-class lifecycle metadata and snapshot linkage for replay/audit export.
 3. Add deterministic replay/eval utilities and percentile latency dashboards once provider-side usage data is exposed.
 
 ## 9) Definition of Ready / Done

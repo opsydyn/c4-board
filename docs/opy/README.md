@@ -212,12 +212,15 @@ OPY now runs a local anomaly preflight before executable chat, review, proposal,
 - secret or credential exfiltration requests
 - policy/confirmation bypass language
 - broad destructive mutation phrasing on proposal/action requests
+- suspicious tool-trace summaries that reference secrets, confirmation bypass, or broad destructive scope
+- mutation-plan scans for unsafe language and oversized/high-risk apply batches before board mutation
 
 ### Current Behavior
 
 - critical findings fail closed before model invocation or board-action resolution
 - caution findings continue, but OPY records an `anomaly_assessment` artifact and surfaces `ANOMALY::...` chrome warnings
 - anomaly results are persisted into the same OPY task artifact history used for resumes and audit inspection
+- proposal apply now re-screens planner mutation plans for unsafe language and oversized/high-risk batches before `resolve_action` can stage a board mutation
 - Settings audit now aggregates persisted anomaly history, blocked counts, cancellations, failures, decisions, and average terminal-task duration across sessions
 
 ## Orchestration Lifecycle

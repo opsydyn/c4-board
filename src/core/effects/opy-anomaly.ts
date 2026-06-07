@@ -1,10 +1,20 @@
-export type OpyAnomalyRequestKind = "chat" | "review" | "proposal" | "action";
+import type { RigToolRisk } from "./agent-policy";
+
+export type OpyAnomalyRequestKind =
+  | "chat"
+  | "review"
+  | "proposal"
+  | "action"
+  | "tool-trace"
+  | "mutation-plan";
 
 export type OpyAnomalySignalKind =
   | "prompt-injection"
   | "secret-exfiltration"
   | "policy-evasion"
-  | "destructive-mutation";
+  | "destructive-mutation"
+  | "suspicious-tool-trace"
+  | "unsafe-mutation-plan";
 
 export type OpyAnomalySeverity = "none" | "caution" | "critical";
 
@@ -117,6 +127,68 @@ const ALL_PATTERNS: ReadonlyArray<OpyAnomalyPattern> = [
   ...DESTRUCTIVE_MUTATION_PATTERNS,
 ];
 
+const TOOL_TRACE_PATTERNS: ReadonlyArray<OpyAnomalyPattern> = [
+  {
+    kind: "suspicious-tool-trace",
+    severity: "caution",
+    score: 2,
+    evidence: "Tool trace references secret or credential material",
+    recommendedAction: "Inspect the tool boundary. Tool traces should never include secret or credential language.",
+    when: ({ normalizedText }) =>
+      /(api key|secret|token|password|credential|keychain|\.env|environment variable)/i.test(normalizedText),
+  },
+  {
+    kind: "suspicious-tool-trace",
+    severity: "caution",
+    score: 2,
+    evidence: "Tool trace references policy bypass or auto-apply language",
+    recommendedAction: "Inspect the tool boundary. Action traces must preserve confirmation and policy constraints.",
+    when: ({ normalizedText }) =>
+      /(auto-apply|bypass confirmation|skip approval|disable guardrail|ignore policy)/i.test(normalizedText),
+  },
+  {
+    kind: "suspicious-tool-trace",
+    severity: "caution",
+    score: 1,
+    evidence: "Tool trace suggests broad destructive scope",
+    recommendedAction: "Break the operation into smaller bounded actions before continuing.",
+    when: ({ normalizedText }) =>
+      /(delete|remove|wipe|clear|destroy).{0,30}(all|entire|everything|whole board|every node|all nodes)/i
+        .test(normalizedText),
+  },
+];
+
+const MUTATION_PLAN_PATTERNS: ReadonlyArray<OpyAnomalyPattern> = [
+  {
+    kind: "unsafe-mutation-plan",
+    severity: "critical",
+    score: 5,
+    evidence: "Mutation plan references secret or credential extraction",
+    recommendedAction: "Reject the plan and regenerate it with architecture-only language.",
+    when: ({ normalizedText }) =>
+      /(api key|secret|token|password|credential|keychain|\.env|environment variable)/i.test(normalizedText),
+  },
+  {
+    kind: "unsafe-mutation-plan",
+    severity: "critical",
+    score: 4,
+    evidence: "Mutation plan references confirmation or policy bypass",
+    recommendedAction: "Reject the plan and require a policy-compliant proposal.",
+    when: ({ normalizedText }) =>
+      /(auto-apply|bypass confirmation|skip approval|disable guardrail|ignore policy)/i.test(normalizedText),
+  },
+  {
+    kind: "unsafe-mutation-plan",
+    severity: "caution",
+    score: 2,
+    evidence: "Mutation plan suggests broad destructive scope",
+    recommendedAction: "Reduce blast radius and split the proposal into smaller bounded changes.",
+    when: ({ normalizedText }) =>
+      /(delete|remove|wipe|clear|destroy).{0,30}(all|entire|everything|whole board|every node|all nodes)/i
+        .test(normalizedText),
+  },
+];
+
 const dedupeSignals = (
   signals: ReadonlyArray<OpyAnomalySignal>,
 ): ReadonlyArray<OpyAnomalySignal> => {
@@ -162,43 +234,64 @@ const buildRecommendedAction = (
     ?? "Restate the request in plain architecture terms without bypass or secret-extraction language.";
 };
 
-export const assessOpyRequestAnomaly = (input: {
+const createNoAnomalyAssessment = (
+  requestKind: OpyAnomalyRequestKind,
+): OpyAnomalyAssessment => ({
+  requestKind,
+  severity: "none",
+  blocked: false,
+  score: 0,
+  summary: "No anomaly signals detected.",
+  recommendedAction: "Continue with the current OPY request.",
+  signals: [],
+});
+
+const assessPatternSet = (input: {
   readonly requestKind: OpyAnomalyRequestKind;
   readonly text: string;
+  readonly patterns: ReadonlyArray<OpyAnomalyPattern>;
+  readonly extraSignals?: ReadonlyArray<OpyAnomalySignal & { readonly score?: number; readonly recommendedAction?: string }>;
 }): OpyAnomalyAssessment => {
   const normalizedText = input.text.trim().replace(/\s+/g, " ");
   if (normalizedText.length === 0) {
-    return {
-      requestKind: input.requestKind,
-      severity: "none",
-      blocked: false,
-      score: 0,
-      summary: "No anomaly signals detected.",
-      recommendedAction: "Continue with the current OPY request.",
-      signals: [],
-    };
+    return createNoAnomalyAssessment(input.requestKind);
   }
 
-  const matchedPatterns = ALL_PATTERNS.filter((pattern) =>
+  const matchedPatterns = input.patterns.filter((pattern) =>
     pattern.when({
       normalizedText,
       requestKind: input.requestKind,
     })
   );
-  const signals = dedupeSignals(
-    matchedPatterns.map((pattern) => ({
+  const extraSignals = input.extraSignals ?? [];
+  const signals = dedupeSignals([
+    ...matchedPatterns.map((pattern) => ({
       kind: pattern.kind,
       severity: pattern.severity,
       evidence: pattern.evidence,
     })),
-  );
-  const score = matchedPatterns.reduce((sum, pattern) => sum + pattern.score, 0);
-  const blocked = matchedPatterns.some((pattern) => pattern.severity === "critical");
+    ...extraSignals.map((signal) => ({
+      kind: signal.kind,
+      severity: signal.severity,
+      evidence: signal.evidence,
+    })),
+  ]);
+  const score = matchedPatterns.reduce((sum, pattern) => sum + pattern.score, 0)
+    + extraSignals.reduce((sum, signal) => sum + (signal.score ?? 0), 0);
+  const blocked = matchedPatterns.some((pattern) => pattern.severity === "critical")
+    || extraSignals.some((signal) => signal.severity === "critical");
   const severity: OpyAnomalySeverity = blocked
     ? "critical"
-    : matchedPatterns.some((pattern) => pattern.severity === "caution")
+    : [...matchedPatterns, ...extraSignals].some((signal) => signal.severity === "caution")
     ? "caution"
     : "none";
+  const recommendedAction = blocked
+    ? matchedPatterns[0]?.recommendedAction
+      ?? extraSignals[0]?.recommendedAction
+      ?? buildRecommendedAction(severity, matchedPatterns)
+    : matchedPatterns[0]?.recommendedAction
+      ?? extraSignals[0]?.recommendedAction
+      ?? "Continue with the current OPY request.";
 
   return {
     requestKind: input.requestKind,
@@ -206,7 +299,93 @@ export const assessOpyRequestAnomaly = (input: {
     blocked,
     score,
     summary: buildSummary(input.requestKind, severity, signals),
-    recommendedAction: buildRecommendedAction(severity, matchedPatterns),
+    recommendedAction,
     signals,
   };
+};
+
+export const assessOpyRequestAnomaly = (input: {
+  readonly requestKind: OpyAnomalyRequestKind;
+  readonly text: string;
+}): OpyAnomalyAssessment =>
+  assessPatternSet({
+    requestKind: input.requestKind,
+    text: input.text,
+    patterns: ALL_PATTERNS,
+  });
+
+export const assessOpyToolTraceAnomaly = (input: {
+  readonly toolName: string;
+  readonly inputSummary: string | null;
+  readonly outputSummary: string | null;
+  readonly errorSummary?: string | null;
+}): OpyAnomalyAssessment =>
+  assessPatternSet({
+    requestKind: "tool-trace",
+    text: [
+      `tool ${input.toolName}`,
+      input.inputSummary ?? "",
+      input.outputSummary ?? "",
+      input.errorSummary ?? "",
+    ].filter((value) => value.trim().length > 0).join(" · "),
+    patterns: TOOL_TRACE_PATTERNS,
+  });
+
+export const assessOpyMutationPlanAnomaly = (input: {
+  readonly proposalSummary: string;
+  readonly rationale: string;
+  readonly warnings: ReadonlyArray<string>;
+  readonly issueDetails: ReadonlyArray<string>;
+  readonly impactDetails: ReadonlyArray<string>;
+  readonly totalActions: number;
+  readonly totalNodesCreated: number;
+  readonly totalEdgesCreated: number;
+  readonly highestRisk: RigToolRisk;
+}): OpyAnomalyAssessment => {
+  const extraSignals: Array<OpyAnomalySignal & { readonly score?: number; readonly recommendedAction?: string }> = [];
+
+  if (input.totalActions >= 10 || input.totalNodesCreated >= 6 || input.totalEdgesCreated >= 10) {
+    extraSignals.push({
+      kind: "unsafe-mutation-plan",
+      severity: "critical",
+      evidence: "Very large mutation batch planned",
+      score: 4,
+      recommendedAction: "Reject the plan and regenerate it as smaller bounded changes before apply.",
+    });
+  } else if (input.totalActions >= 6 || input.totalNodesCreated >= 4 || input.totalEdgesCreated >= 6) {
+    extraSignals.push({
+      kind: "unsafe-mutation-plan",
+      severity: "caution",
+      evidence: "Large mutation batch planned",
+      score: 2,
+      recommendedAction: "Split the plan into smaller bounded proposals before applying.",
+    });
+  }
+
+  if (input.highestRisk === "high") {
+    extraSignals.push({
+      kind: "unsafe-mutation-plan",
+      severity: "caution",
+      evidence: "Mutation plan includes high-risk actions",
+      score: 2,
+      recommendedAction: "Review the plan carefully and reduce risk before apply.",
+    });
+  }
+
+  return assessPatternSet({
+    requestKind: "mutation-plan",
+    text: [
+      input.proposalSummary,
+      input.rationale,
+      ...input.warnings,
+      ...input.issueDetails,
+      ...input.impactDetails,
+      `actions ${input.totalActions}`,
+      `nodes ${input.totalNodesCreated}`,
+      `edges ${input.totalEdgesCreated}`,
+      `highest risk ${input.highestRisk}`,
+    ].filter((value) => value.trim().length > 0).join(" · "),
+    patterns: MUTATION_PLAN_PATTERNS,
+    extraSignals,
+  });
 };
