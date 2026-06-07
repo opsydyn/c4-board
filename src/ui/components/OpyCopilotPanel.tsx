@@ -1605,6 +1605,26 @@ const getRigExecutionPolicyBlockedNotice = (
   recommendedAction: violation.recommendedAction,
 });
 
+const describeOpyActionBoundaryToken = (
+  actionMode: AiActionMode,
+  rigAgentRollout: EffectiveRigAgentV1RolloutState,
+  executionPolicyViolation: ReturnType<typeof detectRigExecutionPolicyViolation>,
+): string => {
+  if (executionPolicyViolation) {
+    return executionPolicyViolation.kind === "kill-switch"
+      ? "EXECUTION::KILL-SWITCH"
+      : "EXECUTION::BLOCKED";
+  }
+
+  if (rigAgentRollout.mode === "disabled") {
+    return rigAgentRollout.baseMode === "canary"
+      ? "ROLLOUT::OPT-IN-REQUIRED"
+      : "ROLLOUT::DISABLED";
+  }
+
+  return `ACTION::${actionMode.toUpperCase()}`;
+};
+
 const createLifecycleRequest = (
   request: OpyAgentLifecycleRequest,
 ): OpyAgentLifecycleRequest => request;
@@ -1953,6 +1973,10 @@ export function OpyCopilotPanel({
     ),
     [actionMode, agentPolicy, rigAgentRollout, rigExecutionPolicy, rigExecutionPolicyViolation],
   );
+  const actionBoundaryText = useMemo(
+    () => describeOpyActionBoundaryToken(actionMode, rigAgentRollout, rigExecutionPolicyViolation),
+    [actionMode, rigAgentRollout, rigExecutionPolicyViolation],
+  );
   const latestDiagnosticsSurface = useMemo(() => {
     const surfaces: OpyDiagnosticsSurface[] = [];
 
@@ -2015,12 +2039,12 @@ export function OpyCopilotPanel({
     return {
       key: "policy",
       targetSection: "control",
-      label: `POLICY::${actionMode.toUpperCase()}`,
+      label: actionBoundaryText,
       detail: actionModeSurface.label,
       tone: toOpyChromeTone(actionModeSurface.tone),
       isFresh: false,
     };
-  }, [actionMode, actionModeSurface]);
+  }, [actionBoundaryText, actionModeSurface]);
   const reviewChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
     if (!activeBoardReview) {
       return null;
@@ -5982,7 +6006,7 @@ export function OpyCopilotPanel({
     : latestRun
     ? `LAST::${RUN_STATUS_LABEL[latestRun.status]}::${RUN_STAGE_LABEL[latestRun.stage]}`
     : "RUN::IDLE";
-  const actionModeText = `ACTION::${actionMode.toUpperCase()}`;
+  const actionModeText = actionBoundaryText;
   const activeCommandToken = detectCommandToken(draftPrompt);
   const boardContextHints = boardContext?.scopes.slice(0, 3) ?? [];
   const currentBoardLabel = diagramName.trim().length > 0 ? diagramName.trim() : "UNTITLED BOARD";
@@ -6329,7 +6353,7 @@ export function OpyCopilotPanel({
         )
         ?? `BOARD::${currentBoardLabel} · SESSION::${
           selectedSession?.title ?? "NONE"
-        } · ACTION::${actionMode.toUpperCase()}`,
+        } · ${actionBoundaryText}`,
     "CONTROL SURFACE READY.",
   );
   const diagnosticsSectionSummary = latestDiagnosticsSurface
@@ -7402,7 +7426,7 @@ export function OpyCopilotPanel({
                 aria-label="OPY action mode boundary"
               >
                 <div className={styles.opyCopilotProposalHeader}>
-                  <span>{`MODE POLICY::${actionMode.toUpperCase()}`}</span>
+                  <span>{`MODE ${actionBoundaryText}`}</span>
                   <span>{actionModeSurface.label}</span>
                 </div>
                 <p className={styles.opyCopilotProposalHint}>{actionModeSurface.detail}</p>

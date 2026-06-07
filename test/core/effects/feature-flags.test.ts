@@ -1,5 +1,6 @@
 import {
   resolveEffectiveRigAgentV1Rollout,
+  resolveRigAgentV1DefaultFallback,
   resolveRigAgentV1Flag,
   resolveSettingsV1Flag,
 } from "@/core/effects/feature-flags";
@@ -146,6 +147,33 @@ describe("resolveRigAgentV1Flag", () => {
 
     expect(result.mode).toBe("canary");
     expect(result.envKey).toBe("VITE_RIG_AGENT_V1");
+  });
+});
+
+describe("resolveRigAgentV1DefaultFallback", () => {
+  it("enables the default rollout during Vite development mode", () => {
+    expect(
+      resolveRigAgentV1DefaultFallback({
+        DEV: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("enables the default rollout when MODE is development", () => {
+    expect(
+      resolveRigAgentV1DefaultFallback({
+        MODE: "development",
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps the default rollout disabled outside development", () => {
+    expect(
+      resolveRigAgentV1DefaultFallback({
+        DEV: false,
+        MODE: "production",
+      }),
+    ).toBe(false);
   });
 });
 

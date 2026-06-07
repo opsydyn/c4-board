@@ -184,6 +184,35 @@ const readProcessEnv = (): Record<string, string | undefined> | undefined => {
   return env;
 };
 
+export const resolveRigAgentV1DefaultFallback = (
+  importMetaEnv?: Record<string, unknown> | undefined,
+): boolean => {
+  if (!importMetaEnv) {
+    return false;
+  }
+
+  const rawDev = importMetaEnv.DEV;
+  if (typeof rawDev === "boolean") {
+    return rawDev;
+  }
+  if (typeof rawDev === "string") {
+    const parsed = parseBooleanFlag(rawDev);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  const rawMode = importMetaEnv.MODE;
+  if (typeof rawMode === "string") {
+    const normalized = rawMode.trim().toLowerCase();
+    if (normalized === "development" || normalized === "dev") {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const createEnvProvider = (
   keys: readonly string[],
   env: Record<string, unknown>,
@@ -351,7 +380,7 @@ const SETTINGS_V1_FLAG = resolveSettingsV1Flag({
 const RIG_AGENT_V1_FLAG = resolveRigAgentV1Flag({
   importMetaEnv: readImportMetaEnv(),
   processEnv: readProcessEnv(),
-  fallback: false,
+  fallback: resolveRigAgentV1DefaultFallback(readImportMetaEnv()),
 });
 
 export const getSettingsV1Flag = (): SettingsV1FlagState => SETTINGS_V1_FLAG;

@@ -283,12 +283,19 @@ export function SettingsPanel() {
       return "THIS WORKSTATION IS RUNNING THE RIG_AGENT_V1 CANARY. OPY FLOWS FOLLOW THE STORED ACTION MODE, BUT THE ROLLOUT REMAINS STAGED.";
     }
 
+    if (
+      rigAgentEffectiveRollout.baseMode === "enabled"
+      && rigAgentRolloutFlag.source === "default"
+    ) {
+      return "RIG_AGENT_V1 IS ENABLED BY THE LOCAL DEVELOPMENT DEFAULT. SET RIG_AGENT_V1 EXPLICITLY TO STAGE OR DISABLE THE RUNTIME.";
+    }
+
     if (rigAgentEffectiveRollout.baseMode === "enabled") {
       return "RIG_AGENT_V1 IS ENABLED BY ENVIRONMENT ROLLOUT.";
     }
 
     return "RIG_AGENT_V1 IS DISABLED BY DEFAULT ROLLOUT.";
-  }, [rigAgentEffectiveRollout]);
+  }, [rigAgentEffectiveRollout, rigAgentRolloutFlag.source]);
   const rigExecutionPolicyStatusText = useMemo(() => {
     if (!selectedRigExecutionViolation) {
       return "ALLOWED";
