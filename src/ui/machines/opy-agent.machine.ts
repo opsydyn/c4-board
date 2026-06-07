@@ -5,6 +5,13 @@ import type {
   OpyAgentLifecycleRequest,
   OpyAgentLifecycleStatus,
 } from "../../core/effects/opy-agent.lifecycle";
+import {
+  createOpyAgentLifecycleBudgetMessage,
+  createOpyAgentLifecycleTimeoutMessage,
+  getOpyAgentLifecycleFailurePhaseForStage,
+  getOpyAgentLifecycleStageGuardrail,
+  isOpyAgentLifecycleRetryAllowed,
+} from "../../core/effects/opy-agent.orchestration";
 
 export type {
   OpyAgentLifecycleConfirmation,
@@ -19,16 +26,19 @@ export type {
 
 export interface OpyAgentMachineContext {
   readonly activeRequest: OpyAgentLifecycleRequest | null;
+  readonly activeStageEnteredAt: number | null;
   readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastError: string | null;
   readonly lastFailurePhase: OpyAgentLifecycleFailurePhase | null;
   readonly lastFailureStage: OpyAgentLifecycleNonTerminalStage | null;
   readonly lastCompletedAt: number | null;
   readonly lastTerminalStatus: OpyAgentLifecycleStatus;
+  readonly retryCount: number;
   readonly resumableRequest: OpyAgentLifecycleRequest | null;
   readonly resumableStage: OpyAgentLifecycleNonTerminalStage | null;
   readonly resumableTaskId: string | null;
   readonly resumableUpdatedAt: number | null;
+  readonly stageEntryCounts: Readonly<Partial<Record<OpyAgentLifecycleNonTerminalStage, number>>>;
 }
 
 export type OpyAgentMachineEvent =
@@ -63,16 +73,19 @@ const toErrorMessage = (value: string): string => value.trim().replace(/\s+/g, "
 
 const initialContext: OpyAgentMachineContext = {
   activeRequest: null,
+  activeStageEnteredAt: null,
   lastRequest: null,
   lastError: null,
   lastFailurePhase: null,
   lastFailureStage: null,
   lastCompletedAt: null,
   lastTerminalStatus: null,
+  retryCount: 0,
   resumableRequest: null,
   resumableStage: null,
   resumableTaskId: null,
   resumableUpdatedAt: null,
+  stageEntryCounts: {},
 };
 
 const opyAgentMachineSetup = setup({
@@ -90,6 +103,13 @@ const opyAgentMachineSetup = setup({
       context.resumableRequest?.requiresConfirmation === true
       && context.resumableStage === "awaiting_confirmation",
     resumableRequestWasRead: ({ context }) => context.resumableRequest?.mode === "read",
+    stageEntryBudgetExceeded: (
+      { context },
+      params: { readonly stage: OpyAgentLifecycleNonTerminalStage },
+    ) => {
+      const maxEntries = getOpyAgentLifecycleStageGuardrail(params.stage).maxEntries;
+      return (context.stageEntryCounts[params.stage] ?? 0) > maxEntries;
+    },
   },
   actions: {
     startRequest: assign(({ event }) => {
@@ -99,16 +119,19 @@ const opyAgentMachineSetup = setup({
 
       return {
         activeRequest: event.request,
+        activeStageEnteredAt: null,
         lastRequest: event.request,
         lastError: null,
         lastFailurePhase: null,
         lastFailureStage: null,
         lastCompletedAt: null,
         lastTerminalStatus: null,
+        retryCount: 0,
         resumableRequest: null,
         resumableStage: null,
         resumableTaskId: null,
         resumableUpdatedAt: null,
+        stageEntryCounts: {},
       };
     }),
     clearFailure: assign(() => ({
@@ -116,6 +139,16 @@ const opyAgentMachineSetup = setup({
       lastFailurePhase: null,
       lastFailureStage: null,
       lastTerminalStatus: null,
+    })),
+    restartLastRequest: assign(({ context }) => ({
+      activeRequest: context.lastRequest,
+      activeStageEnteredAt: null,
+      lastError: null,
+      lastFailurePhase: null,
+      lastFailureStage: null,
+      lastCompletedAt: null,
+      lastTerminalStatus: null,
+      retryCount: context.retryCount + 1,
     })),
     hydrateResumable: assign(({ event }) => {
       if (event.type !== "HYDRATE_RESUMABLE") {
@@ -137,19 +170,33 @@ const opyAgentMachineSetup = setup({
     })),
     startResumable: assign(({ context }) => ({
       activeRequest: context.resumableRequest,
+      activeStageEnteredAt: null,
       lastRequest: context.resumableRequest,
       lastError: null,
       lastFailurePhase: null,
       lastFailureStage: null,
       lastCompletedAt: null,
       lastTerminalStatus: null,
+      retryCount: 0,
       resumableRequest: null,
       resumableStage: null,
       resumableTaskId: null,
       resumableUpdatedAt: null,
+      stageEntryCounts: {},
+    })),
+    recordStageEntry: assign((
+      { context },
+      params: { readonly stage: OpyAgentLifecycleNonTerminalStage },
+    ) => ({
+      activeStageEnteredAt: Date.now(),
+      stageEntryCounts: {
+        ...context.stageEntryCounts,
+        [params.stage]: (context.stageEntryCounts[params.stage] ?? 0) + 1,
+      },
     })),
     recordCompletion: assign(({ context }) => ({
       activeRequest: null,
+      activeStageEnteredAt: null,
       lastRequest: context.activeRequest ?? context.lastRequest,
       lastError: null,
       lastFailurePhase: null,
@@ -159,6 +206,7 @@ const opyAgentMachineSetup = setup({
     })),
     recordCancellation: assign(({ context }) => ({
       activeRequest: null,
+      activeStageEnteredAt: null,
       lastRequest: context.activeRequest ?? context.lastRequest,
       lastError: null,
       lastFailurePhase: null,
@@ -173,6 +221,7 @@ const opyAgentMachineSetup = setup({
 
       return {
         activeRequest: null,
+        activeStageEnteredAt: null,
         lastRequest: context.activeRequest ?? context.lastRequest,
         lastError: toErrorMessage(event.message),
         lastFailurePhase: event.phase ?? null,
@@ -181,9 +230,86 @@ const opyAgentMachineSetup = setup({
         lastTerminalStatus: "failed" as const,
       };
     }),
+    recordGuardrailFailure: assign((
+      { context },
+      params: {
+        readonly kind: "budget" | "timeout";
+        readonly stage: OpyAgentLifecycleNonTerminalStage;
+      },
+    ) => {
+      const requestLabel = context.activeRequest?.label ?? context.lastRequest?.label ?? "OPY";
+      return {
+        activeRequest: null,
+        activeStageEnteredAt: null,
+        lastRequest: context.activeRequest ?? context.lastRequest,
+        lastError: params.kind === "timeout"
+          ? createOpyAgentLifecycleTimeoutMessage({
+            requestLabel,
+            stage: params.stage,
+          })
+          : createOpyAgentLifecycleBudgetMessage({
+            requestLabel,
+            stage: params.stage,
+          }),
+        lastFailurePhase: getOpyAgentLifecycleFailurePhaseForStage(params.stage),
+        lastFailureStage: params.stage,
+        lastCompletedAt: Date.now(),
+        lastTerminalStatus: "failed" as const,
+      };
+    }),
     clearLifecycle: assign(() => initialContext),
   },
 });
+
+const createGuardedLifecycleState = (
+  stage: OpyAgentLifecycleNonTerminalStage,
+  input: {
+    readonly on: any;
+  },
+): any => {
+  const timeoutMs = getOpyAgentLifecycleStageGuardrail(stage).timeoutMs;
+  return {
+    entry: {
+      type: "recordStageEntry",
+      params: {
+        stage,
+      },
+    },
+    always: {
+      target: "failed",
+      guard: {
+        type: "stageEntryBudgetExceeded",
+        params: {
+          stage,
+        },
+      },
+      actions: {
+        type: "recordGuardrailFailure",
+        params: {
+          kind: "budget",
+          stage,
+        },
+      },
+    },
+    ...(timeoutMs === null
+      ? {}
+      : {
+        after: {
+          [timeoutMs]: {
+            target: "failed",
+            actions: {
+              type: "recordGuardrailFailure",
+              params: {
+                kind: "timeout" as const,
+                stage,
+              },
+            },
+          },
+        },
+      }),
+    on: input.on,
+  };
+};
 
 export const createOpyAgentMachine = () =>
   opyAgentMachineSetup.createMachine({
@@ -237,100 +363,124 @@ export const createOpyAgentMachine = () =>
         },
       },
       contextualizing: {
-        on: {
-          CONTEXT_READY: {
-            target: "planning",
+        ...createGuardedLifecycleState("contextualizing", {
+          on: {
+            CONTEXT_READY: {
+              target: "planning",
+            },
+            CANCEL: {
+              target: "completed",
+              actions: "recordCancellation",
+            },
+            FAIL: {
+              target: "failed",
+              actions: "recordFailure",
+            },
+            RESET: {
+              target: "idle",
+              actions: "clearLifecycle",
+            },
           },
-          FAIL: {
-            target: "failed",
-            actions: "recordFailure",
-          },
-          RESET: {
-            target: "idle",
-            actions: "clearLifecycle",
-          },
-        },
+        }),
       },
       planning: {
-        on: {
-          RESULT_READY: {
-            target: "proposing",
+        ...createGuardedLifecycleState("planning", {
+          on: {
+            RESULT_READY: {
+              target: "proposing",
+            },
+            CANCEL: {
+              target: "completed",
+              actions: "recordCancellation",
+            },
+            FAIL: {
+              target: "failed",
+              actions: "recordFailure",
+            },
+            RESET: {
+              target: "idle",
+              actions: "clearLifecycle",
+            },
           },
-          FAIL: {
-            target: "failed",
-            actions: "recordFailure",
-          },
-          RESET: {
-            target: "idle",
-            actions: "clearLifecycle",
-          },
-        },
+        }),
       },
       proposing: {
-        on: {
-          PERSIST_READY: {
-            target: "verifying",
+        ...createGuardedLifecycleState("proposing", {
+          on: {
+            PERSIST_READY: {
+              target: "verifying",
+            },
+            CANCEL: {
+              target: "completed",
+              actions: "recordCancellation",
+            },
+            FAIL: {
+              target: "failed",
+              actions: "recordFailure",
+            },
+            RESET: {
+              target: "idle",
+              actions: "clearLifecycle",
+            },
           },
-          FAIL: {
-            target: "failed",
-            actions: "recordFailure",
-          },
-          RESET: {
-            target: "idle",
-            actions: "clearLifecycle",
-          },
-        },
+        }),
       },
       awaiting_confirmation: {
-        on: {
-          CONFIRM: {
-            target: "applying",
-            actions: "clearFailure",
+        ...createGuardedLifecycleState("awaiting_confirmation", {
+          on: {
+            CONFIRM: {
+              target: "applying",
+              actions: "clearFailure",
+            },
+            CANCEL: {
+              target: "completed",
+              actions: "recordCancellation",
+            },
+            FAIL: {
+              target: "failed",
+              actions: "recordFailure",
+            },
+            RESET: {
+              target: "idle",
+              actions: "clearLifecycle",
+            },
           },
-          CANCEL: {
-            target: "completed",
-            actions: "recordCancellation",
-          },
-          FAIL: {
-            target: "failed",
-            actions: "recordFailure",
-          },
-          RESET: {
-            target: "idle",
-            actions: "clearLifecycle",
-          },
-        },
+        }),
       },
       applying: {
-        on: {
-          VERIFY_READY: {
-            target: "verifying",
+        ...createGuardedLifecycleState("applying", {
+          on: {
+            VERIFY_READY: {
+              target: "verifying",
+            },
+            FAIL: {
+              target: "failed",
+              actions: "recordFailure",
+            },
+            RESET: {
+              target: "idle",
+              actions: "clearLifecycle",
+            },
           },
-          FAIL: {
-            target: "failed",
-            actions: "recordFailure",
-          },
-          RESET: {
-            target: "idle",
-            actions: "clearLifecycle",
-          },
-        },
+        }),
       },
       verifying: {
-        on: {
-          COMPLETE: {
-            target: "completed",
-            actions: "recordCompletion",
+        ...createGuardedLifecycleState("verifying", {
+          on: {
+            COMPLETE: {
+              target: "completed",
+              actions: "recordCompletion",
+            },
+            FAIL: {
+              target: "failed",
+              actions: "recordFailure",
+            },
+            RESET: {
+              target: "idle",
+              actions: "clearLifecycle",
+            },
           },
-          FAIL: {
-            target: "failed",
-            actions: "recordFailure",
-          },
-          RESET: {
-            target: "idle",
-            actions: "clearLifecycle",
-          },
-        },
+        }),
       },
       completed: {
         on: {
@@ -352,18 +502,22 @@ export const createOpyAgentMachine = () =>
           RETRY: [
             {
               target: "contextualizing",
-              actions: "clearFailure",
-              guard: "lastRequestWasRead",
+              actions: "restartLastRequest",
+              guard: ({ context }) =>
+                context.lastRequest?.mode === "read" && isOpyAgentLifecycleRetryAllowed(context.retryCount),
             },
             {
               target: "awaiting_confirmation",
-              actions: "clearFailure",
-              guard: "lastRequestNeedsConfirmation",
+              actions: "restartLastRequest",
+              guard: ({ context }) =>
+                context.lastRequest?.requiresConfirmation === true
+                && isOpyAgentLifecycleRetryAllowed(context.retryCount),
             },
             {
               target: "applying",
-              actions: "clearFailure",
-              guard: "hasRetryableRequest",
+              actions: "restartLastRequest",
+              guard: ({ context }) =>
+                context.lastRequest !== null && isOpyAgentLifecycleRetryAllowed(context.retryCount),
             },
           ],
           RESET: {
@@ -415,18 +569,22 @@ export const createOpyAgentMachine = () =>
           RETRY: [
             {
               target: "contextualizing",
-              actions: "clearFailure",
-              guard: "lastRequestWasRead",
+              actions: "restartLastRequest",
+              guard: ({ context }) =>
+                context.lastRequest?.mode === "read" && isOpyAgentLifecycleRetryAllowed(context.retryCount),
             },
             {
               target: "awaiting_confirmation",
-              actions: "clearFailure",
-              guard: "lastRequestNeedsConfirmation",
+              actions: "restartLastRequest",
+              guard: ({ context }) =>
+                context.lastRequest?.requiresConfirmation === true
+                && isOpyAgentLifecycleRetryAllowed(context.retryCount),
             },
             {
               target: "applying",
-              actions: "clearFailure",
-              guard: "hasRetryableRequest",
+              actions: "restartLastRequest",
+              guard: ({ context }) =>
+                context.lastRequest !== null && isOpyAgentLifecycleRetryAllowed(context.retryCount),
             },
           ],
           RESET: {

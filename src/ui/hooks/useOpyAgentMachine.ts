@@ -1,10 +1,15 @@
 import { useMachine } from "@xstate/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  getOpyAgentLifecycleRemainingRetries,
+  getOpyAgentLifecycleRetryBudget,
+  getOpyAgentLifecycleStageGuardrail,
+} from "../../core/effects/opy-agent.orchestration";
 import { emitOpyAgentFlowTelemetry } from "../../core/effects/opy-agent.telemetry";
+import type { OpyAgentLifecycleNonTerminalStage } from "../../core/effects/opy-agent.lifecycle";
 import {
   createOpyAgentMachine,
   type OpyAgentLifecycleFailurePhase,
-  type OpyAgentLifecycleNonTerminalStage,
   type OpyAgentLifecycleRequest,
   type OpyAgentLifecycleStage,
 } from "../machines/opy-agent.machine";
@@ -17,6 +22,11 @@ const NON_BUSY_STAGES: ReadonlySet<OpyAgentLifecycleStage> = new Set([
 
 export interface UseOpyAgentMachineResult {
   readonly activeRequest: OpyAgentLifecycleRequest | null;
+  readonly activeStageDeadlineAt: number | null;
+  readonly activeStageEnteredAt: number | null;
+  readonly activeStageEntryBudget: number | null;
+  readonly activeStageEntryCount: number | null;
+  readonly activeStageTimeoutMs: number | null;
   readonly canRetry: boolean;
   readonly isBusy: boolean;
   readonly lastCompletedAt: number | null;
@@ -26,6 +36,9 @@ export interface UseOpyAgentMachineResult {
   readonly lastRequest: OpyAgentLifecycleRequest | null;
   readonly lastTerminalStatus: "completed" | "cancelled" | "failed" | null;
   readonly pendingConfirmationRequest: OpyAgentLifecycleRequest | null;
+  readonly remainingRetryAttempts: number;
+  readonly retryAttemptBudget: number;
+  readonly retryCount: number;
   readonly resumableRequest: OpyAgentLifecycleRequest | null;
   readonly resumableStage: OpyAgentLifecycleNonTerminalStage | null;
   readonly resumableTaskId: string | null;
@@ -72,7 +85,23 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     : null;
   const resumableRequest = snapshot.context.resumableRequest;
   const isBusy = !NON_BUSY_STAGES.has(stage);
-  const canRetry = snapshot.context.lastRequest !== null && (stage === "completed" || stage === "failed");
+  const activeStageGuardrail = stage !== "idle" && stage !== "completed" && stage !== "failed"
+    ? getOpyAgentLifecycleStageGuardrail(stage)
+    : null;
+  const activeStageEnteredAt = snapshot.context.activeStageEnteredAt;
+  const activeStageTimeoutMs = activeStageGuardrail?.timeoutMs ?? null;
+  const activeStageDeadlineAt = activeStageEnteredAt !== null && activeStageTimeoutMs !== null
+    ? activeStageEnteredAt + activeStageTimeoutMs
+    : null;
+  const activeStageEntryCount = activeStageGuardrail
+    ? (snapshot.context.stageEntryCounts[stage as OpyAgentLifecycleNonTerminalStage] ?? 0)
+    : null;
+  const activeStageEntryBudget = activeStageGuardrail?.maxEntries ?? null;
+  const retryAttemptBudget = getOpyAgentLifecycleRetryBudget();
+  const remainingRetryAttempts = getOpyAgentLifecycleRemainingRetries(snapshot.context.retryCount);
+  const canRetry = snapshot.context.lastRequest !== null
+    && (stage === "completed" || stage === "failed")
+    && remainingRetryAttempts > 0;
   const telemetryStateRef = useRef({
     errorSummary: snapshot.context.lastError,
     lastCompletedAt: snapshot.context.lastCompletedAt,
@@ -213,6 +242,11 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
 
   return {
     activeRequest,
+    activeStageDeadlineAt,
+    activeStageEnteredAt,
+    activeStageEntryBudget,
+    activeStageEntryCount,
+    activeStageTimeoutMs,
     canRetry,
     isBusy,
     lastCompletedAt: snapshot.context.lastCompletedAt,
@@ -222,6 +256,9 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     lastRequest: snapshot.context.lastRequest,
     lastTerminalStatus: snapshot.context.lastTerminalStatus,
     pendingConfirmationRequest,
+    remainingRetryAttempts,
+    retryAttemptBudget,
+    retryCount: snapshot.context.retryCount,
     resumableRequest,
     resumableStage: snapshot.context.resumableStage,
     resumableTaskId: snapshot.context.resumableTaskId,

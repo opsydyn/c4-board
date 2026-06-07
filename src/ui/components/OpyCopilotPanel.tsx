@@ -464,6 +464,21 @@ interface OpyPersistedPlannerPlanArtifactPayload {
   readonly mutationPlan: NonNullable<ReturnType<typeof buildRigMutationPlanDiff>>;
 }
 
+type OpyLifecycleRequestTerminalStatus = "cancelled" | "failed";
+
+class OpyLifecycleRequestStaleError extends Error {
+  readonly terminalStatus: OpyLifecycleRequestTerminalStatus;
+
+  constructor(input: {
+    readonly message: string;
+    readonly terminalStatus: OpyLifecycleRequestTerminalStatus;
+  }) {
+    super(input.message);
+    this.name = "OpyLifecycleRequestStaleError";
+    this.terminalStatus = input.terminalStatus;
+  }
+}
+
 interface OpyCopilotPanelProps {
   readonly domain: "c4" | "ddd";
   readonly diagramId: string | null;
@@ -502,6 +517,21 @@ const createRunId = (): string => {
 };
 
 const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const isOpyLifecycleRequestStaleError = (error: unknown): error is OpyLifecycleRequestStaleError =>
+  error instanceof OpyLifecycleRequestStaleError;
+
+const formatShortDuration = (valueMs: number | null): string => {
+  if (valueMs === null) {
+    return "MANUAL";
+  }
+
+  if (valueMs % 1000 === 0) {
+    return `${Math.round(valueMs / 1000)}S`;
+  }
+
+  return `${(valueMs / 1000).toFixed(1)}S`;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
@@ -1604,6 +1634,8 @@ export function OpyCopilotPanel({
   const lifecycleTaskSyncRef = useRef<{
     activeRequestId: string | null;
     errorSummary: string | null;
+    lastFailurePhase: ReturnType<typeof useOpyAgentMachine>["lastFailurePhase"];
+    lastFailureStage: ReturnType<typeof useOpyAgentMachine>["lastFailureStage"];
     lastCompletedAt: number | null;
     lastRequestId: string | null;
     stage: OpyAgentLifecycleStage;
@@ -1611,6 +1643,8 @@ export function OpyCopilotPanel({
   }>({
     activeRequestId: null,
     errorSummary: null,
+    lastFailurePhase: null,
+    lastFailureStage: null,
     lastCompletedAt: null,
     lastRequestId: null,
     stage: "idle",
@@ -3044,9 +3078,37 @@ export function OpyCopilotPanel({
     [createOpyTaskArtifact],
   );
 
+  const resolveLifecycleRequestStaleError = useCallback((requestId: string): OpyLifecycleRequestStaleError | null => {
+    const lifecycleState = lifecycleTaskSyncRef.current;
+    if (lifecycleState.activeRequestId === requestId) {
+      return null;
+    }
+
+    if (lifecycleState.lastRequestId === requestId && lifecycleState.terminalStatus === "failed") {
+      return new OpyLifecycleRequestStaleError({
+        message: lifecycleState.errorSummary
+          ?? "FLOW FAILED BEFORE THE CURRENT STAGE COULD COMPLETE.",
+        terminalStatus: "failed",
+      });
+    }
+
+    return new OpyLifecycleRequestStaleError({
+      message: "FLOW CANCELLED OR SUPERSEDED BEFORE THE CURRENT STAGE COULD COMPLETE.",
+      terminalStatus: "cancelled",
+    });
+  }, []);
+
+  const throwIfLifecycleRequestInactive = useCallback((requestId: string): void => {
+    const staleError = resolveLifecycleRequestStaleError(requestId);
+    if (staleError) {
+      throw staleError;
+    }
+  }, [resolveLifecycleRequestStaleError]);
+
   const trackOpyTaskToolCall = useCallback(
     async <T,>(
       input: {
+        readonly lifecycleRequestId?: string;
         readonly taskId: string;
         readonly sessionId: string;
         readonly name: OpyAgentToolCallName;
@@ -3074,6 +3136,9 @@ export function OpyCopilotPanel({
 
       try {
         const result = await input.execute();
+        if (input.lifecycleRequestId) {
+          throwIfLifecycleRequestInactive(input.lifecycleRequestId);
+        }
         const completedAt = Date.now();
         await persistOpyToolCall({
           id: toolCallId,
@@ -3102,23 +3167,28 @@ export function OpyCopilotPanel({
         return result;
       } catch (error) {
         const completedAt = Date.now();
+        const staleLifecycleError = isOpyLifecycleRequestStaleError(error)
+          ? error
+          : input.lifecycleRequestId
+          ? resolveLifecycleRequestStaleError(input.lifecycleRequestId)
+          : null;
         await persistOpyToolCall({
           id: toolCallId,
           taskId: input.taskId,
           sessionId: input.sessionId,
           name: input.name,
-          status: "failed",
+          status: staleLifecycleError?.terminalStatus === "cancelled" ? "cancelled" : "failed",
           startedAt,
           updatedAt: completedAt,
           completedAt,
           inputSummary: input.inputSummary,
           outputSummary: null,
-          errorSummary: toErrorMessage(error),
+          errorSummary: staleLifecycleError?.message ?? toErrorMessage(error),
         });
         throw error;
       }
     },
-    [createOpyTaskArtifact, persistOpyToolCall],
+    [createOpyTaskArtifact, persistOpyToolCall, resolveLifecycleRequestStaleError, throwIfLifecycleRequestInactive],
   );
 
   const interruptActiveLifecycleTask = useCallback(
@@ -3230,6 +3300,8 @@ export function OpyCopilotPanel({
     const nextState = {
       activeRequestId: agentLifecycle.activeRequest?.id ?? null,
       errorSummary: agentLifecycle.lastError,
+      lastFailurePhase: agentLifecycle.lastFailurePhase,
+      lastFailureStage: agentLifecycle.lastFailureStage,
       lastCompletedAt: agentLifecycle.lastCompletedAt,
       lastRequestId: agentLifecycle.lastRequest?.id ?? null,
       stage: agentLifecycle.stage,
@@ -3303,10 +3375,31 @@ export function OpyCopilotPanel({
     agentLifecycle.activeRequest,
     agentLifecycle.lastCompletedAt,
     agentLifecycle.lastError,
+    agentLifecycle.lastFailurePhase,
+    agentLifecycle.lastFailureStage,
     agentLifecycle.lastRequest,
     agentLifecycle.lastTerminalStatus,
     agentLifecycle.stage,
     persistOpyTask,
+  ]);
+  const surfacedLifecycleFailureAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (
+      agentLifecycle.lastTerminalStatus !== "failed"
+      || !agentLifecycle.lastError
+      || agentLifecycle.lastCompletedAt === null
+      || surfacedLifecycleFailureAtRef.current === agentLifecycle.lastCompletedAt
+    ) {
+      return;
+    }
+
+    surfacedLifecycleFailureAtRef.current = agentLifecycle.lastCompletedAt;
+    setRuntimeError(agentLifecycle.lastError);
+  }, [
+    agentLifecycle.lastCompletedAt,
+    agentLifecycle.lastError,
+    agentLifecycle.lastTerminalStatus,
   ]);
 
   const persistOpyMessage = useCallback(
@@ -3500,6 +3593,7 @@ export function OpyCopilotPanel({
           resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "assemble_context");
         }
         const context = persistedContext ?? await trackOpyTaskToolCall({
+          lifecycleRequestId: taskId,
           taskId,
           sessionId: input.sessionId,
           name: "assemble_context",
@@ -3516,6 +3610,7 @@ export function OpyCopilotPanel({
             payload: bundle,
           }],
         });
+        throwIfLifecycleRequestInactive(taskId);
         agentLifecycle.markContextReady();
 
         const persistedResult = selectReusableCompletedTaskToolCall(
@@ -3529,6 +3624,7 @@ export function OpyCopilotPanel({
           resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, input.invokeToolCallName);
         }
         const result = persistedResult ?? await trackOpyTaskToolCall({
+          lifecycleRequestId: taskId,
           taskId,
           sessionId: input.sessionId,
           name: input.invokeToolCallName,
@@ -3542,6 +3638,7 @@ export function OpyCopilotPanel({
           outputSummary: () => `${INVOKE_TOOL_CALL_ROLE_LABEL[input.invokeToolCallName]} READY`,
           artifacts: (value) => input.artifactsForResult?.(value) ?? [],
         });
+        throwIfLifecycleRequestInactive(taskId);
         agentLifecycle.markResultReady();
         currentRun = await transitionAgentRun(currentRun, {
           stage: "persist",
@@ -3552,6 +3649,7 @@ export function OpyCopilotPanel({
           resumeTrail.toolCalls,
           "persist_assistant_message",
         )) {
+          throwIfLifecycleRequestInactive(taskId);
           await persistResumeBoundaryOutcomeArtifact({
             taskId,
             sessionId: input.sessionId,
@@ -3590,6 +3688,24 @@ export function OpyCopilotPanel({
           errorSummary: null,
         });
         const persistedMessage = await persistOpyMessage(input.sessionId, "assistant", input.assistantMessage(result));
+        const stalePersistMessageError = resolveLifecycleRequestStaleError(taskId);
+        if (stalePersistMessageError) {
+          const finishedAt = Date.now();
+          await persistOpyToolCall({
+            id: persistedMessageCallId,
+            taskId,
+            sessionId: input.sessionId,
+            name: "persist_assistant_message",
+            status: stalePersistMessageError.terminalStatus === "cancelled" ? "cancelled" : "failed",
+            startedAt: persistedMessageStartedAt,
+            updatedAt: finishedAt,
+            completedAt: finishedAt,
+            inputSummary: "Persist assistant transcript message.",
+            outputSummary: null,
+            errorSummary: stalePersistMessageError.message,
+          });
+          throw stalePersistMessageError;
+        }
 
         if (!persistedMessage) {
           const failedAt = Date.now();
@@ -3695,7 +3811,9 @@ export function OpyCopilotPanel({
             updatedAt: Date.now(),
           },
         });
+        throwIfLifecycleRequestInactive(taskId);
         await input.onAfterPersisted?.(result);
+        throwIfLifecycleRequestInactive(taskId);
         agentLifecycle.markPersistReady();
         await transitionAgentRun(currentRun, {
           stage: "complete",
@@ -3706,6 +3824,18 @@ export function OpyCopilotPanel({
         agentLifecycle.completeActiveRequest();
         return result;
       } catch (error) {
+        if (isOpyLifecycleRequestStaleError(error)) {
+          await transitionAgentRun(currentRun, {
+            status: error.terminalStatus === "failed" ? "failed" : "cancelled",
+            completedAt: Date.now(),
+            errorSummary: error.terminalStatus === "failed" ? error.message : null,
+          });
+          if (error.terminalStatus === "failed") {
+            setRuntimeError(error.message);
+          }
+          return null;
+        }
+
         const agentError = withAgentErrorContext(error, {
           runId: currentRun.id,
           stage: currentRun.stage,
@@ -3758,6 +3888,8 @@ export function OpyCopilotPanel({
       persistResumeBoundaryOutcomeArtifact,
       trackOpyTaskToolCall,
       transitionAgentRun,
+      resolveLifecycleRequestStaleError,
+      throwIfLifecycleRequestInactive,
     ],
   );
 
@@ -3830,6 +3962,7 @@ export function OpyCopilotPanel({
         resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "execute_board_action");
         try {
           actionResult = await trackOpyTaskToolCall({
+            lifecycleRequestId: input.taskId,
             taskId: input.taskId,
             sessionId: input.sessionId,
             name: "execute_board_action",
@@ -3839,6 +3972,12 @@ export function OpyCopilotPanel({
             artifacts: (result) => [createActionResultArtifactDraft(result)],
           });
         } catch (error) {
+          if (isOpyLifecycleRequestStaleError(error)) {
+            if (error.terminalStatus === "failed") {
+              setRuntimeError(error.message);
+            }
+            return null;
+          }
           return failBoardActionLifecycle({
             message: toErrorMessage(error),
             phase: "apply",
@@ -3847,6 +3986,17 @@ export function OpyCopilotPanel({
         }
       }
 
+      try {
+        throwIfLifecycleRequestInactive(input.taskId);
+      } catch (error) {
+        if (isOpyLifecycleRequestStaleError(error)) {
+          if (error.terminalStatus === "failed") {
+            setRuntimeError(error.message);
+          }
+          return null;
+        }
+        throw error;
+      }
       agentLifecycle.markVerifyReady();
 
       if (!selectReusableCompletedTaskToolCall(input.sessionId, resumeTrail.toolCalls, "refresh_checkpoints")) {
@@ -3854,6 +4004,7 @@ export function OpyCopilotPanel({
         try {
           if (input.onAfterApplied) {
             await trackOpyTaskToolCall({
+              lifecycleRequestId: input.taskId,
               taskId: input.taskId,
               sessionId: input.sessionId,
               name: "refresh_checkpoints",
@@ -3866,6 +4017,12 @@ export function OpyCopilotPanel({
             });
           }
         } catch (error) {
+          if (isOpyLifecycleRequestStaleError(error)) {
+            if (error.terminalStatus === "failed") {
+              setRuntimeError(error.message);
+            }
+            return null;
+          }
           return failBoardActionLifecycle({
             message: toErrorMessage(error),
             phase: "verify",
@@ -3905,6 +4062,27 @@ export function OpyCopilotPanel({
         errorSummary: null,
       });
       const persistedAssistantMessage = await persistOpyMessage(input.sessionId, "assistant", actionResult);
+      const stalePersistAssistantError = resolveLifecycleRequestStaleError(input.taskId);
+      if (stalePersistAssistantError) {
+        const finishedAt = Date.now();
+        await persistOpyToolCall({
+          id: persistedMessageCallId,
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          name: "persist_assistant_message",
+          status: stalePersistAssistantError.terminalStatus === "cancelled" ? "cancelled" : "failed",
+          startedAt: persistedMessageStartedAt,
+          updatedAt: finishedAt,
+          completedAt: finishedAt,
+          inputSummary: "Persist assistant transcript message.",
+          outputSummary: null,
+          errorSummary: stalePersistAssistantError.message,
+        });
+        if (stalePersistAssistantError.terminalStatus === "failed") {
+          setRuntimeError(stalePersistAssistantError.message);
+        }
+        return null;
+      }
       if (!persistedAssistantMessage) {
         const failedAt = Date.now();
         await persistOpyToolCall({
@@ -3972,6 +4150,17 @@ export function OpyCopilotPanel({
           updatedAt: Date.now(),
         },
       });
+      try {
+        throwIfLifecycleRequestInactive(input.taskId);
+      } catch (error) {
+        if (isOpyLifecycleRequestStaleError(error)) {
+          if (error.terminalStatus === "failed") {
+            setRuntimeError(error.message);
+          }
+          return null;
+        }
+        throw error;
+      }
       agentLifecycle.completeActiveRequest();
       return actionResult;
     },
@@ -3981,7 +4170,9 @@ export function OpyCopilotPanel({
       persistOpyMessage,
       persistOpyToolCall,
       persistResumeBoundaryOutcomeArtifact,
+      resolveLifecycleRequestStaleError,
       trackOpyTaskToolCall,
+      throwIfLifecycleRequestInactive,
     ],
   );
 
@@ -4996,30 +5187,41 @@ export function OpyCopilotPanel({
         "resolve_action",
       );
 
-      await trackOpyTaskToolCall({
-        taskId: lifecycleRequest.id,
-        sessionId: input.descriptor.sessionId,
-        name: "resolve_action",
-        inputSummary: summarizeInlineText(
-          `${input.descriptor.requestLabel} · ${input.descriptor.boardAction.kind}`,
-          input.descriptor.requestLabel,
-        ),
-        execute: async () => input.descriptor,
-        outputSummary: () => "ACTION DESCRIPTOR READY",
-        artifacts: () => [
-          {
-            kind: "action_descriptor",
-            summary: summarizeInlineText(input.descriptor.confirmationMessage, input.descriptor.requestLabel),
-            payload: {
-              descriptor: input.descriptor,
-              replay: input.replay,
+      try {
+        await trackOpyTaskToolCall({
+          lifecycleRequestId: lifecycleRequest.id,
+          taskId: lifecycleRequest.id,
+          sessionId: input.descriptor.sessionId,
+          name: "resolve_action",
+          inputSummary: summarizeInlineText(
+            `${input.descriptor.requestLabel} · ${input.descriptor.boardAction.kind}`,
+            input.descriptor.requestLabel,
+          ),
+          execute: async () => input.descriptor,
+          outputSummary: () => "ACTION DESCRIPTOR READY",
+          artifacts: () => [
+            {
+              kind: "action_descriptor",
+              summary: summarizeInlineText(input.descriptor.confirmationMessage, input.descriptor.requestLabel),
+              payload: {
+                descriptor: input.descriptor,
+                replay: input.replay,
+              },
             },
-          },
-          ...(input.artifacts ?? []).map((artifact) => ({
-            ...artifact,
-          })),
-        ],
-      });
+            ...(input.artifacts ?? []).map((artifact) => ({
+              ...artifact,
+            })),
+          ],
+        });
+      } catch (error) {
+        if (isOpyLifecycleRequestStaleError(error)) {
+          if (error.terminalStatus === "failed") {
+            setRuntimeError(error.message);
+          }
+          return null;
+        }
+        throw error;
+      }
 
       return executeBoardActionLifecycle({
         lifecycleRequest,
@@ -5533,6 +5735,24 @@ export function OpyCopilotPanel({
     );
     agentLifecycle.cancelActiveRequest();
   }, [agentLifecycle, appendAndPersistMessage, pendingLifecycleConfirmation]);
+  const handleCancelActiveReadLifecycle = useCallback(() => {
+    const activeRequest = agentLifecycle.activeRequest;
+    if (
+      !activeRequest
+      || activeRequest.mode !== "read"
+      || agentLifecycle.stage === "awaiting_confirmation"
+      || !isRunning
+    ) {
+      return;
+    }
+
+    void appendAndPersistMessage(
+      activeRequest.replay.sessionId,
+      "system",
+      `FLOW CANCELLED BY OPERATOR::${activeRequest.label}`,
+    );
+    agentLifecycle.cancelActiveRequest();
+  }, [agentLifecycle, appendAndPersistMessage, isRunning]);
   const handleResumeInterruptedLifecycle = useCallback(() => {
     const request = agentLifecycle.resumableRequest;
     const resumeStage = agentLifecycle.resumableStage;
@@ -5624,6 +5844,38 @@ export function OpyCopilotPanel({
   const composerRunning = agentLifecycle.stage === "contextualizing"
     || agentLifecycle.stage === "planning"
     || agentLifecycle.stage === "proposing";
+  const canCancelActiveReadFlow = isRunning
+    && agentLifecycle.activeRequest?.mode === "read"
+    && agentLifecycle.stage !== "awaiting_confirmation";
+  const lifecyclePolicyText = agentLifecycle.stage !== "idle"
+      && agentLifecycle.stage !== "completed"
+      && agentLifecycle.stage !== "failed"
+    ? `FLOW POLICY::ENTRY ${
+      agentLifecycle.activeStageEntryCount ?? 0
+    }/${
+      agentLifecycle.activeStageEntryBudget ?? 0
+    } · RETRIES ${
+      agentLifecycle.retryCount
+    }/${
+      agentLifecycle.retryAttemptBudget
+    } · TIMEBOX ${
+      formatShortDuration(agentLifecycle.activeStageTimeoutMs)
+    }${
+      agentLifecycle.activeStageDeadlineAt ? ` · DEADLINE ${formatClockTime(agentLifecycle.activeStageDeadlineAt)}` : ""
+    }`
+    : null;
+  const lifecycleControlText = agentLifecycle.stage === "awaiting_confirmation"
+    ? "CONTROL::CONFIRM OR CANCEL REQUIRED."
+    : canCancelActiveReadFlow
+    ? "CONTROL::CANCEL AVAILABLE. LATE RESULTS ARE DROPPED IF THE FLOW IS TERMINATED."
+    : isRunning
+    ? "CONTROL::FLOW LOCKED UNTIL CURRENT APPLY/VERIFY STAGE SETTLES."
+    : null;
+  const retryPolicyText = agentLifecycle.lastRequest
+    ? `RETRY POLICY::${agentLifecycle.remainingRetryAttempts}/${agentLifecycle.retryAttemptBudget} REMAINING · USED::${
+      agentLifecycle.retryCount
+    }`
+    : null;
   const copilotChatInputPlaceholder = useMemo(
     () =>
       agentSecretStatus === "loading"
@@ -5645,8 +5897,18 @@ export function OpyCopilotPanel({
   const handleCopilotStop = useCallback(() => {
     if (agentLifecycle.stage === "awaiting_confirmation") {
       handleCancelPendingLifecycleAction();
+      return;
     }
-  }, [agentLifecycle.stage, handleCancelPendingLifecycleAction]);
+
+    if (agentLifecycle.activeRequest?.mode === "read") {
+      handleCancelActiveReadLifecycle();
+    }
+  }, [
+    agentLifecycle.activeRequest?.mode,
+    agentLifecycle.stage,
+    handleCancelActiveReadLifecycle,
+    handleCancelPendingLifecycleAction,
+  ]);
   const runText = lifecycleText
     ? lifecycleText
     : resumableLifecycleText
@@ -6251,6 +6513,21 @@ export function OpyCopilotPanel({
                   }`}
                 </p>
               )}
+              {lifecyclePolicyText && (
+                <p className={styles.ownershipLensHint}>
+                  {lifecyclePolicyText}
+                </p>
+              )}
+              {lifecycleControlText && (
+                <p className={styles.ownershipLensHint}>
+                  {lifecycleControlText}
+                </p>
+              )}
+              {!isRunning && retryPolicyText && (
+                <p className={styles.ownershipLensHint}>
+                  {retryPolicyText}
+                </p>
+              )}
               {!isRunning && lastLifecycleText && (
                 <p className={styles.ownershipLensHint}>
                   {lastLifecycleText}
@@ -6270,6 +6547,29 @@ export function OpyCopilotPanel({
                     })
                   } · ${agentLifecycle.lastError}`}
                 </p>
+              )}
+              {(canCancelActiveReadFlow || agentLifecycle.canRetry) && (
+                <div className={styles.opyCopilotProposalActions}>
+                  {canCancelActiveReadFlow && (
+                    <button
+                      type="button"
+                      className={styles.ownershipLensToggleButton}
+                      onClick={handleCancelActiveReadLifecycle}
+                    >
+                      CANCEL FLOW
+                    </button>
+                  )}
+                  {agentLifecycle.canRetry && (
+                    <button
+                      type="button"
+                      className={styles.toolbarButton}
+                      onClick={handleRetryLastLifecycle}
+                      disabled={isRunning}
+                    >
+                      RETRY LAST FLOW
+                    </button>
+                  )}
+                </div>
               )}
               {!isRunning && activeInterruptedTasks.length > 0 && (
                 <section className={styles.opyCopilotPlanCard} aria-label="OPY interrupted task queue">

@@ -219,10 +219,13 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - read-side failures now preserve `invoke` vs `persist` provenance, and action-side failures preserve `apply`, `verify`, and `persist` boundaries instead of collapsing to one generic runtime failure
 - the control field now retains the last terminal flow outcome (`complete`, `cancelled`, `failed`) even after the active stage returns to idle
 - lifecycle retry now replays from machine-owned request metadata instead of a captured panel closure
+- non-terminal lifecycle stages now run under explicit entry budgets and hard timeouts so OPY fails closed when a chain loops or stalls
+- the control field now surfaces active deadline, stage-entry budget, retry budget, and cancel/retry semantics as first-class operator state
 - lifecycle reset now clears pending confirmation context structurally through the machine
 - confirmed action execution is now re-resolved from the active machine request replay metadata instead of a panel-local execution ref
 - switching or creating sessions resets the active OPY lifecycle boundary so stale flow state does not bleed across sessions
 - the runtime error strip can retry the last OPY flow after a terminal failure
+- late async completions from cancelled, timed-out, failed, or superseded flows are now dropped instead of mutating the active OPY state after the machine has moved on
 - active OPY lifecycle requests are now persisted as resumable agent tasks, interrupted on session hydration/switch/create, and surfaced back to the operator as `RESUME TASK` / `DISMISS TASK` controls
 
 ## Resumable Task Lifecycle

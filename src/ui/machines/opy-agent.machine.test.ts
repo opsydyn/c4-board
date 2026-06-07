@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createActor } from "xstate";
 import { createOpyAgentMachine, type OpyAgentLifecycleRequest } from "./opy-agent.machine";
 
@@ -237,4 +237,101 @@ describe("opyAgentMachine", () => {
       expect(snapshot.context.resumableTaskId).toBeNull();
     },
   );
+
+  test("fails a stalled planning stage when the hard timeout expires", () => {
+    vi.useFakeTimers();
+    try {
+      const actor = createActor(createOpyAgentMachine());
+      actor.start();
+
+      actor.send({ type: "START_READ", request: createReadRequest() });
+      actor.send({ type: "CONTEXT_READY" });
+      expect(actor.getSnapshot().value).toBe("planning");
+
+      vi.advanceTimersByTime(45_000);
+
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.value).toBe("failed");
+      expect(snapshot.context.lastTerminalStatus).toBe("failed");
+      expect(snapshot.context.lastFailureStage).toBe("planning");
+      expect(snapshot.context.lastFailurePhase).toBe("invoke");
+      expect(snapshot.context.lastError).toBe(
+        "FLOW TIMEOUT::CHAT · PLANNING exceeded 45S.",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("blocks a third read retry when the stage entry budget is exhausted", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_READ", request: createReadRequest() });
+    actor.send({
+      type: "FAIL",
+      message: "context offline",
+      phase: "invoke",
+      stage: "contextualizing",
+    });
+
+    actor.send({ type: "RETRY" });
+    actor.send({
+      type: "FAIL",
+      message: "context offline",
+      phase: "invoke",
+      stage: "contextualizing",
+    });
+
+    actor.send({ type: "RETRY" });
+
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("failed");
+    expect(snapshot.context.retryCount).toBe(2);
+    expect(snapshot.context.stageEntryCounts.contextualizing).toBe(3);
+    expect(snapshot.context.lastFailureStage).toBe("contextualizing");
+    expect(snapshot.context.lastError).toBe(
+      "FLOW BUDGET::CHAT · CONTEXTUALIZING exceeded 2 stage entries.",
+    );
+  });
+
+  test("stops exposing retry when the retry budget is exhausted", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_ACTION", request: createActionRequest() });
+    actor.send({
+      type: "FAIL",
+      message: "confirmation interrupted",
+      phase: "apply",
+      stage: "awaiting_confirmation",
+    });
+
+    actor.send({ type: "RETRY" });
+    actor.send({
+      type: "FAIL",
+      message: "confirmation interrupted",
+      phase: "apply",
+      stage: "awaiting_confirmation",
+    });
+
+    actor.send({ type: "RETRY" });
+    actor.send({
+      type: "FAIL",
+      message: "confirmation interrupted",
+      phase: "apply",
+      stage: "awaiting_confirmation",
+    });
+
+    const beforeRetry = actor.getSnapshot();
+    expect(beforeRetry.context.retryCount).toBe(2);
+    expect(beforeRetry.value).toBe("failed");
+
+    actor.send({ type: "RETRY" });
+
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("failed");
+    expect(snapshot.context.retryCount).toBe(2);
+    expect(snapshot.context.lastFailureStage).toBe("awaiting_confirmation");
+  });
 });

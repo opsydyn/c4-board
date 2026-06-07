@@ -16,13 +16,15 @@
 ## Status Review
 
 - Completed in code: `RIG-001` through `RIG-004`, `RIG-101` through `RIG-103`, `RIG-201`, `RIG-202`, `RIG-203`, `RIG-301`, and `RIG-302`.
-- `RIG-401` is now started:
+- `RIG-401` is now materially complete in code for the current OPY scope:
   - OPY has an explicit orchestration machine for `contextualizing`, `planning`, `proposing`, `awaiting_confirmation`, `applying`, `verifying`, `completed`, and `failed`
   - the panel is no longer relying on a single local `isRunning` flag for read/proposal/apply/rollback flow state
   - action confirmations now surface inside OPY as a real `awaiting_confirmation` state instead of dropping into `window.confirm`
   - machine-level lifecycle telemetry now emits flow start, transition, completion, cancellation, and failure events independently of persisted run envelopes
   - the control field now carries the last terminal flow outcome after a lifecycle returns to `idle`
   - retry now replays from machine-owned request metadata rather than a panel-local closure
+  - each non-terminal lifecycle stage now has explicit entry budgets and hard timeouts, so read/proposal/apply chains fail closed instead of looping or stalling silently
+  - the control field now surfaces active timeout, stage-budget, and retry-budget state, plus explicit cancel/retry semantics for the operator
   - mutation action descriptors and blockers for `/add`, proposal apply, and rollback now resolve through `src/core/effects/opy-action.runtime.ts` instead of staying embedded in the panel
   - confirmation UI is now derived from the active machine request metadata, and lifecycle reset clears that pending confirmation state structurally
   - read-side failures now preserve `invoke` vs `persist` provenance, so terminal OPY state and telemetry no longer flatten read runtime and persistence errors together
@@ -30,12 +32,13 @@
   - confirmed action execution is now re-resolved from the active machine request replay metadata, so OPY no longer depends on a panel-local execution ref to resume or confirm a staged action
   - session changes now reset the OPY lifecycle boundary to avoid cross-session stale flow state
   - retryable terminal failure handling now exists at the OPY surface
+  - stale async completions from cancelled, timed-out, failed, or superseded flows are now dropped instead of mutating the live OPY surface after the machine has already moved on
 - The OPY surface now goes beyond the original roadmap UI baseline:
   - floating widget with layout memory, minimize/orb presence, snap modes, and draggable resize
   - pinned conversation strip with collapsible upper sections
   - urgency-aware chrome signals for `policy`, `review`, `proposal`, and `checkpoint`
   - actionable chrome signals that open and focus the matching OPY section
-- `RIG-401` is now effectively complete in code for the current OPY scope: staged lifecycle, machine-owned retry/reset, typed failure provenance, and confirmation replay are all in place.
+- `RIG-401` is now effectively complete in code for the current OPY scope: staged lifecycle, machine-owned retry/reset, typed failure provenance, confirmation replay, stage guardrails, and stale-result dropping are all in place.
 - `RIG-402` is now started:
   - active OPY lifecycle requests are persisted in `opy_agent_tasks`
   - session hydration/switch/create interrupts stale running tasks instead of losing them silently
@@ -260,7 +263,10 @@
 - Current status:
   - initial machine and OPY panel integration landed
   - in-panel confirmation is now wired through the machine boundary
-  - remaining work is to complete deeper orchestration ownership and handoff into persistent task lifecycle
+  - per-stage entry budgets and hard timeouts now enforce bounded execution across read, proposal, apply, and verify flows
+  - the control field now surfaces timeout, stage-budget, retry-budget, and cancel/retry semantics directly in session state
+  - stale async completions are ignored once a lifecycle is cancelled, timed out, failed, or superseded, so late effects cannot overwrite the active OPY surface
+  - current phase scope is complete; next work moves to retrieval grounding and anomaly detection on top of this bounded orchestration base
 - Primary files:
   - `src/ui/machines/opy-agent.machine.ts`
   - `src/ui/hooks/useOpyAgentMachine.ts`
@@ -409,9 +415,9 @@
 
 ## 8) Next Recommended Execution Order
 
-1. Add per-stage iteration budgets, hard timeouts, and surfaced cancellation/retry semantics so long-running agent chains cannot loop or stall silently.
-2. Build the local retrieval index over board/session/governance artifacts with domain/scope filters and redaction-aware prompt assembly.
-3. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
+1. Build the local retrieval index over board/session/governance artifacts with domain/scope filters and redaction-aware prompt assembly.
+2. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
+3. Expand OPY/Rig telemetry with latency, token, provider/model, and confirmation/cancel metrics so rollout gates can score real operator behavior.
 
 ## 9) Definition of Ready / Done
 

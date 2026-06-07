@@ -237,8 +237,8 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 2. **Track E2: Multi-Agent/Role Orchestration**
    - [x] Implement role separation across Rig read/proposal/review flows: `analyst` (explain), `planner` (plan), `verifier` (post-check), with executor handoff preserved through typed action/apply boundaries.
    - [x] Require persisted planner output before any executable action batch.
-   - [ ] Add iteration budgets and hard timeouts per stage to prevent runaway agent loops.
-   - [ ] Add cancellation and retry semantics surfaced in UI session state.
+   - [x] Add iteration budgets and hard timeouts per stage to prevent runaway agent loops.
+   - [x] Add cancellation and retry semantics surfaced in UI session state.
    - [ ] Add deterministic stage transitions logged per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`).
 
 3. **Track E3: Memory, Sessions, and Task Lifecycle**
