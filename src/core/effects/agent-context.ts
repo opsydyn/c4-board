@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { RigAgentRetrievalBundle, RigAgentRetrievalHit } from "./agent-retrieval";
 import type {
   AgentError,
   RigC4BoardSummary,
@@ -8,6 +9,7 @@ import type {
 } from "./ai-agent.runtime";
 import { runRigReadTool } from "./ai-agent.runtime";
 import type { OpyBoardContextRegistry } from "./opy-board-context";
+import type { RedactionMode } from "./settings.types";
 
 export type RigAgentContextConfidence = "high" | "medium" | "low";
 
@@ -24,12 +26,15 @@ export interface RigAgentContextBundle {
   readonly citations: ReadonlyArray<RigAgentCitation>;
   readonly confidence: RigAgentContextConfidence;
   readonly confidenceReason: string;
+  readonly retrievalHits?: ReadonlyArray<RigAgentRetrievalHit>;
+  readonly retrievalPromptContext?: string;
 }
 
 interface AssembleRigAgentContextInput {
   readonly boardSummary: RigC4BoardSummary | null;
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly focus: string | null;
+  readonly redactionMode?: RedactionMode;
 }
 
 interface AssembleRigAgentContextWithToolsInput extends AssembleRigAgentContextInput {
@@ -43,6 +48,19 @@ interface AssembleRigAgentContextWithToolsInput extends AssembleRigAgentContextI
 const focusLabel = (focus: string | null): string => {
   const normalized = focus?.trim() ?? "";
   return normalized.length > 0 ? normalized : "WHOLE BOARD";
+};
+
+const redactMetadata = (
+  value: string | null | undefined,
+  mode: RedactionMode,
+  strictPlaceholder: string,
+): string => {
+  const normalized = (value ?? "").trim();
+  if (normalized.length === 0) {
+    return "";
+  }
+
+  return mode === "strict" ? strictPlaceholder : normalized;
 };
 
 const toConfidence = (citationCount: number): {
@@ -74,17 +92,19 @@ const formatCitationLine = (citation: RigAgentCitation): string =>
 
 const createBoardSummaryCitation = (
   result: RigReadToolResultByName["board_summary"],
+  redactionMode: RedactionMode,
 ): RigAgentCitation => ({
   id: `board:${result.diagramId ?? "unsaved"}`,
   tool: "board_summary",
   label: result.diagramName?.trim() || "UNTITLED BOARD",
   detail: `${result.nodeCount} nodes · ${result.edgeCount} edges · ${result.ownershipTeams.length} teams`,
-  sourceId: result.diagramId,
+  sourceId: redactionMode === "off" ? result.diagramId : null,
 });
 
 const createNodeCitation = (
   result: RigReadToolResultByName["node_lookup"],
   role: "selected" | "hotspot",
+  redactionMode: RedactionMode,
 ): RigAgentCitation | null => {
   if (!result.found || !result.node) {
     return null;
@@ -94,14 +114,19 @@ const createNodeCitation = (
     id: `${role}:${result.node.id}`,
     tool: "node_lookup",
     label: `${role.toUpperCase()} · ${result.node.nodeType.toUpperCase()} ${result.node.label}`,
-    detail: `${result.relationshipCount} links${result.node.teamOwnership ? ` · team ${result.node.teamOwnership}` : ""}`,
-    sourceId: result.node.id,
+    detail: `${result.relationshipCount} links${
+      result.node.teamOwnership
+        ? ` · team ${redactMetadata(result.node.teamOwnership, redactionMode, "[REDACTED TEAM]")}`
+        : ""
+    }`,
+    sourceId: redactionMode === "off" ? result.node.id : null,
   };
 };
 
 const createEdgeCitation = (
   result: RigReadToolResultByName["edge_lookup"],
   role: "selected-edge" | "hotspot-edge",
+  redactionMode: RedactionMode,
 ): RigAgentCitation | null => {
   if (!result.found || !result.edge) {
     return null;
@@ -112,7 +137,7 @@ const createEdgeCitation = (
     tool: "edge_lookup",
     label: `${role.toUpperCase()} · ${result.edge.sourceLabel} -> ${result.edge.targetLabel}`,
     detail: result.edge.label?.trim() || "(no label)",
-    sourceId: result.edge.id,
+    sourceId: redactionMode === "off" ? result.edge.id : null,
   };
 };
 
@@ -136,11 +161,28 @@ export const formatRigAgentCitationBlock = (bundle: RigAgentContextBundle): stri
   ...bundle.citations.map((citation) => `CITATION::${formatCitationLine(citation)}`),
 ].join("\n");
 
+export const mergeRigAgentContextWithRetrieval = (
+  bundle: RigAgentContextBundle,
+  retrieval: RigAgentRetrievalBundle,
+): RigAgentContextBundle => {
+  if (retrieval.hits.length === 0 || retrieval.promptContext.length === 0) {
+    return bundle;
+  }
+
+  return {
+    ...bundle,
+    retrievalHits: retrieval.hits,
+    retrievalPromptContext: retrieval.promptContext,
+    promptContext: `${bundle.promptContext}\n${retrieval.promptContext}`,
+  };
+};
+
 export const assembleRigAgentContextWithTools = (
   input: AssembleRigAgentContextWithToolsInput,
 ): Effect.Effect<RigAgentContextBundle, AgentError> =>
   Effect.gen(function* () {
     const { boardSummary, boardContext, focus, runReadTool } = input;
+    const redactionMode = input.redactionMode ?? "strict";
 
     if (!boardSummary || boardSummary.nodeCount === 0) {
       const emptyBundle: RigAgentContextBundle = {
@@ -158,7 +200,7 @@ export const assembleRigAgentContextWithTools = (
     }
 
     const boardSummaryResult = yield* runReadTool("board_summary", {}, boardSummary);
-    const citations: RigAgentCitation[] = [createBoardSummaryCitation(boardSummaryResult)];
+    const citations: RigAgentCitation[] = [createBoardSummaryCitation(boardSummaryResult, redactionMode)];
 
     let selectedNodeResult: RigReadToolResultByName["node_lookup"] | null = null;
     if (boardContext?.selectedNode?.id) {
@@ -167,7 +209,7 @@ export const assembleRigAgentContextWithTools = (
         { nodeId: boardContext.selectedNode.id },
         boardSummary,
       );
-      pushCitation(citations, createNodeCitation(selectedNodeResult, "selected"));
+      pushCitation(citations, createNodeCitation(selectedNodeResult, "selected", redactionMode));
     }
 
     if (selectedNodeResult?.found && selectedNodeResult.connectedEdges[0]) {
@@ -176,7 +218,7 @@ export const assembleRigAgentContextWithTools = (
         { edgeId: selectedNodeResult.connectedEdges[0].id },
         boardSummary,
       );
-      pushCitation(citations, createEdgeCitation(selectedEdgeResult, "selected-edge"));
+      pushCitation(citations, createEdgeCitation(selectedEdgeResult, "selected-edge", redactionMode));
     }
 
     if (
@@ -188,7 +230,7 @@ export const assembleRigAgentContextWithTools = (
         { nodeId: boardContext.hotspotNode.id },
         boardSummary,
       );
-      pushCitation(citations, createNodeCitation(hotspotNodeResult, "hotspot"));
+      pushCitation(citations, createNodeCitation(hotspotNodeResult, "hotspot", redactionMode));
 
       if (hotspotNodeResult.found && hotspotNodeResult.connectedEdges[0]) {
         const hotspotEdgeResult = yield* runReadTool(
@@ -196,7 +238,7 @@ export const assembleRigAgentContextWithTools = (
           { edgeId: hotspotNodeResult.connectedEdges[0].id },
           boardSummary,
         );
-        pushCitation(citations, createEdgeCitation(hotspotEdgeResult, "hotspot-edge"));
+        pushCitation(citations, createEdgeCitation(hotspotEdgeResult, "hotspot-edge", redactionMode));
       }
     }
 

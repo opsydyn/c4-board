@@ -66,6 +66,11 @@
   - read/proposal/review Rig runs now persist explicit `analyst`, `planner`, and `verifier` invoke boundaries while remaining backward-compatible with older `invoke_agent` traces
   - proposal generation now persists a planner-owned `mutation_plan` artifact before any operator confirmation or apply step
   - proposal apply and replay now fail closed when that persisted planner artifact is missing for the target proposal
+- `RIG-404` is now materially complete for the current OPY scope:
+  - OPY now builds a local retrieval bundle from current-board evidence, saved-diagram metadata, session transcripts, tasks, proposals, artifacts, checkpoints, and governance state
+  - retrieval supports domain, scope, diagram-scope, and recency filtering before ranked prompt assembly
+  - prompt grounding now respects `redactionMode` so strict privacy can redact freeform transcript content and sensitive board metadata before the model sees it
+  - focused retrieval coverage now exercises grounding assembly, strict-redaction behavior, governance-only retrieval, and all-diagrams metadata lookup
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -345,6 +350,32 @@
   - Proposal apply fails closed when planner provenance is missing.
   - Replay enforces the same planner gate as a live apply path.
 
+### RIG-404: Retrieval Grounding + Redaction Boundary
+
+- Goal: Ground OPY prompts in locally retrievable board/session evidence while respecting the configured privacy policy.
+- Deliverables:
+  - Add a local retrieval index over current-board evidence, OPY session/task/proposal artifacts, checkpoint history, saved-diagram metadata, and governance state.
+  - Support retrieval filters for domain, scope, diagram scope, and recency before prompt assembly.
+  - Apply `redactionMode` to retrieval summaries and prompt context before model invocation.
+- Primary files:
+  - `src/core/effects/agent-retrieval.ts`
+  - `src/core/effects/agent-context.ts`
+  - `src/ui/components/OpyCopilotPanel.tsx`
+  - `src/ui/components/C4CanvasContainer.tsx`
+  - `test/core/effects/agent-context.test.ts`
+  - `test/core/effects/agent-retrieval.test.ts`
+- Depends on: `RIG-403`.
+- Current status:
+  - added `loadRigAgentRetrievalBundle` to assemble ranked local evidence from board graph state, transcript messages, tasks, proposals, artifacts, checkpoints, saved-diagram metadata, and governance snapshots
+  - retrieval now supports `domain`, `scopes`, `diagramScope`, and `recencyMs` inputs before search ranking and fallback selection
+  - current OPY contextualization paths now merge retrieval prompt lines into the base Rig context for chat, review, proposal, and replay flows
+  - strict privacy mode now redacts sensitive ownership metadata and freeform transcript content before retrieval evidence reaches prompt assembly
+  - retrieval loading now fails open so local persistence issues do not block the base OPY board-context path
+- Acceptance:
+  - OPY can assemble local retrieval evidence for read/proposal/review flows without remote indexing infrastructure.
+  - Retrieval prompt context honors the configured redaction mode before model invocation.
+  - Focused tests cover ranked retrieval assembly, strict-redaction behavior, and governance/all-diagrams retrieval paths.
+
 ## 7) Phase 5: Governance, Evaluation, Rollout
 
 ### RIG-501: Policy Controls in Settings
@@ -415,9 +446,9 @@
 
 ## 8) Next Recommended Execution Order
 
-1. Build the local retrieval index over board/session/governance artifacts with domain/scope filters and redaction-aware prompt assembly.
-2. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
-3. Expand OPY/Rig telemetry with latency, token, provider/model, and confirmation/cancel metrics so rollout gates can score real operator behavior.
+1. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
+2. Expand OPY/Rig telemetry with latency, token, provider/model, and confirmation/cancel metrics so rollout gates can score real operator behavior.
+3. Extend retrieval grounding to settings, Azure sync summaries, and explainability artifacts, then surface retrieval hits as explicit operator-visible citation bundles.
 
 ## 9) Definition of Ready / Done
 

@@ -4,8 +4,10 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   assembleRigAgentContext,
   formatRigAgentCitationBlock,
+  mergeRigAgentContextWithRetrieval,
   type RigAgentContextBundle,
 } from "../../core/effects/agent-context";
+import { loadRigAgentRetrievalBundle } from "../../core/effects/agent-retrieval";
 import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
 import {
   detectRigExecutionPolicyViolation,
@@ -134,6 +136,7 @@ import type {
   OpyTaskHistoryFiltersBySession,
   OpyViewportSectionKey,
   OpyViewportSections,
+  RedactionMode,
 } from "../../core/effects/settings.types";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { useOpyAgentMachine } from "../hooks/useOpyAgentMachine";
@@ -489,6 +492,7 @@ interface OpyCopilotPanelProps {
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly aiSettings: AiSettings;
   readonly actionMode: AiActionMode;
+  readonly redactionMode: RedactionMode;
   readonly agentPolicy: RigMutationPolicySettings;
   readonly rigExecutionPolicy: RigExecutionPolicySettings;
   readonly rigAgentRollout: EffectiveRigAgentV1RolloutState;
@@ -1615,6 +1619,7 @@ export function OpyCopilotPanel({
   boardContext,
   aiSettings,
   actionMode,
+  redactionMode,
   agentPolicy,
   rigExecutionPolicy,
   rigAgentRollout,
@@ -2312,15 +2317,56 @@ export function OpyCopilotPanel({
   }, [chromeStatus, onChromeStatusChange]);
 
   const resolveRigAgentContext = useCallback(
-    async (focus: string | null): Promise<RigAgentContextBundle> =>
+    async (input: {
+      readonly focus: string | null;
+      readonly sessionId: string;
+    }): Promise<RigAgentContextBundle> =>
       runEffect(
-        assembleRigAgentContext({
-          boardSummary,
-          boardContext,
-          focus,
-        }),
+        Effect.all({
+          base: assembleRigAgentContext({
+            boardSummary,
+            boardContext,
+            focus: input.focus,
+            redactionMode,
+          }),
+          retrieval: loadRigAgentRetrievalBundle({
+            domain,
+            sessionId: input.sessionId,
+            diagramId,
+            boardSummary,
+            boardContext,
+            query: input.focus,
+            governance: {
+              actionMode,
+              redactionMode,
+              aiProvider: aiSettings.provider,
+              aiModel: aiSettings.model,
+              rigExecutionPolicy,
+              rigAgentRollout,
+              agentPolicy,
+            },
+            redactionMode,
+            scopes: ["board", "session", "task", "artifact", "checkpoint", "governance"],
+            diagramScope: "current-diagram",
+          }),
+        }).pipe(
+          Effect.map(({ base, retrieval }) => mergeRigAgentContextWithRetrieval(base, retrieval)),
+        ),
       ),
-    [boardContext, boardSummary, runEffect],
+    [
+      actionMode,
+      agentPolicy,
+      aiSettings.model,
+      aiSettings.provider,
+      boardContext,
+      boardSummary,
+      diagramId,
+      domain,
+      redactionMode,
+      rigAgentRollout,
+      rigExecutionPolicy,
+      runEffect,
+    ],
   );
 
   useEffect(() => {
@@ -4635,7 +4681,10 @@ export function OpyCopilotPanel({
           sessionId,
           intent: "plan-c4-diagram",
           invokeToolCallName: getReadInvokeToolCallName("proposal"),
-          contextualize: () => resolveRigAgentContext(opyCommand.proposal.description),
+          contextualize: () => resolveRigAgentContext({
+            focus: opyCommand.proposal.description,
+            sessionId,
+          }),
           execute: async (context) => {
             const proposal = await runEffect(
               planRigC4Diagram({
@@ -4752,7 +4801,10 @@ export function OpyCopilotPanel({
           sessionId,
           intent: "review-c4-board",
           invokeToolCallName: getReadInvokeToolCallName("review"),
-          contextualize: () => resolveRigAgentContext(reviewFocus ?? null),
+          contextualize: () => resolveRigAgentContext({
+            focus: reviewFocus ?? null,
+            sessionId,
+          }),
           execute: async (context) => {
             const review = await runEffect(
               reviewRigC4Board({
@@ -4824,7 +4876,10 @@ export function OpyCopilotPanel({
         sessionId,
         intent: "chat",
         invokeToolCallName: getReadInvokeToolCallName("chat"),
-        contextualize: () => resolveRigAgentContext(trimmed),
+        contextualize: () => resolveRigAgentContext({
+          focus: trimmed,
+          sessionId,
+        }),
         execute: async (context) => {
           const response = await runEffect(
             runRigHello({
@@ -5485,7 +5540,10 @@ export function OpyCopilotPanel({
             sessionId: replay.sessionId,
             intent: "chat",
             invokeToolCallName: getReadInvokeToolCallName("chat"),
-            contextualize: () => resolveRigAgentContext(replay.prompt),
+            contextualize: () => resolveRigAgentContext({
+              focus: replay.prompt,
+              sessionId: replay.sessionId,
+            }),
             execute: async (context) => {
               const response = await runEffect(
                 runRigHello({
@@ -5525,7 +5583,10 @@ export function OpyCopilotPanel({
             sessionId: replay.sessionId,
             intent: "plan-c4-diagram",
             invokeToolCallName: getReadInvokeToolCallName("proposal"),
-            contextualize: () => resolveRigAgentContext(replay.description),
+            contextualize: () => resolveRigAgentContext({
+              focus: replay.description,
+              sessionId: replay.sessionId,
+            }),
             execute: async (context) => {
               const proposal = await runEffect(
                 planRigC4Diagram({
@@ -5598,7 +5659,10 @@ export function OpyCopilotPanel({
             sessionId: replay.sessionId,
             intent: "review-c4-board",
             invokeToolCallName: getReadInvokeToolCallName("review"),
-            contextualize: () => resolveRigAgentContext(reviewFocus ?? null),
+            contextualize: () => resolveRigAgentContext({
+              focus: reviewFocus ?? null,
+              sessionId: replay.sessionId,
+            }),
             execute: async (context) => {
               const review = await runEffect(
                 reviewRigC4Board({

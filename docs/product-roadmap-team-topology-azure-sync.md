@@ -250,10 +250,11 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 
 4. **Track E4: Grounded Context + Retrieval**
    - [ ] Build local retrieval index over nodes, edges, settings, sync run summaries, and explainability artifacts.
-   - [ ] Add retrieval filters by domain (`c4`, `ddd`, `azure`), scope (current diagram/all diagrams), and recency.
+   - Current OPY scope now indexes current-board graph evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, and governance snapshots locally. Settings, sync run summaries, and explainability artifacts remain to be added.
+   - [x] Add retrieval filters by domain (`c4`, `ddd`, `azure`), scope (current diagram/all diagrams), and recency.
    - [ ] Return explicit citation bundles for every generated recommendation.
    - [ ] Add confidence scoring tied to citation coverage (low citation coverage => low confidence banner).
-   - [ ] Add redaction pipeline before retrieval/prompt assembly using existing privacy settings.
+   - [x] Add redaction pipeline before retrieval/prompt assembly using existing privacy settings.
 
 5. **Track E5: Action Safety, Governance, and Rollout**
    - [ ] Add approval policies by action class (always-confirm, confirm-on-threshold, auto-apply for read-only).
@@ -280,7 +281,7 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 ### Suggested Delivery Sequence
 
 1. E1 typed tool registry + policy metadata.
-2. E4 retrieval + citation confidence model.
+2. E4 citation surfacing + confidence model on top of the new local retrieval grounding path.
 3. E2 role orchestration with stage lifecycle controls.
 4. E3 session/task lifecycle and snapshot linkage.
 5. E5 governance + rollout controls.

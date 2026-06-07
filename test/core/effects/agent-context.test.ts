@@ -92,6 +92,7 @@ describe("agent-context", () => {
         boardSummary,
         boardContext: createBoardContext(),
         focus: "payments",
+        redactionMode: "off",
         runReadTool: (tool, input, snapshot) =>
           Effect.succeed(executeRigReadTool(tool, input as never, snapshot) as never),
       }),
@@ -109,6 +110,7 @@ describe("agent-context", () => {
         boardSummary: null,
         boardContext: null,
         focus: null,
+        redactionMode: "strict",
         runReadTool: () => Effect.die("should not be called"),
       }),
     );
@@ -116,5 +118,23 @@ describe("agent-context", () => {
     expect(context.confidence).toBe("low");
     expect(context.citations).toHaveLength(0);
     expect(context.promptContext).toContain("CONFIDENCE=LOW");
+  });
+
+  it("redacts sensitive node citation metadata in strict mode", async () => {
+    const boardSummary = createBoardSummary();
+    const context = await Effect.runPromise(
+      assembleRigAgentContextWithTools({
+        boardSummary,
+        boardContext: createBoardContext(),
+        focus: "payments",
+        redactionMode: "strict",
+        runReadTool: (tool, input, snapshot) =>
+          Effect.succeed(executeRigReadTool(tool, input as never, snapshot) as never),
+      }),
+    );
+
+    const selectedCitation = context.citations.find((citation) => citation.id.startsWith("selected:"));
+    expect(selectedCitation?.detail).toContain("[REDACTED TEAM]");
+    expect(selectedCitation?.sourceId).toBeNull();
   });
 });

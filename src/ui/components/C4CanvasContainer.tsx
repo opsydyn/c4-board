@@ -2516,6 +2516,7 @@ export function C4CanvasContainer() {
             boardContext={opyBoardContext}
             aiSettings={appSettings.aiSettings}
             actionMode={opyActionMode}
+            redactionMode={appSettings.redactionMode}
             agentPolicy={appSettings.agentPolicy}
             rigExecutionPolicy={appSettings.rigExecutionPolicy}
             rigAgentRollout={rigAgentRollout}

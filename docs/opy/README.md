@@ -180,9 +180,19 @@ OPY’s answers are grounded in typed read tools rather than free-form prompt st
 ### Grounding Features
 
 - context assembly from current board state
+- local retrieval grounding across board evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, and governance state
+- retrieval filters for domain, scope, diagram scope, and recency before prompt assembly
 - confidence labels
 - citations/provenance bundles
 - run diagnostics surfaced in the panel
+
+### Privacy-Aware Retrieval
+
+- retrieval prompt assembly respects the global `redactionMode`
+- `off` keeps raw local evidence available to the model
+- `standard` masks identifiers and sensitive metadata while keeping useful summaries
+- `strict` redacts freeform transcript content and sensitive ownership/governance metadata before invocation
+- retrieval loading fails open, so OPY can still answer from base board context if local history lookup fails
 
 ### Read UX Features
 
