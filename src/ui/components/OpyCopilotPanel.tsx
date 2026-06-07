@@ -68,7 +68,10 @@ import {
   summarizeOpyAgentTaskLineageCollection,
   summarizeOpyAgentTaskLineage,
 } from "../../core/effects/opy-agent.task-lineage";
-import { emitOpyAgentRunTelemetry } from "../../core/effects/opy-agent.telemetry";
+import {
+  emitOpyAgentRunTelemetry,
+  type OpyAgentTelemetryContext,
+} from "../../core/effects/opy-agent.telemetry";
 import {
   buildResumeBoundaryDrilldownFromOutcome,
   buildResumeBoundaryDrilldownFromPlan,
@@ -1783,7 +1786,41 @@ export function OpyCopilotPanel({
   const [viewportSectionsUnseen, setViewportSectionsUnseen] = useState<OpyViewportSections>(
     EMPTY_VIEWPORT_SECTION_STATE,
   );
-  const agentLifecycle = useOpyAgentMachine();
+  const buildTelemetryContextForSessionId = useCallback(
+    (sessionId: string | null): Omit<OpyAgentTelemetryContext, "requiresConfirmation"> => {
+      const latestAnomaly = sessionId ? latestAnomalyBySessionId[sessionId] ?? null : null;
+      return {
+        actionMode,
+        anomalyBlocked: latestAnomaly?.assessment.blocked ?? null,
+        anomalyScore: latestAnomaly?.assessment.score ?? null,
+        anomalySeverity: latestAnomaly?.assessment.severity ?? null,
+        maxTokenBudget: aiSettings.maxTokens,
+        model: aiSettings.model,
+        provider: aiSettings.provider,
+        rolloutBaseMode: rigAgentRollout.baseMode,
+        rolloutMode: rigAgentRollout.mode,
+        rolloutSource: rigAgentRollout.source,
+      };
+    },
+    [
+      actionMode,
+      aiSettings.maxTokens,
+      aiSettings.model,
+      aiSettings.provider,
+      latestAnomalyBySessionId,
+      rigAgentRollout.baseMode,
+      rigAgentRollout.mode,
+      rigAgentRollout.source,
+    ],
+  );
+  const getLifecycleTelemetryContext = useCallback(
+    (request: OpyAgentLifecycleRequest | null) =>
+      buildTelemetryContextForSessionId(request?.replay.sessionId ?? null),
+    [buildTelemetryContextForSessionId],
+  );
+  const agentLifecycle = useOpyAgentMachine({
+    getTelemetryContext: getLifecycleTelemetryContext,
+  });
   const isRunning = agentLifecycle.isBusy;
   const pendingLifecycleRequest = agentLifecycle.pendingConfirmationRequest;
   const pendingLifecycleConfirmation = pendingLifecycleRequest?.confirmation ?? null;
@@ -2932,7 +2969,9 @@ export function OpyCopilotPanel({
             toolCallErrorSummary: "INTERRUPTED DURING PREVIOUS SESSION.",
           }),
         );
-        restoredSessionState.finalizedRuns.forEach(emitOpyAgentRunTelemetry);
+        restoredSessionState.finalizedRuns.forEach((run) => {
+          emitOpyAgentRunTelemetry(run);
+        });
         const loadedMessages = await runEffect(listOpyChatMessages(sessionId));
         const loadedProposals = await runEffect(listOpyDiagramProposals(sessionId));
         const loadedCheckpoints = await runEffect(listOpyAgentCheckpoints(sessionId));
@@ -3102,12 +3141,15 @@ export function OpyCopilotPanel({
       }));
 
       if (nextRun.status !== "running") {
-        emitOpyAgentRunTelemetry(nextRun);
+        emitOpyAgentRunTelemetry(
+          nextRun,
+          buildTelemetryContextForSessionId(nextRun.sessionId),
+        );
       }
 
       return nextRun;
     },
-    [runEffect],
+    [buildTelemetryContextForSessionId, runEffect],
   );
 
   const persistOpyTask = useCallback(

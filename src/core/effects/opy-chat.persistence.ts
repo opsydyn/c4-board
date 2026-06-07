@@ -333,6 +333,20 @@ const LIST_AGENT_ARTIFACTS_SQL = `
   ORDER BY created_at ASC
 `;
 
+const LIST_ALL_AGENT_ARTIFACTS_SQL = `
+  SELECT
+    id,
+    task_id AS taskId,
+    session_id AS sessionId,
+    tool_call_id AS toolCallId,
+    kind,
+    summary,
+    payload_json AS payloadJson,
+    created_at AS createdAt
+  FROM opy_agent_artifacts
+  ORDER BY created_at ASC
+`;
+
 const LIST_DIAGRAM_PROPOSALS_SQL = `
   SELECT
     session_id AS sessionId,
@@ -1199,6 +1213,15 @@ export const listOpyAgentArtifacts = (taskId: string) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
     const rows = yield* service.query<AgentArtifactRow>(LIST_AGENT_ARTIFACTS_SQL, [taskId]);
+    return sortArtifactsByTimeline(
+      rows.map(decodeAgentArtifactRow).filter((row): row is OpyAgentArtifact => row !== null),
+    );
+  });
+
+export const listAllOpyAgentArtifacts = () =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentArtifactRow>(LIST_ALL_AGENT_ARTIFACTS_SQL);
     return sortArtifactsByTimeline(
       rows.map(decodeAgentArtifactRow).filter((row): row is OpyAgentArtifact => row !== null),
     );

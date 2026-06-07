@@ -6,6 +6,7 @@ import {
   interruptOpyAgentToolCalls,
   interruptOpyAgentTasks,
   getOpyAgentCheckpoint,
+  listAllOpyAgentArtifacts,
   listAllOpyAgentTasks,
   listAllOpyChatSessions,
   listAllOpyDiagramProposals,
@@ -237,6 +238,55 @@ describe("opy-chat.persistence", () => {
     expect(sessions).toHaveLength(2);
     expect(sessions[0]?.id).toBe("session-1");
     expect(sessions[1]?.domain).toBe("ddd");
+  });
+
+  it("lists persisted OPY artifacts across tasks for audit aggregation", async () => {
+    const olderArtifact = createArtifact({
+      id: "artifact-older",
+      taskId: "task-older",
+      sessionId: "session-older",
+      kind: "context_bundle",
+      createdAt: 1_000,
+    });
+    const newerArtifact = createArtifact({
+      id: "artifact-newer",
+      taskId: "task-newer",
+      sessionId: "session-newer",
+      kind: "anomaly_assessment",
+      createdAt: 2_000,
+    });
+
+    const artifacts = await runWithDatabaseService(
+      listAllOpyAgentArtifacts(),
+      {
+        query: () => [
+          {
+            id: newerArtifact.id,
+            taskId: newerArtifact.taskId,
+            sessionId: newerArtifact.sessionId,
+            toolCallId: newerArtifact.toolCallId,
+            kind: newerArtifact.kind,
+            summary: newerArtifact.summary,
+            payloadJson: JSON.stringify(newerArtifact.payload),
+            createdAt: newerArtifact.createdAt,
+          },
+          {
+            id: olderArtifact.id,
+            taskId: olderArtifact.taskId,
+            sessionId: olderArtifact.sessionId,
+            toolCallId: olderArtifact.toolCallId,
+            kind: olderArtifact.kind,
+            summary: olderArtifact.summary,
+            payloadJson: JSON.stringify(olderArtifact.payload),
+            createdAt: olderArtifact.createdAt,
+          },
+        ],
+      },
+    );
+
+    expect(artifacts).toHaveLength(2);
+    expect(artifacts[0]?.id).toBe("artifact-older");
+    expect(artifacts[1]?.kind).toBe("anomaly_assessment");
   });
 
   it("loads persisted diagram proposals ordered by latest proposal timestamp", async () => {

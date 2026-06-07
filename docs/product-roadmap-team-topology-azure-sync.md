@@ -263,6 +263,7 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - Current OPY scope now runs request-preflight anomaly checks for prompt injection, secret exfiltration, policy bypass, and destructive mutation language, persisting `anomaly_assessment` artifacts and surfacing `ANOMALY::...` warnings. Tool-trace and mutation-plan anomaly scoring still remains.
    - [x] Add canary rollout mode (`rig_agent_v1`) and environment-level overrides.
    - [x] Add governance audit log view in Settings (`who`, `what`, `when`, `why`, `source session`).
+   - Current OPY scope also aggregates persisted anomalies, blocked counts, cancellations, failures, decisions, and average terminal-task duration in that audit surface.
 
 6. **Track E6: Developer Experience + Evaluation**
    - [ ] Add deterministic fixture suite for Rig runs (`read-only qa`, `safe mutation`, `failure recovery`, `rollback`).
@@ -270,6 +271,7 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - [ ] Add local replay utility for failed agent runs using stored transcripts and tool traces.
    - [ ] Add budget/latency dashboards (p50/p95 latency, token usage, cost estimate, tool success rate).
    - [ ] Add pass/fail quality gates before enabling mutation mode by default.
+   - Current OPY scope now emits browser telemetry for provider/model, configured max-token budget, action mode, rollout mode/source, anomaly severity/score, confirmation requirement, and cancellation/failure outcomes. Provider-reported token usage and cost remain pending runtime support.
 
 ### Acceptance Criteria
 

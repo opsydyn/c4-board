@@ -218,6 +218,7 @@ OPY now runs a local anomaly preflight before executable chat, review, proposal,
 - critical findings fail closed before model invocation or board-action resolution
 - caution findings continue, but OPY records an `anomaly_assessment` artifact and surfaces `ANOMALY::...` chrome warnings
 - anomaly results are persisted into the same OPY task artifact history used for resumes and audit inspection
+- Settings audit now aggregates persisted anomaly history, blocked counts, cancellations, failures, decisions, and average terminal-task duration across sessions
 
 ## Orchestration Lifecycle
 
@@ -243,6 +244,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - the confirmation card is now derived from the active machine request metadata rather than separate panel-local state
 - the OPY header/control field now surfaces `FLOW::...` stage state while a lifecycle is active
 - OPY now emits lifecycle telemetry for stage start/transition/completion/cancellation/failure, not only persisted run completion
+- telemetry payloads now carry provider/model, configured max-token ceiling, action mode, rollout mode/source, anomaly severity/score, and confirmation requirement metadata for downstream scoring
 - read-side failures now preserve `invoke` vs `persist` provenance, and action-side failures preserve `apply`, `verify`, and `persist` boundaries instead of collapsing to one generic runtime failure
 - the control field now retains the last terminal flow outcome (`complete`, `cancelled`, `failed`) even after the active stage returns to idle
 - lifecycle retry now replays from machine-owned request metadata instead of a captured panel closure

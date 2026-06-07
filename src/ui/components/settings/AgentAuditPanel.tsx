@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { OpyAnomalyAssessment } from "../../../core/effects/opy-anomaly";
+import type { OpyAgentArtifact } from "../../../core/effects/opy-agent.trace";
 import {
+  listAllOpyAgentArtifacts,
   listAllOpyAgentTasks,
   listAllOpyChatSessions,
   listAllOpyDiagramProposals,
@@ -12,6 +15,7 @@ import { useDatabase } from "../../../core/effects/useDatabase";
 import * as styles from "../../../pages/settings.css";
 
 interface AgentAuditSnapshot {
+  readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
   readonly sessions: ReadonlyArray<OpyChatSession>;
   readonly tasks: ReadonlyArray<OpyAgentTask>;
   readonly proposals: ReadonlyArray<OpyPersistedDiagramProposal>;
@@ -26,6 +30,11 @@ interface AgentAuditEntry {
   readonly why: string;
   readonly sourceSession: string;
   readonly detail: string;
+}
+
+interface PersistedAnomalyAssessmentPayload {
+  readonly assessment: OpyAnomalyAssessment;
+  readonly requestText: string;
 }
 
 const formatTimestamp = (timestamp: number): string =>
@@ -46,6 +55,82 @@ const formatSessionLabel = (session: OpyChatSession | undefined): string => {
 
   return `${session.title.toUpperCase()} · ${session.domain.toUpperCase()}${session.diagramId ? ` · ${session.diagramId}` : ""}`;
 };
+
+const formatDuration = (durationMs: number | null): string => {
+  if (durationMs === null || !Number.isFinite(durationMs) || durationMs < 0) {
+    return "N/A";
+  }
+
+  if (durationMs < 1_000) {
+    return `${Math.round(durationMs)}MS`;
+  }
+  if (durationMs < 60_000) {
+    return `${(durationMs / 1_000).toFixed(1)}S`;
+  }
+
+  return `${(durationMs / 60_000).toFixed(1)}M`;
+};
+
+const isAnomalySeverity = (
+  value: unknown,
+): value is OpyAnomalyAssessment["severity"] =>
+  value === "none" || value === "caution" || value === "critical";
+
+const isAnomalySignalKind = (value: unknown): value is OpyAnomalyAssessment["signals"][number]["kind"] =>
+  value === "prompt-injection"
+  || value === "secret-exfiltration"
+  || value === "policy-evasion"
+  || value === "destructive-mutation";
+
+const isOpyAnomalyAssessment = (value: unknown): value is OpyAnomalyAssessment => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<OpyAnomalyAssessment>;
+  return (
+    (candidate.requestKind === "chat"
+      || candidate.requestKind === "review"
+      || candidate.requestKind === "proposal"
+      || candidate.requestKind === "action")
+    && isAnomalySeverity(candidate.severity)
+    && typeof candidate.blocked === "boolean"
+    && typeof candidate.score === "number"
+    && typeof candidate.summary === "string"
+    && typeof candidate.recommendedAction === "string"
+    && Array.isArray(candidate.signals)
+    && candidate.signals.every((signal) =>
+      signal
+      && typeof signal === "object"
+      && isAnomalySignalKind((signal as { kind?: unknown }).kind)
+      && (
+        (signal as { severity?: unknown }).severity === "caution"
+        || (signal as { severity?: unknown }).severity === "critical"
+      )
+      && typeof (signal as { evidence?: unknown }).evidence === "string"
+    )
+  );
+};
+
+const isPersistedAnomalyAssessmentPayload = (
+  value: unknown,
+): value is PersistedAnomalyAssessmentPayload => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<PersistedAnomalyAssessmentPayload>;
+  return isOpyAnomalyAssessment(candidate.assessment)
+    && typeof candidate.requestText === "string";
+};
+
+const decodePersistedAnomalyArtifact = (
+  artifact: OpyAgentArtifact,
+): PersistedAnomalyAssessmentPayload | null => (
+  artifact.kind === "anomaly_assessment" && isPersistedAnomalyAssessmentPayload(artifact.payload)
+    ? artifact.payload
+    : null
+);
 
 const describeTaskWhat = (task: OpyAgentTask): string => {
   switch (task.request.replay.kind) {
@@ -116,7 +201,27 @@ const buildAuditEntries = (
     detail: proposal.proposal.summary,
   }));
 
-  return [...taskEntries, ...proposalEntries].sort((left, right) => right.at - left.at);
+  const anomalyEntries = snapshot.artifacts.flatMap((artifact) => {
+    const payload = decodePersistedAnomalyArtifact(artifact);
+    if (!payload || payload.assessment.severity === "none") {
+      return [];
+    }
+
+    return [{
+      id: `artifact:${artifact.id}`,
+      at: artifact.createdAt,
+      who: "OPY GUARD",
+      what: `ANOMALY ${payload.assessment.severity.toUpperCase()}`,
+      status: payload.assessment.blocked
+        ? "PREFLIGHT · BLOCKED"
+        : "PREFLIGHT · CAUTION",
+      why: payload.assessment.summary,
+      sourceSession: formatSessionLabel(sessionById.get(artifact.sessionId)),
+      detail: `REQUEST ${payload.assessment.requestKind.toUpperCase()} · SCORE ${payload.assessment.score} · ${payload.requestText}`,
+    }] satisfies ReadonlyArray<AgentAuditEntry>;
+  });
+
+  return [...taskEntries, ...proposalEntries, ...anomalyEntries].sort((left, right) => right.at - left.at);
 };
 
 const toErrorMessage = (error: unknown): string =>
@@ -125,6 +230,7 @@ const toErrorMessage = (error: unknown): string =>
 export function AgentAuditPanel() {
   const { runEffect } = useDatabase();
   const [snapshot, setSnapshot] = useState<AgentAuditSnapshot>({
+    artifacts: [],
     sessions: [],
     tasks: [],
     proposals: [],
@@ -140,6 +246,7 @@ export function AgentAuditPanel() {
 
     void runEffect(
       Effect.all({
+        artifacts: listAllOpyAgentArtifacts(),
         sessions: listAllOpyChatSessions(),
         tasks: listAllOpyAgentTasks(),
         proposals: listAllOpyDiagramProposals(),
@@ -178,10 +285,49 @@ export function AgentAuditPanel() {
     () => snapshot.tasks.filter((task) => task.request.requiresConfirmation).length,
     [snapshot.tasks],
   );
+  const cancelledTaskCount = useMemo(
+    () => snapshot.tasks.filter((task) => task.status === "cancelled").length,
+    [snapshot.tasks],
+  );
+  const failedTaskCount = useMemo(
+    () => snapshot.tasks.filter((task) => task.status === "failed").length,
+    [snapshot.tasks],
+  );
+  const anomalyArtifacts = useMemo(
+    () => snapshot.artifacts
+      .map((artifact) => ({
+        artifact,
+        payload: decodePersistedAnomalyArtifact(artifact),
+      }))
+      .filter((entry): entry is {
+        readonly artifact: OpyAgentArtifact;
+        readonly payload: PersistedAnomalyAssessmentPayload;
+      } => entry.payload !== null && entry.payload.assessment.severity !== "none"),
+    [snapshot.artifacts],
+  );
+  const anomalyCount = useMemo(
+    () => anomalyArtifacts.length,
+    [anomalyArtifacts],
+  );
+  const blockedAnomalyCount = useMemo(
+    () => anomalyArtifacts.filter((entry) => entry.payload.assessment.blocked).length,
+    [anomalyArtifacts],
+  );
   const decisionCount = useMemo(
     () => snapshot.proposals.filter((proposal) => proposal.decisionStatus !== "pending").length,
     [snapshot.proposals],
   );
+  const averageTerminalTaskDurationMs = useMemo(() => {
+    const terminalDurations = snapshot.tasks
+      .filter((task) => task.completedAt !== null)
+      .map((task) => Math.max(0, (task.completedAt ?? task.createdAt) - task.createdAt));
+    if (terminalDurations.length === 0) {
+      return null;
+    }
+
+    const totalDuration = terminalDurations.reduce((sum, duration) => sum + duration, 0);
+    return totalDuration / terminalDurations.length;
+  }, [snapshot.tasks]);
 
   return (
     <article id="agent-audit" className={`${styles.settingsCard} ${styles.settingsCardWide}`}>
@@ -224,12 +370,32 @@ export function AgentAuditPanel() {
           <span className={styles.settingsMetricValue}>{snapshot.tasks.length}</span>
         </div>
         <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Anomalies</span>
+          <span className={styles.settingsMetricValue}>{anomalyCount}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Blocked</span>
+          <span className={styles.settingsMetricValue}>{blockedAnomalyCount}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
           <span className={styles.settingsMetricLabel}>Confirmations</span>
           <span className={styles.settingsMetricValue}>{confirmationCount}</span>
         </div>
         <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Cancelled</span>
+          <span className={styles.settingsMetricValue}>{cancelledTaskCount}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Failures</span>
+          <span className={styles.settingsMetricValue}>{failedTaskCount}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
           <span className={styles.settingsMetricLabel}>Decisions</span>
           <span className={styles.settingsMetricValue}>{decisionCount}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Avg Duration</span>
+          <span className={styles.settingsMetricValue}>{formatDuration(averageTerminalTaskDurationMs)}</span>
         </div>
       </div>
       {error && <p className={styles.settingsErrorText}>{error}</p>}

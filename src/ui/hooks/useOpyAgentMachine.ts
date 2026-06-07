@@ -5,7 +5,10 @@ import {
   getOpyAgentLifecycleRetryBudget,
   getOpyAgentLifecycleStageGuardrail,
 } from "../../core/effects/opy-agent.orchestration";
-import { emitOpyAgentFlowTelemetry } from "../../core/effects/opy-agent.telemetry";
+import {
+  emitOpyAgentFlowTelemetry,
+  type OpyAgentTelemetryContext,
+} from "../../core/effects/opy-agent.telemetry";
 import type { OpyAgentLifecycleNonTerminalStage } from "../../core/effects/opy-agent.lifecycle";
 import {
   createOpyAgentMachine,
@@ -70,11 +73,20 @@ export interface UseOpyAgentMachineResult {
   readonly confirmActiveRequest: () => void;
 }
 
-export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
+interface UseOpyAgentMachineOptions {
+  readonly getTelemetryContext?: (
+    request: OpyAgentLifecycleRequest | null,
+  ) => Omit<OpyAgentTelemetryContext, "requiresConfirmation">;
+}
+
+export const useOpyAgentMachine = (
+  input?: UseOpyAgentMachineOptions,
+): UseOpyAgentMachineResult => {
   const machine = useMemo(() => createOpyAgentMachine(), []);
   const [snapshot, send] = useMachine(machine);
   const sendRef = useRef(send);
   sendRef.current = send;
+  const getTelemetryContext = input?.getTelemetryContext;
 
   const stage = snapshot.value as OpyAgentLifecycleStage;
   const activeRequest = snapshot.context.activeRequest;
@@ -130,6 +142,8 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
       || previousState.errorSummary !== nextState.errorSummary;
 
     if (stageChanged || requestChanged || terminalChanged) {
+      const request = snapshot.context.activeRequest ?? snapshot.context.lastRequest;
+      const telemetryContext = getTelemetryContext?.(request ?? null);
       emitOpyAgentFlowTelemetry({
         activeRequest: snapshot.context.activeRequest,
         errorSummary: snapshot.context.lastError,
@@ -138,6 +152,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
         fromStage: previousState.stage,
         lastCompletedAt: snapshot.context.lastCompletedAt,
         lastRequest: snapshot.context.lastRequest,
+        ...(telemetryContext ? { telemetryContext } : {}),
         terminalStatus: snapshot.context.lastTerminalStatus,
         toStage: stage,
       });
@@ -152,6 +167,7 @@ export const useOpyAgentMachine = (): UseOpyAgentMachineResult => {
     snapshot.context.lastFailureStage,
     snapshot.context.lastRequest,
     snapshot.context.lastTerminalStatus,
+    getTelemetryContext,
     stage,
   ]);
 

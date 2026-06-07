@@ -447,6 +447,7 @@
   - added workstation canary enrollment in persisted settings, with effective rollout surfaced in `src/ui/components/settings/SettingsPanel.tsx`
   - clamped OPY runtime action mode behind the effective rollout gate so disabled environments and non-enrolled canary workstations stay mutation-offline
   - added cross-session audit readers in `src/core/effects/opy-chat.persistence.ts` and a full-width `AgentAuditPanel` for who/what/when/why/session visibility
+  - audit aggregation now includes persisted anomaly events, blocked anomaly counts, cancellations, failures, decisions, and average terminal-task duration
 
 ### RIG-504: Prompt/Request Anomaly Boundary
 
@@ -467,6 +468,7 @@
   - added a pure `assessOpyRequestAnomaly` boundary covering instruction override attempts, hidden-prompt extraction, secret/credential exfiltration, policy-bypass language, and broad destructive board mutations
   - chat, review, proposal, and `/add` action flows now run anomaly preflight before execution, with critical findings blocking the request and caution findings continuing under visible warning
   - anomaly assessments now persist as `anomaly_assessment` OPY task artifacts and surface into widget chrome via `ANOMALY::BLOCKED` / `ANOMALY::CAUTION`
+  - lifecycle and terminal-run telemetry now carry anomaly severity/score alongside provider/model, max-token budget, rollout, action-mode, confirmation, and cancellation context for rollout scoring
 - Acceptance:
   - Critical hostile requests do not reach model invocation or action resolution.
   - Operators can see anomaly outcomes without opening task-history internals.
@@ -474,9 +476,9 @@
 
 ## 8) Next Recommended Execution Order
 
-1. Expand OPY/Rig telemetry with latency, token, provider/model, anomaly, and confirmation/cancel metrics so rollout gates can score real operator behavior.
-2. Extend retrieval grounding to settings, Azure sync summaries, and explainability artifacts, then surface retrieval hits as explicit operator-visible citation bundles.
-3. Deepen anomaly detection from request preflight into tool-trace and mutation-plan pattern analysis before wider mutation rollout.
+1. Extend retrieval grounding to settings, Azure sync summaries, and explainability artifacts, then surface retrieval hits as explicit operator-visible citation bundles.
+2. Deepen anomaly detection from request preflight into tool-trace and mutation-plan pattern analysis before wider mutation rollout.
+3. Add deterministic replay/eval utilities and percentile latency dashboards once provider-side usage data is exposed.
 
 ## 9) Definition of Ready / Done
 

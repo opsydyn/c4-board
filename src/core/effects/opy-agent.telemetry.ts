@@ -18,6 +18,21 @@ export interface OpyAgentFlowTelemetryRequest {
   readonly kind: string;
   readonly label: string;
   readonly mode: string;
+  readonly requiresConfirmation: boolean;
+}
+
+export interface OpyAgentTelemetryContext {
+  readonly actionMode?: string | null;
+  readonly anomalyBlocked?: boolean | null;
+  readonly anomalyScore?: number | null;
+  readonly anomalySeverity?: "none" | "caution" | "critical" | null;
+  readonly maxTokenBudget?: number | null;
+  readonly model?: string | null;
+  readonly provider?: string | null;
+  readonly requiresConfirmation?: boolean | null;
+  readonly rolloutBaseMode?: string | null;
+  readonly rolloutMode?: string | null;
+  readonly rolloutSource?: string | null;
 }
 
 export interface OpyAgentRunTelemetryPayload {
@@ -31,6 +46,16 @@ export interface OpyAgentRunTelemetryPayload {
   readonly completedAt: number | null;
   readonly durationMs: number | null;
   readonly errorSummary: string | null;
+  readonly provider: string | null;
+  readonly model: string | null;
+  readonly maxTokenBudget: number | null;
+  readonly actionMode: string | null;
+  readonly rolloutMode: string | null;
+  readonly rolloutBaseMode: string | null;
+  readonly rolloutSource: string | null;
+  readonly anomalySeverity: "none" | "caution" | "critical" | null;
+  readonly anomalyBlocked: boolean | null;
+  readonly anomalyScore: number | null;
 }
 
 export interface OpyAgentFlowTelemetryPayload {
@@ -38,6 +63,7 @@ export interface OpyAgentFlowTelemetryPayload {
   readonly requestKind: string | null;
   readonly requestLabel: string | null;
   readonly requestMode: string | null;
+  readonly requiresConfirmation: boolean | null;
   readonly failurePhase: string | null;
   readonly fromStage: string | null;
   readonly toStage: string;
@@ -45,6 +71,16 @@ export interface OpyAgentFlowTelemetryPayload {
   readonly failureStage: string | null;
   readonly errorSummary: string | null;
   readonly completedAt: number | null;
+  readonly provider: string | null;
+  readonly model: string | null;
+  readonly maxTokenBudget: number | null;
+  readonly actionMode: string | null;
+  readonly rolloutMode: string | null;
+  readonly rolloutBaseMode: string | null;
+  readonly rolloutSource: string | null;
+  readonly anomalySeverity: "none" | "caution" | "critical" | null;
+  readonly anomalyBlocked: boolean | null;
+  readonly anomalyScore: number | null;
   readonly timestamp: number;
 }
 
@@ -64,12 +100,34 @@ const toTelemetryEvent = (run: OpyAgentRun): OpyAgentRunTelemetryEvent | null =>
   }
 };
 
-export const emitOpyAgentRunTelemetry = (run: OpyAgentRun): void => {
+const normalizeTelemetryContext = (
+  context?: OpyAgentTelemetryContext,
+): Required<Omit<OpyAgentTelemetryContext, "requiresConfirmation">> & {
+  readonly requiresConfirmation: boolean | null;
+} => ({
+  actionMode: context?.actionMode ?? null,
+  anomalyBlocked: context?.anomalyBlocked ?? null,
+  anomalyScore: context?.anomalyScore ?? null,
+  anomalySeverity: context?.anomalySeverity ?? null,
+  maxTokenBudget: context?.maxTokenBudget ?? null,
+  model: context?.model ?? null,
+  provider: context?.provider ?? null,
+  requiresConfirmation: context?.requiresConfirmation ?? null,
+  rolloutBaseMode: context?.rolloutBaseMode ?? null,
+  rolloutMode: context?.rolloutMode ?? null,
+  rolloutSource: context?.rolloutSource ?? null,
+});
+
+export const emitOpyAgentRunTelemetry = (
+  run: OpyAgentRun,
+  telemetryContext?: OpyAgentTelemetryContext,
+): void => {
   const event = toTelemetryEvent(run);
   if (!event) {
     return;
   }
 
+  const context = normalizeTelemetryContext(telemetryContext);
   const detail = {
     event,
     runId: run.id,
@@ -82,6 +140,16 @@ export const emitOpyAgentRunTelemetry = (run: OpyAgentRun): void => {
     completedAt: run.completedAt,
     durationMs: run.completedAt === null ? null : Math.max(0, run.completedAt - run.startedAt),
     errorSummary: run.errorSummary,
+    provider: context.provider,
+    model: context.model,
+    maxTokenBudget: context.maxTokenBudget,
+    actionMode: context.actionMode,
+    rolloutMode: context.rolloutMode,
+    rolloutBaseMode: context.rolloutBaseMode,
+    rolloutSource: context.rolloutSource,
+    anomalySeverity: context.anomalySeverity,
+    anomalyBlocked: context.anomalyBlocked,
+    anomalyScore: context.anomalyScore,
   } satisfies OpyAgentRunTelemetryPayload & { readonly event: OpyAgentRunTelemetryEvent };
 
   if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
@@ -127,6 +195,7 @@ export const emitOpyAgentFlowTelemetry = (payload: {
   readonly fromStage: string | null;
   readonly lastCompletedAt: number | null;
   readonly lastRequest: OpyAgentFlowTelemetryRequest | null;
+  readonly telemetryContext?: OpyAgentTelemetryContext;
   readonly terminalStatus: OpyAgentFlowTelemetryPayload["terminalStatus"];
   readonly toStage: string;
 }): void => {
@@ -136,12 +205,14 @@ export const emitOpyAgentFlowTelemetry = (payload: {
   }
 
   const request = payload.activeRequest ?? payload.lastRequest;
+  const context = normalizeTelemetryContext(payload.telemetryContext);
   const detail = {
     event,
     requestId: request?.id ?? null,
     requestKind: request?.kind ?? null,
     requestLabel: request?.label ?? null,
     requestMode: request?.mode ?? null,
+    requiresConfirmation: request?.requiresConfirmation ?? context.requiresConfirmation,
     failurePhase: payload.failurePhase,
     fromStage: payload.fromStage,
     toStage: payload.toStage,
@@ -149,6 +220,16 @@ export const emitOpyAgentFlowTelemetry = (payload: {
     failureStage: payload.failureStage,
     errorSummary: payload.errorSummary,
     completedAt: payload.lastCompletedAt,
+    provider: context.provider,
+    model: context.model,
+    maxTokenBudget: context.maxTokenBudget,
+    actionMode: context.actionMode,
+    rolloutMode: context.rolloutMode,
+    rolloutBaseMode: context.rolloutBaseMode,
+    rolloutSource: context.rolloutSource,
+    anomalySeverity: context.anomalySeverity,
+    anomalyBlocked: context.anomalyBlocked,
+    anomalyScore: context.anomalyScore,
     timestamp: Date.now(),
   } satisfies OpyAgentFlowTelemetryPayload & { readonly event: OpyAgentFlowTelemetryEvent };
 

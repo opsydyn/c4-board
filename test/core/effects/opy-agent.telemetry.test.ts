@@ -25,6 +25,17 @@ describe("opy-agent.telemetry", () => {
       startedAt: 100,
       completedAt: 250,
       errorSummary: null,
+    }, {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      maxTokenBudget: 1024,
+      actionMode: "propose",
+      rolloutMode: "canary",
+      rolloutBaseMode: "canary",
+      rolloutSource: "settings",
+      anomalySeverity: "caution",
+      anomalyBlocked: false,
+      anomalyScore: 2,
     });
 
     expect(detail).toMatchObject({
@@ -32,6 +43,11 @@ describe("opy-agent.telemetry", () => {
       runId: "run-1",
       status: "completed",
       durationMs: 150,
+      provider: "openai",
+      model: "gpt-4o-mini",
+      actionMode: "propose",
+      anomalySeverity: "caution",
+      anomalyBlocked: false,
     });
   });
 
@@ -49,6 +65,7 @@ describe("opy-agent.telemetry", () => {
         kind: "review",
         label: "REVIEW",
         mode: "read",
+        requiresConfirmation: false,
       },
       errorSummary: null,
       failurePhase: null,
@@ -56,6 +73,18 @@ describe("opy-agent.telemetry", () => {
       fromStage: "idle",
       lastCompletedAt: null,
       lastRequest: null,
+      telemetryContext: {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        maxTokenBudget: 4096,
+        actionMode: "read-only",
+        rolloutMode: "enabled",
+        rolloutBaseMode: "enabled",
+        rolloutSource: "env",
+        anomalySeverity: "none",
+        anomalyBlocked: false,
+        anomalyScore: 0,
+      },
       terminalStatus: null,
       toStage: "contextualizing",
     });
@@ -65,8 +94,12 @@ describe("opy-agent.telemetry", () => {
       requestId: "request-1",
       requestKind: "review",
       requestMode: "read",
+      requiresConfirmation: false,
       fromStage: "idle",
       toStage: "contextualizing",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      actionMode: "read-only",
     });
   });
 
@@ -90,6 +123,7 @@ describe("opy-agent.telemetry", () => {
         kind: "apply-proposal",
         label: "APPLY",
         mode: "action",
+        requiresConfirmation: true,
       },
       terminalStatus: "cancelled",
       toStage: "completed",
@@ -98,6 +132,7 @@ describe("opy-agent.telemetry", () => {
     expect(detail).toMatchObject({
       event: "opy_flow_cancelled",
       requestId: "request-2",
+      requiresConfirmation: true,
       terminalStatus: "cancelled",
       completedAt: 500,
       toStage: "completed",
@@ -124,6 +159,7 @@ describe("opy-agent.telemetry", () => {
         kind: "apply-proposal",
         label: "APPLY",
         mode: "action",
+        requiresConfirmation: true,
       },
       terminalStatus: "failed",
       toStage: "failed",
@@ -158,6 +194,7 @@ describe("opy-agent.telemetry", () => {
         kind: "review",
         label: "REVIEW",
         mode: "read",
+        requiresConfirmation: false,
       },
       terminalStatus: "failed",
       toStage: "failed",
