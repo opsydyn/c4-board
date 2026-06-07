@@ -8,8 +8,11 @@ import {
 } from "../../core/effects/agent-context";
 import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
 import {
+  detectRigExecutionPolicyViolation,
+  summarizeRigExecutionPolicySettings,
   summarizeRigMutationPolicySettings,
   summarizeRigToolPolicy,
+  type RigExecutionPolicySettings,
   type RigMutationPolicySettings,
 } from "../../core/effects/agent-policy";
 import {
@@ -123,6 +126,7 @@ import {
 } from "../../core/effects/opy-chat.persistence";
 import type { EffectiveRigAgentV1RolloutState } from "../../core/effects/feature-flags";
 import type {
+  AiSettings,
   AiActionMode,
   OpyTaskHistoryBoundaryFilter,
   OpyTaskHistoryChainScopeFilter,
@@ -423,8 +427,10 @@ interface OpyCopilotPanelProps {
   readonly edgeCount: number;
   readonly boardSummary: RigC4BoardSummary | null;
   readonly boardContext: OpyBoardContextRegistry | null;
+  readonly aiSettings: AiSettings;
   readonly actionMode: AiActionMode;
   readonly agentPolicy: RigMutationPolicySettings;
+  readonly rigExecutionPolicy: RigExecutionPolicySettings;
   readonly rigAgentRollout: EffectiveRigAgentV1RolloutState;
   readonly viewportSections: OpyViewportSections;
   readonly onViewportSectionsChange: (sections: OpyViewportSections) => void;
@@ -1368,9 +1374,22 @@ const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostic
 const describeActionMode = (
   actionMode: AiActionMode,
   agentPolicy: RigMutationPolicySettings,
+  rigExecutionPolicy: RigExecutionPolicySettings,
+  executionPolicyViolation: ReturnType<typeof detectRigExecutionPolicyViolation>,
   rigAgentRollout: EffectiveRigAgentV1RolloutState,
 ): OpyActionModeSurface => {
   const policySummary = summarizeRigMutationPolicySettings(agentPolicy);
+  const executionSummary = summarizeRigExecutionPolicySettings(rigExecutionPolicy);
+
+  if (executionPolicyViolation) {
+    return {
+      tone: "critical",
+      label: executionPolicyViolation.kind === "kill-switch"
+        ? "KILL SWITCH ACTIVE"
+        : "EXECUTION POLICY BLOCK",
+      detail: `${executionPolicyViolation.message} ${executionPolicyViolation.recommendedAction} ${executionSummary}`,
+    };
+  }
 
   if (rigAgentRollout.mode === "disabled") {
     const rolloutDetail = rigAgentRollout.baseMode === "canary"
@@ -1447,6 +1466,16 @@ const getRigRolloutBlockedNotice = (
   };
 };
 
+const getRigExecutionPolicyBlockedNotice = (
+  violation: NonNullable<ReturnType<typeof detectRigExecutionPolicyViolation>>,
+): {
+  readonly message: string;
+  readonly recommendedAction: string;
+} => ({
+  message: violation.message,
+  recommendedAction: violation.recommendedAction,
+});
+
 const createLifecycleRequest = (
   request: OpyAgentLifecycleRequest,
 ): OpyAgentLifecycleRequest => request;
@@ -1459,8 +1488,10 @@ export function OpyCopilotPanel({
   edgeCount,
   boardSummary,
   boardContext,
+  aiSettings,
   actionMode,
   agentPolicy,
+  rigExecutionPolicy,
   rigAgentRollout,
   viewportSections,
   onViewportSectionsChange,
@@ -1764,9 +1795,29 @@ export function OpyCopilotPanel({
       decidedAtMs: activeDiagramProposal.decidedAtMs,
     };
   }, [activeDiagramProposal]);
+  const hasOpenAiRuntimeProvider = aiSettings.provider === "openai";
+  const rigExecutionPolicyViolation = useMemo(
+    () =>
+      detectRigExecutionPolicyViolation({
+        policy: rigExecutionPolicy,
+        provider: aiSettings.provider,
+        model: aiSettings.model,
+      }),
+    [
+      aiSettings.model,
+      aiSettings.provider,
+      rigExecutionPolicy,
+    ],
+  );
   const actionModeSurface = useMemo(
-    () => describeActionMode(actionMode, agentPolicy, rigAgentRollout),
-    [actionMode, agentPolicy, rigAgentRollout],
+    () => describeActionMode(
+      actionMode,
+      agentPolicy,
+      rigExecutionPolicy,
+      rigExecutionPolicyViolation,
+      rigAgentRollout,
+    ),
+    [actionMode, agentPolicy, rigAgentRollout, rigExecutionPolicy, rigExecutionPolicyViolation],
   );
   const latestDiagnosticsSurface = useMemo(() => {
     const surfaces: OpyDiagnosticsSurface[] = [];
@@ -3213,6 +3264,58 @@ export function OpyCopilotPanel({
     },
     [appendAndPersistMessage],
   );
+  const appendRigKillSwitchNotice = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      if (!rigExecutionPolicy.killSwitchEnabled) {
+        return false;
+      }
+
+      await appendAgentNotice(
+        sessionId,
+        makeAgentPolicyError({
+          message: "Rig execution is blocked by the global kill switch.",
+          recommendedAction: "Open Settings > AI Agent and disable the kill switch.",
+        }),
+      );
+      return true;
+    },
+    [appendAgentNotice, rigExecutionPolicy.killSwitchEnabled],
+  );
+  const appendRigExecutionPolicyNotice = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      if (!rigExecutionPolicyViolation) {
+        return false;
+      }
+
+      const notice = getRigExecutionPolicyBlockedNotice(rigExecutionPolicyViolation);
+      await appendAgentNotice(
+        sessionId,
+        makeAgentPolicyError({
+          message: notice.message,
+          recommendedAction: notice.recommendedAction,
+        }),
+      );
+      return true;
+    },
+    [appendAgentNotice, rigExecutionPolicyViolation],
+  );
+  const appendUnsupportedProviderNotice = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      if (hasOpenAiRuntimeProvider) {
+        return false;
+      }
+
+      await appendAgentNotice(
+        sessionId,
+        makeAgentConfigError({
+          message: `Runtime currently supports OPENAI only. Provider ${aiSettings.provider.toUpperCase()} is not executable yet.`,
+          recommendedAction: "Switch provider to OPENAI in Settings > AI Agent.",
+        }),
+      );
+      return true;
+    },
+    [aiSettings.provider, appendAgentNotice, hasOpenAiRuntimeProvider],
+  );
 
   const executeRigRun = useCallback(
     async <T,>(
@@ -4105,6 +4208,10 @@ export function OpyCopilotPanel({
           return;
         }
 
+        if (await appendRigKillSwitchNotice(sessionId)) {
+          return;
+        }
+
         if (actionMode === "disabled" || actionMode === "read-only") {
           const rolloutBlockedNotice = getRigRolloutBlockedNotice(rigAgentRollout);
           await appendAgentNotice(
@@ -4186,6 +4293,14 @@ export function OpyCopilotPanel({
           return;
         }
 
+        if (await appendRigExecutionPolicyNotice(sessionId)) {
+          return;
+        }
+
+        if (await appendUnsupportedProviderNotice(sessionId)) {
+          return;
+        }
+
         await executeRigRun({
           lifecycleRequest: createLifecycleRequest({
             confirmation: null,
@@ -4209,6 +4324,8 @@ export function OpyCopilotPanel({
                 description: opyCommand.proposal.description,
                 diagramContext: context.promptContext,
                 ...(boardSummary ? { boardSummary } : {}),
+                model: aiSettings.model,
+                maxTokens: aiSettings.maxTokens,
               }),
             );
             return {
@@ -4271,6 +4388,14 @@ export function OpyCopilotPanel({
           return;
         }
 
+        if (await appendRigExecutionPolicyNotice(sessionId)) {
+          return;
+        }
+
+        if (await appendUnsupportedProviderNotice(sessionId)) {
+          return;
+        }
+
         if (!hasOpenAiApiKey) {
           await appendAgentNotice(
             sessionId,
@@ -4306,6 +4431,8 @@ export function OpyCopilotPanel({
                 ...(reviewFocus ? { focus: reviewFocus } : {}),
                 diagramContext: context.promptContext,
                 boardSummary,
+                model: aiSettings.model,
+                maxTokens: aiSettings.maxTokens,
               }),
             );
             return {
@@ -4330,6 +4457,14 @@ export function OpyCopilotPanel({
             }));
           },
         });
+        return;
+      }
+
+      if (await appendRigExecutionPolicyNotice(sessionId)) {
+        return;
+      }
+
+      if (await appendUnsupportedProviderNotice(sessionId)) {
         return;
       }
 
@@ -4364,6 +4499,9 @@ export function OpyCopilotPanel({
         execute: async (context) => {
           const response = await runEffect(
             runRigHello({
+              model: aiSettings.model,
+              temperature: aiSettings.temperature,
+              maxTokens: aiSettings.maxTokens,
               prompt: [
                 "You are OPY Net, an architecture copilot for OPSYDYN.",
                 "Respond with concise, actionable architecture guidance.",
@@ -4397,7 +4535,14 @@ export function OpyCopilotPanel({
       boardContext,
       boardSummary,
       domain,
+      aiSettings.maxTokens,
+      aiSettings.model,
+      aiSettings.provider,
+      aiSettings.temperature,
       executeRigRun,
+      appendRigExecutionPolicyNotice,
+      appendRigKillSwitchNotice,
+      appendUnsupportedProviderNotice,
       hasOpenAiApiKey,
       isRunning,
       onApplyBoardAction,
@@ -4676,6 +4821,10 @@ export function OpyCopilotPanel({
       readonly replay: OpyAgentLifecycleRequest["replay"];
       readonly skipConfirmation?: boolean;
     }): Promise<string | null> => {
+      if (await appendRigKillSwitchNotice(input.descriptor.sessionId)) {
+        return null;
+      }
+
       const lifecycleRequest = input.lifecycleRequest ?? createLifecycleRequest({
         confirmation: {
           cancelMessage: input.descriptor.cancelMessage,
@@ -4746,7 +4895,13 @@ export function OpyCopilotPanel({
           : {}),
       });
     },
-    [executeBoardActionLifecycle, onApplyBoardAction, refreshCheckpointsForSession, trackOpyTaskToolCall],
+    [
+      appendRigKillSwitchNotice,
+      executeBoardActionLifecycle,
+      onApplyBoardAction,
+      refreshCheckpointsForSession,
+      trackOpyTaskToolCall,
+    ],
   );
 
   const handleApplyActiveProposal = useCallback(async () => {
@@ -4845,6 +5000,12 @@ export function OpyCopilotPanel({
       const replay = request.replay;
       switch (replay.kind) {
         case "chat":
+          if (await appendRigExecutionPolicyNotice(replay.sessionId)) {
+            return false;
+          }
+          if (await appendUnsupportedProviderNotice(replay.sessionId)) {
+            return false;
+          }
           if (!hasOpenAiApiKey) {
             await appendAgentNotice(
               replay.sessionId,
@@ -4865,6 +5026,12 @@ export function OpyCopilotPanel({
                 recommendedAction: "Switch to the C4 board and retry.",
               }),
             );
+            return false;
+          }
+          if (await appendRigExecutionPolicyNotice(replay.sessionId)) {
+            return false;
+          }
+          if (await appendUnsupportedProviderNotice(replay.sessionId)) {
             return false;
           }
           if (!hasOpenAiApiKey) {
@@ -4899,6 +5066,12 @@ export function OpyCopilotPanel({
             );
             return false;
           }
+          if (await appendRigExecutionPolicyNotice(replay.sessionId)) {
+            return false;
+          }
+          if (await appendUnsupportedProviderNotice(replay.sessionId)) {
+            return false;
+          }
           if (!hasOpenAiApiKey) {
             await appendAgentNotice(
               replay.sessionId,
@@ -4913,6 +5086,9 @@ export function OpyCopilotPanel({
         case "add-node":
         case "apply-proposal":
         case "rollback": {
+          if (await appendRigKillSwitchNotice(replay.sessionId)) {
+            return false;
+          }
           const resolution = resolveExecutableActionReplay(replay, request);
           if (!resolution) {
             return false;
@@ -4927,8 +5103,12 @@ export function OpyCopilotPanel({
     },
     [
       appendAgentNotice,
+      appendRigExecutionPolicyNotice,
+      appendRigKillSwitchNotice,
+      appendUnsupportedProviderNotice,
       hasOpenAiApiKey,
       handleOpyActionFlowIssue,
+      domain,
       resolveExecutableActionReplay,
     ],
   );
@@ -4954,6 +5134,9 @@ export function OpyCopilotPanel({
             execute: async (context) => {
               const response = await runEffect(
                 runRigHello({
+                  model: aiSettings.model,
+                  temperature: aiSettings.temperature,
+                  maxTokens: aiSettings.maxTokens,
                   prompt: [
                     "You are OPY Net, an architecture copilot for OPSYDYN.",
                     "Respond with concise, actionable architecture guidance.",
@@ -4993,6 +5176,8 @@ export function OpyCopilotPanel({
                   description: replay.description,
                   diagramContext: context.promptContext,
                   ...(boardSummary ? { boardSummary } : {}),
+                  model: aiSettings.model,
+                  maxTokens: aiSettings.maxTokens,
                 }),
               );
               return {
@@ -5054,6 +5239,8 @@ export function OpyCopilotPanel({
                   ...(reviewFocus ? { focus: reviewFocus } : {}),
                   diagramContext: context.promptContext,
                   boardSummary,
+                  model: aiSettings.model,
+                  maxTokens: aiSettings.maxTokens,
                 }),
               );
               return {
@@ -5118,6 +5305,9 @@ export function OpyCopilotPanel({
       executeOpyActionFlow,
       executeRigRun,
       agentLifecycle,
+      aiSettings.maxTokens,
+      aiSettings.model,
+      aiSettings.temperature,
       handleOpyActionFlowIssue,
       resolveRigAgentContext,
       resolveExecutableActionReplay,

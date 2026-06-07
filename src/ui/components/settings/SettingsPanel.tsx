@@ -2,7 +2,11 @@ import { useMachine } from "@xstate/react";
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tone from "tone";
-import { summarizeRigMutationPolicySettings } from "../../../core/effects/agent-policy";
+import {
+  detectRigExecutionPolicyViolation,
+  summarizeRigExecutionPolicySettings,
+  summarizeRigMutationPolicySettings,
+} from "../../../core/effects/agent-policy";
 import {
   clearRigOpenAiApiKey,
   getRigSecretStatus,
@@ -27,8 +31,8 @@ import { useDatabase } from "../../../core/effects/useDatabase";
 import * as styles from "../../../pages/settings.css";
 import { useDatabaseRuntimeStatus } from "../../hooks/useDatabaseRuntimeStatus";
 import { createSettingsMachine } from "../../machines/settings.machine";
-import { AgentAuditPanel } from "./AgentAuditPanel";
 import { TacticalSelect } from "../TacticalSelect";
+import { AgentAuditPanel } from "./AgentAuditPanel";
 
 type SaveState = "disabled" | "loading" | "saving" | "saved" | "error";
 type AgentHelloState = "idle" | "running" | "success" | "error";
@@ -65,8 +69,7 @@ const isAiActionMode = (value: string): value is AiActionMode =>
 
 const isRigAgentV1RolloutPreference = (
   value: string,
-): value is RigAgentV1RolloutPreference =>
-  value === "inherit" || value === "canary";
+): value is RigAgentV1RolloutPreference => value === "inherit" || value === "canary";
 
 const transitionIntensityOptions = [
   { value: "low", label: "LOW" },
@@ -197,8 +200,7 @@ export function SettingsPanel() {
   const [agentSecretWarning, setAgentSecretWarning] = useState<string | null>(null);
   const [agentSecretStatusError, setAgentSecretStatusError] = useState<string | null>(null);
   const [agentSecretResolutionOrder, setAgentSecretResolutionOrder] = useState<ReadonlyArray<string>>([]);
-  const [agentSecretCommandState, setAgentSecretCommandState] =
-    useState<AgentSecretCommandState>("idle");
+  const [agentSecretCommandState, setAgentSecretCommandState] = useState<AgentSecretCommandState>("idle");
   const [agentSecretActionMessage, setAgentSecretActionMessage] = useState<string | null>(null);
   const hasOpenAiRuntimeProvider = settings.aiSettings.provider === "openai";
   const hasPendingProviderSupport = settings.aiSettings.provider !== "openai";
@@ -212,6 +214,23 @@ export function SettingsPanel() {
         settings.rigAgentRolloutPreference,
       ),
     [rigAgentRolloutFlag, settings.rigAgentRolloutPreference],
+  );
+  const rigExecutionPolicySummary = useMemo(
+    () => summarizeRigExecutionPolicySettings(settings.rigExecutionPolicy),
+    [settings.rigExecutionPolicy],
+  );
+  const selectedRigExecutionViolation = useMemo(
+    () =>
+      detectRigExecutionPolicyViolation({
+        policy: settings.rigExecutionPolicy,
+        provider: settings.aiSettings.provider,
+        model: settings.aiSettings.model,
+      }),
+    [
+      settings.aiSettings.model,
+      settings.aiSettings.provider,
+      settings.rigExecutionPolicy,
+    ],
   );
   const agentPolicySummary = useMemo(
     () => summarizeRigMutationPolicySettings(settings.agentPolicy),
@@ -270,6 +289,20 @@ export function SettingsPanel() {
 
     return "RIG_AGENT_V1 IS DISABLED BY DEFAULT ROLLOUT.";
   }, [rigAgentEffectiveRollout]);
+  const rigExecutionPolicyStatusText = useMemo(() => {
+    if (!selectedRigExecutionViolation) {
+      return "ALLOWED";
+    }
+
+    return `BLOCKED :: ${selectedRigExecutionViolation.kind.toUpperCase()}`;
+  }, [selectedRigExecutionViolation]);
+  const rigExecutionPolicyNotice = useMemo(() => {
+    if (!selectedRigExecutionViolation) {
+      return "SELECTED PROVIDER/MODEL PASSES THE CURRENT RIG EXECUTION POLICY.";
+    }
+
+    return `${selectedRigExecutionViolation.message} ${selectedRigExecutionViolation.recommendedAction}`;
+  }, [selectedRigExecutionViolation]);
   const lastSavedAt = state.context.lastSavedAt;
   const pendingOperations = state.context.pendingOperations;
   const pendingWrites = state.context.pendingWrites;
@@ -433,6 +466,15 @@ export function SettingsPanel() {
     settings.saveVolEnabled,
   ]);
   const handleRunRigHello = useCallback(() => {
+    if (selectedRigExecutionViolation) {
+      setAgentHelloState("error");
+      setAgentHelloOutput(null);
+      setAgentHelloError(
+        `${selectedRigExecutionViolation.message} ${selectedRigExecutionViolation.recommendedAction}`,
+      );
+      return;
+    }
+
     if (!hasOpenAiRuntimeProvider) {
       setAgentHelloState("error");
       setAgentHelloOutput(null);
@@ -463,6 +505,7 @@ export function SettingsPanel() {
   }, [
     agentHelloPrompt,
     hasOpenAiRuntimeProvider,
+    selectedRigExecutionViolation,
     settings.aiSettings.maxTokens,
     settings.aiSettings.model,
     settings.aiSettings.temperature,
@@ -494,6 +537,45 @@ export function SettingsPanel() {
     },
     [send, settingsV1Enabled],
   );
+  const toggleAllowedProvider = useCallback(
+    (provider: AiProvider) => {
+      const currentProviders = settings.rigExecutionPolicy.allowedProviders;
+      const nextProviders = currentProviders.includes(provider)
+        ? currentProviders.filter((currentProvider) => currentProvider !== provider)
+        : [
+          ...currentProviders,
+          provider,
+        ];
+
+      applyPatch({
+        rigExecutionPolicy: {
+          ...settings.rigExecutionPolicy,
+          allowedProviders: nextProviders,
+        },
+      });
+    },
+    [applyPatch, settings.rigExecutionPolicy],
+  );
+  const toggleAllowedModel = useCallback(
+    (model: string) => {
+      const normalizedModel = model.trim();
+      const currentModels = settings.rigExecutionPolicy.allowedModels;
+      const nextModels = currentModels.includes(normalizedModel)
+        ? currentModels.filter((currentModel) => currentModel !== normalizedModel)
+        : [
+          ...currentModels,
+          normalizedModel,
+        ];
+
+      applyPatch({
+        rigExecutionPolicy: {
+          ...settings.rigExecutionPolicy,
+          allowedModels: nextModels,
+        },
+      });
+    },
+    [applyPatch, settings.rigExecutionPolicy],
+  );
   const clearLegacyOpenAiFallback = useCallback(() => {
     if (settings.openAiApiKey.trim().length === 0) {
       return;
@@ -524,8 +606,8 @@ export function SettingsPanel() {
           status.source === "keychain"
             ? "OPENAI KEY STORED IN KEYCHAIN."
             : status.source === "settings-db"
-              ? "OPENAI KEY STORED IN SETTINGS DB FALLBACK."
-              : "OPENAI KEY STORED.",
+            ? "OPENAI KEY STORED IN SETTINGS DB FALLBACK."
+            : "OPENAI KEY STORED.",
         );
       })
       .catch((error: unknown) => {
@@ -1468,11 +1550,9 @@ export function SettingsPanel() {
                     }}
                     autoComplete="off"
                     spellCheck={false}
-                    placeholder={
-                      hasConfiguredAgentSecret && openAiApiKeyDraft.trim().length === 0
-                        ? "stored in secure resolver"
-                        : "sk-..."
-                    }
+                    placeholder={hasConfiguredAgentSecret && openAiApiKeyDraft.trim().length === 0
+                      ? "stored in secure resolver"
+                      : "sk-..."}
                     aria-label="OpenAI API key"
                   />
                   <button
@@ -1543,6 +1623,88 @@ export function SettingsPanel() {
                   <span className={styles.settingsRowHint}>Resolved runtime boundary for OPY</span>
                 </div>
                 <span className={styles.settingsRowValue}>{rigAgentRolloutEffectiveText}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Kill Switch</span>
+                  <span className={styles.settingsRowHint}>Hard stop for all Rig execution paths</span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.settingsToggleControl}
+                  data-active={settings.rigExecutionPolicy.killSwitchEnabled ? "true" : "false"}
+                  onClick={() =>
+                    applyPatch({
+                      rigExecutionPolicy: {
+                        ...settings.rigExecutionPolicy,
+                        killSwitchEnabled: !settings.rigExecutionPolicy.killSwitchEnabled,
+                      },
+                    })}
+                >
+                  {settings.rigExecutionPolicy.killSwitchEnabled ? "ON" : "OFF"}
+                </button>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Execution Policy</span>
+                  <span className={styles.settingsRowHint}>Selected provider/model execution gate</span>
+                </div>
+                <span className={styles.settingsRowValue}>{rigExecutionPolicyStatusText}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Governance Snapshot</span>
+                  <span className={styles.settingsRowHint}>Kill switch + allow-list state</span>
+                </div>
+                <span className={styles.settingsRowValue}>{rigExecutionPolicySummary}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Provider Allow-List</span>
+                  <span className={styles.settingsRowHint}>Runtime can execute only allowed providers</span>
+                </div>
+                <div className={styles.settingsInlineActions}>
+                  {aiProviderOptions.map((option) => {
+                    const active = settings.rigExecutionPolicy.allowedProviders.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={styles.settingsToggleControl}
+                        data-active={active ? "true" : "false"}
+                        onClick={() => {
+                          toggleAllowedProvider(option.value);
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Model Allow-List</span>
+                  <span className={styles.settingsRowHint}>Selected model must stay on this allow-list</span>
+                </div>
+                <div className={styles.settingsInlineActions}>
+                  {agentModelOptions.map((option) => {
+                    const active = settings.rigExecutionPolicy.allowedModels.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={styles.settingsToggleControl}
+                        data-active={active ? "true" : "false"}
+                        onClick={() => {
+                          toggleAllowedModel(option.value);
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {agentSecretActionMessage && <p className={styles.settingsNotice}>{agentSecretActionMessage}</p>}
               <div className={styles.settingsRow}>
@@ -1794,7 +1956,9 @@ export function SettingsPanel() {
                     type="button"
                     className={styles.settingsActionButton}
                     onClick={handleRunRigHello}
-                    disabled={agentHelloState === "running" || !hasOpenAiRuntimeProvider}
+                    disabled={agentHelloState === "running"
+                      || !hasOpenAiRuntimeProvider
+                      || selectedRigExecutionViolation !== null}
                   >
                     RUN HELLO AGENT
                   </button>
@@ -1805,6 +1969,7 @@ export function SettingsPanel() {
                   SELECTED PROVIDER IS CONFIGURED FOR FUTURE PHASES. CURRENT RUNTIME EXECUTION IS OPENAI ONLY.
                 </p>
               )}
+              <p className={styles.settingsNotice}>{rigExecutionPolicyNotice}</p>
               {agentSecretWarning && <p className={styles.settingsNotice}>{agentSecretWarning}</p>}
               <p className={styles.settingsNotice}>{rigAgentRolloutNotice}</p>
               {agentSecretStatusError && <p className={styles.settingsErrorText}>{agentSecretStatusError}</p>}

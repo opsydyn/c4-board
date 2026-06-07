@@ -1,5 +1,7 @@
 import { pipe, Schema } from "effect";
 import {
+  RigExecutionPolicySettingsSchema,
+  type RigExecutionPolicySettings,
   RigMutationPolicySettingsSchema,
   type RigMutationPolicySettings,
 } from "./agent-policy";
@@ -272,6 +274,7 @@ export const AppSettingsSchema = Schema.Struct({
   openAiApiKey: OpenAiApiKeySchema,
   aiSettings: AiSettingsSchema,
   rigAgentRolloutPreference: RigAgentV1RolloutPreferenceSchema,
+  rigExecutionPolicy: RigExecutionPolicySettingsSchema,
   agentPolicy: RigMutationPolicySettingsSchema,
 });
 
@@ -344,6 +347,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     actionMode: "read-only",
   },
   rigAgentRolloutPreference: "inherit",
+  rigExecutionPolicy: {
+    killSwitchEnabled: false,
+    allowedProviders: ["openai"],
+    allowedModels: ["gpt-4o-mini", "gpt-4.1-mini"],
+  } satisfies RigExecutionPolicySettings,
   agentPolicy: {
     maxActionsPerBatch: 48,
     maxNodesCreatedPerRun: 12,

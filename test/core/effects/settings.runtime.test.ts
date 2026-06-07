@@ -177,6 +177,30 @@ describe("settings.runtime", () => {
     expect(db.state.executeCount - executeBefore).toBe(1);
   });
 
+  it("persists rigExecutionPolicy as a single root setting patch", async () => {
+    const db = makeInMemorySettingsDb();
+    await runWithService(resetSettings(), db.service);
+    const executeBefore = db.state.executeCount;
+
+    const patched = await runWithService(
+      patchSettings({
+        rigExecutionPolicy: {
+          killSwitchEnabled: true,
+          allowedProviders: ["openai", "openrouter"],
+          allowedModels: ["gpt-4o-mini"],
+        },
+      }),
+      db.service,
+    );
+
+    expect(patched.rigExecutionPolicy).toEqual({
+      killSwitchEnabled: true,
+      allowedProviders: ["openai", "openrouter"],
+      allowedModels: ["gpt-4o-mini"],
+    });
+    expect(db.state.executeCount - executeBefore).toBe(1);
+  });
+
   it("reset writes all setting keys", async () => {
     const db = makeInMemorySettingsDb();
     await runWithService(resetSettings(), db.service);
@@ -244,6 +268,24 @@ describe("settings.runtime", () => {
           maxNodesCreatedPerRun: 12,
           maxEdgesCreatedPerRun: 24,
           allowSettingsMutation: false,
+        }),
+        updated_at: Date.now(),
+      },
+    ]);
+
+    await expect(runWithService(getSettings(), db.service)).rejects.toThrow(
+      "App settings schema validation failed",
+    );
+  });
+
+  it("fails for schema-invalid rigExecutionPolicy payloads", async () => {
+    const db = makeInMemorySettingsDb([
+      {
+        key: "rigExecutionPolicy",
+        value: JSON.stringify({
+          killSwitchEnabled: false,
+          allowedProviders: ["openai"],
+          allowedModels: [""],
         }),
         updated_at: Date.now(),
       },

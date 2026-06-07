@@ -1,6 +1,6 @@
 # Rig Agent Task Breakdown (Execution Plan)
 
-**Last Updated**: 2026-06-05
+**Last Updated**: 2026-06-07
 **Source ADR**: `docs/adr/008-rig-agent-platform-orchestration.md`
 **Delivery Horizon**: 6 phases across 2026-Q1/Q2
 
@@ -331,6 +331,10 @@
   - implemented root-level `agentPolicy` settings with persisted limits for max actions, max nodes, max edges, and settings mutation lock
   - settings UI now exposes live policy summary plus direct controls for those limits alongside OPY action mode
   - OPY action resolution now enforces policy budgets for add-node, apply-proposal, and rollback paths before any mutation reaches the board
+  - added persisted `rigExecutionPolicy` settings with a global kill switch plus provider/model allow-lists
+  - settings now surface execution-policy status, governance snapshot, and direct allow-list controls alongside rollout and runtime config
+  - OPY read/proposal/review paths now block on kill-switch, provider, and model policy violations before invoking the model runtime
+  - OPY action execution and replay paths now enforce the kill switch even for already-staged confirmations and resumable apply/rollback flows
   - targeted coverage now includes policy helper tests plus runtime/settings regression coverage for persisted policy enforcement
 
 ### RIG-502: Evaluation Harness

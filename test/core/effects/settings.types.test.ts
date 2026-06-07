@@ -52,6 +52,7 @@ describe("settings.types", () => {
     expect(isAppSettingKey("openAiApiKey")).toBe(true);
     expect(isAppSettingKey("aiSettings")).toBe(true);
     expect(isAppSettingKey("rigAgentRolloutPreference")).toBe(true);
+    expect(isAppSettingKey("rigExecutionPolicy")).toBe(true);
     expect(isAppSettingKey("agentPolicy")).toBe(true);
     expect(isAppSettingKey("not_a_real_setting")).toBe(false);
   });
@@ -122,6 +123,28 @@ describe("settings.types", () => {
         agentPolicy: {
           ...DEFAULT_APP_SETTINGS.agentPolicy,
           maxNodesCreatedPerRun: 999,
+        },
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid rigExecutionPolicy values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        rigExecutionPolicy: {
+          ...DEFAULT_APP_SETTINGS.rigExecutionPolicy,
+          allowedProviders: ["azure-openai"],
+        },
+      })
+    ).toThrow();
+
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        rigExecutionPolicy: {
+          ...DEFAULT_APP_SETTINGS.rigExecutionPolicy,
+          allowedModels: [""],
         },
       })
     ).toThrow();

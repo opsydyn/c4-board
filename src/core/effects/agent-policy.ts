@@ -12,6 +12,9 @@ export type RigToolScope = Schema.Schema.Type<typeof RigToolScopeSchema>;
 export const RigMutationModeSchema = Schema.Literal("disabled", "confirm", "policy");
 export type RigMutationMode = Schema.Schema.Type<typeof RigMutationModeSchema>;
 
+export const RigProviderIdentifierSchema = Schema.Literal("openai", "anthropic", "openrouter");
+export type RigProviderIdentifier = Schema.Schema.Type<typeof RigProviderIdentifierSchema>;
+
 const RigMaxActionsPerBatchSchema = pipe(
   Schema.Number,
   Schema.filter(
@@ -42,6 +45,36 @@ const RigMaxEdgesCreatedPerRunSchema = pipe(
   ),
 );
 
+const RigAllowedModelSchema = pipe(
+  Schema.String,
+  Schema.filter(
+    (value) => value.trim().length > 0 && value.trim().length <= 128,
+    {
+      message: () => "allowedModels entries must be between 1 and 128 characters",
+    },
+  ),
+);
+
+const RigAllowedProvidersSchema = pipe(
+  Schema.Array(RigProviderIdentifierSchema),
+  Schema.filter(
+    (value) => value.length <= 8,
+    {
+      message: () => "allowedProviders must contain 8 entries or fewer",
+    },
+  ),
+);
+
+const RigAllowedModelsSchema = pipe(
+  Schema.Array(RigAllowedModelSchema),
+  Schema.filter(
+    (value) => value.length <= 32,
+    {
+      message: () => "allowedModels must contain 32 entries or fewer",
+    },
+  ),
+);
+
 export const RigMutationPolicySettingsSchema = Schema.Struct({
   maxActionsPerBatch: RigMaxActionsPerBatchSchema,
   maxNodesCreatedPerRun: RigMaxNodesCreatedPerRunSchema,
@@ -50,11 +83,26 @@ export const RigMutationPolicySettingsSchema = Schema.Struct({
 });
 export type RigMutationPolicySettings = Schema.Schema.Type<typeof RigMutationPolicySettingsSchema>;
 
+export const RigExecutionPolicySettingsSchema = Schema.Struct({
+  killSwitchEnabled: Schema.Boolean,
+  allowedProviders: RigAllowedProvidersSchema,
+  allowedModels: RigAllowedModelsSchema,
+});
+export type RigExecutionPolicySettings = Schema.Schema.Type<typeof RigExecutionPolicySettingsSchema>;
+
 export interface RigMutationPolicyViolation {
   readonly kind: "actions" | "nodes" | "edges" | "settings";
   readonly actual: number | null;
   readonly limit: number | null;
   readonly message: string;
+}
+
+export interface RigExecutionPolicyViolation {
+  readonly kind: "kill-switch" | "provider" | "model";
+  readonly actual: string | null;
+  readonly allowed: ReadonlyArray<string> | null;
+  readonly message: string;
+  readonly recommendedAction: string;
 }
 
 export const RigToolPolicyMetadataSchema = Schema.Struct({
@@ -93,6 +141,75 @@ export const summarizeRigMutationPolicySettings = (
   `LIMITS::A${policy.maxActionsPerBatch} · N${policy.maxNodesCreatedPerRun} · E${policy.maxEdgesCreatedPerRun} · SETTINGS::${
     policy.allowSettingsMutation ? "UNLOCKED" : "LOCKED"
   }`;
+
+const normalizeRigAllowedValue = (value: string): string => value.trim().toLowerCase();
+
+export const isRigProviderAllowed = (
+  policy: RigExecutionPolicySettings,
+  provider: string,
+): boolean => {
+  const normalizedProvider = normalizeRigAllowedValue(provider);
+  return policy.allowedProviders.some(
+    (allowedProvider) => normalizeRigAllowedValue(allowedProvider) === normalizedProvider,
+  );
+};
+
+export const isRigModelAllowed = (
+  policy: RigExecutionPolicySettings,
+  model: string,
+): boolean => {
+  const normalizedModel = normalizeRigAllowedValue(model);
+  return policy.allowedModels.some(
+    (allowedModel) => normalizeRigAllowedValue(allowedModel) === normalizedModel,
+  );
+};
+
+const summarizeRigAllowedValues = (
+  values: ReadonlyArray<string>,
+): string => values.length === 0 ? "NONE" : values.map((value) => value.toUpperCase()).join("/");
+
+export const summarizeRigExecutionPolicySettings = (
+  policy: RigExecutionPolicySettings,
+): string =>
+  `EXEC::${policy.killSwitchEnabled ? "OFFLINE" : "LIVE"} · PROVIDERS::${summarizeRigAllowedValues(policy.allowedProviders)} · MODELS::${summarizeRigAllowedValues(policy.allowedModels)}`;
+
+export const detectRigExecutionPolicyViolation = (input: {
+  readonly policy: RigExecutionPolicySettings;
+  readonly provider: string;
+  readonly model: string;
+}): RigExecutionPolicyViolation | null => {
+  if (input.policy.killSwitchEnabled) {
+    return {
+      kind: "kill-switch",
+      actual: null,
+      allowed: null,
+      message: "Rig execution is blocked by the global kill switch.",
+      recommendedAction: "Disable the kill switch in Settings > AI Agent to restore execution.",
+    };
+  }
+
+  if (!isRigProviderAllowed(input.policy, input.provider)) {
+    return {
+      kind: "provider",
+      actual: input.provider,
+      allowed: input.policy.allowedProviders,
+      message: `Provider ${input.provider.toUpperCase()} is not on the allow-list.`,
+      recommendedAction: "Allow the provider in Settings > AI Agent or switch to an allowed provider.",
+    };
+  }
+
+  if (!isRigModelAllowed(input.policy, input.model)) {
+    return {
+      kind: "model",
+      actual: input.model,
+      allowed: input.policy.allowedModels,
+      message: `Model ${input.model.toUpperCase()} is not on the allow-list.`,
+      recommendedAction: "Allow the model in Settings > AI Agent or switch to an allowed model.",
+    };
+  }
+
+  return null;
+};
 
 export const detectRigMutationPolicyViolation = (input: {
   readonly policy: RigMutationPolicySettings;

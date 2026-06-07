@@ -2514,8 +2514,10 @@ export function C4CanvasContainer() {
             edgeCount={state.context.edges.length}
             boardSummary={opyBoardSummary}
             boardContext={opyBoardContext}
+            aiSettings={appSettings.aiSettings}
             actionMode={opyActionMode}
             agentPolicy={appSettings.agentPolicy}
+            rigExecutionPolicy={appSettings.rigExecutionPolicy}
             rigAgentRollout={rigAgentRollout}
             viewportSections={appSettings.opyViewportSections}
             onViewportSectionsChange={(nextSections) => {

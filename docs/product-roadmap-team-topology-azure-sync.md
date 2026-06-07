@@ -257,7 +257,7 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 
 5. **Track E5: Action Safety, Governance, and Rollout**
    - [ ] Add approval policies by action class (always-confirm, confirm-on-threshold, auto-apply for read-only).
-   - [ ] Add per-provider and per-model allow-lists in settings with kill switch support.
+   - [x] Add per-provider and per-model allow-lists in settings with kill switch support.
    - [ ] Add anomaly detection for suspicious prompts/tool-call patterns (prompt injection, unsafe request patterns).
    - [x] Add canary rollout mode (`rig_agent_v1`) and environment-level overrides.
    - [x] Add governance audit log view in Settings (`who`, `what`, `when`, `why`, `source session`).
