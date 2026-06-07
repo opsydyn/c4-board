@@ -7,7 +7,12 @@ import {
   mergeRigAgentContextWithRetrieval,
   type RigAgentContextBundle,
 } from "../../core/effects/agent-context";
-import { loadRigAgentRetrievalBundle } from "../../core/effects/agent-retrieval";
+import {
+  loadRigAgentRetrievalBundle,
+  type RigAgentAzureSyncRetrievalSnapshot,
+  type RigAgentExplainabilityRetrievalSnapshot,
+  type RigAgentSettingsRetrievalSnapshot,
+} from "../../core/effects/agent-retrieval";
 import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
 import {
   detectRigExecutionPolicyViolation,
@@ -527,6 +532,9 @@ interface OpyCopilotPanelProps {
   readonly agentPolicy: RigMutationPolicySettings;
   readonly rigExecutionPolicy: RigExecutionPolicySettings;
   readonly rigAgentRollout: EffectiveRigAgentV1RolloutState;
+  readonly settingsSnapshot: RigAgentSettingsRetrievalSnapshot;
+  readonly azureSyncSnapshot: RigAgentAzureSyncRetrievalSnapshot | null;
+  readonly explainabilitySnapshot: RigAgentExplainabilityRetrievalSnapshot | null;
   readonly viewportSections: OpyViewportSections;
   readonly onViewportSectionsChange: (sections: OpyViewportSections) => void;
   readonly taskHistoryFiltersBySession: OpyTaskHistoryFiltersBySession;
@@ -1674,6 +1682,9 @@ export function OpyCopilotPanel({
   agentPolicy,
   rigExecutionPolicy,
   rigAgentRollout,
+  settingsSnapshot,
+  azureSyncSnapshot,
+  explainabilitySnapshot,
   viewportSections,
   onViewportSectionsChange,
   taskHistoryFiltersBySession,
@@ -2468,6 +2479,9 @@ export function OpyCopilotPanel({
               rigAgentRollout,
               agentPolicy,
             },
+            settingsSnapshot,
+            azureSyncSnapshot,
+            explainabilitySnapshot,
             redactionMode,
             scopes: ["board", "session", "task", "artifact", "checkpoint", "governance"],
             diagramScope: "current-diagram",
@@ -2485,10 +2499,13 @@ export function OpyCopilotPanel({
       boardSummary,
       diagramId,
       domain,
+      explainabilitySnapshot,
       redactionMode,
       rigAgentRollout,
       rigExecutionPolicy,
       runEffect,
+      settingsSnapshot,
+      azureSyncSnapshot,
     ],
   );
 

@@ -249,10 +249,10 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - [ ] Add background cleanup/retention controls in Settings (TTL + max session count).
 
 4. **Track E4: Grounded Context + Retrieval**
-   - [ ] Build local retrieval index over nodes, edges, settings, sync run summaries, and explainability artifacts.
-   - Current OPY scope now indexes current-board graph evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, and governance snapshots locally. Settings, sync run summaries, and explainability artifacts remain to be added.
+   - [x] Build local retrieval index over nodes, edges, settings, sync run summaries, and explainability artifacts.
+   - Current OPY scope now indexes current-board graph evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, governance snapshots, operator settings state, Azure sync summaries, and complexity-field explainability snapshots locally.
    - [x] Add retrieval filters by domain (`c4`, `ddd`, `azure`), scope (current diagram/all diagrams), and recency.
-   - [ ] Return explicit citation bundles for every generated recommendation.
+   - [x] Return explicit citation bundles for every generated recommendation.
    - [ ] Add confidence scoring tied to citation coverage (low citation coverage => low confidence banner).
    - [x] Add redaction pipeline before retrieval/prompt assembly using existing privacy settings.
 
@@ -284,11 +284,10 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 ### Suggested Delivery Sequence
 
 1. E1 typed tool registry + policy metadata.
-2. E4 citation surfacing + confidence model on top of the new local retrieval grounding path.
-3. E2 role orchestration with stage lifecycle controls.
+2. E2 role orchestration with stage lifecycle controls.
+3. E5 deeper anomaly analysis across tool traces and mutation-plan artifacts.
 4. E3 session/task lifecycle and snapshot linkage.
-5. E5 governance + rollout controls.
-6. E6 eval/replay dashboards and release gating.
+5. E6 eval/replay dashboards and release gating.
 
 ## 5) Release Gates
 

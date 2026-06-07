@@ -38,7 +38,10 @@ export type RigAgentRetrievalSource =
   | "proposal"
   | "artifact"
   | "checkpoint"
-  | "governance";
+  | "governance"
+  | "settings"
+  | "azure_sync"
+  | "explainability";
 
 export interface RigAgentRetrievalHit {
   readonly id: string;
@@ -70,6 +73,81 @@ export interface RigAgentGovernanceSnapshot {
   readonly agentPolicy: RigMutationPolicySettings;
 }
 
+export interface RigAgentSettingsRetrievalSnapshot {
+  readonly opyVisible: boolean;
+  readonly azurePanelVisible: boolean;
+  readonly ownershipLensVisible: boolean;
+  readonly couplingExplainabilityVisible: boolean;
+  readonly opyWidgetPresence: "orb" | "field" | "mission";
+  readonly viewportSections: Readonly<{
+    control: boolean;
+    diagnostics: boolean;
+    checkpoints: boolean;
+    review: boolean;
+    proposal: boolean;
+  }>;
+  readonly autosaveEnabled: boolean;
+  readonly autosaveIntervalMs: number;
+  readonly saveOnNavigate: boolean;
+  readonly transitionIntensity: "low" | "normal" | "high";
+  readonly historyRetentionDays: number;
+  readonly telemetryEnabled: boolean;
+  readonly mudAlertThreshold: number;
+}
+
+export interface RigAgentAzureSyncRetrievalSnapshot {
+  readonly authState: "unknown" | "ready" | "required" | "unavailable";
+  readonly authStrategy: string | null;
+  readonly subscriptionCount: number;
+  readonly resourceGroupCount: number;
+  readonly tagFilterCount: number;
+  readonly advancedQuery: string | null;
+  readonly existingAzureNodeCount: number;
+  readonly existingAzureEdgeCount: number;
+  readonly previewResourceCount: number;
+  readonly previewRelationshipCount: number;
+  readonly mappedNodeCount: number;
+  readonly mappedEdgeCount: number;
+  readonly plannedNodeCreates: number;
+  readonly plannedNodeUpdates: number;
+  readonly plannedNodeArchives: number;
+  readonly plannedEdgeCreates: number;
+  readonly plannedEdgeUpdates: number;
+  readonly plannedEdgeArchives: number;
+  readonly warningCount: number;
+  readonly warnings: ReadonlyArray<string>;
+  readonly lastStatus: "planned" | "applied" | "aborted" | "failed" | "idle";
+  readonly lastUpdatedAt: number | null;
+  readonly lastAppliedAt: number | null;
+  readonly lastError: string | null;
+}
+
+export interface RigAgentExplainabilityModuleSnapshot {
+  readonly id: string;
+  readonly label: string;
+  readonly riskTier: "low" | "medium" | "high";
+  readonly systemicRisk: number;
+  readonly modularity: number;
+  readonly balance: number;
+  readonly volatilityPropagation: number;
+  readonly subdomainType: string;
+  readonly integrationType: string;
+  readonly strategy: string | null;
+}
+
+export interface RigAgentExplainabilityRetrievalSnapshot {
+  readonly domain: RigAgentRetrievalDomain;
+  readonly explainabilityVisible: boolean;
+  readonly mudAlertThreshold: number;
+  readonly totalModules: number;
+  readonly averageModularity: number;
+  readonly averageBalance: number;
+  readonly averageRisk: number;
+  readonly totalPropagation: number;
+  readonly selectedModule: RigAgentExplainabilityModuleSnapshot | null;
+  readonly topRiskModule: RigAgentExplainabilityModuleSnapshot | null;
+}
+
 export interface LoadRigAgentRetrievalBundleInput {
   readonly domain: RigAgentRetrievalDomain;
   readonly sessionId: string;
@@ -78,6 +156,9 @@ export interface LoadRigAgentRetrievalBundleInput {
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly query: string | null;
   readonly governance: RigAgentGovernanceSnapshot;
+  readonly settingsSnapshot?: RigAgentSettingsRetrievalSnapshot;
+  readonly azureSyncSnapshot?: RigAgentAzureSyncRetrievalSnapshot | null;
+  readonly explainabilitySnapshot?: RigAgentExplainabilityRetrievalSnapshot | null;
   readonly redactionMode: RedactionMode;
   readonly scopes?: ReadonlyArray<RigAgentRetrievalScope>;
   readonly diagramScope?: "current-diagram" | "all-diagrams";
@@ -206,6 +287,18 @@ const formatRetrievalLine = (hit: RigAgentRetrievalHit): string => {
 const buildPromptContextFromHits = (
   hits: ReadonlyArray<RigAgentRetrievalHit>,
 ): string => hits.map(formatRetrievalLine).join("\n");
+
+const toOnOff = (value: boolean): string => value ? "on" : "off";
+
+const summarizeViewportSections = (
+  sections: RigAgentSettingsRetrievalSnapshot["viewportSections"],
+): string => {
+  const expanded = Object.entries(sections)
+    .filter(([, isVisible]) => isVisible)
+    .map(([section]) => section);
+
+  return expanded.length > 0 ? expanded.join(", ") : "conversation-first";
+};
 
 const describeTaskWhat = (task: OpyAgentTask): string => {
   switch (task.request.replay.kind) {
@@ -537,6 +630,113 @@ const buildGovernanceDocument = (input: {
   tags: ["governance", "policy", "settings", input.domain],
 });
 
+const buildSettingsDocument = (input: {
+  readonly domain: RigAgentRetrievalDomain;
+  readonly settings: RigAgentSettingsRetrievalSnapshot | null | undefined;
+}): RigAgentRetrievalDocument | null => {
+  if (!input.settings) {
+    return null;
+  }
+
+  return {
+    id: `settings:${input.domain}`,
+    domain: input.domain,
+    scope: "governance",
+    source: "settings",
+    title: "OPERATOR SETTINGS SURFACE",
+    detail: `PRESENCE ${input.settings.opyWidgetPresence.toUpperCase()} · TELEMETRY ${input.settings.telemetryEnabled ? "ON" : "OFF"} · RETENTION ${input.settings.historyRetentionDays}D`,
+    content: [
+      `opy visible ${toOnOff(input.settings.opyVisible)}`,
+      `azure panel ${toOnOff(input.settings.azurePanelVisible)}`,
+      `ownership lens ${toOnOff(input.settings.ownershipLensVisible)}`,
+      `explainability ${toOnOff(input.settings.couplingExplainabilityVisible)}`,
+      `viewport ${summarizeViewportSections(input.settings.viewportSections)}`,
+      `autosave ${input.settings.autosaveEnabled ? `${input.settings.autosaveIntervalMs}ms` : "disabled"}`,
+      `save on navigate ${toOnOff(input.settings.saveOnNavigate)}`,
+      `transition ${input.settings.transitionIntensity}`,
+      `mud threshold ${input.settings.mudAlertThreshold.toFixed(1)}`,
+    ].join(" · "),
+    createdAt: null,
+    priority: 83,
+    tags: ["settings", "operator", "surface", "opy", input.domain],
+  };
+};
+
+const buildAzureSyncDocument = (input: {
+  readonly domain: RigAgentRetrievalDomain;
+  readonly snapshot: RigAgentAzureSyncRetrievalSnapshot | null | undefined;
+  readonly redactionMode: RedactionMode;
+}): RigAgentRetrievalDocument | null => {
+  if (!input.snapshot) {
+    return null;
+  }
+
+  const advancedQuery = redactFreeform(input.snapshot.advancedQuery, input.redactionMode);
+  return {
+    id: `azure-sync:${input.domain}`,
+    domain: input.domain,
+    scope: "governance",
+    source: "azure_sync",
+    title: "AZURE SYNC RUN SUMMARY",
+    detail: `AUTH ${input.snapshot.authState.toUpperCase()} · ${input.snapshot.subscriptionCount} subs · ${input.snapshot.previewResourceCount} resources · ${input.snapshot.previewRelationshipCount} links`,
+    content: [
+      `strategy ${normalizeText(input.snapshot.authStrategy, "unconfigured")}`,
+      `resource groups ${input.snapshot.resourceGroupCount}`,
+      `tag filters ${input.snapshot.tagFilterCount}`,
+      advancedQuery.length > 0 ? `query ${advancedQuery}` : "",
+      `existing azure ${input.snapshot.existingAzureNodeCount} nodes / ${input.snapshot.existingAzureEdgeCount} edges`,
+      `mapped graph ${input.snapshot.mappedNodeCount} nodes / ${input.snapshot.mappedEdgeCount} edges`,
+      `planned nodes +${input.snapshot.plannedNodeCreates} ~${input.snapshot.plannedNodeUpdates} -${input.snapshot.plannedNodeArchives}`,
+      `planned edges +${input.snapshot.plannedEdgeCreates} ~${input.snapshot.plannedEdgeUpdates} -${input.snapshot.plannedEdgeArchives}`,
+      `warnings ${input.snapshot.warningCount}`,
+      input.snapshot.lastError
+        ? `last error ${redactFreeform(input.snapshot.lastError, input.redactionMode)}`
+        : "",
+    ].filter((value) => value.length > 0).join(" · "),
+    createdAt: input.snapshot.lastUpdatedAt,
+    priority: input.snapshot.lastError ? 110 : 84,
+    tags: ["azure", "sync", "graph", input.snapshot.lastStatus, input.domain],
+  };
+};
+
+const buildExplainabilityDocument = (input: {
+  readonly snapshot: RigAgentExplainabilityRetrievalSnapshot | null | undefined;
+}): RigAgentRetrievalDocument | null => {
+  if (!input.snapshot || input.snapshot.totalModules === 0) {
+    return null;
+  }
+
+  const focusedModule = input.snapshot.selectedModule ?? input.snapshot.topRiskModule;
+  const focusDetail = focusedModule
+    ? `${focusedModule.label} ${focusedModule.systemicRisk.toFixed(1)} ${focusedModule.riskTier.toUpperCase()}`
+    : "NO FOCUS";
+
+  return {
+    id: `explainability:${input.snapshot.domain}`,
+    domain: input.snapshot.domain,
+    scope: "board",
+    source: "explainability",
+    title: "COMPLEXITY FIELD EXPLAINABILITY",
+    detail: `${input.snapshot.totalModules} modules · avg risk ${input.snapshot.averageRisk.toFixed(1)} · focus ${focusDetail}`,
+    content: [
+      `panel ${toOnOff(input.snapshot.explainabilityVisible)}`,
+      `threshold ${input.snapshot.mudAlertThreshold.toFixed(1)}`,
+      `average modularity ${input.snapshot.averageModularity.toFixed(1)}`,
+      `average balance ${input.snapshot.averageBalance.toFixed(1)}`,
+      `propagation ${input.snapshot.totalPropagation.toFixed(1)}`,
+      focusedModule
+        ? `focus module ${focusedModule.label} · ${focusedModule.subdomainType} · ${focusedModule.integrationType} · strategy ${focusedModule.strategy ?? "legacy"}`
+        : "",
+      input.snapshot.topRiskModule
+        ? `top risk ${input.snapshot.topRiskModule.label} ${input.snapshot.topRiskModule.systemicRisk.toFixed(1)} ${input.snapshot.topRiskModule.riskTier.toUpperCase()}`
+        : "",
+    ].filter((value) => value.length > 0).join(" · "),
+    createdAt: null,
+    priority: focusedModule?.riskTier === "high" ? 111 : 87,
+    tags: ["explainability", "complexity", "coupling", input.snapshot.domain],
+  };
+};
+
 const applyScopeAndRecencyFilters = (input: {
   readonly documents: ReadonlyArray<RigAgentRetrievalDocument>;
   readonly scopes: ReadonlySet<RigAgentRetrievalScope>;
@@ -680,7 +880,19 @@ export const loadRigAgentRetrievalBundle = (
           domain: input.domain,
           governance: input.governance,
         }),
-      ],
+        buildSettingsDocument({
+          domain: input.domain,
+          settings: input.settingsSnapshot,
+        }),
+        buildAzureSyncDocument({
+          domain: input.domain,
+          snapshot: input.azureSyncSnapshot,
+          redactionMode: input.redactionMode,
+        }),
+        buildExplainabilityDocument({
+          snapshot: input.explainabilitySnapshot,
+        }),
+      ].filter((document): document is RigAgentRetrievalDocument => document !== null),
       scopes,
       recencyMs,
       now,

@@ -1,6 +1,7 @@
 import { CloudIcon } from "@phosphor-icons/react";
 import type { Edge, Node } from "@xyflow/react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import type { RigAgentAzureSyncRetrievalSnapshot } from "../../core/effects/agent-retrieval";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import type { AzureRelationshipConfidence, AzureRelationshipSource } from "../../core/effects/azure-sync.types";
 import { useAzureSync } from "../hooks/useAzureSync";
@@ -11,6 +12,7 @@ interface AzureSyncPanelProps {
   readonly edges: readonly Edge[];
   readonly diagramId?: string | null;
   readonly onApply?: (dryRun: AzureSyncDryRunOutput) => Promise<void>;
+  readonly onSummaryChange?: (summary: RigAgentAzureSyncRetrievalSnapshot | null) => void;
 }
 
 const formatTimestamp = (value: number | null): string => {
@@ -24,6 +26,12 @@ const formatTimestamp = (value: number | null): string => {
     second: "2-digit",
   });
 };
+
+const countCommaSeparatedEntries = (value: string): number =>
+  value
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0).length;
 
 const EDGE_SOURCE_ORDER: readonly AzureRelationshipSource[] = [
   "arm_depends_on",
@@ -88,6 +96,7 @@ export function AzureSyncPanel({
   edges,
   diagramId,
   onApply,
+  onSummaryChange,
 }: AzureSyncPanelProps) {
   const {
     form,
@@ -213,6 +222,76 @@ export function AzureSyncPanel({
 
     return [...new Set(combinedWarnings)];
   }, [dryRun, relationshipTelemetry]);
+
+  const retrievalSummary = useMemo<RigAgentAzureSyncRetrievalSnapshot | null>(() => {
+    const hasSignal = authStatus !== null
+      || dryRun !== null
+      || error !== null
+      || lastUpdatedAt !== null
+      || lastAppliedAt !== null
+      || existingAzureNodeCount > 0
+      || existingAzureEdgeCount > 0
+      || form.subscriptionIdsInput.trim().length > 0
+      || form.resourceGroupsInput.trim().length > 0
+      || form.tagFiltersInput.trim().length > 0
+      || form.queryInput.trim().length > 0;
+
+    if (!hasSignal) {
+      return null;
+    }
+
+    const authState = !authStatus
+      ? "unknown"
+      : !authStatus.available
+        ? "unavailable"
+        : authStatus.authenticated
+          ? "ready"
+          : "required";
+
+    return {
+      authState,
+      authStrategy: authStatus?.strategy ?? null,
+      subscriptionCount: countCommaSeparatedEntries(form.subscriptionIdsInput),
+      resourceGroupCount: countCommaSeparatedEntries(form.resourceGroupsInput),
+      tagFilterCount: countCommaSeparatedEntries(form.tagFiltersInput),
+      advancedQuery: form.queryInput.trim() || null,
+      existingAzureNodeCount,
+      existingAzureEdgeCount,
+      previewResourceCount: dryRun?.snapshot.resources.length ?? 0,
+      previewRelationshipCount: dryRun?.snapshot.relationships.length ?? 0,
+      mappedNodeCount: dryRun?.mapped.nodes.length ?? 0,
+      mappedEdgeCount: dryRun?.mapped.edges.length ?? 0,
+      plannedNodeCreates: dryRun?.nodeDiff.create.length ?? 0,
+      plannedNodeUpdates: dryRun?.nodeDiff.update.length ?? 0,
+      plannedNodeArchives: dryRun?.nodeDiff.archive.length ?? 0,
+      plannedEdgeCreates: dryRun?.edgeDiff.create.length ?? 0,
+      plannedEdgeUpdates: dryRun?.edgeDiff.update.length ?? 0,
+      plannedEdgeArchives: dryRun?.edgeDiff.archive.length ?? 0,
+      warningCount: dryRunWarnings.length,
+      warnings: dryRunWarnings,
+      lastStatus: dryRun?.result.status ?? (error ? "failed" : lastAppliedAt !== null ? "applied" : "idle"),
+      lastUpdatedAt,
+      lastAppliedAt,
+      lastError: error,
+    };
+  }, [
+    authStatus,
+    dryRun,
+    dryRunWarnings,
+    error,
+    existingAzureEdgeCount,
+    existingAzureNodeCount,
+    form.queryInput,
+    form.resourceGroupsInput,
+    form.subscriptionIdsInput,
+    form.tagFiltersInput,
+    lastAppliedAt,
+    lastUpdatedAt,
+  ]);
+
+  useEffect(() => {
+    onSummaryChange?.(retrievalSummary);
+  }, [onSummaryChange, retrievalSummary]);
 
   return (
     <section className={styles.syncCard} aria-label="Azure Resource Graph sync panel">

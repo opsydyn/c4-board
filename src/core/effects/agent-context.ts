@@ -90,6 +90,13 @@ const toConfidence = (citationCount: number): {
 const formatCitationLine = (citation: RigAgentCitation): string =>
   `[${citation.tool.toUpperCase()}] ${citation.label} :: ${citation.detail}`;
 
+const formatRetrievalCitationLine = (hit: RigAgentRetrievalHit): string => {
+  const preview = hit.contentPreview.trim();
+  return preview.length > 0
+    ? `[RETRIEVAL/${hit.source.toUpperCase()}] ${hit.label} :: ${hit.detail} :: ${preview}`
+    : `[RETRIEVAL/${hit.source.toUpperCase()}] ${hit.label} :: ${hit.detail}`;
+};
+
 const createBoardSummaryCitation = (
   result: RigReadToolResultByName["board_summary"],
   redactionMode: RedactionMode,
@@ -159,6 +166,7 @@ const pushCitation = (
 export const formatRigAgentCitationBlock = (bundle: RigAgentContextBundle): string => [
   `CONFIDENCE::${bundle.confidence.toUpperCase()} · ${bundle.confidenceReason}`,
   ...bundle.citations.map((citation) => `CITATION::${formatCitationLine(citation)}`),
+  ...(bundle.retrievalHits ?? []).map((hit) => `CITATION::${formatRetrievalCitationLine(hit)}`),
 ].join("\n");
 
 export const mergeRigAgentContextWithRetrieval = (

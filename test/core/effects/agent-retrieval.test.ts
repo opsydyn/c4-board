@@ -387,4 +387,122 @@ describe("agent-retrieval", () => {
       hit.source === "diagram" && hit.label.includes("Inventory Landscape")
     )).toBe(true);
   });
+
+  it("indexes settings, Azure sync summaries, and explainability artifacts into retrieval hits", async () => {
+    const bundle = await runWithDatabaseService(
+      loadRigAgentRetrievalBundle({
+        domain: "c4",
+        sessionId: "session-1",
+        diagramId: "diagram-1",
+        boardSummary: null,
+        boardContext: null,
+        query: "azure sync complexity telemetry",
+        governance: {
+          ...governance,
+          redactionMode: "off",
+        },
+        settingsSnapshot: {
+          opyVisible: true,
+          azurePanelVisible: true,
+          ownershipLensVisible: false,
+          couplingExplainabilityVisible: true,
+          opyWidgetPresence: "mission",
+          viewportSections: {
+            control: false,
+            diagnostics: false,
+            checkpoints: false,
+            review: true,
+            proposal: false,
+          },
+          autosaveEnabled: true,
+          autosaveIntervalMs: 1_500,
+          saveOnNavigate: true,
+          transitionIntensity: "normal",
+          historyRetentionDays: 30,
+          telemetryEnabled: true,
+          mudAlertThreshold: 8.0,
+        },
+        azureSyncSnapshot: {
+          authState: "ready",
+          authStrategy: "azure-cli",
+          subscriptionCount: 2,
+          resourceGroupCount: 1,
+          tagFilterCount: 2,
+          advancedQuery: "where type =~ 'microsoft.web/sites'",
+          existingAzureNodeCount: 3,
+          existingAzureEdgeCount: 2,
+          previewResourceCount: 14,
+          previewRelationshipCount: 9,
+          mappedNodeCount: 14,
+          mappedEdgeCount: 9,
+          plannedNodeCreates: 11,
+          plannedNodeUpdates: 2,
+          plannedNodeArchives: 0,
+          plannedEdgeCreates: 7,
+          plannedEdgeUpdates: 1,
+          plannedEdgeArchives: 0,
+          warningCount: 1,
+          warnings: ["RELATIONSHIP TRUST WARNING :: 75% inferred links."],
+          lastStatus: "planned",
+          lastUpdatedAt: 1_800,
+          lastAppliedAt: null,
+          lastError: null,
+        },
+        explainabilitySnapshot: {
+          domain: "c4",
+          explainabilityVisible: true,
+          mudAlertThreshold: 8.0,
+          totalModules: 4,
+          averageModularity: 6.5,
+          averageBalance: 5.8,
+          averageRisk: 4.7,
+          totalPropagation: 8.2,
+          selectedModule: {
+            id: "system-payments",
+            label: "Payments API",
+            riskTier: "high",
+            systemicRisk: 7.7,
+            modularity: 6.2,
+            balance: 5.1,
+            volatilityPropagation: 8.0,
+            subdomainType: "core",
+            integrationType: "intrusive",
+            strategy: "auto-derived",
+          },
+          topRiskModule: {
+            id: "system-payments",
+            label: "Payments API",
+            riskTier: "high",
+            systemicRisk: 7.7,
+            modularity: 6.2,
+            balance: 5.1,
+            volatilityPropagation: 8.0,
+            subdomainType: "core",
+            integrationType: "intrusive",
+            strategy: "auto-derived",
+          },
+        },
+        redactionMode: "off",
+        scopes: ["board", "governance"],
+        maxHits: 4,
+        recencyMs: null,
+        now: 2_000,
+      }),
+      queryRows({
+        messages: [],
+        tasks: [],
+        proposals: [],
+        artifacts: [],
+        checkpoints: [],
+        diagrams: [],
+      }),
+    );
+
+    expect(bundle.hits.some((hit) => hit.source === "settings")).toBe(true);
+    expect(bundle.hits.some((hit) => hit.source === "azure_sync")).toBe(true);
+    expect(bundle.hits.some((hit) => hit.source === "explainability")).toBe(true);
+    expect(bundle.promptContext).toContain("RETRIEVAL=[GOVERNANCE/SETTINGS]");
+    expect(bundle.promptContext).toContain("RETRIEVAL=[GOVERNANCE/AZURE_SYNC]");
+    expect(bundle.promptContext).toContain("RETRIEVAL=[BOARD/EXPLAINABILITY]");
+  });
 });

@@ -180,10 +180,10 @@ OPY’s answers are grounded in typed read tools rather than free-form prompt st
 ### Grounding Features
 
 - context assembly from current board state
-- local retrieval grounding across board evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, and governance state
+- local retrieval grounding across board evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, governance state, operator settings, Azure sync run summaries, and complexity-field explainability snapshots
 - retrieval filters for domain, scope, diagram scope, and recency before prompt assembly
 - confidence labels
-- citations/provenance bundles
+- explicit operator-visible citation bundles, including retrieval-backed settings, Azure sync, and explainability hits
 - run diagnostics surfaced in the panel
 
 ### Privacy-Aware Retrieval

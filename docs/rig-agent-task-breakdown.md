@@ -371,14 +371,16 @@
 - Depends on: `RIG-403`.
 - Current status:
   - added `loadRigAgentRetrievalBundle` to assemble ranked local evidence from board graph state, transcript messages, tasks, proposals, artifacts, checkpoints, saved-diagram metadata, and governance snapshots
+  - retrieval evidence now also indexes operator settings state, Azure sync dry-run/apply summaries, and complexity-field explainability snapshots from the active board surface
   - retrieval now supports `domain`, `scopes`, `diagramScope`, and `recencyMs` inputs before search ranking and fallback selection
   - current OPY contextualization paths now merge retrieval prompt lines into the base Rig context for chat, review, proposal, and replay flows
+  - formatted OPY citation bundles now surface retrieval-backed settings, Azure sync, and explainability hits alongside typed read-tool citations for operator auditability
   - strict privacy mode now redacts sensitive ownership metadata and freeform transcript content before retrieval evidence reaches prompt assembly
   - retrieval loading now fails open so local persistence issues do not block the base OPY board-context path
 - Acceptance:
-  - OPY can assemble local retrieval evidence for read/proposal/review flows without remote indexing infrastructure.
+  - OPY can assemble local retrieval evidence for read/proposal/review flows without remote indexing infrastructure, including current settings/sync/explainability surfaces.
   - Retrieval prompt context honors the configured redaction mode before model invocation.
-  - Focused tests cover ranked retrieval assembly, strict-redaction behavior, and governance/all-diagrams retrieval paths.
+  - Focused tests cover ranked retrieval assembly, strict-redaction behavior, governance/all-diagrams retrieval paths, and the new settings/Azure/explainability source classes.
 
 ## 7) Phase 5: Governance, Evaluation, Rollout
 
@@ -476,8 +478,8 @@
 
 ## 8) Next Recommended Execution Order
 
-1. Extend retrieval grounding to settings, Azure sync summaries, and explainability artifacts, then surface retrieval hits as explicit operator-visible citation bundles.
-2. Deepen anomaly detection from request preflight into tool-trace and mutation-plan pattern analysis before wider mutation rollout.
+1. Deepen anomaly detection from request preflight into tool-trace and mutation-plan pattern analysis before wider mutation rollout.
+2. Add deterministic stage-transition logging per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`) so audit/eval can reason over exact orchestration flow.
 3. Add deterministic replay/eval utilities and percentile latency dashboards once provider-side usage data is exposed.
 
 ## 9) Definition of Ready / Done

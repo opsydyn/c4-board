@@ -137,4 +137,30 @@ describe("agent-context", () => {
     expect(selectedCitation?.detail).toContain("[REDACTED TEAM]");
     expect(selectedCitation?.sourceId).toBeNull();
   });
+
+  it("includes retrieval hits in the formatted citation block", () => {
+    const citationBlock = formatRigAgentCitationBlock({
+      promptContext: "",
+      citations: [],
+      confidence: "medium",
+      confidenceReason: "Retrieval evidence complements board sources.",
+      retrievalHits: [
+        {
+          id: "settings:c4",
+          scope: "governance",
+          source: "settings",
+          label: "OPERATOR SETTINGS SURFACE",
+          detail: "PRESENCE MISSION · TELEMETRY ON · RETENTION 30D",
+          contentPreview: "opy visible on · explainability on · autosave 1500ms",
+          createdAt: null,
+          score: 0.02,
+        },
+      ],
+      retrievalPromptContext: "RETRIEVAL=[GOVERNANCE/SETTINGS] OPERATOR SETTINGS SURFACE",
+    });
+
+    expect(citationBlock).toContain("CITATION::[RETRIEVAL/SETTINGS]");
+    expect(citationBlock).toContain("OPERATOR SETTINGS SURFACE");
+    expect(citationBlock).toContain("autosave 1500ms");
+  });
 });

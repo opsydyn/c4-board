@@ -16,12 +16,10 @@ import { ParentSize } from "@visx/responsive";
 import { scaleOrdinal } from "@visx/scale";
 import { Circle, Pie } from "@visx/shape";
 import { useTooltip } from "@visx/tooltip";
-import type { Edge, Node } from "@xyflow/react";
 import { useId, useMemo } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { type BalancedCouplingModel, type ModuleCouplingSnapshot, type RiskTier } from "../../core/balancedCoupling";
 import { theme } from "../../styles/theme.css";
-import type { DiagramDomain } from "../machines/canvas.machine";
 import {
   mudChartCanvas,
   mudChartCard,
@@ -56,14 +54,11 @@ import {
   mudChartTitle,
   mudChartTooltip,
 } from "./styles.css";
-import { useBalancedCouplingModel } from "./useBalancedCouplingModel";
 
 interface BalancedMudChartProps {
-  nodes: Node[];
-  edges: Edge[];
+  model: BalancedCouplingModel;
   selectedModuleId?: string | null;
   onSelectModule?: (moduleId: string) => void;
-  domain: DiagramDomain;
   mudAlertThreshold?: number;
   isExplainabilityVisible: boolean;
   onToggleExplainability: () => void;
@@ -315,16 +310,13 @@ const TextStack = ({ modularity, balance, risk }: TextStackProps) => (
 );
 
 export function BalancedMudChart({
-  nodes,
-  edges,
+  model,
   onSelectModule,
   selectedModuleId,
-  domain,
   mudAlertThreshold = 8.0,
   isExplainabilityVisible,
   onToggleExplainability,
 }: BalancedMudChartProps) {
-  const model = useBalancedCouplingModel(nodes, edges, domain);
   const {
     tooltipData,
     tooltipOpen,

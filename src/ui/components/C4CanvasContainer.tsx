@@ -29,8 +29,15 @@ import { ToggleButton } from "react-aria-components";
 import * as Tone from "tone";
 import type { Actor, AnyStateMachine, StateFrom } from "xstate";
 import { waitFor } from "xstate";
+import type { ModuleCouplingSnapshot } from "../../core/balancedCoupling";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
+import type {
+  RigAgentAzureSyncRetrievalSnapshot,
+  RigAgentExplainabilityModuleSnapshot,
+  RigAgentExplainabilityRetrievalSnapshot,
+  RigAgentSettingsRetrievalSnapshot,
+} from "../../core/effects/agent-retrieval";
 import {
   buildOpyCheckpointRecord,
   buildOpyCheckpointSnapshot,
@@ -94,6 +101,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
 import { Toolbar } from "./Toolbar";
+import { useBalancedCouplingModel } from "./useBalancedCouplingModel";
 
 const sidebarBrandMetaClass = flex({
   direction: "column",
@@ -229,6 +237,23 @@ const buildRigC4BoardSummary = (input: {
   };
 };
 
+const serializeRetrievalSnapshot = (value: unknown): string => JSON.stringify(value ?? null);
+
+const toExplainabilityModuleSnapshot = (
+  snapshot: ModuleCouplingSnapshot,
+): RigAgentExplainabilityModuleSnapshot => ({
+  id: snapshot.id,
+  label: snapshot.label,
+  riskTier: snapshot.riskTier,
+  systemicRisk: snapshot.systemicRisk,
+  modularity: snapshot.modularity,
+  balance: snapshot.balance,
+  volatilityPropagation: snapshot.volatilityPropagation,
+  subdomainType: snapshot.subdomainType,
+  integrationType: snapshot.integrationType,
+  strategy: snapshot.provenance?.strategy ?? null,
+});
+
 export function C4CanvasContainer() {
   const [state, send, canvasActor] = useMachine(
     canvasMachine as unknown as UseMachineParam,
@@ -263,6 +288,7 @@ export function C4CanvasContainer() {
   const [isDataBarOpen, setDataBarOpen] = useState(false);
   const [opyChromeStatus, setOpyChromeStatus] = useState<OpyWidgetChromeStatus | null>(null);
   const [opyChromeSectionRequest, setOpyChromeSectionRequest] = useState<OpyWidgetChromeFocusRequest | null>(null);
+  const [opyAzureSyncSnapshot, setOpyAzureSyncSnapshot] = useState<RigAgentAzureSyncRetrievalSnapshot | null>(null);
   const [ownershipTeamCatalog, setOwnershipTeamCatalog] = useState<string[]>([]);
   const [ownershipTeamFilter, setOwnershipTeamFilter] = useState<string>(
     OWNERSHIP_FILTER_ALL,
@@ -389,6 +415,17 @@ export function C4CanvasContainer() {
     toggleOpyCopilot,
   ]);
 
+  const handleAzureSyncSummaryChange = useCallback(
+    (nextSummary: RigAgentAzureSyncRetrievalSnapshot | null) => {
+      setOpyAzureSyncSnapshot((currentSummary) =>
+        serializeRetrievalSnapshot(currentSummary) === serializeRetrievalSnapshot(nextSummary)
+          ? currentSummary
+          : nextSummary
+      );
+    },
+    [],
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -402,6 +439,10 @@ export function C4CanvasContainer() {
       console.warn("⚠️ Failed to emit frontend:ready event", error);
     });
   }, []);
+
+  useEffect(() => {
+    setOpyAzureSyncSnapshot(null);
+  }, [state.context.currentDiagramId, state.context.currentDomain]);
 
   const primeSaveAudio = useCallback(async (): Promise<boolean> => {
     if (!appSettings.masterAudioEnabled || !appSettings.saveVolEnabled) {
@@ -2190,6 +2231,82 @@ export function C4CanvasContainer() {
       }),
     [opyBoardSummary, state.context.selectedNodeId],
   );
+  const balancedCouplingModel = useBalancedCouplingModel(
+    state.context.nodes,
+    state.context.edges,
+    state.context.currentDomain,
+  );
+  const opySettingsSnapshot = useMemo<RigAgentSettingsRetrievalSnapshot>(
+    () => ({
+      opyVisible: isOpy9000Open,
+      azurePanelVisible: isAzurePanelOpen,
+      ownershipLensVisible: isOwnershipLensOpen,
+      couplingExplainabilityVisible: isCouplingExplainabilityVisible,
+      opyWidgetPresence: appSettings.opyWidgetPresence,
+      viewportSections: appSettings.opyViewportSections,
+      autosaveEnabled: appSettings.autosaveEnabled,
+      autosaveIntervalMs: appSettings.autosaveIntervalMs,
+      saveOnNavigate: appSettings.saveOnNavigate,
+      transitionIntensity: appSettings.transitionIntensity,
+      historyRetentionDays: appSettings.historyRetentionDays,
+      telemetryEnabled: appSettings.telemetryEnabled,
+      mudAlertThreshold: appSettings.bigBallOfMudAlertThreshold,
+    }),
+    [
+      appSettings.autosaveEnabled,
+      appSettings.autosaveIntervalMs,
+      appSettings.bigBallOfMudAlertThreshold,
+      appSettings.historyRetentionDays,
+      appSettings.opyTaskHistoryFiltersBySession,
+      appSettings.opyViewportSections,
+      appSettings.opyWidgetPresence,
+      appSettings.saveOnNavigate,
+      appSettings.telemetryEnabled,
+      appSettings.transitionIntensity,
+      isAzurePanelOpen,
+      isCouplingExplainabilityVisible,
+      isOpy9000Open,
+      isOwnershipLensOpen,
+    ],
+  );
+  const opyExplainabilitySnapshot = useMemo<RigAgentExplainabilityRetrievalSnapshot | null>(() => {
+    if (balancedCouplingModel.snapshots.length === 0) {
+      return null;
+    }
+
+    const selectedSnapshot = state.context.selectedNodeId
+      ? balancedCouplingModel.snapshots.find((snapshot) => snapshot.id === state.context.selectedNodeId) ?? null
+      : null;
+    const topRiskSnapshot = balancedCouplingModel.snapshots.reduce<ModuleCouplingSnapshot | null>(
+      (currentTop, snapshot) =>
+        !currentTop || snapshot.systemicRisk > currentTop.systemicRisk ? snapshot : currentTop,
+      null,
+    );
+
+    return {
+      domain: state.context.currentDomain,
+      explainabilityVisible: isCouplingExplainabilityVisible,
+      mudAlertThreshold: appSettings.bigBallOfMudAlertThreshold,
+      totalModules: balancedCouplingModel.aggregate.totalModules,
+      averageModularity: balancedCouplingModel.aggregate.averageModularity,
+      averageBalance: balancedCouplingModel.aggregate.averageBalance,
+      averageRisk: balancedCouplingModel.aggregate.averageRisk,
+      totalPropagation: balancedCouplingModel.aggregate.totalPropagation,
+      selectedModule: selectedSnapshot ? toExplainabilityModuleSnapshot(selectedSnapshot) : null,
+      topRiskModule: topRiskSnapshot ? toExplainabilityModuleSnapshot(topRiskSnapshot) : null,
+    };
+  }, [
+    appSettings.bigBallOfMudAlertThreshold,
+    balancedCouplingModel.aggregate.averageBalance,
+    balancedCouplingModel.aggregate.averageModularity,
+    balancedCouplingModel.aggregate.averageRisk,
+    balancedCouplingModel.aggregate.totalModules,
+    balancedCouplingModel.aggregate.totalPropagation,
+    balancedCouplingModel.snapshots,
+    isCouplingExplainabilityVisible,
+    state.context.currentDomain,
+    state.context.selectedNodeId,
+  ]);
 
   return (
     <div
@@ -2362,6 +2479,7 @@ export function C4CanvasContainer() {
               edges={state.context.edges}
               diagramId={state.context.currentDiagramId}
               onApply={handleApplyAzureSync}
+              onSummaryChange={handleAzureSyncSummaryChange}
             />
           )}
           {state.context.currentDomain === "c4"
@@ -2520,6 +2638,9 @@ export function C4CanvasContainer() {
             agentPolicy={appSettings.agentPolicy}
             rigExecutionPolicy={appSettings.rigExecutionPolicy}
             rigAgentRollout={rigAgentRollout}
+            settingsSnapshot={opySettingsSnapshot}
+            azureSyncSnapshot={opyAzureSyncSnapshot}
+            explainabilitySnapshot={opyExplainabilitySnapshot}
             viewportSections={appSettings.opyViewportSections}
             onViewportSectionsChange={(nextSections) => {
               void persistOpyViewportSections(nextSections);
@@ -2586,11 +2707,9 @@ export function C4CanvasContainer() {
             </ToggleButton>
           </div>
           <BalancedMudChart
-            nodes={state.context.nodes}
-            edges={state.context.edges}
+            model={balancedCouplingModel}
             selectedModuleId={selectedNode?.id ?? null}
             onSelectModule={handleSelectNode}
-            domain={state.context.currentDomain}
             mudAlertThreshold={appSettings.bigBallOfMudAlertThreshold}
             isExplainabilityVisible={isCouplingExplainabilityVisible}
             onToggleExplainability={toggleCouplingExplainability}
