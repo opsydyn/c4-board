@@ -1,6 +1,6 @@
 # Product Roadmap: Team Topologies + Azure Sync
 
-**Last Updated**: 2026-02-15
+**Last Updated**: 2026-06-07
 **Owner**: Product + Platform Engineering
 **Scope Horizon**: 2026-Q1 to 2026-Q2
 
@@ -235,8 +235,8 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - [ ] Emit normalized tool execution telemetry (`tool`, `args_hash`, `duration_ms`, `result`, `error_class`).
 
 2. **Track E2: Multi-Agent/Role Orchestration**
-   - [ ] Implement role separation in Rig flows: `planner` (plan), `analyst` (explain), `executor` (propose actions), `verifier` (post-check).
-   - [ ] Require planner output before any executable action batch.
+   - [x] Implement role separation across Rig read/proposal/review flows: `analyst` (explain), `planner` (plan), `verifier` (post-check), with executor handoff preserved through typed action/apply boundaries.
+   - [x] Require persisted planner output before any executable action batch.
    - [ ] Add iteration budgets and hard timeouts per stage to prevent runaway agent loops.
    - [ ] Add cancellation and retry semantics surfaced in UI session state.
    - [ ] Add deterministic stage transitions logged per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`).

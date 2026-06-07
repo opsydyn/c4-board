@@ -627,6 +627,9 @@ const isOpyAgentTaskStage = (value: unknown): value is OpyAgentTaskStage =>
 const isOpyAgentToolCallName = (value: unknown): value is OpyAgentToolCallName =>
   value === "assemble_context"
   || value === "invoke_agent"
+  || value === "invoke_analyst"
+  || value === "invoke_planner"
+  || value === "invoke_verifier"
   || value === "persist_assistant_message"
   || value === "resolve_action"
   || value === "execute_board_action"

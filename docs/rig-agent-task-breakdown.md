@@ -59,6 +59,10 @@
 - confirmed action tasks interrupted after confirmation now resume at the apply boundary instead of dropping back to the confirmation gate, with machine coverage for both `applying` and `verifying` interruptions
 - continuity spotlight ranking, boundary drilldown, and health-driver diagnostics now have direct pure test coverage instead of relying only on panel-level manual verification
 - `RIG-402` is now effectively complete for the current OPY scope: restart-proof hydration, stage-aware resume, continuity spotlight/drilldown, exact artifact focus routing, and persistence coverage are all in place
+- `RIG-403` is now complete for the current OPY scope:
+  - read/proposal/review Rig runs now persist explicit `analyst`, `planner`, and `verifier` invoke boundaries while remaining backward-compatible with older `invoke_agent` traces
+  - proposal generation now persists a planner-owned `mutation_plan` artifact before any operator confirmation or apply step
+  - proposal apply and replay now fail closed when that persisted planner artifact is missing for the target proposal
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -286,7 +290,7 @@
   - `opy_agent_tasks` now stores active OPY lifecycle requests with `running|interrupted|completed|failed|cancelled` status
   - OPY can hydrate a resumable interrupted-task queue for the active session, let the operator switch the active resume slot, and resume or dismiss the selected task
   - `opy_agent_tasks` now also stores lineage metadata so related task segments can be chained through `lineage_key` and `parent_task_id`
-  - `opy_agent_tool_calls` now records high-signal lifecycle steps such as context assembly, agent invoke, assistant-message persistence, action resolution, board apply, and checkpoint refresh
+  - `opy_agent_tool_calls` now records high-signal lifecycle steps such as context assembly, role-specific analyst/planner/verifier invokes, assistant-message persistence, action resolution, board apply, and checkpoint refresh
   - `opy_agent_artifacts` now stores grounded context bundles, response/proposal/review payloads, action descriptors, action results, resume boundary outcomes, mutation plans, and checkpoint restore previews
   - OPY now surfaces recent per-session task history with expandable tool-call timeline and artifact inspection
   - interrupted-task resume now rehydrates persisted grounded/action artifacts and can recover action execution from stored descriptors
@@ -308,6 +312,32 @@
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.
+
+### RIG-403: Role-Separated Planning Boundary
+
+- Goal: Separate Rig reasoning roles and require planner provenance before any executable mutation batch.
+- Deliverables:
+  - Persist explicit role-oriented invoke boundaries for `analyst`, `planner`, and `verifier` flows.
+  - Persist a planner-owned `mutation_plan` artifact during proposal generation.
+  - Block proposal apply and replay when the target proposal has no persisted planner artifact.
+- Primary files:
+  - `src/core/effects/opy-agent.trace.ts`
+  - `src/core/effects/opy-agent.resume.ts`
+  - `src/core/effects/opy-chat.persistence.ts`
+  - `src/core/effects/opy-action.runtime.ts`
+  - `src/ui/components/OpyCopilotPanel.tsx`
+  - `test/core/effects/opy-action.runtime.test.ts`
+  - `test/core/effects/agent-evals/rig-agent.evals.test.ts`
+  - `test/core/effects/opy-chat.persistence.test.ts`
+- Depends on: `RIG-402`.
+- Current status:
+  - proposal runs now persist a planner-owned `mutation_plan` artifact alongside the proposal artifact itself
+  - apply/replay now check for that persisted planner artifact before constructing an executable mutation descriptor
+  - resume/task-history boundaries now distinguish `invoke_analyst`, `invoke_planner`, and `invoke_verifier`, with legacy `invoke_agent` support retained for older persisted runs
+- Acceptance:
+  - Read/proposal/review chains show explicit role boundaries in persisted traces and resume diagnostics.
+  - Proposal apply fails closed when planner provenance is missing.
+  - Replay enforces the same planner gate as a live apply path.
 
 ## 7) Phase 5: Governance, Evaluation, Rollout
 
@@ -379,10 +409,9 @@
 
 ## 8) Next Recommended Execution Order
 
-1. Introduce explicit role separation in Rig flows (`planner`, `analyst`, `executor`, `verifier`) and require a persisted planner artifact before any executable mutation batch.
-2. Add per-stage iteration budgets, hard timeouts, and surfaced cancellation/retry semantics so long-running agent chains cannot loop or stall silently.
-3. Build the local retrieval index over board/session/governance artifacts with domain/scope filters and redaction-aware prompt assembly.
-4. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
+1. Add per-stage iteration budgets, hard timeouts, and surfaced cancellation/retry semantics so long-running agent chains cannot loop or stall silently.
+2. Build the local retrieval index over board/session/governance artifacts with domain/scope filters and redaction-aware prompt assembly.
+3. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
 
 ## 9) Definition of Ready / Done
 

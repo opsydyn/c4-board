@@ -52,6 +52,9 @@ export const LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD = 0.5;
 const RESUME_BOUNDARY_LABEL: Record<OpyAgentToolCallName, string> = {
   assemble_context: "CONTEXT",
   invoke_agent: "RESULT",
+  invoke_analyst: "ANALYST",
+  invoke_planner: "PLANNER",
+  invoke_verifier: "VERIFIER",
   persist_assistant_message: "MESSAGE",
   resolve_action: "ACTION",
   execute_board_action: "APPLY",

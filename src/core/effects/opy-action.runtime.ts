@@ -168,6 +168,7 @@ export const resolveOpyApplyProposalActionFlow = (input: {
   readonly policy: RigMutationPolicySettings;
   readonly boardSummary: RigC4BoardSummary | null;
   readonly proposalRecord: OpyActionProposalRecord | null;
+  readonly plannerArtifactReady: boolean;
   readonly sessionId: string;
 }):
   | { readonly ok: true; readonly value: OpyApplyProposalActionResolution }
@@ -239,6 +240,16 @@ export const resolveOpyApplyProposalActionFlow = (input: {
     return {
       ok: false,
       issue: createNoOpIssue("NO NEW CHANGES TO APPLY. PROPOSAL ALREADY MATCHES THE BOARD."),
+    };
+  }
+
+  if (!input.plannerArtifactReady) {
+    return {
+      ok: false,
+      issue: createPolicyIssue(
+        "Plan apply blocked because no persisted planner artifact is attached to this proposal.",
+        "Regenerate the proposal so OPY can persist a planner artifact before apply.",
+      ),
     };
   }
 

@@ -626,7 +626,9 @@ describe("opy-chat.persistence", () => {
 
   it("upserts and lists persisted OPY agent tool calls", async () => {
     const execute = vi.fn();
-    const toolCall = createToolCall();
+    const toolCall = createToolCall({
+      name: "invoke_planner",
+    });
 
     const persistedToolCall = await runWithDatabaseService(
       upsertOpyAgentToolCall(toolCall),
@@ -639,7 +641,7 @@ describe("opy-chat.persistence", () => {
     expect(upsertValues[0]).toBe("tool-1");
     expect(upsertValues[1]).toBe("task-1");
     expect(upsertValues[2]).toBe("session-1");
-    expect(upsertValues[3]).toBe("invoke_agent");
+    expect(upsertValues[3]).toBe("invoke_planner");
 
     const listed = await runWithDatabaseService(
       listOpyAgentToolCalls("task-1"),
@@ -649,7 +651,7 @@ describe("opy-chat.persistence", () => {
             id: "tool-older",
             taskId: "task-1",
             sessionId: "session-1",
-            name: "assemble_context",
+            name: "invoke_verifier",
             status: "completed",
             startedAt: 2_000,
             updatedAt: 2_010,

@@ -143,6 +143,7 @@ describe("opy-action.runtime", () => {
       policy: defaultAgentPolicy,
       boardSummary: createBoardSummary(),
       proposalRecord: createProposalRecord(),
+      plannerArtifactReady: true,
       sessionId: "session-1",
     });
 
@@ -175,6 +176,7 @@ describe("opy-action.runtime", () => {
         edges: [],
       }),
       proposalRecord: createProposalRecord(),
+      plannerArtifactReady: true,
       sessionId: "session-9",
     });
 
@@ -234,6 +236,7 @@ describe("opy-action.runtime", () => {
       proposalRecord: createProposalRecord({
         decisionStatus: "pending",
       }),
+      plannerArtifactReady: true,
       sessionId: "session-1",
     });
 
@@ -339,6 +342,7 @@ describe("opy-action.runtime", () => {
         edges: [],
       }),
       proposalRecord: createProposalRecord(),
+      plannerArtifactReady: true,
       sessionId: "session-11",
     });
 
@@ -347,6 +351,40 @@ describe("opy-action.runtime", () => {
       issue: expect.objectContaining({
         kind: "policy",
         message: "Plan apply blocked by policy. Batch size 2 exceeds the max action budget 1.",
+      }),
+    });
+  });
+
+  it("blocks apply when the persisted planner artifact is missing", () => {
+    const resolution = resolveOpyApplyProposalActionFlow({
+      actionMode: "apply-with-confirmation",
+      policy: defaultAgentPolicy,
+      boardSummary: createBoardSummary({
+        nodeCount: 1,
+        edgeCount: 0,
+        nodes: [
+          {
+            id: "person-customer",
+            label: "Customer",
+            nodeType: "person",
+            description: null,
+            technology: null,
+            teamOwnership: null,
+          },
+        ],
+        edges: [],
+      }),
+      proposalRecord: createProposalRecord(),
+      plannerArtifactReady: false,
+      sessionId: "session-12",
+    });
+
+    expect(resolution).toEqual({
+      ok: false,
+      issue: expect.objectContaining({
+        kind: "policy",
+        message: "Plan apply blocked because no persisted planner artifact is attached to this proposal.",
+        recommendedAction: "Regenerate the proposal so OPY can persist a planner artifact before apply.",
       }),
     });
   });

@@ -1,6 +1,9 @@
 export type OpyAgentToolCallName =
   | "assemble_context"
   | "invoke_agent"
+  | "invoke_analyst"
+  | "invoke_planner"
+  | "invoke_verifier"
   | "persist_assistant_message"
   | "resolve_action"
   | "execute_board_action"

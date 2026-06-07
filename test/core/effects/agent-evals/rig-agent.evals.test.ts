@@ -126,6 +126,7 @@ describe("rig-agent eval harness", () => {
         proposal: scenario.proposal,
         decisionStatus: "approved",
       },
+      plannerArtifactReady: true,
       sessionId: "eval-mono-team",
     });
 
@@ -157,6 +158,7 @@ describe("rig-agent eval harness", () => {
           proposal: scenario.proposal,
           decisionStatus: "approved",
         },
+        plannerArtifactReady: true,
         sessionId: `eval-read-only-${scenario.id}`,
       });
 
@@ -183,6 +185,7 @@ describe("rig-agent eval harness", () => {
         proposal: scenario.proposal,
         decisionStatus: "approved",
       },
+      plannerArtifactReady: true,
       sessionId: "eval-cross-team",
     });
 

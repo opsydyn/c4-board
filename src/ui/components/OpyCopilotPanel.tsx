@@ -359,18 +359,25 @@ const createBoardReviewArtifactDraft = (
 });
 
 const createMutationPlanArtifactDraft = (input: {
-  readonly groundedProposal: ReturnType<typeof buildGroundedProposalDiff>;
+  readonly proposalRespondedAtMs: number;
+  readonly groundedProposal: NonNullable<ReturnType<typeof buildGroundedProposalDiff>>;
   readonly proposalSummary: ReturnType<typeof summarizeGroundedProposalDiff>;
-  readonly mutationPlan: ReturnType<typeof buildRigMutationPlanDiff>;
+  readonly mutationPlan: NonNullable<ReturnType<typeof buildRigMutationPlanDiff>>;
 }): OpyTaskArtifactDraft => ({
   kind: "mutation_plan",
   summary: summarizeInlineText(
-    input.mutationPlan?.plan
-      ? `PLAN::${input.mutationPlan.plan.totalActions} ACTION(S) · RISK::${input.mutationPlan.plan.highestRisk.toUpperCase()}`
-      : "MUTATION PLAN READY.",
-    "MUTATION PLAN READY.",
+    input.mutationPlan.plan
+      ? `PLANNER PLAN::${input.mutationPlan.plan.totalActions} ACTION(S) · RISK::${input.mutationPlan.plan.highestRisk.toUpperCase()}`
+      : "PLANNER PLAN READY.",
+    "PLANNER PLAN READY.",
   ),
-  payload: input,
+  payload: {
+    role: "planner",
+    proposalRespondedAtMs: input.proposalRespondedAtMs,
+    groundedProposal: input.groundedProposal,
+    proposalSummary: input.proposalSummary,
+    mutationPlan: input.mutationPlan,
+  } satisfies OpyPersistedPlannerPlanArtifactPayload,
 });
 
 const createCheckpointRestorePreviewArtifactDraft = (
@@ -390,6 +397,34 @@ const createCheckpointRestorePreviewArtifactDraft = (
     ),
     payload: preview,
   };
+};
+
+const createPlannerPlanArtifactDraftFromGroundedProposal = (
+  groundedProposal: OpyGroundedDiagramProposal,
+  boardSummary: RigC4BoardSummary | null,
+): OpyTaskArtifactDraft | null => {
+  const groundedDiff = buildGroundedProposalDiff(
+    groundedProposal.proposal,
+    boardSummary,
+  );
+  if (!groundedDiff) {
+    return null;
+  }
+
+  const mutationPlan = buildRigMutationPlanDiff(
+    groundedProposal.proposal,
+    groundedDiff,
+  );
+  if (!mutationPlan) {
+    return null;
+  }
+
+  return createMutationPlanArtifactDraft({
+    proposalRespondedAtMs: groundedProposal.proposal.respondedAtMs,
+    groundedProposal: groundedDiff,
+    proposalSummary: summarizeGroundedProposalDiff(groundedDiff),
+    mutationPlan,
+  });
 };
 
 type OpyPersistMessageResult =
@@ -417,6 +452,16 @@ interface OpyPersistedActionDescriptorArtifactPayload {
 
 interface OpyPersistedActionResultArtifactPayload {
   readonly message: string;
+}
+
+type OpyRigInvokeToolCallName = "invoke_analyst" | "invoke_planner" | "invoke_verifier";
+
+interface OpyPersistedPlannerPlanArtifactPayload {
+  readonly role: "planner";
+  readonly proposalRespondedAtMs: number;
+  readonly groundedProposal: NonNullable<ReturnType<typeof buildGroundedProposalDiff>>;
+  readonly proposalSummary: ReturnType<typeof summarizeGroundedProposalDiff>;
+  readonly mutationPlan: NonNullable<ReturnType<typeof buildRigMutationPlanDiff>>;
 }
 
 interface OpyCopilotPanelProps {
@@ -480,6 +525,16 @@ const isPersistedActionResultArtifactPayload = (
   value: unknown,
 ): value is OpyPersistedActionResultArtifactPayload =>
   isRecord(value) && typeof value.message === "string";
+
+const isPersistedPlannerPlanArtifactPayload = (
+  value: unknown,
+): value is OpyPersistedPlannerPlanArtifactPayload =>
+  isRecord(value)
+  && value.role === "planner"
+  && typeof value.proposalRespondedAtMs === "number"
+  && isRecord(value.groundedProposal)
+  && isRecord(value.proposalSummary)
+  && isRecord(value.mutationPlan);
 
 const isPersistedResumeBoundaryOutcomePayload = (
   value: unknown,
@@ -588,6 +643,20 @@ const selectPersistedActionResultMessage = (
     return null;
   }
   return artifact.payload.message;
+};
+
+const selectPersistedPlannerPlanArtifact = (
+  artifacts: readonly OpyAgentArtifact[],
+  proposalRespondedAtMs: number,
+): OpyPersistedPlannerPlanArtifactPayload | null => {
+  const artifact = selectLatestTaskArtifact(artifacts, "mutation_plan");
+  if (!artifact || !isPersistedPlannerPlanArtifactPayload(artifact.payload)) {
+    return null;
+  }
+
+  return artifact.payload.proposalRespondedAtMs === proposalRespondedAtMs
+    ? artifact.payload
+    : null;
 };
 
 const selectPersistedContextBundle = (
@@ -837,10 +906,32 @@ const SESSION_LOCAL_RESUME_BOUNDARIES = new Set<OpyAgentToolCallName>([
 const RESUME_BOUNDARY_LABEL: Record<OpyAgentToolCallName, string> = {
   assemble_context: "CONTEXT",
   invoke_agent: "RESULT",
+  invoke_analyst: "ANALYST",
+  invoke_planner: "PLANNER",
+  invoke_verifier: "VERIFIER",
   persist_assistant_message: "MESSAGE",
   resolve_action: "ACTION",
   execute_board_action: "APPLY",
   refresh_checkpoints: "CHECKPOINTS",
+};
+
+const INVOKE_TOOL_CALL_ROLE_LABEL: Record<OpyRigInvokeToolCallName, "ANALYST" | "PLANNER" | "VERIFIER"> = {
+  invoke_analyst: "ANALYST",
+  invoke_planner: "PLANNER",
+  invoke_verifier: "VERIFIER",
+};
+
+const getReadInvokeToolCallName = (
+  kind: Extract<OpyAgentLifecycleRequest["kind"], "chat" | "proposal" | "review">,
+): OpyRigInvokeToolCallName => {
+  switch (kind) {
+    case "chat":
+      return "invoke_analyst";
+    case "proposal":
+      return "invoke_planner";
+    case "review":
+      return "invoke_verifier";
+  }
 };
 
 const RESUME_BOUNDARY_ORIGIN_LABEL: Record<Exclude<OpyResumeBoundaryOrigin, "fresh">, string> = {
@@ -859,9 +950,11 @@ const getResumeBoundariesForRequest = (
 ): ReadonlyArray<OpyAgentToolCallName> => {
   switch (request.kind) {
     case "chat":
+      return ["assemble_context", "invoke_analyst", "persist_assistant_message"];
     case "proposal":
+      return ["assemble_context", "invoke_planner", "persist_assistant_message"];
     case "review":
-      return ["assemble_context", "invoke_agent", "persist_assistant_message"];
+      return ["assemble_context", "invoke_verifier", "persist_assistant_message"];
     case "add-node":
     case "apply-proposal":
     case "rollback":
@@ -874,9 +967,11 @@ const getResumeBoundariesForRequestKind = (
 ): ReadonlyArray<OpyAgentToolCallName> => {
   switch (kind) {
     case "chat":
+      return ["assemble_context", "invoke_analyst", "persist_assistant_message"];
     case "proposal":
+      return ["assemble_context", "invoke_planner", "persist_assistant_message"];
     case "review":
-      return ["assemble_context", "invoke_agent", "persist_assistant_message"];
+      return ["assemble_context", "invoke_verifier", "persist_assistant_message"];
     case "add-node":
     case "apply-proposal":
     case "rollback":
@@ -2432,6 +2527,34 @@ export function OpyCopilotPanel({
     ],
   );
 
+  const loadPersistedPlannerArtifactForProposal = useCallback(
+    async (
+      sessionId: string,
+      proposalRespondedAtMs: number,
+    ): Promise<OpyPersistedPlannerPlanArtifactPayload | null> => {
+      const proposalTasks = (tasksBySessionId[sessionId] ?? [])
+        .filter((task) => task.request.kind === "proposal")
+        .sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt);
+
+      for (const proposalTask of proposalTasks) {
+        const artifacts = taskArtifactsByTaskId[proposalTask.id]
+          ?? (await loadTaskLineageDetails(proposalTask)).artifactsByTaskId[proposalTask.id]
+          ?? [];
+        const plannerArtifact = selectPersistedPlannerPlanArtifact(
+          artifacts,
+          proposalRespondedAtMs,
+        );
+
+        if (plannerArtifact) {
+          return plannerArtifact;
+        }
+      }
+
+      return null;
+    },
+    [loadTaskLineageDetails, taskArtifactsByTaskId, tasksBySessionId],
+  );
+
   const activateResumableTask = useCallback(
     async (task: OpyAgentTask): Promise<void> => {
       if (!isResumableTaskStage(task.stage)) {
@@ -3324,6 +3447,7 @@ export function OpyCopilotPanel({
         readonly manageLifecycleStart?: boolean;
         readonly sessionId: string;
         readonly intent: OpyAgentRunIntent;
+        readonly invokeToolCallName: OpyRigInvokeToolCallName;
         readonly contextualize: () => Promise<RigAgentContextBundle>;
         readonly execute: (context: RigAgentContextBundle) => Promise<T>;
         readonly assistantMessage: (result: T) => string;
@@ -3397,23 +3521,25 @@ export function OpyCopilotPanel({
         const persistedResult = selectReusableCompletedTaskToolCall(
           input.sessionId,
           resumeTrail.toolCalls,
-          "invoke_agent",
+          input.invokeToolCallName,
         )
           ? selectPersistedReadResultArtifact(input.lifecycleRequest, resumeTrail.artifacts) as T | null
           : null;
         if (!persistedResult) {
-          resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, "invoke_agent");
+          resumeBoundaryOutcome = markResumeBoundaryReran(resumeBoundaryOutcome, input.invokeToolCallName);
         }
         const result = persistedResult ?? await trackOpyTaskToolCall({
           taskId,
           sessionId: input.sessionId,
-          name: "invoke_agent",
+          name: input.invokeToolCallName,
           inputSummary: summarizeInlineText(
-            `${input.lifecycleRequest.kind.toUpperCase()} · ${input.lifecycleRequest.label}`,
+            `ROLE::${INVOKE_TOOL_CALL_ROLE_LABEL[input.invokeToolCallName]} · ${
+              input.lifecycleRequest.kind.toUpperCase()
+            } · ${input.lifecycleRequest.label}`,
             input.lifecycleRequest.label,
           ),
           execute: () => input.execute(context),
-          outputSummary: () => `${input.lifecycleRequest.label} RESULT READY`,
+          outputSummary: () => `${INVOKE_TOOL_CALL_ROLE_LABEL[input.invokeToolCallName]} READY`,
           artifacts: (value) => input.artifactsForResult?.(value) ?? [],
         });
         agentLifecycle.markResultReady();
@@ -4317,6 +4443,7 @@ export function OpyCopilotPanel({
           }),
           sessionId,
           intent: "plan-c4-diagram",
+          invokeToolCallName: getReadInvokeToolCallName("proposal"),
           contextualize: () => resolveRigAgentContext(opyCommand.proposal.description),
           execute: async (context) => {
             const proposal = await runEffect(
@@ -4338,7 +4465,16 @@ export function OpyCopilotPanel({
               formatRigAgentCitationBlock(groundedProposal.context)
             }`,
           failurePrefix: "DIAGRAM PROPOSAL FAILED",
-          artifactsForResult: (groundedProposal) => [createDiagramProposalArtifactDraft(groundedProposal)],
+          artifactsForResult: (groundedProposal) => {
+            const plannerPlanArtifact = createPlannerPlanArtifactDraftFromGroundedProposal(
+              groundedProposal,
+              boardSummary,
+            );
+            return [
+              createDiagramProposalArtifactDraft(groundedProposal),
+              ...(plannerPlanArtifact ? [plannerPlanArtifact] : []),
+            ];
+          },
           onAfterPersisted: async (groundedProposal) => {
             const persistedProposal: OpySessionDiagramProposal = {
               command: opyCommand.proposal,
@@ -4424,6 +4560,7 @@ export function OpyCopilotPanel({
           }),
           sessionId,
           intent: "review-c4-board",
+          invokeToolCallName: getReadInvokeToolCallName("review"),
           contextualize: () => resolveRigAgentContext(reviewFocus ?? null),
           execute: async (context) => {
             const review = await runEffect(
@@ -4495,6 +4632,7 @@ export function OpyCopilotPanel({
         }),
         sessionId,
         intent: "chat",
+        invokeToolCallName: getReadInvokeToolCallName("chat"),
         contextualize: () => resolveRigAgentContext(trimmed),
         execute: async (context) => {
           const response = await runEffect(
@@ -4714,10 +4852,10 @@ export function OpyCopilotPanel({
   );
 
   const resolveExecutableActionReplay = useCallback(
-    (
+    async (
       replay: OpyAgentLifecycleRequest["replay"],
       request?: OpyAgentLifecycleRequest,
-    ): OpyExecutableActionReplayResolution | null => {
+    ): Promise<OpyExecutableActionReplayResolution | null> => {
       let liveResolution: OpyExecutableActionReplayResolution | null = null;
 
       switch (replay.kind) {
@@ -4732,11 +4870,16 @@ export function OpyCopilotPanel({
           });
           break;
         case "apply-proposal": {
+          const plannerArtifact = await loadPersistedPlannerArtifactForProposal(
+            replay.sessionId,
+            replay.proposalRespondedAtMs,
+          );
           const resolution = resolveOpyApplyProposalActionFlow({
             actionMode,
             policy: agentPolicy,
             boardSummary,
             proposalRecord: findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs),
+            plannerArtifactReady: plannerArtifact !== null,
             sessionId: replay.sessionId,
           });
           liveResolution = resolution.ok
@@ -4745,6 +4888,7 @@ export function OpyCopilotPanel({
               value: resolution.value.descriptor,
               artifacts: [
                 createMutationPlanArtifactDraft({
+                  proposalRespondedAtMs: replay.proposalRespondedAtMs,
                   groundedProposal: resolution.value.groundedProposal,
                   proposalSummary: resolution.value.proposalSummary,
                   mutationPlan: resolution.value.mutationPlan,
@@ -4808,6 +4952,7 @@ export function OpyCopilotPanel({
       domain,
       findCheckpointForReplay,
       findPersistedProposalForReplay,
+      loadPersistedPlannerArtifactForProposal,
       resolvePersistedActionDescriptorReplay,
     ],
   );
@@ -4914,6 +5059,10 @@ export function OpyCopilotPanel({
       return;
     }
 
+    const plannerArtifact = await loadPersistedPlannerArtifactForProposal(
+      sessionId,
+      activeDiagramProposal.proposal.respondedAtMs,
+    );
     const resolution = resolveOpyApplyProposalActionFlow({
       actionMode,
       policy: agentPolicy,
@@ -4922,6 +5071,7 @@ export function OpyCopilotPanel({
         proposal: activeDiagramProposal.proposal,
         decisionStatus: activeDiagramProposal.decisionStatus,
       },
+      plannerArtifactReady: plannerArtifact !== null,
       sessionId,
     });
     if (!resolution.ok) {
@@ -4934,6 +5084,7 @@ export function OpyCopilotPanel({
       descriptor: resolution.value.descriptor,
       artifacts: [
         createMutationPlanArtifactDraft({
+          proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
           groundedProposal: resolution.value.groundedProposal,
           proposalSummary: resolution.value.proposalSummary,
           mutationPlan: resolution.value.mutationPlan,
@@ -4953,6 +5104,7 @@ export function OpyCopilotPanel({
     executeOpyActionFlow,
     handleOpyActionFlowIssue,
     isRunning,
+    loadPersistedPlannerArtifactForProposal,
     selectedSessionId,
   ]);
 
@@ -5089,7 +5241,7 @@ export function OpyCopilotPanel({
           if (await appendRigKillSwitchNotice(replay.sessionId)) {
             return false;
           }
-          const resolution = resolveExecutableActionReplay(replay, request);
+          const resolution = await resolveExecutableActionReplay(replay, request);
           if (!resolution) {
             return false;
           }
@@ -5130,6 +5282,7 @@ export function OpyCopilotPanel({
             manageLifecycleStart: false,
             sessionId: replay.sessionId,
             intent: "chat",
+            invokeToolCallName: getReadInvokeToolCallName("chat"),
             contextualize: () => resolveRigAgentContext(replay.prompt),
             execute: async (context) => {
               const response = await runEffect(
@@ -5169,6 +5322,7 @@ export function OpyCopilotPanel({
             manageLifecycleStart: false,
             sessionId: replay.sessionId,
             intent: "plan-c4-diagram",
+            invokeToolCallName: getReadInvokeToolCallName("proposal"),
             contextualize: () => resolveRigAgentContext(replay.description),
             execute: async (context) => {
               const proposal = await runEffect(
@@ -5190,7 +5344,16 @@ export function OpyCopilotPanel({
                 formatRigAgentCitationBlock(groundedProposal.context)
               }`,
             failurePrefix: "DIAGRAM PROPOSAL FAILED",
-            artifactsForResult: (groundedProposal) => [createDiagramProposalArtifactDraft(groundedProposal)],
+            artifactsForResult: (groundedProposal) => {
+              const plannerPlanArtifact = createPlannerPlanArtifactDraftFromGroundedProposal(
+                groundedProposal,
+                boardSummary,
+              );
+              return [
+                createDiagramProposalArtifactDraft(groundedProposal),
+                ...(plannerPlanArtifact ? [plannerPlanArtifact] : []),
+              ];
+            },
             onAfterPersisted: async (groundedProposal) => {
               const persistedProposal: OpySessionDiagramProposal = {
                 command: {
@@ -5232,6 +5395,7 @@ export function OpyCopilotPanel({
             manageLifecycleStart: false,
             sessionId: replay.sessionId,
             intent: "review-c4-board",
+            invokeToolCallName: getReadInvokeToolCallName("review"),
             contextualize: () => resolveRigAgentContext(reviewFocus ?? null),
             execute: async (context) => {
               const review = await runEffect(
@@ -5273,7 +5437,7 @@ export function OpyCopilotPanel({
         case "add-node":
         case "apply-proposal":
         case "rollback": {
-          const resolution = resolveExecutableActionReplay(replay, request);
+          const resolution = await resolveExecutableActionReplay(replay, request);
           if (!resolution) {
             return;
           }
@@ -5323,7 +5487,7 @@ export function OpyCopilotPanel({
       return;
     }
 
-    const resolution = resolveExecutableActionReplay(request.replay, request);
+    const resolution = await resolveExecutableActionReplay(request.replay, request);
     if (!resolution) {
       return;
     }
