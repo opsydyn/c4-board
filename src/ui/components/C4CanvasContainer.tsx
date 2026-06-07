@@ -53,6 +53,10 @@ import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-conte
 import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
 import { buildGroundedProposalDiff, summarizeGroundedProposalDiff } from "../../core/effects/opy-c4-proposals";
+import {
+  getRigAgentV1Flag,
+  resolveEffectiveRigAgentV1Rollout,
+} from "../../core/effects/feature-flags";
 import { useAppSettings } from "../../core/effects/useAppSettings";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { flex } from "../../styles/sprinkles.css";
@@ -235,6 +239,7 @@ export function C4CanvasContainer() {
     isLoading: isSettingsLoading,
     settingsV1Enabled,
   } = useAppSettings();
+  const rigAgentRolloutFlag = getRigAgentV1Flag();
   const canvasRegionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<C4CanvasRef>(null);
   const lastDiagramIdRef = useRef<string | null>(null);
@@ -264,6 +269,17 @@ export function C4CanvasContainer() {
   );
   const [showCrossTeamOnly, setShowCrossTeamOnly] = useState(false);
   const [showUnknownOwnershipOnly, setShowUnknownOwnershipOnly] = useState(false);
+  const rigAgentRollout = useMemo(
+    () =>
+      resolveEffectiveRigAgentV1Rollout(
+        rigAgentRolloutFlag,
+        appSettings.rigAgentRolloutPreference,
+      ),
+    [appSettings.rigAgentRolloutPreference, rigAgentRolloutFlag],
+  );
+  const opyActionMode = rigAgentRollout.mode === "disabled"
+    ? "disabled"
+    : appSettings.aiSettings.actionMode;
 
   const persistPanelPreferencePatch = useCallback(
     async (patch: C4PanelPreferencePatch): Promise<void> => {
@@ -2498,7 +2514,9 @@ export function C4CanvasContainer() {
             edgeCount={state.context.edges.length}
             boardSummary={opyBoardSummary}
             boardContext={opyBoardContext}
-            actionMode={appSettings.aiSettings.actionMode}
+            actionMode={opyActionMode}
+            agentPolicy={appSettings.agentPolicy}
+            rigAgentRollout={rigAgentRollout}
             viewportSections={appSettings.opyViewportSections}
             onViewportSectionsChange={(nextSections) => {
               void persistOpyViewportSections(nextSections);

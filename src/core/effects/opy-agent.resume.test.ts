@@ -1,14 +1,14 @@
 import { describe, expect, test } from "vitest";
-import type { OpyAgentTaskLineageDiagnostics } from "./opy-agent.task-lineage";
 import {
   buildResumeBoundaryDrilldownFromOutcome,
   buildResumeBoundaryDrilldownFromPlan,
   formatLineageResumeOutcomeRollup,
-  summarizeOpyTaskLineageAttention,
-  summarizeResumeBoundaryHealthDrivers,
   type OpyPersistedResumeBoundaryOutcomePayload,
   type OpyResumeBoundaryPlanItem,
+  summarizeOpyTaskLineageAttention,
+  summarizeResumeBoundaryHealthDrivers,
 } from "./opy-agent.resume";
+import type { OpyAgentTaskLineageDiagnostics } from "./opy-agent.task-lineage";
 
 const createLineageDiagnostics = (
   overrides: Partial<OpyAgentTaskLineageDiagnostics> = {},

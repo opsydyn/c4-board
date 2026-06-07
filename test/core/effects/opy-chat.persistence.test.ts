@@ -6,6 +6,9 @@ import {
   interruptOpyAgentToolCalls,
   interruptOpyAgentTasks,
   getOpyAgentCheckpoint,
+  listAllOpyAgentTasks,
+  listAllOpyChatSessions,
+  listAllOpyDiagramProposals,
   listOpyAgentArtifacts,
   listOpyAgentTasks,
   listOpyAgentToolCalls,
@@ -204,6 +207,38 @@ const runExitWithDatabaseService = async <A, E>(
 };
 
 describe("opy-chat.persistence", () => {
+  it("lists all OPY chat sessions across domains for audit views", async () => {
+    const sessions = await runWithDatabaseService(
+      listAllOpyChatSessions(),
+      {
+        query: () => [
+          {
+            id: "session-older",
+            title: "Legacy board",
+            domain: "ddd",
+            diagramId: null,
+            createdAt: 500,
+            updatedAt: 1_000,
+            lastMessageAt: 950,
+          },
+          {
+            id: "session-1",
+            title: "Payments board",
+            domain: "c4",
+            diagramId: "diagram-1",
+            createdAt: 1_000,
+            updatedAt: 2_000,
+            lastMessageAt: 1_900,
+          },
+        ],
+      },
+    );
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0]?.id).toBe("session-1");
+    expect(sessions[1]?.domain).toBe("ddd");
+  });
+
   it("loads persisted diagram proposals ordered by latest proposal timestamp", async () => {
     const newestProposal = createPersistedProposal();
     const olderProposal = createPersistedProposal({
@@ -253,6 +288,40 @@ describe("opy-chat.persistence", () => {
     expect(result[0]?.decisionStatus).toBe("pending");
     expect(result[1]?.proposal.respondedAtMs).toBe(1_000);
     expect(result[1]?.decisionStatus).toBe("approved");
+  });
+
+  it("lists diagram proposals across sessions for audit views", async () => {
+    const listed = await runWithDatabaseService(
+      listAllOpyDiagramProposals(),
+      {
+        query: () => [
+          {
+            sessionId: "session-2",
+            commandDescription: "Refine downstream billing context",
+            proposalJson: JSON.stringify({
+              ...createPersistedProposal().proposal,
+              summary: "Refine Billing",
+              respondedAtMs: 1_500,
+            }),
+            contextJson: JSON.stringify(createPersistedProposal().context),
+            decisionStatus: "approved",
+            decidedAt: 1_600,
+          },
+          {
+            sessionId: "session-1",
+            commandDescription: "Add a ledger service downstream from Payments API",
+            proposalJson: JSON.stringify(createPersistedProposal().proposal),
+            contextJson: JSON.stringify(createPersistedProposal().context),
+            decisionStatus: "pending",
+            decidedAt: 2_100,
+          },
+        ],
+      },
+    );
+
+    expect(listed).toHaveLength(2);
+    expect(listed[0]?.sessionId).toBe("session-1");
+    expect(listed[1]?.decisionStatus).toBe("approved");
   });
 
   it("upserts diagram proposal artifacts with serialized proposal and context", async () => {
@@ -453,6 +522,61 @@ describe("opy-chat.persistence", () => {
     expect(listed[0]?.request.label).toBe("REVIEW");
     expect(listed[0]?.lineageKey).toBe("review:session-1:payments api");
     expect(listed[1]?.status).toBe("interrupted");
+  });
+
+  it("lists persisted OPY agent tasks across sessions for audit views", async () => {
+    const task = createTask();
+
+    const listed = await runWithDatabaseService(
+      listAllOpyAgentTasks(),
+      {
+        query: () => [
+          {
+            id: "task-other",
+            sessionId: "session-2",
+            requestJson: JSON.stringify({
+              confirmation: null,
+              id: "request-other",
+              mode: "action",
+              kind: "add-node",
+              label: "ADD NODE",
+              requiresConfirmation: true,
+              replay: {
+                kind: "add-node",
+                label: "Billing API",
+                nodeType: "system",
+                sessionId: "session-2",
+              },
+            }),
+            lineageKey: "add-node:session-2:billing api",
+            parentTaskId: null,
+            stage: "awaiting_confirmation",
+            status: "running",
+            createdAt: 1_500,
+            updatedAt: 1_700,
+            completedAt: null,
+            errorSummary: null,
+          },
+          {
+            id: task.id,
+            sessionId: task.sessionId,
+            requestJson: JSON.stringify(task.request),
+            lineageKey: task.lineageKey,
+            parentTaskId: task.parentTaskId,
+            stage: task.stage,
+            status: task.status,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+            completedAt: task.completedAt,
+            errorSummary: task.errorSummary,
+          },
+        ],
+      },
+    );
+
+    expect(listed).toHaveLength(2);
+    expect(listed[0]?.id).toBe("task-1");
+    expect(listed[1]?.sessionId).toBe("session-2");
   });
 
   it("interrupts running OPY agent tasks on resume hydration", async () => {

@@ -259,8 +259,8 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - [ ] Add approval policies by action class (always-confirm, confirm-on-threshold, auto-apply for read-only).
    - [ ] Add per-provider and per-model allow-lists in settings with kill switch support.
    - [ ] Add anomaly detection for suspicious prompts/tool-call patterns (prompt injection, unsafe request patterns).
-   - [ ] Add canary rollout mode (`rig_agent_v1`) and environment-level overrides.
-   - [ ] Add governance audit log view in Settings (`who`, `what`, `when`, `why`, `source session`).
+   - [x] Add canary rollout mode (`rig_agent_v1`) and environment-level overrides.
+   - [x] Add governance audit log view in Settings (`who`, `what`, `when`, `why`, `source session`).
 
 6. **Track E6: Developer Experience + Evaluation**
    - [ ] Add deterministic fixture suite for Rig runs (`read-only qa`, `safe mutation`, `failure recovery`, `rollback`).

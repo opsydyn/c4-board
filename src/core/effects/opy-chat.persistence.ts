@@ -184,6 +184,19 @@ const LIST_SESSIONS_SQL = `
   ORDER BY updated_at DESC
 `;
 
+const LIST_ALL_SESSIONS_SQL = `
+  SELECT
+    id,
+    title,
+    domain,
+    diagram_id AS diagramId,
+    created_at AS createdAt,
+    updated_at AS updatedAt,
+    last_message_at AS lastMessageAt
+  FROM opy_chat_sessions
+  ORDER BY updated_at DESC
+`;
+
 const CREATE_SESSION_SQL = `
   INSERT INTO opy_chat_sessions (
     id,
@@ -270,6 +283,23 @@ const LIST_AGENT_TASKS_SQL = `
   ORDER BY updated_at DESC, created_at DESC
 `;
 
+const LIST_ALL_AGENT_TASKS_SQL = `
+  SELECT
+    id,
+    session_id AS sessionId,
+    request_json AS requestJson,
+    lineage_key AS lineageKey,
+    parent_task_id AS parentTaskId,
+    stage,
+    status,
+    created_at AS createdAt,
+    updated_at AS updatedAt,
+    completed_at AS completedAt,
+    error_summary AS errorSummary
+  FROM opy_agent_tasks
+  ORDER BY updated_at DESC, created_at DESC
+`;
+
 const LIST_AGENT_TOOL_CALLS_SQL = `
   SELECT
     id,
@@ -313,6 +343,18 @@ const LIST_DIAGRAM_PROPOSALS_SQL = `
     decided_at AS decidedAt
   FROM opy_diagram_proposals
   WHERE session_id = ?
+  ORDER BY decided_at DESC, proposal_responded_at DESC
+`;
+
+const LIST_ALL_DIAGRAM_PROPOSALS_SQL = `
+  SELECT
+    session_id AS sessionId,
+    command_description AS commandDescription,
+    proposal_json AS proposalJson,
+    context_json AS contextJson,
+    decision_status AS decisionStatus,
+    decided_at AS decidedAt
+  FROM opy_diagram_proposals
   ORDER BY decided_at DESC, proposal_responded_at DESC
 `;
 
@@ -1058,6 +1100,13 @@ export const listOpyChatSessions = (input: ListOpyChatSessionsInput) =>
     return sortSessionsByRecency(rows.map(decodeSessionRow));
   });
 
+export const listAllOpyChatSessions = () =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<SessionRow>(LIST_ALL_SESSIONS_SQL);
+    return sortSessionsByRecency(rows.map(decodeSessionRow));
+  });
+
 export const createOpyChatSession = (input: CreateOpyChatSessionInput) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -1124,6 +1173,15 @@ export const listOpyAgentTasks = (sessionId: string) =>
     );
   });
 
+export const listAllOpyAgentTasks = () =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentTaskRow>(LIST_ALL_AGENT_TASKS_SQL);
+    return sortTasksByRecency(
+      rows.map(decodeAgentTaskRow).filter((row): row is OpyAgentTask => row !== null),
+    );
+  });
+
 export const listOpyAgentToolCalls = (taskId: string) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -1146,6 +1204,16 @@ export const listOpyDiagramProposals = (sessionId: string) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
     const rows = yield* service.query<DiagramProposalRow>(LIST_DIAGRAM_PROPOSALS_SQL, [sessionId]);
+    return rows
+      .map(decodeDiagramProposalRow)
+      .filter((row): row is OpyPersistedDiagramProposal => row !== null)
+      .sort((left, right) => right.proposal.respondedAtMs - left.proposal.respondedAtMs);
+  });
+
+export const listAllOpyDiagramProposals = () =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<DiagramProposalRow>(LIST_ALL_DIAGRAM_PROPOSALS_SQL);
     return rows
       .map(decodeDiagramProposalRow)
       .filter((row): row is OpyPersistedDiagramProposal => row !== null)

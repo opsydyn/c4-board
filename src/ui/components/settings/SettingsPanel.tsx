@@ -2,6 +2,7 @@ import { useMachine } from "@xstate/react";
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tone from "tone";
+import { summarizeRigMutationPolicySettings } from "../../../core/effects/agent-policy";
 import {
   clearRigOpenAiApiKey,
   getRigSecretStatus,
@@ -9,18 +10,24 @@ import {
   runRigHello,
   storeRigOpenAiApiKey,
 } from "../../../core/effects/ai-agent.runtime";
-import { getSettingsV1Flag } from "../../../core/effects/feature-flags";
+import {
+  getRigAgentV1Flag,
+  getSettingsV1Flag,
+  resolveEffectiveRigAgentV1Rollout,
+} from "../../../core/effects/feature-flags";
 import type {
   AiActionMode,
   AiProvider,
   AppSettingsPatch,
   RedactionMode,
+  RigAgentV1RolloutPreference,
   TransitionIntensity,
 } from "../../../core/effects/settings.types";
 import { useDatabase } from "../../../core/effects/useDatabase";
 import * as styles from "../../../pages/settings.css";
 import { useDatabaseRuntimeStatus } from "../../hooks/useDatabaseRuntimeStatus";
 import { createSettingsMachine } from "../../machines/settings.machine";
+import { AgentAuditPanel } from "./AgentAuditPanel";
 import { TacticalSelect } from "../TacticalSelect";
 
 type SaveState = "disabled" | "loading" | "saving" | "saved" | "error";
@@ -56,6 +63,11 @@ const isAiActionMode = (value: string): value is AiActionMode =>
   || value === "propose"
   || value === "apply-with-confirmation";
 
+const isRigAgentV1RolloutPreference = (
+  value: string,
+): value is RigAgentV1RolloutPreference =>
+  value === "inherit" || value === "canary";
+
 const transitionIntensityOptions = [
   { value: "low", label: "LOW" },
   { value: "normal", label: "NORMAL" },
@@ -84,6 +96,16 @@ const aiActionModeOptions = [
   { value: "read-only", label: "READ-ONLY" },
   { value: "propose", label: "PROPOSE" },
   { value: "apply-with-confirmation", label: "APPLY W/ CONFIRM" },
+] as const;
+
+const rigAgentRolloutPreferenceOptions = [
+  { value: "inherit", label: "INHERIT" },
+  { value: "canary", label: "CANARY OPT-IN" },
+] as const;
+
+const settingsMutationLockOptions = [
+  { value: "locked", label: "LOCKED" },
+  { value: "unlocked", label: "UNLOCKED" },
 ] as const;
 
 const formatClockTime = (timestamp: number | null): string => {
@@ -154,6 +176,7 @@ export function SettingsPanel() {
   const settingsV1Flag = state.context.settingsV1Flag;
   const settingsV1Enabled = settingsV1Flag.enabled;
   const settings = state.context.settings;
+  const rigAgentRolloutFlag = getRigAgentV1Flag();
   const diagnosticSynthRef = useRef<Tone.PolySynth<Tone.Synth> | null>(null);
   const [audioContextStatus, setAudioContextStatus] = useState<AudioContextStatus>("unknown");
   const [audioDiagnosticMessage, setAudioDiagnosticMessage] = useState<string | null>(null);
@@ -163,6 +186,9 @@ export function SettingsPanel() {
   );
   const [aiTemperatureDraft, setAiTemperatureDraft] = useState<string>("0.2");
   const [aiMaxTokensDraft, setAiMaxTokensDraft] = useState<string>("1024");
+  const [maxActionsPerBatchDraft, setMaxActionsPerBatchDraft] = useState<string>("48");
+  const [maxNodesCreatedPerRunDraft, setMaxNodesCreatedPerRunDraft] = useState<string>("12");
+  const [maxEdgesCreatedPerRunDraft, setMaxEdgesCreatedPerRunDraft] = useState<string>("24");
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState<string>("");
   const [agentHelloOutput, setAgentHelloOutput] = useState<string | null>(null);
   const [agentHelloError, setAgentHelloError] = useState<string | null>(null);
@@ -179,6 +205,18 @@ export function SettingsPanel() {
   const runtimeProviderText = hasOpenAiRuntimeProvider
     ? "OPENAI ACTIVE"
     : `LIMITED (OPENAI RUNTIME, CONFIG=${settings.aiSettings.provider.toUpperCase()})`;
+  const rigAgentEffectiveRollout = useMemo(
+    () =>
+      resolveEffectiveRigAgentV1Rollout(
+        rigAgentRolloutFlag,
+        settings.rigAgentRolloutPreference,
+      ),
+    [rigAgentRolloutFlag, settings.rigAgentRolloutPreference],
+  );
+  const agentPolicySummary = useMemo(
+    () => summarizeRigMutationPolicySettings(settings.agentPolicy),
+    [settings.agentPolicy],
+  );
   const agentModelOptions = useMemo(() => {
     const model = settings.aiSettings.model.trim();
     if (model.length === 0 || rigModelOptions.some((option) => option.value === model)) {
@@ -193,6 +231,45 @@ export function SettingsPanel() {
       ...rigModelOptions,
     ];
   }, [settings.aiSettings.model]);
+  const rigAgentRolloutBaseText = useMemo(
+    () =>
+      `${rigAgentRolloutFlag.mode.toUpperCase()} :: ${
+        rigAgentRolloutFlag.source === "env" && rigAgentRolloutFlag.envKey
+          ? rigAgentRolloutFlag.envKey
+          : "DEFAULT"
+      }`,
+    [rigAgentRolloutFlag],
+  );
+  const rigAgentRolloutEffectiveText = useMemo(() => {
+    if (
+      rigAgentEffectiveRollout.baseMode === "canary"
+      && rigAgentEffectiveRollout.mode === "disabled"
+      && rigAgentEffectiveRollout.preference === "inherit"
+    ) {
+      return "DISABLED :: OPT-IN REQUIRED";
+    }
+
+    return `${rigAgentEffectiveRollout.mode.toUpperCase()} :: ${rigAgentEffectiveRollout.source.toUpperCase()}`;
+  }, [rigAgentEffectiveRollout]);
+  const rigAgentRolloutNotice = useMemo(() => {
+    if (
+      rigAgentEffectiveRollout.baseMode === "canary"
+      && rigAgentEffectiveRollout.mode === "disabled"
+      && rigAgentEffectiveRollout.preference === "inherit"
+    ) {
+      return "RIG_AGENT_V1 CANARY IS AVAILABLE, BUT THIS WORKSTATION IS NOT ENROLLED. OPY COMMANDS STAY OFFLINE UNTIL CANARY OPT-IN IS ENABLED.";
+    }
+
+    if (rigAgentEffectiveRollout.mode === "canary") {
+      return "THIS WORKSTATION IS RUNNING THE RIG_AGENT_V1 CANARY. OPY FLOWS FOLLOW THE STORED ACTION MODE, BUT THE ROLLOUT REMAINS STAGED.";
+    }
+
+    if (rigAgentEffectiveRollout.baseMode === "enabled") {
+      return "RIG_AGENT_V1 IS ENABLED BY ENVIRONMENT ROLLOUT.";
+    }
+
+    return "RIG_AGENT_V1 IS DISABLED BY DEFAULT ROLLOUT.";
+  }, [rigAgentEffectiveRollout]);
   const lastSavedAt = state.context.lastSavedAt;
   const pendingOperations = state.context.pendingOperations;
   const pendingWrites = state.context.pendingWrites;
@@ -787,6 +864,69 @@ export function SettingsPanel() {
     });
   }, [aiMaxTokensDraft, applyPatch, settings.aiSettings]);
 
+  const commitMaxActionsPerBatch = useCallback(() => {
+    const parsed = Number(maxActionsPerBatchDraft);
+    if (!Number.isFinite(parsed)) {
+      setMaxActionsPerBatchDraft(String(settings.agentPolicy.maxActionsPerBatch));
+      return;
+    }
+
+    const normalized = clamp(Math.round(parsed), 0, 256);
+    setMaxActionsPerBatchDraft(String(normalized));
+    if (normalized === settings.agentPolicy.maxActionsPerBatch) {
+      return;
+    }
+
+    applyPatch({
+      agentPolicy: {
+        ...settings.agentPolicy,
+        maxActionsPerBatch: normalized,
+      },
+    });
+  }, [applyPatch, maxActionsPerBatchDraft, settings.agentPolicy]);
+
+  const commitMaxNodesCreatedPerRun = useCallback(() => {
+    const parsed = Number(maxNodesCreatedPerRunDraft);
+    if (!Number.isFinite(parsed)) {
+      setMaxNodesCreatedPerRunDraft(String(settings.agentPolicy.maxNodesCreatedPerRun));
+      return;
+    }
+
+    const normalized = clamp(Math.round(parsed), 0, 128);
+    setMaxNodesCreatedPerRunDraft(String(normalized));
+    if (normalized === settings.agentPolicy.maxNodesCreatedPerRun) {
+      return;
+    }
+
+    applyPatch({
+      agentPolicy: {
+        ...settings.agentPolicy,
+        maxNodesCreatedPerRun: normalized,
+      },
+    });
+  }, [applyPatch, maxNodesCreatedPerRunDraft, settings.agentPolicy]);
+
+  const commitMaxEdgesCreatedPerRun = useCallback(() => {
+    const parsed = Number(maxEdgesCreatedPerRunDraft);
+    if (!Number.isFinite(parsed)) {
+      setMaxEdgesCreatedPerRunDraft(String(settings.agentPolicy.maxEdgesCreatedPerRun));
+      return;
+    }
+
+    const normalized = clamp(Math.round(parsed), 0, 256);
+    setMaxEdgesCreatedPerRunDraft(String(normalized));
+    if (normalized === settings.agentPolicy.maxEdgesCreatedPerRun) {
+      return;
+    }
+
+    applyPatch({
+      agentPolicy: {
+        ...settings.agentPolicy,
+        maxEdgesCreatedPerRun: normalized,
+      },
+    });
+  }, [applyPatch, maxEdgesCreatedPerRunDraft, settings.agentPolicy]);
+
   useEffect(() => {
     if (settings.openAiApiKey.trim().length > 0) {
       setOpenAiApiKeyDraft(settings.openAiApiKey);
@@ -798,6 +938,15 @@ export function SettingsPanel() {
   useEffect(() => {
     setAiMaxTokensDraft(String(settings.aiSettings.maxTokens));
   }, [settings.aiSettings.maxTokens]);
+  useEffect(() => {
+    setMaxActionsPerBatchDraft(String(settings.agentPolicy.maxActionsPerBatch));
+  }, [settings.agentPolicy.maxActionsPerBatch]);
+  useEffect(() => {
+    setMaxNodesCreatedPerRunDraft(String(settings.agentPolicy.maxNodesCreatedPerRun));
+  }, [settings.agentPolicy.maxNodesCreatedPerRun]);
+  useEffect(() => {
+    setMaxEdgesCreatedPerRunDraft(String(settings.agentPolicy.maxEdgesCreatedPerRun));
+  }, [settings.agentPolicy.maxEdgesCreatedPerRun]);
   useEffect(() => {
     refreshAgentSecretStatus();
   }, [refreshAgentSecretStatus]);
@@ -1360,6 +1509,41 @@ export function SettingsPanel() {
                   {agentSecretStatusText}
                 </span>
               </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Rollout Base</span>
+                  <span className={styles.settingsRowHint}>Env/default rig_agent_v1 state</span>
+                </div>
+                <span className={styles.settingsRowValue}>{rigAgentRolloutBaseText}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Canary Enrollment</span>
+                  <span className={styles.settingsRowHint}>Local workstation opt-in</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <TacticalSelect
+                    ariaLabel="Rig rollout canary enrollment"
+                    value={settings.rigAgentRolloutPreference}
+                    options={rigAgentRolloutPreferenceOptions}
+                    onChange={(nextValue) => {
+                      if (!isRigAgentV1RolloutPreference(nextValue)) {
+                        return;
+                      }
+                      applyPatch({
+                        rigAgentRolloutPreference: nextValue,
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Rollout Effective</span>
+                  <span className={styles.settingsRowHint}>Resolved runtime boundary for OPY</span>
+                </div>
+                <span className={styles.settingsRowValue}>{rigAgentRolloutEffectiveText}</span>
+              </div>
               {agentSecretActionMessage && <p className={styles.settingsNotice}>{agentSecretActionMessage}</p>}
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
@@ -1483,6 +1667,109 @@ export function SettingsPanel() {
               </div>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>
+                  <span>Policy Snapshot</span>
+                  <span className={styles.settingsRowHint}>Live runtime mutation budget</span>
+                </div>
+                <span className={styles.settingsRowValue}>{agentPolicySummary}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Max Actions Per Batch</span>
+                  <span className={styles.settingsRowHint}>0 to 256</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={256}
+                    step={1}
+                    className={styles.settingsNumberControl}
+                    value={maxActionsPerBatchDraft}
+                    onChange={(event) => setMaxActionsPerBatchDraft(event.currentTarget.value)}
+                    onBlur={commitMaxActionsPerBatch}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitMaxActionsPerBatch();
+                      }
+                    }}
+                    aria-label="Agent policy max actions per batch"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Max Nodes Created</span>
+                  <span className={styles.settingsRowHint}>Per OPY run, 0 to 128</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={128}
+                    step={1}
+                    className={styles.settingsNumberControl}
+                    value={maxNodesCreatedPerRunDraft}
+                    onChange={(event) => setMaxNodesCreatedPerRunDraft(event.currentTarget.value)}
+                    onBlur={commitMaxNodesCreatedPerRun}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitMaxNodesCreatedPerRun();
+                      }
+                    }}
+                    aria-label="Agent policy max nodes created per run"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Max Edges Created</span>
+                  <span className={styles.settingsRowHint}>Per OPY run, 0 to 256</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={256}
+                    step={1}
+                    className={styles.settingsNumberControl}
+                    value={maxEdgesCreatedPerRunDraft}
+                    onChange={(event) => setMaxEdgesCreatedPerRunDraft(event.currentTarget.value)}
+                    onBlur={commitMaxEdgesCreatedPerRun}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitMaxEdgesCreatedPerRun();
+                      }
+                    }}
+                    aria-label="Agent policy max edges created per run"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Settings Mutation Lock</span>
+                  <span className={styles.settingsRowHint}>Protect settings scope from agent writes</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <TacticalSelect
+                    ariaLabel="Agent policy settings mutation lock"
+                    value={settings.agentPolicy.allowSettingsMutation ? "unlocked" : "locked"}
+                    options={settingsMutationLockOptions}
+                    onChange={(nextValue) => {
+                      if (nextValue !== "locked" && nextValue !== "unlocked") {
+                        return;
+                      }
+                      applyPatch({
+                        agentPolicy: {
+                          ...settings.agentPolicy,
+                          allowSettingsMutation: nextValue === "unlocked",
+                        },
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
                   <span>Prompt</span>
                   <span className={styles.settingsRowHint}>Single hello-world request</span>
                 </div>
@@ -1519,6 +1806,7 @@ export function SettingsPanel() {
                 </p>
               )}
               {agentSecretWarning && <p className={styles.settingsNotice}>{agentSecretWarning}</p>}
+              <p className={styles.settingsNotice}>{rigAgentRolloutNotice}</p>
               {agentSecretStatusError && <p className={styles.settingsErrorText}>{agentSecretStatusError}</p>}
               {agentSecretResolutionOrder.length > 0 && (
                 <p className={styles.settingsRowHint}>
@@ -1741,6 +2029,8 @@ export function SettingsPanel() {
                 </div>
               )}
             </article>
+
+            <AgentAuditPanel />
 
             <article id="about" className={styles.settingsCard}>
               <h2 className={styles.settingsCardTitle}>About</h2>

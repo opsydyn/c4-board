@@ -51,6 +51,8 @@ describe("settings.types", () => {
     expect(isAppSettingKey("opyCopilotVisible")).toBe(true);
     expect(isAppSettingKey("openAiApiKey")).toBe(true);
     expect(isAppSettingKey("aiSettings")).toBe(true);
+    expect(isAppSettingKey("rigAgentRolloutPreference")).toBe(true);
+    expect(isAppSettingKey("agentPolicy")).toBe(true);
     expect(isAppSettingKey("not_a_real_setting")).toBe(false);
   });
 
@@ -89,6 +91,37 @@ describe("settings.types", () => {
         aiSettings: {
           ...DEFAULT_APP_SETTINGS.aiSettings,
           temperature: 2.5,
+        },
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid rig rollout preference values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        rigAgentRolloutPreference: "enabled",
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid agentPolicy values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        agentPolicy: {
+          ...DEFAULT_APP_SETTINGS.agentPolicy,
+          maxActionsPerBatch: -1,
+        },
+      })
+    ).toThrow();
+
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        agentPolicy: {
+          ...DEFAULT_APP_SETTINGS.agentPolicy,
+          maxNodesCreatedPerRun: 999,
         },
       })
     ).toThrow();

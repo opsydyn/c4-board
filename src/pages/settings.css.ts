@@ -209,6 +209,10 @@ export const settingsCard = style({
 	minHeight: "180px",
 });
 
+export const settingsCardWide = style({
+	gridColumn: "1 / -1",
+});
+
 export const settingsCardDanger = style({
 	borderColor: theme.color.status.critical,
 	boxShadow: `0 0 14px ${theme.color.status.critical}33`,
@@ -535,4 +539,83 @@ export const settingsNotice = style({
 	color: theme.color.foreground.tertiary,
 	fontFamily: theme.typography.family.sans,
 	fontSize: theme.typography.size.sm,
+});
+
+export const settingsMetricsGrid = style({
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+	gap: theme.spacing["2"],
+});
+
+export const settingsMetricTile = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["1"],
+	padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(12, 20, 16, 0.82)",
+});
+
+export const settingsMetricLabel = style({
+	color: theme.color.foreground.tertiary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.xs,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const settingsMetricValue = style({
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.lg,
+	fontWeight: theme.typography.weight.bold,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const settingsAuditList = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["2"],
+});
+
+export const settingsAuditEntry = style({
+	display: "flex",
+	flexDirection: "column",
+	gap: theme.spacing["2"],
+	padding: `${theme.spacing["3"]} ${theme.spacing["3"]}`,
+	border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+	backgroundColor: "rgba(12, 20, 16, 0.82)",
+});
+
+export const settingsAuditEntryHeader = style({
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: theme.spacing["2"],
+	flexWrap: "wrap",
+});
+
+export const settingsAuditEntryTitle = style({
+	margin: 0,
+	color: theme.color.foreground.primary,
+	fontFamily: theme.typography.family.mono,
+	fontSize: theme.typography.size.sm,
+	textTransform: theme.typography.textTransform.uppercase,
+	letterSpacing: theme.typography.letterSpacing.wide,
+});
+
+export const settingsAuditEntryMeta = style({
+	display: "flex",
+	alignItems: "center",
+	gap: theme.spacing["2"],
+	flexWrap: "wrap",
+});
+
+export const settingsAuditEntryBody = style({
+	margin: 0,
+	color: theme.color.foreground.secondary,
+	fontFamily: theme.typography.family.sans,
+	fontSize: theme.typography.size.sm,
+	lineHeight: 1.5,
 });

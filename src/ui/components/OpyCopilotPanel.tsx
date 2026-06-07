@@ -7,7 +7,11 @@ import {
   type RigAgentContextBundle,
 } from "../../core/effects/agent-context";
 import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
-import { summarizeRigToolPolicy } from "../../core/effects/agent-policy";
+import {
+  summarizeRigMutationPolicySettings,
+  summarizeRigToolPolicy,
+  type RigMutationPolicySettings,
+} from "../../core/effects/agent-policy";
 import {
   buildOpyCheckpointRestorePreview,
   formatOpyRollbackSummary,
@@ -117,6 +121,7 @@ import {
   upsertOpyAgentToolCall,
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
+import type { EffectiveRigAgentV1RolloutState } from "../../core/effects/feature-flags";
 import type {
   AiActionMode,
   OpyTaskHistoryBoundaryFilter,
@@ -419,6 +424,8 @@ interface OpyCopilotPanelProps {
   readonly boardSummary: RigC4BoardSummary | null;
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly actionMode: AiActionMode;
+  readonly agentPolicy: RigMutationPolicySettings;
+  readonly rigAgentRollout: EffectiveRigAgentV1RolloutState;
   readonly viewportSections: OpyViewportSections;
   readonly onViewportSectionsChange: (sections: OpyViewportSections) => void;
   readonly taskHistoryFiltersBySession: OpyTaskHistoryFiltersBySession;
@@ -1358,31 +1365,53 @@ const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostic
   };
 };
 
-const describeActionMode = (actionMode: AiActionMode): OpyActionModeSurface => {
+const describeActionMode = (
+  actionMode: AiActionMode,
+  agentPolicy: RigMutationPolicySettings,
+  rigAgentRollout: EffectiveRigAgentV1RolloutState,
+): OpyActionModeSurface => {
+  const policySummary = summarizeRigMutationPolicySettings(agentPolicy);
+
+  if (rigAgentRollout.mode === "disabled") {
+    const rolloutDetail = rigAgentRollout.baseMode === "canary"
+      ? "rig_agent_v1 is staged in CANARY and this workstation is not enrolled."
+      : "rig_agent_v1 is disabled by the current environment rollout.";
+
+    return {
+      tone: "critical",
+      label: "ROLLOUT GATE ACTIVE",
+      detail: `${rolloutDetail} OPY chat remains available for context, but proposal and mutation routes stay offline. ${policySummary}`,
+    };
+  }
+
+  const rolloutPrefix = rigAgentRollout.mode === "canary"
+    ? "Canary rollout active. "
+    : "";
+
   switch (actionMode) {
     case "disabled":
       return {
         tone: "critical",
         label: "MUTATION ROUTES OFFLINE",
-        detail: "Board writes and proposal generation are blocked. Chat and board review remain read-only.",
+        detail: `${rolloutPrefix}Board writes and proposal generation are blocked. Chat and board review remain read-only. ${policySummary}`,
       };
     case "read-only":
       return {
         tone: "critical",
         label: "READ-ONLY BOUNDARY ACTIVE",
-        detail: "Use chat and /review for inspection. /add, /diagram, and apply paths are blocked in this mode.",
+        detail: `${rolloutPrefix}Use chat and /review for inspection. /add, /diagram, and apply paths are blocked in this mode. ${policySummary}`,
       };
     case "propose":
       return {
         tone: "warning",
         label: "PROPOSAL BOUNDARY ACTIVE",
-        detail: "OPY can prepare changes, but apply paths stay blocked until APPLY-WITH-CONFIRMATION is enabled.",
+        detail: `${rolloutPrefix}OPY can prepare changes, but apply paths stay blocked until APPLY-WITH-CONFIRMATION is enabled. ${policySummary}`,
       };
     case "apply-with-confirmation":
       return {
         tone: "ready",
         label: "CONFIRMED APPLY BOUNDARY",
-        detail: "Mutations still require operator confirmation before the board is changed.",
+        detail: `${rolloutPrefix}Mutations still require operator confirmation before the board is changed. ${policySummary}`,
       };
   }
 };
@@ -1399,6 +1428,25 @@ const toProposalChromeTone = (risk: "low" | "medium" | "high"): OpyWidgetChromeT
     ? "caution"
     : "ready";
 
+const getRigRolloutBlockedNotice = (
+  rigAgentRollout: EffectiveRigAgentV1RolloutState,
+): {
+  readonly message: string;
+  readonly recommendedAction: string;
+} => {
+  if (rigAgentRollout.baseMode === "canary") {
+    return {
+      message: "RIG rollout is staged in CANARY and this workstation is not enrolled.",
+      recommendedAction: "Open Settings > AI Agent and enable CANARY OPT-IN for rig_agent_v1.",
+    };
+  }
+
+  return {
+    message: "RIG rollout is currently disabled for this environment.",
+    recommendedAction: "Wait for the rollout to move to CANARY or ENABLED.",
+  };
+};
+
 const createLifecycleRequest = (
   request: OpyAgentLifecycleRequest,
 ): OpyAgentLifecycleRequest => request;
@@ -1412,6 +1460,8 @@ export function OpyCopilotPanel({
   boardSummary,
   boardContext,
   actionMode,
+  agentPolicy,
+  rigAgentRollout,
   viewportSections,
   onViewportSectionsChange,
   taskHistoryFiltersBySession,
@@ -1715,8 +1765,8 @@ export function OpyCopilotPanel({
     };
   }, [activeDiagramProposal]);
   const actionModeSurface = useMemo(
-    () => describeActionMode(actionMode),
-    [actionMode],
+    () => describeActionMode(actionMode, agentPolicy, rigAgentRollout),
+    [actionMode, agentPolicy, rigAgentRollout],
   );
   const latestDiagnosticsSurface = useMemo(() => {
     const surfaces: OpyDiagnosticsSurface[] = [];
@@ -4056,11 +4106,16 @@ export function OpyCopilotPanel({
         }
 
         if (actionMode === "disabled" || actionMode === "read-only") {
+          const rolloutBlockedNotice = getRigRolloutBlockedNotice(rigAgentRollout);
           await appendAgentNotice(
             sessionId,
             makeAgentPolicyError({
-              message: `Action blocked by mode ${actionMode.toUpperCase()}.`,
-              recommendedAction: "Switch to APPLY-WITH-CONFIRMATION to execute board actions.",
+              message: rigAgentRollout.mode === "disabled"
+                ? rolloutBlockedNotice.message
+                : `Action blocked by mode ${actionMode.toUpperCase()}.`,
+              recommendedAction: rigAgentRollout.mode === "disabled"
+                ? rolloutBlockedNotice.recommendedAction
+                : "Switch to APPLY-WITH-CONFIRMATION to execute board actions.",
             }),
           );
           return;
@@ -4105,11 +4160,16 @@ export function OpyCopilotPanel({
         }
 
         if (actionMode === "disabled" || actionMode === "read-only") {
+          const rolloutBlockedNotice = getRigRolloutBlockedNotice(rigAgentRollout);
           await appendAgentNotice(
             sessionId,
             makeAgentPolicyError({
-              message: `Diagram proposal blocked by mode ${actionMode.toUpperCase()}.`,
-              recommendedAction: "Switch to PROPOSE or APPLY-WITH-CONFIRMATION.",
+              message: rigAgentRollout.mode === "disabled"
+                ? rolloutBlockedNotice.message
+                : `Diagram proposal blocked by mode ${actionMode.toUpperCase()}.`,
+              recommendedAction: rigAgentRollout.mode === "disabled"
+                ? rolloutBlockedNotice.recommendedAction
+                : "Switch to PROPOSE or APPLY-WITH-CONFIRMATION.",
             }),
           );
           return;
@@ -4341,6 +4401,7 @@ export function OpyCopilotPanel({
       hasOpenAiApiKey,
       isRunning,
       onApplyBoardAction,
+      rigAgentRollout,
       resolveRigAgentContext,
       runEffect,
       selectedSessionId,
@@ -4518,6 +4579,7 @@ export function OpyCopilotPanel({
         case "add-node":
           liveResolution = resolveOpyExecutableAddNodeActionFlow({
             actionMode,
+            policy: agentPolicy,
             domain,
             sessionId: replay.sessionId,
             nodeType: replay.nodeType,
@@ -4527,6 +4589,7 @@ export function OpyCopilotPanel({
         case "apply-proposal": {
           const resolution = resolveOpyApplyProposalActionFlow({
             actionMode,
+            policy: agentPolicy,
             boardSummary,
             proposalRecord: findPersistedProposalForReplay(replay.sessionId, replay.proposalRespondedAtMs),
             sessionId: replay.sessionId,
@@ -4550,6 +4613,7 @@ export function OpyCopilotPanel({
           const checkpoint = findCheckpointForReplay(replay.sessionId, replay.checkpointId);
           const resolution = resolveOpyRollbackActionFlow({
             actionMode,
+            policy: agentPolicy,
             checkpoint,
             sessionId: replay.sessionId,
           });
@@ -4594,6 +4658,7 @@ export function OpyCopilotPanel({
     },
     [
       actionMode,
+      agentPolicy,
       boardSummary,
       domain,
       findCheckpointForReplay,
@@ -4696,6 +4761,7 @@ export function OpyCopilotPanel({
 
     const resolution = resolveOpyApplyProposalActionFlow({
       actionMode,
+      policy: agentPolicy,
       boardSummary,
       proposalRecord: {
         proposal: activeDiagramProposal.proposal,
@@ -4726,6 +4792,7 @@ export function OpyCopilotPanel({
     });
   }, [
     actionMode,
+    agentPolicy,
     activeDiagramProposal,
     boardSummary,
     executeOpyActionFlow,
@@ -4742,6 +4809,7 @@ export function OpyCopilotPanel({
 
     const resolution = resolveOpyRollbackActionFlow({
       actionMode,
+      policy: agentPolicy,
       checkpoint,
       sessionId,
     });
@@ -4765,6 +4833,7 @@ export function OpyCopilotPanel({
     });
   }, [
     actionMode,
+    agentPolicy,
     executeOpyActionFlow,
     handleOpyActionFlowIssue,
     isRunning,

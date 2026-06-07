@@ -1,6 +1,9 @@
 import { Config, ConfigError, ConfigProvider, Effect, Either, pipe } from "effect";
 
 type FeatureFlagSource = "env" | "default";
+export type RigAgentV1RolloutMode = "disabled" | "canary" | "enabled";
+export type RigAgentV1RolloutPreference = "inherit" | "canary";
+export type RigAgentV1RolloutSource = FeatureFlagSource | "settings";
 
 export interface SettingsV1FlagState {
   readonly enabled: boolean;
@@ -15,10 +18,34 @@ interface ResolveSettingsV1FlagInput {
   readonly fallback?: boolean;
 }
 
+export interface RigAgentV1FlagState {
+  readonly mode: RigAgentV1RolloutMode;
+  readonly source: FeatureFlagSource;
+  readonly envKey: string | null;
+  readonly rawValue: string | null;
+}
+
+export interface EffectiveRigAgentV1RolloutState {
+  readonly mode: RigAgentV1RolloutMode | "disabled";
+  readonly baseMode: RigAgentV1RolloutMode;
+  readonly preference: RigAgentV1RolloutPreference;
+  readonly source: RigAgentV1RolloutSource;
+  readonly envKey: string | null;
+  readonly rawValue: string | null;
+  readonly isEnabled: boolean;
+  readonly isCanary: boolean;
+}
+
 const SETTINGS_V1_ENV_KEYS = [
   "PUBLIC_SETTINGS_V1",
   "VITE_SETTINGS_V1",
   "SETTINGS_V1",
+] as const;
+
+const RIG_AGENT_V1_ENV_KEYS = [
+  "PUBLIC_RIG_AGENT_V1",
+  "VITE_RIG_AGENT_V1",
+  "RIG_AGENT_V1",
 ] as const;
 
 const TRUTHY_FLAG_VALUES = new Set([
@@ -41,6 +68,11 @@ type ParsedFlagValue = {
   readonly rawValue: string;
 };
 
+type ParsedRolloutValue = {
+  readonly mode: RigAgentV1RolloutMode;
+  readonly rawValue: string;
+};
+
 const parseBooleanFlag = (rawValue: string): boolean | null => {
   const normalized = rawValue.trim().toLowerCase();
 
@@ -49,6 +81,25 @@ const parseBooleanFlag = (rawValue: string): boolean | null => {
   }
   if (FALSY_FLAG_VALUES.has(normalized)) {
     return false;
+  }
+
+  return null;
+};
+
+const parseRigAgentRolloutFlag = (rawValue: string): RigAgentV1RolloutMode | null => {
+  const normalized = rawValue.trim().toLowerCase();
+  const booleanValue = parseBooleanFlag(rawValue);
+
+  if (booleanValue !== null) {
+    return booleanValue ? "enabled" : "disabled";
+  }
+
+  if (
+    normalized === "canary"
+    || normalized === "pilot"
+    || normalized === "preview"
+  ) {
+    return "canary";
   }
 
   return null;
@@ -72,6 +123,29 @@ const decodeBooleanFlagConfig = (
 
       return Either.right({
         enabled: parsed,
+        rawValue,
+      });
+    }),
+  );
+
+const decodeRigAgentRolloutConfig = (
+  key: string,
+): Config.Config<ParsedRolloutValue> =>
+  pipe(
+    Config.string(key),
+    Config.mapOrFail((rawValue) => {
+      const parsed = parseRigAgentRolloutFlag(rawValue);
+      if (parsed === null) {
+        return Either.left(
+          ConfigError.InvalidData(
+            [key],
+            `Expected rollout value for "${key}", got "${rawValue}"`,
+          ),
+        );
+      }
+
+      return Either.right({
+        mode: parsed,
         rawValue,
       });
     }),
@@ -111,11 +185,12 @@ const readProcessEnv = (): Record<string, string | undefined> | undefined => {
 };
 
 const createEnvProvider = (
+  keys: readonly string[],
   env: Record<string, unknown>,
 ): ConfigProvider.ConfigProvider => {
   const map = new Map<string, string>();
 
-  for (const key of SETTINGS_V1_ENV_KEYS) {
+  for (const key of keys) {
     const rawValue = env[key];
     if (rawValue === undefined || rawValue === null) {
       continue;
@@ -127,12 +202,12 @@ const createEnvProvider = (
   return ConfigProvider.fromMap(map);
 };
 
-const readFlagFromProvider = (
+const readConfigFromProvider = <A>(
   provider: ConfigProvider.ConfigProvider,
-  key: (typeof SETTINGS_V1_ENV_KEYS)[number],
-): ParsedFlagValue | null => {
+  config: Config.Config<A>,
+): A | null => {
   const result = Effect.runSync(
-    Effect.either(provider.load(decodeBooleanFlagConfig(key))),
+    Effect.either(provider.load(config)),
   );
 
   if (Either.isLeft(result)) {
@@ -153,9 +228,9 @@ export const resolveSettingsV1Flag = (
       continue;
     }
 
-    const provider = createEnvProvider(env);
+    const provider = createEnvProvider(SETTINGS_V1_ENV_KEYS, env);
     for (const key of SETTINGS_V1_ENV_KEYS) {
-      const decoded = readFlagFromProvider(provider, key);
+      const decoded = readConfigFromProvider(provider, decodeBooleanFlagConfig(key));
       if (!decoded) {
         continue;
       }
@@ -177,12 +252,110 @@ export const resolveSettingsV1Flag = (
   };
 };
 
+export const resolveRigAgentV1Flag = (
+  input: ResolveSettingsV1FlagInput = {},
+): RigAgentV1FlagState => {
+  const fallback: RigAgentV1RolloutMode = input.fallback ? "enabled" : "disabled";
+  const envCandidates = [input.importMetaEnv, input.processEnv];
+
+  for (const env of envCandidates) {
+    if (!env) {
+      continue;
+    }
+
+    const provider = createEnvProvider(RIG_AGENT_V1_ENV_KEYS, env);
+    for (const key of RIG_AGENT_V1_ENV_KEYS) {
+      const decoded = readConfigFromProvider(provider, decodeRigAgentRolloutConfig(key));
+      if (!decoded) {
+        continue;
+      }
+
+      return {
+        mode: decoded.mode,
+        source: "env",
+        envKey: key,
+        rawValue: decoded.rawValue,
+      };
+    }
+  }
+
+  return {
+    mode: fallback,
+    source: "default",
+    envKey: null,
+    rawValue: null,
+  };
+};
+
+export const resolveEffectiveRigAgentV1Rollout = (
+  flag: RigAgentV1FlagState,
+  preference: RigAgentV1RolloutPreference,
+): EffectiveRigAgentV1RolloutState => {
+  if (flag.mode === "disabled") {
+    return {
+      mode: "disabled",
+      baseMode: flag.mode,
+      preference,
+      source: flag.source,
+      envKey: flag.envKey,
+      rawValue: flag.rawValue,
+      isEnabled: false,
+      isCanary: false,
+    };
+  }
+
+  if (flag.mode === "enabled") {
+    return {
+      mode: "enabled",
+      baseMode: flag.mode,
+      preference,
+      source: flag.source,
+      envKey: flag.envKey,
+      rawValue: flag.rawValue,
+      isEnabled: true,
+      isCanary: false,
+    };
+  }
+
+  if (preference === "canary") {
+    return {
+      mode: "canary",
+      baseMode: flag.mode,
+      preference,
+      source: "settings",
+      envKey: flag.envKey,
+      rawValue: flag.rawValue,
+      isEnabled: true,
+      isCanary: true,
+    };
+  }
+
+  return {
+    mode: "disabled",
+    baseMode: flag.mode,
+    preference,
+    source: "default",
+    envKey: flag.envKey,
+    rawValue: flag.rawValue,
+    isEnabled: false,
+    isCanary: false,
+  };
+};
+
 const SETTINGS_V1_FLAG = resolveSettingsV1Flag({
   importMetaEnv: readImportMetaEnv(),
   processEnv: readProcessEnv(),
   fallback: true,
 });
 
+const RIG_AGENT_V1_FLAG = resolveRigAgentV1Flag({
+  importMetaEnv: readImportMetaEnv(),
+  processEnv: readProcessEnv(),
+  fallback: false,
+});
+
 export const getSettingsV1Flag = (): SettingsV1FlagState => SETTINGS_V1_FLAG;
 
 export const isSettingsV1Enabled = (): boolean => SETTINGS_V1_FLAG.enabled;
+
+export const getRigAgentV1Flag = (): RigAgentV1FlagState => RIG_AGENT_V1_FLAG;

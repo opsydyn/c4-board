@@ -1,4 +1,8 @@
 import { pipe, Schema } from "effect";
+import {
+  RigMutationPolicySettingsSchema,
+  type RigMutationPolicySettings,
+} from "./agent-policy";
 
 export const TransitionIntensitySchema = Schema.Literal("low", "normal", "high");
 export type TransitionIntensity = Schema.Schema.Type<typeof TransitionIntensitySchema>;
@@ -16,6 +20,9 @@ export const AiActionModeSchema = Schema.Literal(
   "apply-with-confirmation",
 );
 export type AiActionMode = Schema.Schema.Type<typeof AiActionModeSchema>;
+
+export const RigAgentV1RolloutPreferenceSchema = Schema.Literal("inherit", "canary");
+export type RigAgentV1RolloutPreference = Schema.Schema.Type<typeof RigAgentV1RolloutPreferenceSchema>;
 
 const MasterVolumeSchema = pipe(
   Schema.Number,
@@ -264,6 +271,8 @@ export const AppSettingsSchema = Schema.Struct({
   historyRetentionDays: HistoryRetentionDaysSchema,
   openAiApiKey: OpenAiApiKeySchema,
   aiSettings: AiSettingsSchema,
+  rigAgentRolloutPreference: RigAgentV1RolloutPreferenceSchema,
+  agentPolicy: RigMutationPolicySettingsSchema,
 });
 
 export type AppSettings = Schema.Schema.Type<typeof AppSettingsSchema>;
@@ -334,6 +343,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     maxTokens: 1_024,
     actionMode: "read-only",
   },
+  rigAgentRolloutPreference: "inherit",
+  agentPolicy: {
+    maxActionsPerBatch: 48,
+    maxNodesCreatedPerRun: 12,
+    maxEdgesCreatedPerRun: 24,
+    allowSettingsMutation: false,
+  } satisfies RigMutationPolicySettings,
 };
 
 export const APP_SETTING_KEYS = Object.freeze(

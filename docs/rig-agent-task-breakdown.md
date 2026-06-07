@@ -321,10 +321,17 @@
   - `src/ui/components/settings/SettingsPanel.tsx`
   - `src/core/effects/settings.types.ts`
   - `src/core/effects/agent-policy.ts`
+  - `src/core/effects/opy-action.runtime.ts`
+  - `src/ui/components/OpyCopilotPanel.tsx`
 - Depends on: Phase 4 complete.
 - Acceptance:
   - Policy updates take effect without restart.
   - Runtime blocks policy-violating actions.
+- Status:
+  - implemented root-level `agentPolicy` settings with persisted limits for max actions, max nodes, max edges, and settings mutation lock
+  - settings UI now exposes live policy summary plus direct controls for those limits alongside OPY action mode
+  - OPY action resolution now enforces policy budgets for add-node, apply-proposal, and rollback paths before any mutation reaches the board
+  - targeted coverage now includes policy helper tests plus runtime/settings regression coverage for persisted policy enforcement
 
 ### RIG-502: Evaluation Harness
 
@@ -339,6 +346,12 @@
 - Acceptance:
   - Eval pass criteria is met before enabling mutation mode by default.
   - Regression suite blocks unsafe behavioral drift.
+- Status:
+  - added offline eval fixtures for mono-team, cross-team, unknown-ownership, and Azure-heavy board topologies in `test/core/effects/agent-evals/fixtures.ts`
+  - added grounding evaluations that require high-confidence board evidence and stable ownership-team counts from typed read-tool execution
+  - added safe-mutation evaluations covering read-only blocking, bounded apply success, and policy-budget rejection for oversized edge creation
+  - added rollback evaluation coverage that exercises restore, revert, and remove impacts together on an Azure-heavy topology
+  - expanded `src/ui/machines/opy-agent.machine.test.ts` so action lifecycle coverage includes direct-apply requests that do not require confirmation
 
 ### RIG-503: Rollout Controls + Audit View
 
@@ -354,6 +367,11 @@
 - Acceptance:
   - Feature can be enabled by cohort/environment.
   - Audit trail captures who/what/when/why per applied task.
+- Status:
+  - added `rig_agent_v1` env flag resolution with `disabled`, `canary`, and `enabled` rollout modes in `src/core/effects/feature-flags.ts`
+  - added workstation canary enrollment in persisted settings, with effective rollout surfaced in `src/ui/components/settings/SettingsPanel.tsx`
+  - clamped OPY runtime action mode behind the effective rollout gate so disabled environments and non-enrolled canary workstations stay mutation-offline
+  - added cross-session audit readers in `src/core/effects/opy-chat.persistence.ts` and a full-width `AgentAuditPanel` for who/what/when/why/session visibility
 
 ## 8) Next Recommended Execution Order
 

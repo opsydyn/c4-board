@@ -137,6 +137,46 @@ describe("settings.runtime", () => {
     expect(db.state.executeCount).toBe(executeBefore);
   });
 
+  it("persists agentPolicy as a single root setting patch", async () => {
+    const db = makeInMemorySettingsDb();
+    await runWithService(resetSettings(), db.service);
+    const executeBefore = db.state.executeCount;
+
+    const patched = await runWithService(
+      patchSettings({
+        agentPolicy: {
+          ...DEFAULT_APP_SETTINGS.agentPolicy,
+          maxActionsPerBatch: 16,
+          allowSettingsMutation: true,
+        },
+      }),
+      db.service,
+    );
+
+    expect(patched.agentPolicy).toEqual({
+      ...DEFAULT_APP_SETTINGS.agentPolicy,
+      maxActionsPerBatch: 16,
+      allowSettingsMutation: true,
+    });
+    expect(db.state.executeCount - executeBefore).toBe(1);
+  });
+
+  it("persists rigAgentRolloutPreference as a single root setting patch", async () => {
+    const db = makeInMemorySettingsDb();
+    await runWithService(resetSettings(), db.service);
+    const executeBefore = db.state.executeCount;
+
+    const patched = await runWithService(
+      patchSettings({
+        rigAgentRolloutPreference: "canary",
+      }),
+      db.service,
+    );
+
+    expect(patched.rigAgentRolloutPreference).toBe("canary");
+    expect(db.state.executeCount - executeBefore).toBe(1);
+  });
+
   it("reset writes all setting keys", async () => {
     const db = makeInMemorySettingsDb();
     await runWithService(resetSettings(), db.service);
@@ -185,6 +225,25 @@ describe("settings.runtime", () => {
           temperature: 0.2,
           maxTokens: 1024,
           actionMode: "auto-apply",
+        }),
+        updated_at: Date.now(),
+      },
+    ]);
+
+    await expect(runWithService(getSettings(), db.service)).rejects.toThrow(
+      "App settings schema validation failed",
+    );
+  });
+
+  it("fails for schema-invalid agentPolicy payloads", async () => {
+    const db = makeInMemorySettingsDb([
+      {
+        key: "agentPolicy",
+        value: JSON.stringify({
+          maxActionsPerBatch: -1,
+          maxNodesCreatedPerRun: 12,
+          maxEdgesCreatedPerRun: 24,
+          allowSettingsMutation: false,
         }),
         updated_at: Date.now(),
       },

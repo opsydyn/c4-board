@@ -1,4 +1,8 @@
 import { buildRigMutationPlanDiff, type RigRenderedMutationPlan } from "./agent-plan-diff";
+import {
+  detectRigMutationPolicyViolation,
+  type RigMutationPolicySettings,
+} from "./agent-policy";
 import { formatOpyRollbackSummary } from "./agent-rollback.runtime";
 import type { RigC4BoardSummary, RigC4DiagramProposal } from "./ai-agent.runtime";
 import {
@@ -111,6 +115,7 @@ export const createOpyAddNodeActionFlowDescriptor = (input: {
 
 export const resolveOpyExecutableAddNodeActionFlow = (input: {
   readonly actionMode: AiActionMode;
+  readonly policy: RigMutationPolicySettings;
   readonly domain: "c4" | "ddd";
   readonly sessionId: string;
   readonly nodeType: OpyC4NodeType;
@@ -136,6 +141,22 @@ export const resolveOpyExecutableAddNodeActionFlow = (input: {
     };
   }
 
+  const policyViolation = detectRigMutationPolicyViolation({
+    policy: input.policy,
+    totalActions: 1,
+    totalNodesCreated: 1,
+    totalEdgesCreated: 0,
+  });
+  if (policyViolation) {
+    return {
+      ok: false,
+      issue: createPolicyIssue(
+        `Action blocked by policy. ${policyViolation.message}`,
+        "Adjust AI Agent policy limits in Settings or reduce the requested board change.",
+      ),
+    };
+  }
+
   return {
     ok: true,
     value: createOpyAddNodeActionFlowDescriptor(input),
@@ -144,6 +165,7 @@ export const resolveOpyExecutableAddNodeActionFlow = (input: {
 
 export const resolveOpyApplyProposalActionFlow = (input: {
   readonly actionMode: AiActionMode;
+  readonly policy: RigMutationPolicySettings;
   readonly boardSummary: RigC4BoardSummary | null;
   readonly proposalRecord: OpyActionProposalRecord | null;
   readonly sessionId: string;
@@ -230,6 +252,22 @@ export const resolveOpyApplyProposalActionFlow = (input: {
     };
   }
 
+  const policyViolation = detectRigMutationPolicyViolation({
+    policy: input.policy,
+    totalActions: mutationPlan.plan.totalActions,
+    totalNodesCreated: mutationPlan.plan.totalNodesCreated,
+    totalEdgesCreated: mutationPlan.plan.totalEdgesCreated,
+  });
+  if (policyViolation) {
+    return {
+      ok: false,
+      issue: createPolicyIssue(
+        `Plan apply blocked by policy. ${policyViolation.message}`,
+        "Adjust AI Agent policy limits in Settings or reduce the proposed change batch.",
+      ),
+    };
+  }
+
   return {
     ok: true,
     value: {
@@ -267,6 +305,7 @@ export const resolveOpyApplyProposalActionFlow = (input: {
 
 export const resolveOpyRollbackActionFlow = (input: {
   readonly actionMode: AiActionMode;
+  readonly policy: RigMutationPolicySettings;
   readonly checkpoint: OpyAgentCheckpoint | null;
   readonly sessionId: string;
 }): { readonly ok: true; readonly value: OpyActionFlowDescriptor } | { readonly ok: false; readonly issue: OpyActionFlowIssue } => {
@@ -276,6 +315,22 @@ export const resolveOpyRollbackActionFlow = (input: {
       issue: createPolicyIssue(
         `Rollback blocked by mode ${input.actionMode.toUpperCase()}.`,
         "Switch to APPLY-WITH-CONFIRMATION.",
+      ),
+    };
+  }
+
+  const policyViolation = detectRigMutationPolicyViolation({
+    policy: input.policy,
+    totalActions: 1,
+    totalNodesCreated: 0,
+    totalEdgesCreated: 0,
+  });
+  if (policyViolation) {
+    return {
+      ok: false,
+      issue: createPolicyIssue(
+        `Rollback blocked by policy. ${policyViolation.message}`,
+        "Adjust AI Agent policy limits in Settings before retrying rollback.",
       ),
     };
   }

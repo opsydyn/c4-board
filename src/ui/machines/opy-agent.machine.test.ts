@@ -38,6 +38,20 @@ const createActionRequest = (): OpyAgentLifecycleRequest => ({
   },
 });
 
+const createImmediateActionRequest = (): OpyAgentLifecycleRequest => ({
+  confirmation: null,
+  id: "rollback-1",
+  mode: "action",
+  kind: "rollback",
+  label: "ROLLBACK",
+  requiresConfirmation: false,
+  replay: {
+    kind: "rollback",
+    checkpointId: "checkpoint-1",
+    sessionId: "session-1",
+  },
+});
+
 describe("opyAgentMachine", () => {
   test("advances a read flow through explicit lifecycle stages", () => {
     const actor = createActor(createOpyAgentMachine());
@@ -92,6 +106,23 @@ describe("opyAgentMachine", () => {
     expect(snapshot.value).toBe("completed");
     expect(snapshot.context.lastTerminalStatus).toBe("completed");
     expect(snapshot.context.lastRequest?.kind).toBe("apply-proposal");
+  });
+
+  test("starts non-confirmed action requests directly in applying", () => {
+    const actor = createActor(createOpyAgentMachine());
+    actor.start();
+
+    actor.send({ type: "START_ACTION", request: createImmediateActionRequest() });
+    expect(actor.getSnapshot().value).toBe("applying");
+
+    actor.send({ type: "VERIFY_READY" });
+    expect(actor.getSnapshot().value).toBe("verifying");
+
+    actor.send({ type: "COMPLETE" });
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe("completed");
+    expect(snapshot.context.lastTerminalStatus).toBe("completed");
+    expect(snapshot.context.lastRequest?.kind).toBe("rollback");
   });
 
   test("clears pending confirmation context on reset", () => {
