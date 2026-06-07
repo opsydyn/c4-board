@@ -32,6 +32,7 @@ export interface OpyAgentToolCall {
 
 export type OpyAgentArtifactKind =
   | "context_bundle"
+  | "anomaly_assessment"
   | "chat_response"
   | "diagram_proposal"
   | "board_review"

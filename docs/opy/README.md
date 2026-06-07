@@ -202,6 +202,23 @@ OPY’s answers are grounded in typed read tools rather than free-form prompt st
 - run metadata
 - stage-aware failure summaries
 
+## Anomaly Boundary
+
+OPY now runs a local anomaly preflight before executable chat, review, proposal, and `/add` flows.
+
+### Current Detection Coverage
+
+- instruction override and hidden-prompt extraction attempts
+- secret or credential exfiltration requests
+- policy/confirmation bypass language
+- broad destructive mutation phrasing on proposal/action requests
+
+### Current Behavior
+
+- critical findings fail closed before model invocation or board-action resolution
+- caution findings continue, but OPY records an `anomaly_assessment` artifact and surfaces `ANOMALY::...` chrome warnings
+- anomaly results are persisted into the same OPY task artifact history used for resumes and audit inspection
+
 ## Orchestration Lifecycle
 
 OPY now has an explicit UI-side orchestration machine for active flows.

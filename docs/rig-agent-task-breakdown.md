@@ -71,6 +71,10 @@
   - retrieval supports domain, scope, diagram-scope, and recency filtering before ranked prompt assembly
   - prompt grounding now respects `redactionMode` so strict privacy can redact freeform transcript content and sensitive board metadata before the model sees it
   - focused retrieval coverage now exercises grounding assembly, strict-redaction behavior, governance-only retrieval, and all-diagrams metadata lookup
+- `RIG-504` is now started for the current OPY scope:
+  - OPY request preflight now scores prompt injection, secret-exfiltration, policy-bypass, and destructive-mutation language before model invocation or board-action resolution
+  - critical anomaly signals now fail closed into persisted task artifacts and operator-visible warnings
+  - caution-level anomaly signals now persist as task artifacts and surface into OPY chrome without blocking the run
 - `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
 
 ## 2) Phase 0: Foundation Hardening
@@ -444,11 +448,35 @@
   - clamped OPY runtime action mode behind the effective rollout gate so disabled environments and non-enrolled canary workstations stay mutation-offline
   - added cross-session audit readers in `src/core/effects/opy-chat.persistence.ts` and a full-width `AgentAuditPanel` for who/what/when/why/session visibility
 
+### RIG-504: Prompt/Request Anomaly Boundary
+
+- Goal: Detect clearly hostile or unsafe OPY requests before they reach model invocation or board-action resolution.
+- Deliverables:
+  - Add a pure anomaly analyzer for prompt injection, secret extraction, policy bypass, and destructive mutation language.
+  - Persist anomaly assessments into OPY task artifacts.
+  - Surface anomaly warnings in the OPY chrome and transcript, and fail closed on critical cases.
+- Primary files:
+  - `src/core/effects/opy-anomaly.ts`
+  - `src/core/effects/opy-agent.trace.ts`
+  - `src/core/effects/opy-chat.persistence.ts`
+  - `src/ui/components/OpyCopilotPanel.tsx`
+  - `src/ui/components/opyChromeStatus.ts`
+  - `test/core/effects/opy-anomaly.test.ts`
+- Depends on: `RIG-404`.
+- Status:
+  - added a pure `assessOpyRequestAnomaly` boundary covering instruction override attempts, hidden-prompt extraction, secret/credential exfiltration, policy-bypass language, and broad destructive board mutations
+  - chat, review, proposal, and `/add` action flows now run anomaly preflight before execution, with critical findings blocking the request and caution findings continuing under visible warning
+  - anomaly assessments now persist as `anomaly_assessment` OPY task artifacts and surface into widget chrome via `ANOMALY::BLOCKED` / `ANOMALY::CAUTION`
+- Acceptance:
+  - Critical hostile requests do not reach model invocation or action resolution.
+  - Operators can see anomaly outcomes without opening task-history internals.
+  - Focused tests cover safe, caution, and blocked anomaly paths.
+
 ## 8) Next Recommended Execution Order
 
-1. Add suspicious prompt/tool-call anomaly detection before moving mutation modes toward broader rollout.
-2. Expand OPY/Rig telemetry with latency, token, provider/model, and confirmation/cancel metrics so rollout gates can score real operator behavior.
-3. Extend retrieval grounding to settings, Azure sync summaries, and explainability artifacts, then surface retrieval hits as explicit operator-visible citation bundles.
+1. Expand OPY/Rig telemetry with latency, token, provider/model, anomaly, and confirmation/cancel metrics so rollout gates can score real operator behavior.
+2. Extend retrieval grounding to settings, Azure sync summaries, and explainability artifacts, then surface retrieval hits as explicit operator-visible citation bundles.
+3. Deepen anomaly detection from request preflight into tool-trace and mutation-plan pattern analysis before wider mutation rollout.
 
 ## 9) Definition of Ready / Done
 

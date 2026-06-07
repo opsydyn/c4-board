@@ -85,6 +85,11 @@ import {
   type OpyResumeBoundaryPlanItem,
   type OpyTaskLineageAttentionSummary,
 } from "../../core/effects/opy-agent.resume";
+import {
+  assessOpyRequestAnomaly,
+  type OpyAnomalyAssessment,
+  type OpyAnomalyRequestKind,
+} from "../../core/effects/opy-anomaly";
 import type {
   OpyAgentArtifact,
   OpyAgentArtifactKind,
@@ -217,6 +222,12 @@ interface OpyActionModeSurface {
   readonly tone: "critical" | "warning" | "ready";
   readonly label: string;
   readonly detail: string;
+}
+
+interface OpyLatestAnomalySurface {
+  readonly assessment: OpyAnomalyAssessment;
+  readonly createdAt: number;
+  readonly requestText: string;
 }
 
 type OpyTaskHistoryChainFilter = "all" | string;
@@ -361,6 +372,18 @@ const createBoardReviewArtifactDraft = (
   payload: groundedReview,
 });
 
+const createAnomalyAssessmentArtifactDraft = (input: {
+  readonly assessment: OpyAnomalyAssessment;
+  readonly requestText: string;
+}): OpyTaskArtifactDraft => ({
+  kind: "anomaly_assessment",
+  summary: summarizeInlineText(input.assessment.summary, "ANOMALY ASSESSMENT READY."),
+  payload: {
+    assessment: input.assessment,
+    requestText: input.requestText,
+  } satisfies OpyPersistedAnomalyAssessmentPayload,
+});
+
 const createMutationPlanArtifactDraft = (input: {
   readonly proposalRespondedAtMs: number;
   readonly groundedProposal: NonNullable<ReturnType<typeof buildGroundedProposalDiff>>;
@@ -455,6 +478,11 @@ interface OpyPersistedActionDescriptorArtifactPayload {
 
 interface OpyPersistedActionResultArtifactPayload {
   readonly message: string;
+}
+
+interface OpyPersistedAnomalyAssessmentPayload {
+  readonly assessment: OpyAnomalyAssessment;
+  readonly requestText: string;
 }
 
 type OpyRigInvokeToolCallName = "invoke_analyst" | "invoke_planner" | "invoke_verifier";
@@ -1690,6 +1718,9 @@ export function OpyCopilotPanel({
   const [agentSecretStatus, setAgentSecretStatus] = useState<"loading" | "ready" | "error">("loading");
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [latestAnomalyBySessionId, setLatestAnomalyBySessionId] = useState<
+    Readonly<Record<string, OpyLatestAnomalySurface | undefined>>
+  >({});
   const [sessions, setSessions] = useState<ReadonlyArray<OpyChatSession>>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
   const [sessionTitleDraft, setSessionTitleDraft] = useState("");
@@ -2031,6 +2062,10 @@ export function OpyCopilotPanel({
     latestDiagramRun,
     latestReviewRun,
   ]);
+  const latestAnomalySurface = useMemo(
+    () => (selectedSessionId.length > 0 ? latestAnomalyBySessionId[selectedSessionId] ?? null : null),
+    [latestAnomalyBySessionId, selectedSessionId],
+  );
   const policyChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
     if (actionModeSurface.tone === "ready") {
       return null;
@@ -2045,6 +2080,20 @@ export function OpyCopilotPanel({
       isFresh: false,
     };
   }, [actionBoundaryText, actionModeSurface]);
+  const anomalyChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
+    if (!latestAnomalySurface || latestAnomalySurface.assessment.severity === "none") {
+      return null;
+    }
+
+    return {
+      key: "anomaly",
+      targetSection: "diagnostics",
+      label: latestAnomalySurface.assessment.blocked ? "ANOMALY::BLOCKED" : "ANOMALY::CAUTION",
+      detail: latestAnomalySurface.assessment.summary,
+      tone: latestAnomalySurface.assessment.severity === "critical" ? "critical" : "caution",
+      isFresh: viewportSectionsUnseen.diagnostics,
+    };
+  }, [latestAnomalySurface, viewportSectionsUnseen.diagnostics]);
   const reviewChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
     if (!activeBoardReview) {
       return null;
@@ -2175,7 +2224,11 @@ export function OpyCopilotPanel({
     };
   }, [checkpointRestorePreviewById, latestCheckpoint, viewportSectionsUnseen.checkpoints]);
   const controlSectionTone = policyChromeSignal?.tone ?? "neutral";
-  const diagnosticsSectionTone = latestRun?.status === "failed"
+  const diagnosticsSectionTone = anomalyChromeSignal?.tone === "critical"
+    ? "critical"
+    : anomalyChromeSignal?.tone === "caution"
+    ? "caution"
+    : latestRun?.status === "failed"
     ? "critical"
     : latestDiagnosticsSurface?.context.confidence === "low"
     ? "caution"
@@ -2289,13 +2342,15 @@ export function OpyCopilotPanel({
   const chromeStatus = useMemo<OpyWidgetChromeStatus>(() => {
     const priorities: Record<OpyWidgetChromeSignal["key"], number> = {
       focus: 0,
-      review: 1,
-      proposal: 2,
-      checkpoint: 3,
-      policy: 4,
+      anomaly: 1,
+      review: 2,
+      proposal: 3,
+      checkpoint: 4,
+      policy: 5,
     };
     const signals = [
       focusChromeSignal,
+      anomalyChromeSignal,
       reviewChromeSignal,
       proposalChromeSignal,
       checkpointChromeSignal,
@@ -2326,7 +2381,14 @@ export function OpyCopilotPanel({
       ),
       signals,
     };
-  }, [checkpointChromeSignal, focusChromeSignal, policyChromeSignal, proposalChromeSignal, reviewChromeSignal]);
+  }, [
+    anomalyChromeSignal,
+    checkpointChromeSignal,
+    focusChromeSignal,
+    policyChromeSignal,
+    proposalChromeSignal,
+    reviewChromeSignal,
+  ]);
 
   useEffect(() => {
     if (!activeArtifactFocusTarget || isArtifactFocusTargetActive(activeArtifactFocusTarget)) {
@@ -3148,6 +3210,69 @@ export function OpyCopilotPanel({
     [createOpyTaskArtifact],
   );
 
+  const recordLatestAnomalyAssessment = useCallback(
+    (sessionId: string, assessment: OpyAnomalyAssessment, requestText: string): void => {
+      setLatestAnomalyBySessionId((current) => {
+        if (assessment.severity === "none") {
+          if (!(sessionId in current)) {
+            return current;
+          }
+
+          const next = { ...current };
+          delete next[sessionId];
+          return next;
+        }
+
+        return {
+          ...current,
+          [sessionId]: {
+            assessment,
+            createdAt: Date.now(),
+            requestText,
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const formatAnomalyAssessmentMessage = useCallback(
+    (assessment: OpyAnomalyAssessment): string =>
+      `${assessment.summary} ACTION::${assessment.recommendedAction}`,
+    [],
+  );
+
+  const persistBlockedOpyAnomalyAssessment = useCallback(
+    async (input: {
+      readonly request: OpyAgentLifecycleRequest;
+      readonly assessment: OpyAnomalyAssessment;
+      readonly requestText: string;
+    }): Promise<void> => {
+      const now = Date.now();
+      await persistOpyTask({
+        id: input.request.id,
+        sessionId: input.request.replay.sessionId,
+        request: input.request,
+        stage: "failed",
+        status: "failed",
+        createdAt: now,
+        updatedAt: now,
+        completedAt: now,
+        errorSummary: input.assessment.summary,
+      });
+      await createOpyTaskArtifact({
+        taskId: input.request.id,
+        sessionId: input.request.replay.sessionId,
+        toolCallId: null,
+        draft: createAnomalyAssessmentArtifactDraft({
+          assessment: input.assessment,
+          requestText: input.requestText,
+        }),
+      });
+    },
+    [createOpyTaskArtifact, persistOpyTask],
+  );
+
   const resolveLifecycleRequestStaleError = useCallback((requestId: string): OpyLifecycleRequestStaleError | null => {
     const lifecycleState = lifecycleTaskSyncRef.current;
     if (lifecycleState.activeRequestId === requestId) {
@@ -3602,6 +3727,75 @@ export function OpyCopilotPanel({
     },
     [aiSettings.provider, appendAgentNotice, hasOpenAiRuntimeProvider],
   );
+  const evaluateOpyRequestAnomaly = useCallback(
+    async (input: {
+      readonly sessionId: string;
+      readonly request: OpyAgentLifecycleRequest;
+      readonly requestKind: OpyAnomalyRequestKind;
+      readonly requestText: string;
+    }): Promise<{
+      readonly assessment: OpyAnomalyAssessment;
+      readonly blocked: boolean;
+      readonly preflightArtifacts: ReadonlyArray<OpyTaskArtifactDraft>;
+    }> => {
+      const assessment = assessOpyRequestAnomaly({
+        requestKind: input.requestKind,
+        text: input.requestText,
+      });
+      recordLatestAnomalyAssessment(input.sessionId, assessment, input.requestText);
+
+      if (assessment.severity === "none") {
+        return {
+          assessment,
+          blocked: false,
+          preflightArtifacts: [],
+        };
+      }
+
+      const artifact = createAnomalyAssessmentArtifactDraft({
+        assessment,
+        requestText: input.requestText,
+      });
+
+      if (assessment.blocked) {
+        await persistBlockedOpyAnomalyAssessment({
+          request: input.request,
+          assessment,
+          requestText: input.requestText,
+        });
+        await appendAgentNotice(
+          input.sessionId,
+          makeAgentPolicyError({
+            message: assessment.summary,
+            recommendedAction: assessment.recommendedAction,
+          }),
+        );
+        return {
+          assessment,
+          blocked: true,
+          preflightArtifacts: [artifact],
+        };
+      }
+
+      await appendAndPersistMessage(
+        input.sessionId,
+        "system",
+        formatAnomalyAssessmentMessage(assessment),
+      );
+      return {
+        assessment,
+        blocked: false,
+        preflightArtifacts: [artifact],
+      };
+    },
+    [
+      appendAgentNotice,
+      appendAndPersistMessage,
+      formatAnomalyAssessmentMessage,
+      persistBlockedOpyAnomalyAssessment,
+      recordLatestAnomalyAssessment,
+    ],
+  );
 
   const executeRigRun = useCallback(
     async <T,>(
@@ -3611,6 +3805,7 @@ export function OpyCopilotPanel({
         readonly sessionId: string;
         readonly intent: OpyAgentRunIntent;
         readonly invokeToolCallName: OpyRigInvokeToolCallName;
+        readonly preflightArtifacts?: ReadonlyArray<OpyTaskArtifactDraft>;
         readonly contextualize: () => Promise<RigAgentContextBundle>;
         readonly execute: (context: RigAgentContextBundle) => Promise<T>;
         readonly assistantMessage: (result: T) => string;
@@ -3625,6 +3820,29 @@ export function OpyCopilotPanel({
           await dismissResumableLifecycleTask("SUPERSEDED BY NEW TASK.");
         }
         agentLifecycle.startReadRequest(input.lifecycleRequest);
+      }
+      if (input.preflightArtifacts && input.preflightArtifacts.length > 0) {
+        const now = Date.now();
+        await persistOpyTask({
+          id: input.lifecycleRequest.id,
+          sessionId: input.sessionId,
+          request: input.lifecycleRequest,
+          stage: "contextualizing",
+          status: "running",
+          createdAt: now,
+          updatedAt: now,
+          completedAt: null,
+          errorSummary: null,
+        });
+
+        for (const artifact of input.preflightArtifacts) {
+          await createOpyTaskArtifact({
+            taskId: input.lifecycleRequest.id,
+            sessionId: input.sessionId,
+            toolCallId: null,
+            draft: artifact,
+          });
+        }
       }
       let run: OpyAgentRun;
       try {
@@ -3951,9 +4169,11 @@ export function OpyCopilotPanel({
       agentLifecycle,
       appendAndPersistMessage,
       beginAgentRun,
+      createOpyTaskArtifact,
       dismissResumableLifecycleTask,
       getTaskResumeTrail,
       persistOpyMessage,
+      persistOpyTask,
       persistOpyToolCall,
       persistResumeBoundaryOutcomeArtifact,
       trackOpyTaskToolCall,
@@ -4629,14 +4849,40 @@ export function OpyCopilotPanel({
           nodeType: opyCommand.action.nodeType,
           label: opyCommand.action.label,
         });
-        await executeOpyActionFlow({
-          descriptor: actionFlow,
+        const actionLifecycleRequest = createLifecycleRequest({
+          confirmation: {
+            cancelMessage: actionFlow.cancelMessage,
+            confirmationLines: actionFlow.confirmationMessage.split("\n"),
+            failurePrefix: actionFlow.failurePrefix,
+            sessionId,
+          },
+          id: createMessageId(),
+          mode: "action",
+          kind: "add-node",
+          label: actionFlow.requestLabel,
+          requiresConfirmation: true,
           replay: {
             kind: "add-node",
             label: opyCommand.action.label,
             nodeType: opyCommand.action.nodeType,
             sessionId,
           },
+        });
+        const actionAnomalyAssessment = await evaluateOpyRequestAnomaly({
+          sessionId,
+          request: actionLifecycleRequest,
+          requestKind: "action",
+          requestText: trimmed,
+        });
+        if (actionAnomalyAssessment.blocked) {
+          return;
+        }
+
+        await executeOpyActionFlow({
+          descriptor: actionFlow,
+          lifecycleRequest: actionLifecycleRequest,
+          artifacts: actionAnomalyAssessment.preflightArtifacts,
+          replay: actionLifecycleRequest.replay,
         });
         return;
       }
@@ -4688,23 +4934,35 @@ export function OpyCopilotPanel({
           return;
         }
 
-        await executeRigRun({
-          lifecycleRequest: createLifecycleRequest({
-            confirmation: null,
-            id: createMessageId(),
-            mode: "read",
+        const proposalLifecycleRequest = createLifecycleRequest({
+          confirmation: null,
+          id: createMessageId(),
+          mode: "read",
+          kind: "proposal",
+          label: "PROPOSAL",
+          requiresConfirmation: false,
+          replay: {
+            description: opyCommand.proposal.description,
             kind: "proposal",
-            label: "PROPOSAL",
-            requiresConfirmation: false,
-            replay: {
-              description: opyCommand.proposal.description,
-              kind: "proposal",
-              sessionId,
-            },
-          }),
+            sessionId,
+          },
+        });
+        const proposalAnomalyAssessment = await evaluateOpyRequestAnomaly({
+          sessionId,
+          request: proposalLifecycleRequest,
+          requestKind: "proposal",
+          requestText: trimmed,
+        });
+        if (proposalAnomalyAssessment.blocked) {
+          return;
+        }
+
+        await executeRigRun({
+          lifecycleRequest: proposalLifecycleRequest,
           sessionId,
           intent: "plan-c4-diagram",
           invokeToolCallName: getReadInvokeToolCallName("proposal"),
+          preflightArtifacts: proposalAnomalyAssessment.preflightArtifacts,
           contextualize: () => resolveRigAgentContext({
             focus: opyCommand.proposal.description,
             sessionId,
@@ -4808,23 +5066,35 @@ export function OpyCopilotPanel({
         }
 
         const reviewFocus = opyCommand.review.focus ?? boardContext?.selectedNode?.label;
-        await executeRigRun({
-          lifecycleRequest: createLifecycleRequest({
-            confirmation: null,
-            id: createMessageId(),
-            mode: "read",
+        const reviewLifecycleRequest = createLifecycleRequest({
+          confirmation: null,
+          id: createMessageId(),
+          mode: "read",
+          kind: "review",
+          label: "REVIEW",
+          requiresConfirmation: false,
+          replay: {
+            focus: reviewFocus ?? null,
             kind: "review",
-            label: "REVIEW",
-            requiresConfirmation: false,
-            replay: {
-              focus: reviewFocus ?? null,
-              kind: "review",
-              sessionId,
-            },
-          }),
+            sessionId,
+          },
+        });
+        const reviewAnomalyAssessment = await evaluateOpyRequestAnomaly({
+          sessionId,
+          request: reviewLifecycleRequest,
+          requestKind: "review",
+          requestText: trimmed,
+        });
+        if (reviewAnomalyAssessment.blocked) {
+          return;
+        }
+
+        await executeRigRun({
+          lifecycleRequest: reviewLifecycleRequest,
           sessionId,
           intent: "review-c4-board",
           invokeToolCallName: getReadInvokeToolCallName("review"),
+          preflightArtifacts: reviewAnomalyAssessment.preflightArtifacts,
           contextualize: () => resolveRigAgentContext({
             focus: reviewFocus ?? null,
             sessionId,
@@ -4883,23 +5153,35 @@ export function OpyCopilotPanel({
         return;
       }
 
-      await executeRigRun({
-        lifecycleRequest: createLifecycleRequest({
-          confirmation: null,
-          id: createMessageId(),
-          mode: "read",
+      const chatLifecycleRequest = createLifecycleRequest({
+        confirmation: null,
+        id: createMessageId(),
+        mode: "read",
+        kind: "chat",
+        label: "CHAT",
+        requiresConfirmation: false,
+        replay: {
           kind: "chat",
-          label: "CHAT",
-          requiresConfirmation: false,
-          replay: {
-            kind: "chat",
-            prompt: trimmed,
-            sessionId,
-          },
-        }),
+          prompt: trimmed,
+          sessionId,
+        },
+      });
+      const chatAnomalyAssessment = await evaluateOpyRequestAnomaly({
+        sessionId,
+        request: chatLifecycleRequest,
+        requestKind: "chat",
+        requestText: trimmed,
+      });
+      if (chatAnomalyAssessment.blocked) {
+        return;
+      }
+
+      await executeRigRun({
+        lifecycleRequest: chatLifecycleRequest,
         sessionId,
         intent: "chat",
         invokeToolCallName: getReadInvokeToolCallName("chat"),
+        preflightArtifacts: chatAnomalyAssessment.preflightArtifacts,
         contextualize: () => resolveRigAgentContext({
           focus: trimmed,
           sessionId,

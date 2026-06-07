@@ -260,6 +260,7 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - [ ] Add approval policies by action class (always-confirm, confirm-on-threshold, auto-apply for read-only).
    - [x] Add per-provider and per-model allow-lists in settings with kill switch support.
    - [ ] Add anomaly detection for suspicious prompts/tool-call patterns (prompt injection, unsafe request patterns).
+   - Current OPY scope now runs request-preflight anomaly checks for prompt injection, secret exfiltration, policy bypass, and destructive mutation language, persisting `anomaly_assessment` artifacts and surfacing `ANOMALY::...` warnings. Tool-trace and mutation-plan anomaly scoring still remains.
    - [x] Add canary rollout mode (`rig_agent_v1`) and environment-level overrides.
    - [x] Add governance audit log view in Settings (`who`, `what`, `when`, `why`, `source session`).
 

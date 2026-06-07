@@ -644,6 +644,7 @@ const isOpyAgentToolCallStatus = (value: unknown): value is OpyAgentToolCallStat
 
 const isOpyAgentArtifactKind = (value: unknown): value is OpyAgentArtifactKind =>
   value === "context_bundle"
+  || value === "anomaly_assessment"
   || value === "chat_response"
   || value === "diagram_proposal"
   || value === "board_review"
