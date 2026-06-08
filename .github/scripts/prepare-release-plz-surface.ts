@@ -21,6 +21,12 @@ type ReleaseSurfacePayload = {
 	paths: string[];
 };
 
+function runGit(args: string[]): ReturnType<typeof spawnSync> {
+	return spawnSync("git", args, {
+		encoding: "utf8",
+	});
+}
+
 function usage(): never {
 	console.error(
 		"usage: prepare-release-plz-surface.ts <base-ref> <head-ref> <output-path>",
@@ -28,10 +34,52 @@ function usage(): never {
 	process.exit(1);
 }
 
+function emptyTreeRef(): string {
+	const result = runGit(["hash-object", "-t", "tree", "/dev/null"]);
+	if (result.status !== 0) {
+		console.error(result.stderr.trim());
+		process.exit(result.status ?? 1);
+	}
+
+	return result.stdout.trim();
+}
+
+function hasGitObject(ref: string): boolean {
+	if (ref.trim().length === 0) {
+		return false;
+	}
+
+	const result = runGit(["cat-file", "-e", `${ref}^{object}`]);
+	return result.status === 0;
+}
+
+function resolveExistingBaseRef(baseRef: string, headRef: string): string {
+	if (baseRef === "0000000000000000000000000000000000000000") {
+		return emptyTreeRef();
+	}
+
+	if (hasGitObject(baseRef)) {
+		return baseRef;
+	}
+
+	const parentResult = runGit(["rev-parse", "--verify", `${headRef}^`]);
+	if (parentResult.status === 0) {
+		const fallback = parentResult.stdout.trim();
+		console.warn(
+			`Base ref ${baseRef} is unavailable; falling back to ${fallback}.`,
+		);
+		return fallback;
+	}
+
+	const fallback = emptyTreeRef();
+	console.warn(
+		`Base ref ${baseRef} is unavailable and ${headRef} has no parent; falling back to empty tree ${fallback}.`,
+	);
+	return fallback;
+}
+
 function listChangedPaths(baseRef: string, headRef: string): string[] {
-	const result = spawnSync("git", ["diff", "--name-only", baseRef, headRef], {
-		encoding: "utf8",
-	});
+	const result = runGit(["diff", "--name-only", baseRef, headRef]);
 
 	if (result.status !== 0) {
 		console.error(result.stderr.trim());
@@ -71,7 +119,14 @@ if (!baseRef || !headRef || !outputPath) {
 	usage();
 }
 
-const relevantPaths = listChangedPaths(baseRef, headRef)
+if (!hasGitObject(headRef)) {
+	console.error(`Head ref ${headRef} is unavailable.`);
+	process.exit(1);
+}
+
+const resolvedBaseRef = resolveExistingBaseRef(baseRef, headRef);
+
+const relevantPaths = listChangedPaths(resolvedBaseRef, headRef)
 	.filter(isRelevant)
 	.sort((left, right) => left.localeCompare(right));
 
@@ -84,7 +139,7 @@ const payload: ReleaseSurfacePayload = {
 	managedBy: "github-actions/release-plz",
 	purpose:
 		"Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
-	base: baseRef,
+	base: resolvedBaseRef,
 	head: headRef,
 	paths: relevantPaths,
 };
