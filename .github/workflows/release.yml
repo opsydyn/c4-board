@@ -17,6 +17,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Set to true once Apple signing credentials are stored in repo secrets.
+  APPLE_SIGNING_ENABLED: "false"
 
 jobs:
   release-gate:
@@ -292,7 +294,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Validate Apple signing configuration
-        if: ${{ startsWith(matrix.os, 'macos') }}
+        if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' }}
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -338,7 +340,7 @@ jobs:
           fi
 
       - name: Prepare App Store Connect API key
-        if: ${{ startsWith(matrix.os, 'macos') }}
+        if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' }}
         shell: bash
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
