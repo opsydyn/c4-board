@@ -247,6 +247,14 @@ describe("createValidatedEdge", () => {
 		expect(result.label).toBe("sends data");
 	});
 
+	it("should create unique edge IDs when multiple edges are created in the same millisecond", () => {
+		const first = Effect.runSync(createValidatedEdge([], "node-a", "node-b", "uses"));
+		const second = Effect.runSync(createValidatedEdge([first], "node-c", "node-d", "calls"));
+
+		expect(first.id).not.toBe(second.id);
+		expect(new Set([first.id, second.id]).size).toBe(2);
+	});
+
 	it("should fail for invalid connection", async () => {
 		const existingEdges: Edge[] = [
 			{

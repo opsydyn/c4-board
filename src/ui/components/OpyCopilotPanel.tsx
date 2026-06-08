@@ -578,6 +578,22 @@ const createRunId = (): string => {
 
 const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
+const EXTREME_MUTATION_BATCH_EVIDENCE = "Extreme mutation batch planned";
+
+const createMutationPlanSizeOverrideKey = (sessionId: string, proposalRespondedAtMs: number): string =>
+  `${sessionId}:${proposalRespondedAtMs}:size`;
+
+const isMutationPlanSizeOverrideEligible = (assessment: OpyAnomalyAssessment): boolean =>
+  assessment.requestKind === "mutation-plan"
+  && assessment.blocked
+  && assessment.signals.some((signal) =>
+    signal.kind === "unsafe-mutation-plan" && signal.evidence === EXTREME_MUTATION_BATCH_EVIDENCE
+  )
+  && assessment.signals.every((signal) =>
+    signal.severity !== "critical"
+    || (signal.kind === "unsafe-mutation-plan" && signal.evidence === EXTREME_MUTATION_BATCH_EVIDENCE)
+  );
+
 const isOpyLifecycleRequestStaleError = (error: unknown): error is OpyLifecycleRequestStaleError =>
   error instanceof OpyLifecycleRequestStaleError;
 
@@ -1627,6 +1643,9 @@ export function OpyCopilotPanel({
   const [latestAnomalyBySessionId, setLatestAnomalyBySessionId] = useState<
     Readonly<Record<string, OpyLatestAnomalySurface | undefined>>
   >({});
+  const [mutationPlanSizeOverrideByKey, setMutationPlanSizeOverrideByKey] = useState<
+    Readonly<Record<string, true | undefined>>
+  >({});
   const [sessions, setSessions] = useState<ReadonlyArray<OpyChatSession>>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
   const [sessionTitleDraft, setSessionTitleDraft] = useState("");
@@ -1911,6 +1930,38 @@ export function OpyCopilotPanel({
       activeDiagramProposal ? buildRigMutationPlanDiff(activeDiagramProposal.proposal, activeGroundedProposal) : null,
     [activeDiagramProposal, activeGroundedProposal],
   );
+  const activeMutationPlanAnomalyAssessment = useMemo(
+    () =>
+      activeMutationPlan
+        ? assessOpyMutationPlanAnomaly({
+          proposalSummary: activeMutationPlan.proposalSummary,
+          rationale: activeMutationPlan.rationale,
+          warnings: activeMutationPlan.warnings,
+          issueDetails: activeMutationPlan.issues.map((issue) => `${issue.title} :: ${issue.detail}`),
+          impactDetails: activeMutationPlan.impactedEntities.map((impact) => `${impact.title} :: ${impact.detail}`),
+          totalActions: activeMutationPlan.plan.totalActions,
+          totalNodesCreated: activeMutationPlan.plan.totalNodesCreated,
+          totalEdgesCreated: activeMutationPlan.plan.totalEdgesCreated,
+          highestRisk: activeMutationPlan.plan.highestRisk,
+        })
+        : null,
+    [activeMutationPlan],
+  );
+  const activeMutationPlanSizePolicyBlocked = activeMutationPlan
+    ? activeMutationPlan.plan.totalActions > agentPolicy.maxActionsPerBatch
+      || activeMutationPlan.plan.totalNodesCreated > agentPolicy.maxNodesCreatedPerRun
+      || activeMutationPlan.plan.totalEdgesCreated > agentPolicy.maxEdgesCreatedPerRun
+    : false;
+  const activeMutationPlanSizeOverrideRequired = activeMutationPlanSizePolicyBlocked
+    || (activeMutationPlanAnomalyAssessment
+      ? isMutationPlanSizeOverrideEligible(activeMutationPlanAnomalyAssessment)
+      : false);
+  const activeMutationPlanSizeOverrideKey = activeDiagramProposal
+    ? createMutationPlanSizeOverrideKey(selectedSessionId, activeDiagramProposal.proposal.respondedAtMs)
+    : null;
+  const isActiveMutationPlanSizeOverrideEnabled = activeMutationPlanSizeOverrideKey
+    ? mutationPlanSizeOverrideByKey[activeMutationPlanSizeOverrideKey] === true
+    : false;
   const activePlanDecision = useMemo(() => {
     if (!activeDiagramProposal) {
       return null;
@@ -3215,6 +3266,18 @@ export function OpyCopilotPanel({
     [],
   );
 
+  const clearLatestAnomalyAssessment = useCallback((sessionId: string): void => {
+    setLatestAnomalyBySessionId((current) => {
+      if (!(sessionId in current)) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[sessionId];
+      return next;
+    });
+  }, []);
+
   const formatAnomalyAssessmentMessage = useCallback(
     (assessment: OpyAnomalyAssessment): string =>
       `${assessment.summary} ACTION::${assessment.recommendedAction}`,
@@ -4360,6 +4423,7 @@ export function OpyCopilotPanel({
           },
         });
         agentLifecycle.completeActiveRequest();
+        clearLatestAnomalyAssessment(input.sessionId);
         return actionResult;
       }
 
@@ -4480,10 +4544,12 @@ export function OpyCopilotPanel({
         throw error;
       }
       agentLifecycle.completeActiveRequest();
+      clearLatestAnomalyAssessment(input.sessionId);
       return actionResult;
     },
     [
       agentLifecycle,
+      clearLatestAnomalyAssessment,
       getTaskResumeTrail,
       persistOpyMessage,
       persistOpyToolCall,
@@ -5402,6 +5468,39 @@ export function OpyCopilotPanel({
     ],
   );
 
+  const handleEnableActiveMutationPlanSizeOverride = useCallback(async () => {
+    const sessionId = selectedSessionId;
+    if (
+      sessionId.length === 0
+      || !activeDiagramProposal
+      || !activeMutationPlan
+      || !activeMutationPlanSizeOverrideKey
+      || !activeMutationPlanSizeOverrideRequired
+      || isRunning
+    ) {
+      return;
+    }
+
+    setMutationPlanSizeOverrideByKey((current) => ({
+      ...current,
+      [activeMutationPlanSizeOverrideKey]: true,
+    }));
+
+    await appendAndPersistMessage(
+      sessionId,
+      "system",
+      `SIZE OVERRIDE ARMED::PROPOSAL ${activeDiagramProposal.proposal.respondedAtMs} · ${activeMutationPlan.plan.totalActions} ACTION(S) · ${activeMutationPlan.plan.totalNodesCreated} NODE(S) · ${activeMutationPlan.plan.totalEdgesCreated} EDGE(S). FINAL APPLY STILL REQUIRES CONFIRMATION.`,
+    );
+  }, [
+    activeDiagramProposal,
+    activeMutationPlan,
+    activeMutationPlanSizeOverrideKey,
+    activeMutationPlanSizeOverrideRequired,
+    appendAndPersistMessage,
+    isRunning,
+    selectedSessionId,
+  ]);
+
   const findPersistedProposalForReplay = useCallback(
     (sessionId: string, proposalRespondedAtMs: number): OpySessionDiagramProposal | null =>
       (diagramProposalHistoryBySessionId[sessionId] ?? []).find(
@@ -5608,6 +5707,7 @@ export function OpyCopilotPanel({
       readonly artifacts?: ReadonlyArray<OpyTaskArtifactDraft>;
       readonly replay: OpyAgentLifecycleRequest["replay"];
       readonly skipConfirmation?: boolean;
+      readonly mutationPlanSizeOverride?: boolean;
     }): Promise<string | null> => {
       if (await appendRigKillSwitchNotice(input.descriptor.sessionId)) {
         return null;
@@ -5656,13 +5756,29 @@ export function OpyCopilotPanel({
         });
 
         if (mutationPlanAssessment.severity !== "none") {
+          const isMutationPlanSizeOverrideApplied = mutationPlanAssessment.blocked
+            && input.mutationPlanSizeOverride === true
+            && isMutationPlanSizeOverrideEligible(mutationPlanAssessment);
+          const mutationPlanAuditAssessment: OpyAnomalyAssessment = isMutationPlanSizeOverrideApplied
+            ? {
+              ...mutationPlanAssessment,
+              severity: "caution",
+              blocked: false,
+              summary: "ANOMALY OVERRIDDEN :: MUTATION-PLAN :: SIZE-BATCH",
+              recommendedAction: "Proceeding under explicit operator size override; final confirmation remains required.",
+            }
+            : mutationPlanAssessment;
+
           recordLatestAnomalyAssessment(
             input.descriptor.sessionId,
-            mutationPlanAssessment,
+            mutationPlanAuditAssessment,
             mutationPlanTraceText.length > 0 ? mutationPlanTraceText : mutationPlan.proposalSummary,
           );
 
-          if (mutationPlanAssessment.blocked) {
+          if (
+            mutationPlanAssessment.blocked
+            && !isMutationPlanSizeOverrideApplied
+          ) {
             await persistBlockedOpyAnomalyAssessment({
               request: lifecycleRequest,
               assessment: mutationPlanAssessment,
@@ -5674,14 +5790,24 @@ export function OpyCopilotPanel({
               input.descriptor.sessionId,
               makeAgentPolicyError({
                 message: mutationPlanAssessment.summary,
-                recommendedAction: mutationPlanAssessment.recommendedAction,
+                recommendedAction: isMutationPlanSizeOverrideEligible(mutationPlanAssessment)
+                  ? "Use OVERRIDE SIZE BLOCK only if this large batch is intentional, then apply again and confirm."
+                  : mutationPlanAssessment.recommendedAction,
               }),
             );
             return null;
           }
 
+          if (isMutationPlanSizeOverrideApplied) {
+            await appendAndPersistMessage(
+              input.descriptor.sessionId,
+              "system",
+              `ANOMALY OVERRIDE::SIZE BLOCK::${mutationPlan.plan.totalActions} ACTION(S) · ${mutationPlan.plan.totalNodesCreated} NODE(S) · ${mutationPlan.plan.totalEdgesCreated} EDGE(S). OPERATOR CONFIRMATION STILL REQUIRED.`,
+            );
+          }
+
           actionArtifacts = mergeArtifactDrafts(actionArtifacts, [createAnomalyAssessmentArtifactDraft({
-            assessment: mutationPlanAssessment,
+            assessment: mutationPlanAuditAssessment,
             requestText: mutationPlanTraceText.length > 0
               ? mutationPlanTraceText
               : mutationPlan.proposalSummary,
@@ -5689,7 +5815,7 @@ export function OpyCopilotPanel({
           await appendAndPersistMessage(
             input.descriptor.sessionId,
             "system",
-            formatAnomalyAssessmentMessage(mutationPlanAssessment),
+            formatAnomalyAssessmentMessage(mutationPlanAuditAssessment),
           );
         }
       }
@@ -5829,6 +5955,7 @@ export function OpyCopilotPanel({
         decisionStatus: activeDiagramProposal.decisionStatus,
       },
       plannerArtifactReady: plannerArtifact !== null,
+      sizePolicyOverride: isActiveMutationPlanSizeOverrideEnabled,
       sessionId,
     });
     if (!resolution.ok) {
@@ -5852,6 +5979,7 @@ export function OpyCopilotPanel({
         proposalRespondedAtMs: activeDiagramProposal.proposal.respondedAtMs,
         sessionId,
       },
+      mutationPlanSizeOverride: isActiveMutationPlanSizeOverrideEnabled,
     });
   }, [
     actionMode,
@@ -5860,6 +5988,7 @@ export function OpyCopilotPanel({
     boardSummary,
     executeOpyActionFlow,
     handleOpyActionFlowIssue,
+    isActiveMutationPlanSizeOverrideEnabled,
     isRunning,
     loadPersistedPlannerArtifactForProposal,
     selectedSessionId,
@@ -8639,9 +8768,31 @@ export function OpyCopilotPanel({
                       >
                         REJECT PLAN
                       </button>
+                      {activeMutationPlanSizeOverrideRequired && (
+                        <button
+                          type="button"
+                          className={styles.ownershipLensToggleButton}
+                          data-selected={isActiveMutationPlanSizeOverrideEnabled ? "true" : undefined}
+                          onClick={() => {
+                            void handleEnableActiveMutationPlanSizeOverride();
+                          }}
+                          disabled={isRunning
+                            || isActiveMutationPlanSizeOverrideEnabled
+                            || !activeMutationPlan.canApprove
+                            || !activeMutationPlan.hasChanges}
+                        >
+                          {isActiveMutationPlanSizeOverrideEnabled ? "SIZE OVERRIDE ARMED" : "OVERRIDE SIZE BLOCK"}
+                        </button>
+                      )}
                       <p className={styles.opyCopilotProposalHint}>
                         {`DECISION::${PLAN_DECISION_LABEL[activePlanDecision.status]} · ${
                           activeMutationPlan.canApprove ? "READY FOR REVIEW" : "BLOCKERS PRESENT"
+                        }${
+                          activeMutationPlanSizeOverrideRequired
+                            ? isActiveMutationPlanSizeOverrideEnabled
+                              ? " · SIZE OVERRIDE::ARMED"
+                              : " · SIZE OVERRIDE::AVAILABLE"
+                            : ""
                         }`}
                       </p>
                     </div>

@@ -177,6 +177,8 @@ Also accepts:
 
 Planner recovery behavior:
 
+- OPY should infer defensible relationships when the architecture language implies flow, dependency, storage, publish/subscribe, or backing-service relationships
+- OPY should record inferred or directionally uncertain relationships in `warnings`; it should ask/regenerate only when no safe relationship can be inferred
 - proposal node and edge keys are normalized to stable kebab-case before validation so casing or punctuation drift from the model does not break edge resolution
 - invalid or dangling proposal edges are dropped during sanitization instead of aborting the whole proposal
 - OPY records a warning when an edge references a node key that is not present in the final proposal payload, and now surfaces those warnings in the proposal-ready transcript
@@ -239,6 +241,10 @@ OPY now runs a local anomaly preflight before executable chat, review, proposal,
 - caution findings continue, but OPY records an `anomaly_assessment` artifact and surfaces `ANOMALY::...` chrome warnings
 - anomaly results are persisted into the same OPY task artifact history used for resumes and audit inspection
 - proposal apply now re-screens planner mutation plans for unsafe language and oversized/high-risk batches before `resolve_action` can stage a board mutation
+- normal first-pass diagram batches are caution-level review signals, not hard blocks; OPY only fails closed for explicit unsafe language or extreme mutation batches
+- extreme size blocks expose an explicit `OVERRIDE SIZE BLOCK` escape hatch for intentional large diagrams; the override covers action/node/edge count limits only and still requires final apply confirmation
+- size override does not bypass action mode, ambiguity checks, missing planner artifacts, settings mutation locks, secret-exfiltration signals, or confirmation/policy-bypass language
+- successful confirmed board actions clear the live anomaly chrome while leaving persisted anomaly artifacts available for audit
 - Settings audit now aggregates persisted anomaly history, blocked counts, cancellations, failures, decisions, and average terminal-task duration across sessions
 
 ## Orchestration Lifecycle
@@ -440,13 +446,16 @@ Board changes flow through the existing save boundary rather than bypassing boar
 - operator confirms apply
 - OPY creates a pre-apply checkpoint
 - in-memory board is updated
-- save runs through `C4CanvasContainer` manual save path
-- failed save restores the pre-apply snapshot
+- newly-created proposal nodes are grouped with the essential `dataFlow` layout before save so applied proposals land as a coherent cluster
+- proposal edge creation now uses collision-resistant edge IDs so multi-edge applies cannot generate duplicate React keys or SQLite `edges.id` conflicts
+- save runs through `C4CanvasContainer` manual save path before the visible board is hydrated with the proposal snapshot
+- failed save leaves the visible board unchanged and keeps the pre-apply checkpoint available for audit/recovery
 
 ### Apply Safety
 
 - apply only in `apply-with-confirmation`
 - proposal CTA advances through the safe sequence: `APPROVE PLAN` while pending or rejected, `APPLY PROPOSAL` after approval, then inline `CONFIRM ACTION` or `CANCEL ACTION` while the lifecycle waits for operator confirmation
+- large proposal batches may require `OVERRIDE SIZE BLOCK` before `APPLY PROPOSAL`; this writes an audit line and does not apply anything until the final confirmation is accepted
 - apply blocked when plan is unresolved or ambiguous
 - save failure keeps board recoverable
 

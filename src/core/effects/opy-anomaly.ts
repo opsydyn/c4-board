@@ -344,21 +344,21 @@ export const assessOpyMutationPlanAnomaly = (input: {
 }): OpyAnomalyAssessment => {
   const extraSignals: Array<OpyAnomalySignal & { readonly score?: number; readonly recommendedAction?: string }> = [];
 
-  if (input.totalActions >= 10 || input.totalNodesCreated >= 6 || input.totalEdgesCreated >= 10) {
+  if (input.totalActions >= 24 || input.totalNodesCreated >= 16 || input.totalEdgesCreated >= 24) {
     extraSignals.push({
       kind: "unsafe-mutation-plan",
       severity: "critical",
-      evidence: "Very large mutation batch planned",
+      evidence: "Extreme mutation batch planned",
       score: 4,
       recommendedAction: "Reject the plan and regenerate it as smaller bounded changes before apply.",
     });
-  } else if (input.totalActions >= 6 || input.totalNodesCreated >= 4 || input.totalEdgesCreated >= 6) {
+  } else if (input.totalActions >= 6 || input.totalNodesCreated >= 6 || input.totalEdgesCreated >= 6) {
     extraSignals.push({
       kind: "unsafe-mutation-plan",
       severity: "caution",
-      evidence: "Large mutation batch planned",
+      evidence: "Diagram-sized mutation batch planned",
       score: 2,
-      recommendedAction: "Split the plan into smaller bounded proposals before applying.",
+      recommendedAction: "Review the generated topology before applying.",
     });
   }
 

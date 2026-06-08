@@ -355,6 +355,41 @@ describe("opy-action.runtime", () => {
     });
   });
 
+  it("allows apply when the operator explicitly overrides a size policy block", () => {
+    const resolution = resolveOpyApplyProposalActionFlow({
+      actionMode: "apply-with-confirmation",
+      policy: {
+        ...defaultAgentPolicy,
+        maxActionsPerBatch: 1,
+      },
+      boardSummary: createBoardSummary({
+        nodeCount: 1,
+        edgeCount: 0,
+        nodes: [
+          {
+            id: "person-customer",
+            label: "Customer",
+            nodeType: "person",
+            description: null,
+            technology: null,
+            teamOwnership: null,
+          },
+        ],
+        edges: [],
+      }),
+      proposalRecord: createProposalRecord(),
+      plannerArtifactReady: true,
+      sizePolicyOverride: true,
+      sessionId: "session-11",
+    });
+
+    expect(resolution.ok).toBe(true);
+    if (resolution.ok) {
+      expect(resolution.value.descriptor.confirmationMessage).toContain("SIZE POLICY OVERRIDE");
+      expect(resolution.value.descriptor.confirmationMessage).toContain("Batch size 2 exceeds the max action budget 1.");
+    }
+  });
+
   it("blocks apply when the persisted planner artifact is missing", () => {
     const resolution = resolveOpyApplyProposalActionFlow({
       actionMode: "apply-with-confirmation",

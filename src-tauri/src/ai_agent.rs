@@ -555,7 +555,10 @@ fn build_c4_diagram_plan_preamble() -> &'static str {
 Convert architecture descriptions into concise C4 node and edge proposals.
 Always return a realistic draft, even when details are missing.
 When current-board context shows an existing node already fits the request, prefer reusing that concept instead of duplicating it.
-Use the warnings field for ambiguity, assumptions, guessed boundaries, or unresolved relationships.
+Infer safe relationships from explicit architecture language such as uses, publishes, subscribes, processes, stores, reads, writes, calls, sends to, backed by, or depends on.
+For event-driven descriptions, prefer publisher -> broker/bus, broker/bus -> processor/subscriber, and processor/service -> datastore edges when those concepts are present.
+Only omit edges when no defensible relationship can be inferred; if direction or label is uncertain, include the best concise edge and record the assumption in warnings.
+Use the warnings field for ambiguity, assumptions, guessed boundaries, inferred relationships, or unresolved relationships.
 Do not describe implementation code, database tables, deployment YAML, or anything outside C4 concepts.
 Node keys must be unique kebab-case identifiers.
 Define each node key once, then reuse that exact key in every edge.

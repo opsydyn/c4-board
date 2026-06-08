@@ -169,6 +169,7 @@ export const resolveOpyApplyProposalActionFlow = (input: {
   readonly boardSummary: RigC4BoardSummary | null;
   readonly proposalRecord: OpyActionProposalRecord | null;
   readonly plannerArtifactReady: boolean;
+  readonly sizePolicyOverride?: boolean;
   readonly sessionId: string;
 }):
   | { readonly ok: true; readonly value: OpyApplyProposalActionResolution }
@@ -269,7 +270,7 @@ export const resolveOpyApplyProposalActionFlow = (input: {
     totalNodesCreated: mutationPlan.plan.totalNodesCreated,
     totalEdgesCreated: mutationPlan.plan.totalEdgesCreated,
   });
-  if (policyViolation) {
+  if (policyViolation && input.sizePolicyOverride !== true) {
     return {
       ok: false,
       issue: createPolicyIssue(
@@ -294,6 +295,9 @@ export const resolveOpyApplyProposalActionFlow = (input: {
           `Create ${mutationPlan.plan.totalEdgesCreated} edge(s)`,
           `Reuse ${proposalSummary.existingNodes} node(s)`,
           `Reuse ${proposalSummary.existingEdges} edge(s)`,
+          ...(policyViolation && input.sizePolicyOverride === true
+            ? ["", `SIZE POLICY OVERRIDE:: ${policyViolation.message}`]
+            : []),
           "",
           "This will update and save the current board.",
         ].join("\n"),

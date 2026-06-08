@@ -54,7 +54,7 @@ import { patchSettings } from "../../core/effects/database";
 import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../../core/effects/ai-agent.runtime";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
-import type { LayoutPresetName } from "../../core/effects/layout";
+import { autoLayoutSelected, getPreset, type LayoutPresetName } from "../../core/effects/layout";
 import { createOpyAgentCheckpoint, getOpyAgentCheckpoint } from "../../core/effects/opy-chat.persistence";
 import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import * as NodeOps from "../../core/effects/node-operations";
@@ -1254,6 +1254,7 @@ export function C4CanvasContainer() {
         let nextEdges = [...state.context.edges];
         let nextNodeCounter = state.context.nodeCounter;
         const nodeIdByProposalKey = new Map<string, string>();
+        const createdProposalNodeIds: string[] = [];
 
         for (const nodeDiff of groundedProposal.nodeDiffs) {
           if (nodeDiff.status === "existing") {
@@ -1290,6 +1291,7 @@ export function C4CanvasContainer() {
           nextNodes = [...nextNodes, createdNode];
           nextNodeCounter += 1;
           nodeIdByProposalKey.set(nodeDiff.node.key, createdNode.id);
+          createdProposalNodeIds.push(createdNode.id);
         }
 
         for (const edgeDiff of groundedProposal.edgeDiffs) {
@@ -1328,6 +1330,15 @@ export function C4CanvasContainer() {
           }
         }
 
+        if (createdProposalNodeIds.length > 1) {
+          nextNodes = autoLayoutSelected(
+            nextNodes,
+            nextEdges,
+            createdProposalNodeIds,
+            getPreset("dataFlow"),
+          );
+        }
+
         const saveInput: SaveDiagramPayload = {
           id: currentDiagramId,
           name: state.context.diagramName,
@@ -1354,12 +1365,9 @@ export function C4CanvasContainer() {
               : {}),
           },
         };
-        let didHydrateMutatedBoard = false;
 
         try {
           cancelAutosave();
-          send(loadEvent);
-          didHydrateMutatedBoard = true;
 
           const didSave = await requestSave("manual", {
             overrideInput: saveInput,
@@ -1371,11 +1379,9 @@ export function C4CanvasContainer() {
             throw new Error(`OPY proposal apply save failed: ${detail}`);
           }
 
+          send(loadEvent);
           cancelAutosave();
         } catch (error) {
-          if (didHydrateMutatedBoard) {
-            restoreCheckpointSnapshot(checkpointSnapshot);
-          }
           throw error;
         }
 

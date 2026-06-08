@@ -106,6 +106,48 @@ describe("assessOpyRequestAnomaly", () => {
 
     expect(result.severity).toBe("caution");
     expect(result.blocked).toBe(false);
-    expect(result.signals.some((signal) => signal.evidence.includes("Large mutation batch"))).toBe(true);
+    expect(result.signals.some((signal) => signal.evidence.includes("Diagram-sized mutation batch"))).toBe(true);
+  });
+
+  it("does not hard block normal first-pass diagram proposals", () => {
+    const result = assessOpyMutationPlanAnomaly({
+      proposalSummary: "Create an event-driven AKS topology.",
+      rationale: "Model web and mobile services publishing events through Event Grid with Cosmos DB storage.",
+      warnings: [],
+      issueDetails: [],
+      impactDetails: [
+        "Web Service :: Create component.",
+        "Mobile Service :: Create component.",
+        "Event Grid :: Create component.",
+        "Cosmos DB :: Create external system.",
+        "Event Processor :: Create component.",
+      ],
+      totalActions: 8,
+      totalNodesCreated: 7,
+      totalEdgesCreated: 1,
+      highestRisk: "medium",
+    });
+
+    expect(result.severity).toBe("caution");
+    expect(result.blocked).toBe(false);
+    expect(result.signals.some((signal) => signal.evidence.includes("Diagram-sized mutation batch"))).toBe(true);
+  });
+
+  it("blocks extreme mutation batches", () => {
+    const result = assessOpyMutationPlanAnomaly({
+      proposalSummary: "Replace the whole enterprise topology.",
+      rationale: "Generate a complete replacement in one operation.",
+      warnings: [],
+      issueDetails: [],
+      impactDetails: ["Enterprise graph :: Create many nodes and relationships."],
+      totalActions: 26,
+      totalNodesCreated: 17,
+      totalEdgesCreated: 24,
+      highestRisk: "high",
+    });
+
+    expect(result.severity).toBe("critical");
+    expect(result.blocked).toBe(true);
+    expect(result.signals.some((signal) => signal.evidence.includes("Extreme mutation batch"))).toBe(true);
   });
 });
