@@ -33,6 +33,8 @@ interface AgentTaskRecord {
   request_json: string;
   lineage_key: string | null;
   parent_task_id: string | null;
+  lifecycle_metadata_json: string | null;
+  snapshot_ref_json: string | null;
   stage: string;
   status: string;
   created_at: number;
@@ -136,6 +138,8 @@ const createInMemoryDatabaseLayer = () => {
               requestJson: task.request_json,
               lineageKey: task.lineage_key,
               parentTaskId: task.parent_task_id,
+              lifecycleMetadataJson: task.lifecycle_metadata_json,
+              snapshotRefJson: task.snapshot_ref_json,
               stage: task.stage,
               status: task.status,
               createdAt: task.created_at,
@@ -156,6 +160,8 @@ const createInMemoryDatabaseLayer = () => {
               requestJson: task.request_json,
               lineageKey: task.lineage_key,
               parentTaskId: task.parent_task_id,
+              lifecycleMetadataJson: task.lifecycle_metadata_json,
+              snapshotRefJson: task.snapshot_ref_json,
               stage: task.stage,
               status: task.status,
               createdAt: task.created_at,
@@ -248,12 +254,14 @@ const createInMemoryDatabaseLayer = () => {
             request_json: String(bindValues[2]),
             lineage_key: bindValues[3] === null ? null : String(bindValues[3]),
             parent_task_id: bindValues[4] === null ? null : String(bindValues[4]),
-            stage: String(bindValues[5]),
-            status: String(bindValues[6]),
-            created_at: Number(bindValues[7]),
-            updated_at: Number(bindValues[8]),
-            completed_at: bindValues[9] === null ? null : Number(bindValues[9]),
-            error_summary: bindValues[10] === null ? null : String(bindValues[10]),
+            lifecycle_metadata_json: bindValues[5] === null ? null : String(bindValues[5]),
+            snapshot_ref_json: bindValues[6] === null ? null : String(bindValues[6]),
+            stage: String(bindValues[7]),
+            status: String(bindValues[8]),
+            created_at: Number(bindValues[9]),
+            updated_at: Number(bindValues[10]),
+            completed_at: bindValues[11] === null ? null : Number(bindValues[11]),
+            error_summary: bindValues[12] === null ? null : String(bindValues[12]),
           });
           return;
         }
