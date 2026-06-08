@@ -7,7 +7,6 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/opsydyn/c4-board"
 homepage = "https://github.com/opsydyn/c4-board"
-publish = false
 include = [
   "Cargo.toml",
   "build.rs",
