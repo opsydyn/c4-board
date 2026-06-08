@@ -1,6 +1,7 @@
 import {
   detectRigExecutionPolicyViolation,
   detectRigMutationPolicyViolation,
+  resolveRigActionApprovalPolicy,
   summarizeRigExecutionPolicySettings,
   summarizeRigMutationPolicySettings,
 } from "@/core/effects/agent-policy";
@@ -118,5 +119,68 @@ describe("agent-policy", () => {
       limit: 1,
       message: "Edge creation count 2 exceeds the max edge budget 1.",
     });
+  });
+
+  it("classifies low-risk single-add actions as always-confirm", () => {
+    const decision = resolveRigActionApprovalPolicy({
+      actionClass: "single-add",
+      policy: defaultAgentPolicy,
+      totalActions: 1,
+      totalNodesCreated: 1,
+      totalEdgesCreated: 0,
+    });
+
+    expect(decision).toMatchObject({
+      actionClass: "single-add",
+      risk: "low",
+      approvalMode: "always-confirm",
+      requiresConfirmation: true,
+      thresholdTriggered: false,
+      blockedReason: null,
+    });
+    expect(decision.summary).toContain("APPROVAL::SINGLE ADD");
+    expect(decision.summary).toContain("ALWAYS CONFIRM");
+  });
+
+  it("classifies large batch mutation actions as threshold-confirm", () => {
+    const decision = resolveRigActionApprovalPolicy({
+      actionClass: "batch-mutation",
+      policy: defaultAgentPolicy,
+      highestRisk: "medium",
+      totalActions: 8,
+      totalNodesCreated: 4,
+      totalEdgesCreated: 4,
+    });
+
+    expect(decision).toMatchObject({
+      actionClass: "batch-mutation",
+      risk: "medium",
+      approvalMode: "confirm-on-threshold",
+      requiresConfirmation: true,
+      thresholdTriggered: true,
+      blockedReason: null,
+    });
+    expect(decision.summary).toContain("THRESHOLD CONFIRM");
+  });
+
+  it("blocks settings mutation approval while the settings mutation lock is enabled", () => {
+    const decision = resolveRigActionApprovalPolicy({
+      actionClass: "settings-mutation",
+      policy: defaultAgentPolicy,
+      totalActions: 1,
+      totalNodesCreated: 0,
+      totalEdgesCreated: 0,
+      touchesSettings: true,
+    });
+
+    expect(decision).toMatchObject({
+      actionClass: "settings-mutation",
+      risk: "high",
+      approvalMode: "blocked",
+      requiresConfirmation: false,
+      thresholdTriggered: true,
+      blockedReason: "Settings mutation is locked by policy.",
+    });
+    expect(decision.summary).toContain("BLOCKED");
   });
 });

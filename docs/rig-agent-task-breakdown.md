@@ -1,8 +1,14 @@
 # Rig Agent Task Breakdown (Execution Plan)
 
-**Last Updated**: 2026-06-07
+**Last Updated**: 2026-06-08
 **Source ADR**: `docs/adr/008-rig-agent-platform-orchestration.md`
 **Delivery Horizon**: 6 phases across 2026-Q1/Q2
+
+## Phase Closeout
+
+The current OPY/Rig C4 agentic phase is concluded. The releaseable OPY loop now covers grounded read-only QA, proposal planning, planner artifact persistence, operator approval, controlled apply, rollback, resumable task lifecycle, audit/replay surfaces, confidence scoring, anomaly screening, and deterministic fixture coverage.
+
+Remaining roadmap items are intentionally tracked as follow-on governance or platform expansion: release gates over the existing audit/eval signals, provider token/cost persistence, provider budget UI, broader tool registry coverage, and session-management polish.
 
 ## 1) Critical Path
 
@@ -39,7 +45,7 @@
   - urgency-aware chrome signals for `policy`, `review`, `proposal`, and `checkpoint`
   - actionable chrome signals that open and focus the matching OPY section
 - `RIG-401` is now effectively complete in code for the current OPY scope: staged lifecycle, machine-owned retry/reset, typed failure provenance, confirmation replay, stage guardrails, and stale-result dropping are all in place.
-- `RIG-402` is now started:
+- `RIG-402` is now complete for the current OPY scope:
   - active OPY lifecycle requests are persisted in `opy_agent_tasks`
   - session hydration/switch/create interrupts stale running tasks instead of losing them silently
   - OPY can hydrate a resumable interrupted-task queue for a session, auto-select an active resume slot, and surface `resume` / `dismiss` controls back to the operator
@@ -71,11 +77,11 @@
   - retrieval supports domain, scope, diagram-scope, and recency filtering before ranked prompt assembly
   - prompt grounding now respects `redactionMode` so strict privacy can redact freeform transcript content and sensitive board metadata before the model sees it
   - focused retrieval coverage now exercises grounding assembly, strict-redaction behavior, governance-only retrieval, and all-diagrams metadata lookup
-- `RIG-504` is now started for the current OPY scope:
+- `RIG-504` is now complete for the current OPY scope:
   - OPY request preflight now scores prompt injection, secret-exfiltration, policy-bypass, and destructive-mutation language before model invocation or board-action resolution
   - critical anomaly signals now fail closed into persisted task artifacts and operator-visible warnings
   - caution-level anomaly signals now persist as task artifacts and surface into OPY chrome without blocking the run
-- `RIG-501` and `RIG-502` remain valid rollout gates, but they should not move ahead of orchestration and persistent task lifecycle.
+- `RIG-501` and `RIG-502` are complete for the current OPY scope. The next governance layer is release-gate automation over the existing audit/eval signals.
 
 ## 2) Phase 0: Foundation Hardening
 
@@ -172,6 +178,7 @@
 - Acceptance:
   - Assistant response includes at least one citation block.
   - Missing evidence forces low-confidence label.
+  - Proposal/review confidence is scored from citation coverage, scoped read-tool evidence, retrieval hits, and grounded output evidence rather than raw citation count alone.
 
 ### RIG-103: Read-Only UX State
 
@@ -185,6 +192,7 @@
 - Depends on: `RIG-102`.
 - Acceptance:
   - User can inspect sources used for each answer.
+  - OPY proposal/review cards expose grounding score, citation count, retrieval count, and ambiguity count.
   - Read-only mode blocks mutation tools.
 
 ## 4) Phase 2: Proposal-Only Mutation Planning
@@ -324,6 +332,8 @@
   - exact-artifact deep links now promote that live artifact into OPY focus state, so the card stays visually highlighted and the widget chrome carries a `FOCUS::...` signal until the operator navigates elsewhere
   - operators can now clear that focus state directly from the `FOCUS::...` chrome preview or the focused card, so OPY focus behaves like explicit operator state rather than only implicit navigation residue
   - continuity spotlight ranking, resume-boundary drilldown, and health-driver diagnostics now sit in `src/core/effects/opy-agent.resume.ts` with dedicated unit coverage
+  - OPY now persists deterministic `stage_transition` artifacts for lifecycle milestones (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`) so audit/eval tooling can reason over exact orchestration flow after refresh or relaunch
+  - `opy_agent_tasks` now carries typed lifecycle metadata and snapshot references, so replay/audit export can identify request stage/status, terminal state, lineage, active board context, proposal checkpoint lookup, or rollback checkpoint id directly from the task row
 - Acceptance:
   - App restart can resume in-progress task context.
   - Task timeline remains queryable and coherent.
@@ -404,6 +414,8 @@
   - implemented root-level `agentPolicy` settings with persisted limits for max actions, max nodes, max edges, and settings mutation lock
   - settings UI now exposes live policy summary plus direct controls for those limits alongside OPY action mode
   - OPY action resolution now enforces policy budgets for add-node, apply-proposal, and rollback paths before any mutation reaches the board
+  - executable OPY action descriptors now carry typed approval policy decisions for `single-add`, `layout`, `batch-mutation`, `rollback`, and `settings-mutation`
+  - direct `/add` is classified as low-risk `always-confirm`, proposal apply is classified as `batch-mutation` with threshold/risk inherited from the mutation plan, and rollback is classified as high-risk threshold confirmation
   - added persisted `rigExecutionPolicy` settings with a global kill switch plus provider/model allow-lists
   - settings now surface execution-policy status, governance snapshot, and direct allow-list controls alongside rollout and runtime config
   - OPY read/proposal/review paths now block on kill-switch, provider, and model policy violations before invoking the model runtime
@@ -427,7 +439,11 @@
   - added offline eval fixtures for mono-team, cross-team, unknown-ownership, and Azure-heavy board topologies in `test/core/effects/agent-evals/fixtures.ts`
   - added grounding evaluations that require high-confidence board evidence and stable ownership-team counts from typed read-tool execution
   - added safe-mutation evaluations covering read-only blocking, bounded apply success, and policy-budget rejection for oversized edge creation
+  - added deterministic approval-policy coverage across all fixture proposals so safe mutation remains explicitly confirmed and typed as `batch-mutation`
+  - added low-confidence regression coverage for under-cited proposal grounding so fixture proposals cannot silently pass as high confidence without scoped evidence
+  - added failure-recovery replay-readiness coverage that proves failed provider/planner tasks are blocked while read-only QA, safe mutation, and rollback fixtures remain replayable
   - added rollback evaluation coverage that exercises restore, revert, and remove impacts together on an Azure-heavy topology
+  - added rollback approval coverage that requires Azure-heavy checkpoint restore to remain a high-risk threshold-confirm action
   - expanded `src/ui/machines/opy-agent.machine.test.ts` so action lifecycle coverage includes direct-apply requests that do not require confirmation
 
 ### RIG-503: Rollout Controls + Audit View
@@ -480,9 +496,9 @@
 
 ## 8) Next Recommended Execution Order
 
-1. Add deterministic stage-transition logging per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`) so audit/eval can reason over exact orchestration flow.
-2. Extend persisted OPY sessions/task rows with first-class lifecycle metadata and snapshot linkage for replay/audit export.
-3. Add deterministic replay/eval utilities and percentile latency dashboards once provider-side usage data is exposed.
+1. Add release gates that consume replay readiness, latency, confidence, anomaly, and approval-policy signals before enabling broader mutation defaults.
+2. Persist provider-reported token usage and cost estimates when runtime support is available.
+3. Add provider-usage budget tracking UI once usage and cost estimates are persisted.
 
 ## 9) Definition of Ready / Done
 

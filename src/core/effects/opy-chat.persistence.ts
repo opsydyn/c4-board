@@ -63,6 +63,8 @@ export interface OpyAgentTask {
   readonly request: OpyAgentLifecycleRequest;
   readonly lineageKey?: string | null;
   readonly parentTaskId?: string | null;
+  readonly lifecycleMetadata?: OpyAgentTaskLifecycleMetadata | null;
+  readonly snapshotRef?: OpyAgentTaskSnapshotRef | null;
   readonly stage: OpyAgentTaskStage;
   readonly status: OpyAgentTaskStatus;
   readonly createdAt: number;
@@ -73,6 +75,55 @@ export interface OpyAgentTask {
 
 export type OpyAgentTaskStatus = "running" | "interrupted" | "completed" | "failed" | "cancelled";
 export type OpyAgentTaskStage = OpyAgentLifecycleNonTerminalStage | "completed" | "failed";
+
+export interface OpyAgentTaskLifecycleMetadata {
+  readonly version: 1;
+  readonly requestId: string;
+  readonly requestKind: OpyAgentLifecycleRequest["kind"];
+  readonly requestLabel: string;
+  readonly requestMode: OpyAgentLifecycleMode;
+  readonly replayKind: OpyAgentLifecycleReplay["kind"];
+  readonly requiresConfirmation: boolean;
+  readonly currentStage: OpyAgentTaskStage;
+  readonly status: OpyAgentTaskStatus;
+  readonly terminalStatus: Exclude<OpyAgentTaskStatus, "running" | "interrupted"> | null;
+  readonly lineageKey: string;
+  readonly parentTaskId: string | null;
+  readonly startedAt: number;
+  readonly updatedAt: number;
+  readonly completedAt: number | null;
+  readonly errorSummary: string | null;
+}
+
+export type OpyAgentTaskSnapshotRef =
+  | {
+    readonly version: 1;
+    readonly kind: "current_board";
+    readonly diagramId: string;
+    readonly diagramName: string | null;
+    readonly nodeCount: number;
+    readonly edgeCount: number;
+    readonly capturedAt: number;
+  }
+  | {
+    readonly version: 1;
+    readonly kind: "proposal_pre_apply_checkpoint";
+    readonly sessionId: string;
+    readonly proposalRespondedAtMs: number;
+  }
+  | {
+    readonly version: 1;
+    readonly kind: "checkpoint";
+    readonly checkpointId: string;
+  };
+
+export interface OpyAgentTaskBoardSnapshotLinkInput {
+  readonly diagramId: string | null;
+  readonly diagramName: string | null;
+  readonly nodeCount: number;
+  readonly edgeCount: number;
+  readonly capturedAt: number;
+}
 
 export type OpyPlanDecisionStatus = "pending" | "approved" | "rejected";
 
@@ -272,6 +323,8 @@ const LIST_AGENT_TASKS_SQL = `
     request_json AS requestJson,
     lineage_key AS lineageKey,
     parent_task_id AS parentTaskId,
+    lifecycle_metadata_json AS lifecycleMetadataJson,
+    snapshot_ref_json AS snapshotRefJson,
     stage,
     status,
     created_at AS createdAt,
@@ -290,6 +343,8 @@ const LIST_ALL_AGENT_TASKS_SQL = `
     request_json AS requestJson,
     lineage_key AS lineageKey,
     parent_task_id AS parentTaskId,
+    lifecycle_metadata_json AS lifecycleMetadataJson,
+    snapshot_ref_json AS snapshotRefJson,
     stage,
     status,
     created_at AS createdAt,
@@ -315,6 +370,23 @@ const LIST_AGENT_TOOL_CALLS_SQL = `
     error_summary AS errorSummary
   FROM opy_agent_tool_calls
   WHERE task_id = ?
+  ORDER BY started_at ASC, updated_at ASC
+`;
+
+const LIST_ALL_AGENT_TOOL_CALLS_SQL = `
+  SELECT
+    id,
+    task_id AS taskId,
+    session_id AS sessionId,
+    name,
+    status,
+    started_at AS startedAt,
+    updated_at AS updatedAt,
+    completed_at AS completedAt,
+    input_summary AS inputSummary,
+    output_summary AS outputSummary,
+    error_summary AS errorSummary
+  FROM opy_agent_tool_calls
   ORDER BY started_at ASC, updated_at ASC
 `;
 
@@ -424,6 +496,8 @@ const LIST_RUNNING_TASKS_SQL = `
     request_json AS requestJson,
     lineage_key AS lineageKey,
     parent_task_id AS parentTaskId,
+    lifecycle_metadata_json AS lifecycleMetadataJson,
+    snapshot_ref_json AS snapshotRefJson,
     stage,
     status,
     created_at AS createdAt,
@@ -477,6 +551,8 @@ const UPSERT_TASK_SQL = `
     request_json,
     lineage_key,
     parent_task_id,
+    lifecycle_metadata_json,
+    snapshot_ref_json,
     stage,
     status,
     created_at,
@@ -484,11 +560,13 @@ const UPSERT_TASK_SQL = `
     completed_at,
     error_summary
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     request_json = excluded.request_json,
     lineage_key = excluded.lineage_key,
     parent_task_id = excluded.parent_task_id,
+    lifecycle_metadata_json = excluded.lifecycle_metadata_json,
+    snapshot_ref_json = excluded.snapshot_ref_json,
     stage = excluded.stage,
     status = excluded.status,
     updated_at = excluded.updated_at,
@@ -638,6 +716,26 @@ const isOpyAgentTaskStage = (value: unknown): value is OpyAgentTaskStage =>
   || value === "completed"
   || value === "failed";
 
+const isOpyAgentLifecycleRequestKind = (
+  value: unknown,
+): value is OpyAgentLifecycleRequest["kind"] =>
+  value === "chat"
+  || value === "review"
+  || value === "proposal"
+  || value === "add-node"
+  || value === "apply-proposal"
+  || value === "rollback";
+
+const isOpyAgentLifecycleReplayKind = (
+  value: unknown,
+): value is OpyAgentLifecycleReplay["kind"] =>
+  value === "chat"
+  || value === "review"
+  || value === "proposal"
+  || value === "add-node"
+  || value === "apply-proposal"
+  || value === "rollback";
+
 const isOpyAgentToolCallName = (value: unknown): value is OpyAgentToolCallName =>
   value === "assemble_context"
   || value === "invoke_agent"
@@ -666,6 +764,7 @@ const isOpyAgentArtifactKind = (value: unknown): value is OpyAgentArtifactKind =
   || value === "action_result"
   || value === "resume_boundary_outcome"
   || value === "mutation_plan"
+  || value === "stage_transition"
   || value === "checkpoint_restore_preview";
 
 const isOpyPlanDecisionStatus = (value: unknown): value is OpyPlanDecisionStatus =>
@@ -682,6 +781,137 @@ const toNullableTimestamp = (value: unknown): number | null =>
 
 const toNullableText = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isOpyAgentTaskLifecycleMetadata = (value: unknown): value is OpyAgentTaskLifecycleMetadata =>
+  isRecord(value)
+  && value.version === 1
+  && typeof value.requestId === "string"
+  && typeof value.requestLabel === "string"
+  && isOpyAgentLifecycleRequestKind(value.requestKind)
+  && isOpyAgentLifecycleMode(value.requestMode)
+  && isOpyAgentLifecycleReplayKind(value.replayKind)
+  && typeof value.requiresConfirmation === "boolean"
+  && isOpyAgentTaskStage(value.currentStage)
+  && isOpyAgentTaskStatus(value.status)
+  && (
+    value.terminalStatus === null
+    || value.terminalStatus === "completed"
+    || value.terminalStatus === "failed"
+    || value.terminalStatus === "cancelled"
+  )
+  && typeof value.lineageKey === "string"
+  && (value.parentTaskId === null || typeof value.parentTaskId === "string")
+  && typeof value.startedAt === "number"
+  && typeof value.updatedAt === "number"
+  && (value.completedAt === null || typeof value.completedAt === "number")
+  && (value.errorSummary === null || typeof value.errorSummary === "string");
+
+const isOpyAgentTaskSnapshotRef = (value: unknown): value is OpyAgentTaskSnapshotRef => {
+  if (!isRecord(value) || value.version !== 1 || typeof value.kind !== "string") {
+    return false;
+  }
+
+  if (value.kind === "current_board") {
+    return typeof value.diagramId === "string"
+      && (value.diagramName === null || typeof value.diagramName === "string")
+      && typeof value.nodeCount === "number"
+      && typeof value.edgeCount === "number"
+      && typeof value.capturedAt === "number";
+  }
+
+  if (value.kind === "proposal_pre_apply_checkpoint") {
+    return typeof value.sessionId === "string"
+      && typeof value.proposalRespondedAtMs === "number";
+  }
+
+  if (value.kind === "checkpoint") {
+    return typeof value.checkpointId === "string";
+  }
+
+  return false;
+};
+
+const decodeOpyAgentTaskLifecycleMetadata = (
+  value: unknown,
+): OpyAgentTaskLifecycleMetadata | null => {
+  const parsed = parseNullableJsonObject(value);
+  return isOpyAgentTaskLifecycleMetadata(parsed) ? parsed : null;
+};
+
+const decodeOpyAgentTaskSnapshotRef = (
+  value: unknown,
+): OpyAgentTaskSnapshotRef | null => {
+  const parsed = parseNullableJsonObject(value);
+  return isOpyAgentTaskSnapshotRef(parsed) ? parsed : null;
+};
+
+export const buildOpyAgentTaskLifecycleMetadata = (
+  task: OpyAgentTask,
+): OpyAgentTaskLifecycleMetadata => {
+  const lineageKey = task.lineageKey ?? deriveOpyAgentTaskLineageKey(task.request);
+  const terminalStatus =
+    task.status === "completed" || task.status === "failed" || task.status === "cancelled"
+      ? task.status
+      : null;
+
+  return {
+    version: 1,
+    requestId: task.request.id,
+    requestKind: task.request.kind,
+    requestLabel: task.request.label,
+    requestMode: task.request.mode,
+    replayKind: task.request.replay.kind,
+    requiresConfirmation: task.request.requiresConfirmation,
+    currentStage: task.stage,
+    status: task.status,
+    terminalStatus,
+    lineageKey,
+    parentTaskId: task.parentTaskId ?? null,
+    startedAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    completedAt: task.completedAt,
+    errorSummary: task.errorSummary,
+  };
+};
+
+export const deriveOpyAgentTaskSnapshotRef = (
+  task: OpyAgentTask,
+  boardSnapshot?: OpyAgentTaskBoardSnapshotLinkInput | null,
+): OpyAgentTaskSnapshotRef | null => {
+  if (task.request.replay.kind === "rollback") {
+    return {
+      version: 1,
+      kind: "checkpoint",
+      checkpointId: task.request.replay.checkpointId,
+    };
+  }
+
+  if (task.request.replay.kind === "apply-proposal") {
+    return {
+      version: 1,
+      kind: "proposal_pre_apply_checkpoint",
+      sessionId: task.request.replay.sessionId,
+      proposalRespondedAtMs: task.request.replay.proposalRespondedAtMs,
+    };
+  }
+
+  if (boardSnapshot?.diagramId) {
+    return {
+      version: 1,
+      kind: "current_board",
+      diagramId: boardSnapshot.diagramId,
+      diagramName: boardSnapshot.diagramName,
+      nodeCount: boardSnapshot.nodeCount,
+      edgeCount: boardSnapshot.edgeCount,
+      capturedAt: boardSnapshot.capturedAt,
+    };
+  }
+
+  return null;
+};
 
 type SessionRow = {
   id: string;
@@ -719,6 +949,8 @@ type AgentTaskRow = {
   requestJson: string;
   lineageKey: string | null;
   parentTaskId: string | null;
+  lifecycleMetadataJson?: string | null;
+  snapshotRefJson?: string | null;
   stage: string;
   status: string;
   createdAt: number;
@@ -782,6 +1014,14 @@ const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
   } catch {
     return null;
   }
+};
+
+const parseNullableJsonObject = (value: unknown): Record<string, unknown> | null => {
+  if (value === null || typeof value === "undefined") {
+    return null;
+  }
+
+  return parseJsonObject(value);
 };
 
 const isOpyAgentLifecycleConfirmation = (value: unknown): value is OpyAgentLifecycleConfirmation => {
@@ -996,6 +1236,8 @@ const decodeAgentTaskRow = (row: AgentTaskRow): OpyAgentTask | null => {
     request,
     lineageKey: toNullableText(row.lineageKey) ?? deriveOpyAgentTaskLineageKey(request),
     parentTaskId: toNullableText(row.parentTaskId),
+    lifecycleMetadata: decodeOpyAgentTaskLifecycleMetadata(row.lifecycleMetadataJson),
+    snapshotRef: decodeOpyAgentTaskSnapshotRef(row.snapshotRefJson),
     stage: row.stage,
     status: row.status,
     createdAt: toTimestamp(row.createdAt),
@@ -1209,6 +1451,15 @@ export const listOpyAgentToolCalls = (taskId: string) =>
     );
   });
 
+export const listAllOpyAgentToolCalls = () =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentToolCallRow>(LIST_ALL_AGENT_TOOL_CALLS_SQL);
+    return sortToolCallsByTimeline(
+      rows.map(decodeAgentToolCallRow).filter((row): row is OpyAgentToolCall => row !== null),
+    );
+  });
+
 export const listOpyAgentArtifacts = (taskId: string) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -1296,12 +1547,15 @@ export const createOpyAgentRun = (run: OpyAgentRun) =>
 export const upsertOpyAgentTask = (task: OpyAgentTask) =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
+    const lifecycleMetadata = task.lifecycleMetadata ?? buildOpyAgentTaskLifecycleMetadata(task);
     yield* service.execute(UPSERT_TASK_SQL, [
       task.id,
       task.sessionId,
       JSON.stringify(task.request),
       task.lineageKey ?? deriveOpyAgentTaskLineageKey(task.request),
       task.parentTaskId,
+      JSON.stringify(lifecycleMetadata),
+      task.snapshotRef ? JSON.stringify(task.snapshotRef) : null,
       task.stage,
       task.status,
       task.createdAt,
@@ -1310,7 +1564,11 @@ export const upsertOpyAgentTask = (task: OpyAgentTask) =>
       task.errorSummary,
     ]);
 
-    return task;
+    return {
+      ...task,
+      lifecycleMetadata,
+      snapshotRef: task.snapshotRef ?? null,
+    };
   });
 
 export const upsertOpyAgentToolCall = (toolCall: OpyAgentToolCall) =>

@@ -5,6 +5,7 @@ import {
   assembleRigAgentContext,
   formatRigAgentCitationBlock,
   mergeRigAgentContextWithRetrieval,
+  scoreRigAgentGroundingConfidence,
   type RigAgentContextBundle,
 } from "../../core/effects/agent-context";
 import {
@@ -91,6 +92,11 @@ import {
   type OpyAgentTelemetryContext,
 } from "../../core/effects/opy-agent.telemetry";
 import {
+  createOpyStageTransitionPayload,
+  formatOpyStageTransitionSummary,
+  type OpyStageTransitionPayload,
+} from "../../core/effects/opy-agent.stage-transitions";
+import {
   buildResumeBoundaryDrilldownFromOutcome,
   buildResumeBoundaryDrilldownFromPlan,
   calculateReuseEfficiencyRatio,
@@ -127,9 +133,11 @@ import {
 } from "../../core/effects/opy-c4-proposals";
 import {
   appendOpyChatMessage,
+  buildOpyAgentTaskLifecycleMetadata,
   createOpyAgentArtifact,
   createOpyAgentRun,
   createOpyChatSession,
+  deriveOpyAgentTaskSnapshotRef,
   listOpyAgentArtifacts,
   listOpyAgentCheckpoints,
   listOpyAgentTasks,
@@ -708,6 +716,14 @@ const createActionResultArtifactDraft = (message: string): OpyTaskArtifactDraft 
   payload: {
     message,
   } satisfies OpyPersistedActionResultArtifactPayload,
+});
+
+const createStageTransitionArtifactDraft = (
+  payload: OpyStageTransitionPayload,
+): OpyTaskArtifactDraft => ({
+  kind: "stage_transition",
+  summary: formatOpyStageTransitionSummary(payload),
+  payload,
 });
 
 const selectPersistedResumeBoundaryOutcome = (
@@ -1606,6 +1622,7 @@ export function OpyCopilotPanel({
   const pendingViewportBaselineRef = useRef(true);
   const agentTaskIndexRef = useRef<Record<string, OpyAgentTask>>({});
   const resumableTaskActivationRef = useRef<string | null>(null);
+  const persistedStageTransitionKeysRef = useRef<ReadonlySet<string>>(new Set());
   const lifecycleTaskSyncRef = useRef<{
     activeRequestId: string | null;
     errorSummary: string | null;
@@ -1925,6 +1942,34 @@ export function OpyCopilotPanel({
     () => activeGroundedProposal ? summarizeGroundedProposalDiff(activeGroundedProposal) : null,
     [activeGroundedProposal],
   );
+  const activeProposalGroundingConfidence = useMemo(
+    () =>
+      activeDiagramProposal
+        ? scoreRigAgentGroundingConfidence({
+          context: activeDiagramProposal.context,
+          surface: "proposal",
+          proposalSummary: activeProposalSummary,
+        })
+        : null,
+    [activeDiagramProposal, activeProposalSummary],
+  );
+  const activeReviewGroundingConfidence = useMemo(
+    () =>
+      activeBoardReview
+        ? scoreRigAgentGroundingConfidence({
+          context: activeBoardReview.context,
+          surface: "review",
+          reviewEvidence: {
+            riskCount: activeBoardReview.review.risks.length,
+            ambiguityCount: activeBoardReview.review.ambiguities.length,
+            recommendedChangeCount: activeBoardReview.review.recommendedChanges.length,
+            missingNodeCount: activeBoardReview.review.missingNodes.length,
+            missingEdgeCount: activeBoardReview.review.missingEdges.length,
+          },
+        })
+        : null,
+    [activeBoardReview],
+  );
   const activeMutationPlan = useMemo(
     () =>
       activeDiagramProposal ? buildRigMutationPlanDiff(activeDiagramProposal.proposal, activeGroundedProposal) : null,
@@ -2133,6 +2178,17 @@ export function OpyCopilotPanel({
       };
     }
 
+    if (activeReviewGroundingConfidence?.confidence === "low") {
+      return {
+        key: "review",
+        targetSection: "review",
+        label: "REVIEW::LOW CONF",
+        detail: activeReviewGroundingConfidence.reason,
+        tone: "caution",
+        isFresh: viewportSectionsUnseen.review,
+      };
+    }
+
     if (totalRiskCount > 0 || activeBoardReview.review.ambiguities.length > 0) {
       return {
         key: "review",
@@ -2163,7 +2219,7 @@ export function OpyCopilotPanel({
       tone: "ready",
       isFresh: viewportSectionsUnseen.review,
     };
-  }, [activeBoardReview, viewportSectionsUnseen.review]);
+  }, [activeBoardReview, activeReviewGroundingConfidence, viewportSectionsUnseen.review]);
   const proposalChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
     if (!activeDiagramProposal) {
       return null;
@@ -2195,6 +2251,17 @@ export function OpyCopilotPanel({
       };
     }
 
+    if (activeProposalGroundingConfidence?.confidence === "low") {
+      return {
+        key: "proposal",
+        targetSection: "proposal",
+        label: "PLAN::LOW CONF",
+        detail: activeProposalGroundingConfidence.reason,
+        tone: "caution",
+        isFresh: viewportSectionsUnseen.proposal,
+      };
+    }
+
     return {
       key: "proposal",
       targetSection: "proposal",
@@ -2209,6 +2276,7 @@ export function OpyCopilotPanel({
     activeDiagramProposal,
     activeMutationPlan,
     activePlanDecision?.status,
+    activeProposalGroundingConfidence,
     viewportSectionsUnseen.proposal,
   ]);
   const checkpointChromeSignal = useMemo<OpyWidgetChromeSignal | null>(() => {
@@ -3156,7 +3224,18 @@ export function OpyCopilotPanel({
         lineageKey,
         parentTaskId: existing?.parentTaskId ?? task.parentTaskId ?? predecessor?.id ?? null,
       };
-      const persisted = await runEffect(upsertOpyAgentTask(nextTask));
+      const enrichedTask: OpyAgentTask = {
+        ...nextTask,
+        lifecycleMetadata: buildOpyAgentTaskLifecycleMetadata(nextTask),
+        snapshotRef: nextTask.snapshotRef ?? deriveOpyAgentTaskSnapshotRef(nextTask, {
+          diagramId,
+          diagramName,
+          nodeCount,
+          edgeCount,
+          capturedAt: nextTask.updatedAt,
+        }),
+      };
+      const persisted = await runEffect(upsertOpyAgentTask(enrichedTask));
       agentTaskIndexRef.current = {
         ...agentTaskIndexRef.current,
         [persisted.id]: persisted,
@@ -3167,7 +3246,7 @@ export function OpyCopilotPanel({
       }));
       return persisted;
     },
-    [compatibleTasks, runEffect],
+    [compatibleTasks, diagramId, diagramName, edgeCount, nodeCount, runEffect],
   );
 
   const warnOpyTracePersistFailure = useCallback((scope: string, error: unknown) => {
@@ -3222,6 +3301,38 @@ export function OpyCopilotPanel({
       }
     },
     [runEffect, warnOpyTracePersistFailure],
+  );
+
+  const persistOpyStageTransitionArtifact = useCallback(
+    async (input: {
+      readonly taskId: string;
+      readonly sessionId: string;
+      readonly payload: OpyStageTransitionPayload;
+    }): Promise<void> => {
+      const transitionKey = `${input.taskId}:${input.payload.transitionKey}`;
+      if (persistedStageTransitionKeysRef.current.has(transitionKey)) {
+        return;
+      }
+
+      persistedStageTransitionKeysRef.current = new Set([
+        ...persistedStageTransitionKeysRef.current,
+        transitionKey,
+      ]);
+
+      const persisted = await createOpyTaskArtifact({
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        toolCallId: null,
+        draft: createStageTransitionArtifactDraft(input.payload),
+      });
+
+      if (!persisted) {
+        const nextKeys = new Set(persistedStageTransitionKeysRef.current);
+        nextKeys.delete(transitionKey);
+        persistedStageTransitionKeysRef.current = nextKeys;
+      }
+    },
+    [createOpyTaskArtifact],
   );
 
   const persistResumeBoundaryOutcomeArtifact = useCallback(
@@ -3606,6 +3717,21 @@ export function OpyCopilotPanel({
       }).catch((error) => {
         setRuntimeError(`TASK PERSIST FAILED: ${toErrorMessage(error)}`);
       });
+      void persistOpyStageTransitionArtifact({
+        taskId: activeRequest.id,
+        sessionId: activeRequest.replay.sessionId,
+        payload: createOpyStageTransitionPayload({
+          request: activeRequest,
+          fromStage: previousState.stage,
+          toStage: agentLifecycle.stage,
+          status: "running",
+          failureStage: null,
+          failurePhase: null,
+          errorSummary: null,
+          attempt: agentLifecycle.retryCount + 1,
+          occurredAt: now,
+        }),
+      });
     }
 
     const lastRequest = agentLifecycle.lastRequest;
@@ -3639,6 +3765,23 @@ export function OpyCopilotPanel({
       }).catch((error) => {
         setRuntimeError(`TASK PERSIST FAILED: ${toErrorMessage(error)}`);
       });
+      void persistOpyStageTransitionArtifact({
+        taskId: lastRequest.id,
+        sessionId: lastRequest.replay.sessionId,
+        payload: createOpyStageTransitionPayload({
+          request: lastRequest,
+          fromStage: previousState.stage,
+          toStage: agentLifecycle.stage,
+          status: agentLifecycle.lastTerminalStatus,
+          failureStage: agentLifecycle.lastFailureStage,
+          failurePhase: agentLifecycle.lastFailurePhase,
+          errorSummary: agentLifecycle.lastTerminalStatus === "failed"
+            ? agentLifecycle.lastError
+            : null,
+          attempt: agentLifecycle.retryCount + 1,
+          occurredAt: completedAt,
+        }),
+      });
     }
 
     lifecycleTaskSyncRef.current = nextState;
@@ -3650,7 +3793,9 @@ export function OpyCopilotPanel({
     agentLifecycle.lastFailureStage,
     agentLifecycle.lastRequest,
     agentLifecycle.lastTerminalStatus,
+    agentLifecycle.retryCount,
     agentLifecycle.stage,
+    persistOpyStageTransitionArtifact,
     persistOpyTask,
   ]);
   const surfacedLifecycleFailureAtRef = useRef<number | null>(null);
@@ -5008,6 +5153,7 @@ export function OpyCopilotPanel({
           sessionId,
           nodeType: opyCommand.action.nodeType,
           label: opyCommand.action.label,
+          policy: agentPolicy,
         });
         const actionLifecycleRequest = createLifecycleRequest({
           confirmation: {
@@ -8428,8 +8574,8 @@ export function OpyCopilotPanel({
                 <p className={styles.opyCopilotProposalSummary}>{activeBoardReview.review.summary}</p>
                 <p className={styles.opyCopilotProposalHint}>
                   {`CONFIDENCE:: ${
-                    formatConfidence(activeBoardReview.context.confidence)
-                  } · ${activeBoardReview.context.confidenceReason}`}
+                    formatConfidence(activeReviewGroundingConfidence?.confidence ?? activeBoardReview.context.confidence)
+                  } · ${activeReviewGroundingConfidence?.reason ?? activeBoardReview.context.confidenceReason}`}
                 </p>
                 <p className={styles.ownershipLensHint}>
                   {`FOCUS:: ${formatReviewFocus(activeBoardReview.command.focus)}`}
@@ -8437,6 +8583,9 @@ export function OpyCopilotPanel({
                 {boardSummary && (
                   <div className={styles.opyCopilotProposalStats}>
                     <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
+                    {activeReviewGroundingConfidence && (
+                      <span>{`GROUNDING::${activeReviewGroundingConfidence.score}/100 · CITATIONS::${activeReviewGroundingConfidence.citationCount} · RETRIEVAL::${activeReviewGroundingConfidence.retrievalHitCount}`}</span>
+                    )}
                     <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
                     <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
                     <span>{`AMBIGUITIES::${activeBoardReview.review.ambiguities.length}`}</span>
@@ -8628,8 +8777,8 @@ export function OpyCopilotPanel({
                 <p className={styles.opyCopilotProposalRationale}>{activeDiagramProposal.proposal.rationale}</p>
                 <p className={styles.opyCopilotProposalHint}>
                   {`CONFIDENCE:: ${
-                    formatConfidence(activeDiagramProposal.context.confidence)
-                  } · ${activeDiagramProposal.context.confidenceReason}`}
+                    formatConfidence(activeProposalGroundingConfidence?.confidence ?? activeDiagramProposal.context.confidence)
+                  } · ${activeProposalGroundingConfidence?.reason ?? activeDiagramProposal.context.confidenceReason}`}
                 </p>
                 <p className={styles.ownershipLensHint}>
                   {`SOURCE:: ${activeDiagramProposal.command.description}`}
@@ -8646,6 +8795,9 @@ export function OpyCopilotPanel({
                 {boardSummary && activeGroundedProposal && activeProposalSummary && (
                   <div className={styles.opyCopilotProposalStats}>
                     <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
+                    {activeProposalGroundingConfidence && (
+                      <span>{`GROUNDING::${activeProposalGroundingConfidence.score}/100 · CITATIONS::${activeProposalGroundingConfidence.citationCount} · AMBIG::${activeProposalGroundingConfidence.ambiguousOutputCount}`}</span>
+                    )}
                     <span>
                       {`NODE DIFF::${activeProposalSummary.newNodes} NEW · ${activeProposalSummary.existingNodes} MATCH · ${activeProposalSummary.ambiguousNodes} AMBIG`}
                     </span>

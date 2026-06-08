@@ -1,8 +1,10 @@
 import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
 import type { OpyAgentArtifact, OpyAgentToolCall } from "@/core/effects/opy-agent.trace";
 import {
+  buildOpyAgentTaskLifecycleMetadata,
   createOpyAgentArtifact,
   createOpyAgentCheckpoint,
+  deriveOpyAgentTaskSnapshotRef,
   interruptOpyAgentToolCalls,
   interruptOpyAgentTasks,
   getOpyAgentCheckpoint,
@@ -12,6 +14,7 @@ import {
   listAllOpyDiagramProposals,
   listOpyAgentArtifacts,
   listOpyAgentTasks,
+  listAllOpyAgentToolCalls,
   listOpyAgentToolCalls,
   listOpyAgentCheckpoints,
   listOpyDiagramProposals,
@@ -510,7 +513,11 @@ describe("opy-chat.persistence", () => {
       { execute },
     );
 
-    expect(persistedTask).toEqual(task);
+    expect(persistedTask).toEqual({
+      ...task,
+      lifecycleMetadata: buildOpyAgentTaskLifecycleMetadata(task),
+      snapshotRef: null,
+    });
     const [upsertSql, upsertValues] = execute.mock.calls[0] as [string, unknown[]];
     expect(upsertSql).toContain("INSERT INTO opy_agent_tasks");
     const valuesClause = upsertSql.match(/VALUES\s*\(([^)]+)\)/i)?.[1] ?? "";
@@ -520,8 +527,15 @@ describe("opy-chat.persistence", () => {
     expect(JSON.parse(String(upsertValues[2]))).toEqual(task.request);
     expect(upsertValues[3]).toBe("review:session-1:payments api");
     expect(upsertValues[4]).toBeNull();
-    expect(upsertValues[5]).toBe("planning");
-    expect(upsertValues[6]).toBe("running");
+    expect(JSON.parse(String(upsertValues[5]))).toMatchObject({
+      requestId: "request-1",
+      requestKind: "review",
+      currentStage: "planning",
+      status: "running",
+    });
+    expect(upsertValues[6]).toBeNull();
+    expect(upsertValues[7]).toBe("planning");
+    expect(upsertValues[8]).toBe("running");
 
     const listed = await runWithDatabaseService(
       listOpyAgentTasks("session-1"),
@@ -558,6 +572,16 @@ describe("opy-chat.persistence", () => {
             requestJson: JSON.stringify(task.request),
             lineageKey: task.lineageKey,
             parentTaskId: task.parentTaskId,
+            lifecycleMetadataJson: JSON.stringify(buildOpyAgentTaskLifecycleMetadata(task)),
+            snapshotRefJson: JSON.stringify({
+              version: 1,
+              kind: "current_board",
+              diagramId: "diagram-1",
+              diagramName: "Payments Context",
+              nodeCount: 4,
+              edgeCount: 3,
+              capturedAt: 2_050,
+            }),
             stage: task.stage,
             status: task.status,
             createdAt: task.createdAt,
@@ -573,6 +597,11 @@ describe("opy-chat.persistence", () => {
     expect(listed[0]?.id).toBe("task-1");
     expect(listed[0]?.request.label).toBe("REVIEW");
     expect(listed[0]?.lineageKey).toBe("review:session-1:payments api");
+    expect(listed[0]?.lifecycleMetadata?.currentStage).toBe("planning");
+    expect(listed[0]?.snapshotRef).toMatchObject({
+      kind: "current_board",
+      diagramId: "diagram-1",
+    });
     expect(listed[1]?.status).toBe("interrupted");
   });
 
@@ -607,12 +636,18 @@ describe("opy-chat.persistence", () => {
       { execute },
     );
 
-    expect(persistedTask).toEqual(actionTask);
+    expect(persistedTask).toMatchObject({
+      ...actionTask,
+      lifecycleMetadata: {
+        requestKind: "apply-proposal",
+        currentStage: "awaiting_confirmation",
+      },
+    });
     const [upsertSql, upsertValues] = execute.mock.calls[0] as [string, unknown[]];
     expect(upsertSql).toContain("INSERT INTO opy_agent_tasks");
     expect(upsertValues[0]).toBe("task-apply-1");
-    expect(upsertValues[5]).toBe("awaiting_confirmation");
-    expect(upsertValues[6]).toBe("running");
+    expect(upsertValues[7]).toBe("awaiting_confirmation");
+    expect(upsertValues[8]).toBe("running");
     expect(JSON.parse(String(upsertValues[2]))).toMatchObject({
       kind: "apply-proposal",
       mode: "action",
@@ -620,6 +655,68 @@ describe("opy-chat.persistence", () => {
         kind: "apply-proposal",
         proposalRespondedAtMs: 2_000,
       },
+    });
+  });
+
+  it("derives snapshot references for replay/audit export", () => {
+    const boardTask = createTask();
+    expect(deriveOpyAgentTaskSnapshotRef(boardTask, {
+      diagramId: "diagram-1",
+      diagramName: "Payments Context",
+      nodeCount: 4,
+      edgeCount: 3,
+      capturedAt: 2_500,
+    })).toEqual({
+      version: 1,
+      kind: "current_board",
+      diagramId: "diagram-1",
+      diagramName: "Payments Context",
+      nodeCount: 4,
+      edgeCount: 3,
+      capturedAt: 2_500,
+    });
+
+    const applyTask = createTask({
+      request: {
+        confirmation: null,
+        id: "apply-request",
+        mode: "action",
+        kind: "apply-proposal",
+        label: "APPLY PROPOSAL",
+        requiresConfirmation: true,
+        replay: {
+          kind: "apply-proposal",
+          proposalRespondedAtMs: 2_000,
+          sessionId: "session-1",
+        },
+      },
+    });
+    expect(deriveOpyAgentTaskSnapshotRef(applyTask)).toEqual({
+      version: 1,
+      kind: "proposal_pre_apply_checkpoint",
+      sessionId: "session-1",
+      proposalRespondedAtMs: 2_000,
+    });
+
+    const rollbackTask = createTask({
+      request: {
+        confirmation: null,
+        id: "rollback-request",
+        mode: "action",
+        kind: "rollback",
+        label: "ROLLBACK",
+        requiresConfirmation: true,
+        replay: {
+          kind: "rollback",
+          checkpointId: "checkpoint-1",
+          sessionId: "session-1",
+        },
+      },
+    });
+    expect(deriveOpyAgentTaskSnapshotRef(rollbackTask)).toEqual({
+      version: 1,
+      kind: "checkpoint",
+      checkpointId: "checkpoint-1",
     });
   });
 
@@ -781,6 +878,48 @@ describe("opy-chat.persistence", () => {
     expect(listed[1]?.id).toBe("tool-1");
   });
 
+  it("lists all persisted OPY agent tool calls for eval dashboards", async () => {
+    const toolCall = createToolCall({
+      name: "invoke_planner",
+    });
+
+    const listed = await runWithDatabaseService(
+      listAllOpyAgentToolCalls(),
+      {
+        query: () => [
+          {
+            id: "tool-other",
+            taskId: "task-other",
+            sessionId: "session-2",
+            name: "assemble_context",
+            status: "completed",
+            startedAt: 1_000,
+            updatedAt: 1_100,
+            completedAt: 1_100,
+            inputSummary: null,
+            outputSummary: "Context ready.",
+            errorSummary: null,
+          },
+          {
+            id: toolCall.id,
+            taskId: toolCall.taskId,
+            sessionId: toolCall.sessionId,
+            name: toolCall.name,
+            status: toolCall.status,
+            startedAt: toolCall.startedAt,
+            updatedAt: toolCall.updatedAt,
+            completedAt: toolCall.completedAt,
+            inputSummary: toolCall.inputSummary,
+            outputSummary: toolCall.outputSummary,
+            errorSummary: toolCall.errorSummary,
+          },
+        ],
+      },
+    );
+
+    expect(listed.map((entry) => entry.id)).toEqual(["tool-other", "tool-1"]);
+  });
+
   it("creates and lists persisted OPY agent artifacts", async () => {
     const execute = vi.fn();
     const artifact = createArtifact();
@@ -818,6 +957,39 @@ describe("opy-chat.persistence", () => {
 
     expect(listed).toHaveLength(1);
     expect(listed[0]).toEqual(artifact);
+  });
+
+  it("loads persisted OPY lifecycle transition artifacts", async () => {
+    const artifact = createArtifact({
+      kind: "stage_transition",
+      summary: "FLOW :: APPLY PROPOSAL :: CONFIRMED :: AWAITING_CONFIRMATION->APPLYING",
+      payload: {
+        version: 1,
+        requestId: "request-1",
+        milestone: "confirmed",
+        transitionKey: "request-1:attempt-1:awaiting_confirmation->applying:running:none:none:confirmed",
+      },
+    });
+
+    const listed = await runWithDatabaseService(
+      listOpyAgentArtifacts("task-1"),
+      {
+        query: () => [
+          {
+            id: artifact.id,
+            taskId: artifact.taskId,
+            sessionId: artifact.sessionId,
+            toolCallId: artifact.toolCallId,
+            kind: artifact.kind,
+            summary: artifact.summary,
+            payloadJson: JSON.stringify(artifact.payload),
+            createdAt: artifact.createdAt,
+          },
+        ],
+      },
+    );
+
+    expect(listed).toEqual([artifact]);
   });
 
   it("interrupts running OPY agent tool calls on resume hydration", async () => {

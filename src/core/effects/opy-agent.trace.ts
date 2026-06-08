@@ -40,6 +40,7 @@ export type OpyAgentArtifactKind =
   | "action_result"
   | "resume_boundary_outcome"
   | "mutation_plan"
+  | "stage_transition"
   | "checkpoint_restore_preview";
 
 export interface OpyAgentArtifact {

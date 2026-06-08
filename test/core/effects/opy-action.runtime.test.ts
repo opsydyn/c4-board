@@ -137,6 +137,31 @@ describe("opy-action.runtime", () => {
     });
   });
 
+  it("builds a low-risk approval policy for executable add-node actions", () => {
+    const resolution = resolveOpyExecutableAddNodeActionFlow({
+      actionMode: "apply-with-confirmation",
+      policy: defaultAgentPolicy,
+      domain: "c4",
+      sessionId: "session-1",
+      nodeType: "component",
+      label: "Ledger Service",
+    });
+
+    expect(resolution.ok).toBe(true);
+    if (!resolution.ok) {
+      return;
+    }
+
+    expect(resolution.value.approvalPolicy).toMatchObject({
+      actionClass: "single-add",
+      risk: "low",
+      approvalMode: "always-confirm",
+      requiresConfirmation: true,
+      thresholdTriggered: false,
+    });
+    expect(resolution.value.confirmationMessage).toContain("APPROVAL::SINGLE ADD");
+  });
+
   it("returns a no-op apply issue when the approved proposal already matches the board", () => {
     const resolution = resolveOpyApplyProposalActionFlow({
       actionMode: "apply-with-confirmation",
@@ -212,6 +237,14 @@ describe("opy-action.runtime", () => {
     expect(resolution.value.descriptor.confirmationMessage).toContain("Plan actions 2");
     expect(resolution.value.descriptor.confirmationMessage).toContain("Create 1 node(s)");
     expect(resolution.value.descriptor.confirmationMessage).toContain("Create 1 edge(s)");
+    expect(resolution.value.descriptor.approvalPolicy).toMatchObject({
+      actionClass: "batch-mutation",
+      risk: "high",
+      approvalMode: "confirm-on-threshold",
+      requiresConfirmation: true,
+      thresholdTriggered: true,
+    });
+    expect(resolution.value.descriptor.confirmationMessage).toContain("APPROVAL::BATCH MUTATION");
   });
 
   it("blocks apply when the plan has not been approved", () => {
@@ -295,6 +328,14 @@ describe("opy-action.runtime", () => {
     });
     expect(resolution.value.confirmationMessage).toContain("Rollback to OPY checkpoint?");
     expect(resolution.value.confirmationMessage).toContain("This will restore the board to the checkpoint snapshot and save it.");
+    expect(resolution.value.approvalPolicy).toMatchObject({
+      actionClass: "rollback",
+      risk: "high",
+      approvalMode: "confirm-on-threshold",
+      requiresConfirmation: true,
+      thresholdTriggered: true,
+    });
+    expect(resolution.value.confirmationMessage).toContain("APPROVAL::ROLLBACK");
   });
 
   it("blocks add-node when the node creation budget is exhausted", () => {

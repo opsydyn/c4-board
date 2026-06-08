@@ -2,6 +2,12 @@
 
 This handbook describes the current OPY surface in `c4-board`: what it can do today, how it is bounded, and how the runtime is structured.
 
+## Phase Status
+
+The current OPY/Rig agentic phase is concluded for the C4 board loop. OPY now has grounded read/review/proposal flows, typed planner artifacts, policy-backed confirmation, controlled apply, checkpoint rollback, resumable task state, audit/eval surfaces, anomaly boundaries, confidence scoring, and deterministic fixture coverage.
+
+Remaining work is tracked as platform expansion or release governance rather than core OPY loop completion: broader tool coverage, transcript/session management polish, provider usage budgets once provider token/cost data is persisted, and release gates that consume the existing audit/eval signals.
+
 ## What OPY Is
 
 OPY is the board-native architecture copilot for `c4-board`.
@@ -114,6 +120,7 @@ Each OPY session persists:
 - resume prior sessions
 - restore the latest transcript and artifact context
 - persist the OPY task envelope before tool-call trace rows so lifecycle telemetry, artifact writes, and resume state stay foreign-key safe even when no preflight artifacts exist
+- OPY task envelopes now carry replay/audit lifecycle metadata plus snapshot references for active-board context, proposal pre-apply checkpoints, or rollback checkpoints
 - app relaunch and session hydration now restore stale run/task/tool-call state through one persistence transaction before the surface rehydrates
 - hydrate each board/session identity once even while task maps and lifecycle state are being restored
 - guard automatic resumable-task activation so one interrupted task cannot fan out duplicate lineage loads
@@ -143,6 +150,25 @@ OPY is policy-gated by action mode.
 
 - operator can approve and apply safe plans
 - rollback/restore is enabled
+
+## Approval Policy Classes
+
+Executable OPY actions now carry a typed approval policy decision in the action descriptor. The existing `apply-with-confirmation` boundary still applies; the class tells the operator what kind of approval they are giving.
+
+### Current Classes
+
+- `single-add`: low-risk direct node creation, always confirmed.
+- `layout`: low-risk layout-only action class reserved for layout automation.
+- `batch-mutation`: proposal apply path, confirmed on threshold and inherits the mutation plan's highest risk.
+- `rollback`: high-risk checkpoint restore path, always treated as threshold-triggered confirmation.
+- `settings-mutation`: high-risk settings path, blocked while the Settings mutation lock is enabled.
+
+### Operator Surface
+
+- confirmation cards include `APPROVAL::...`, `RISK::...`, action counts, node counts, edge counts, and threshold status
+- low-risk direct `/add` actions are visibly distinct from proposal batches
+- rollback approvals are always high-risk and threshold-triggered
+- size overrides only bypass configured action/node/edge count limits; they do not bypass the approval class, action mode, anomaly checks, planner provenance, or final confirmation
 
 ## Commands
 
@@ -203,7 +229,9 @@ OPY’s answers are grounded in typed read tools rather than free-form prompt st
 - local retrieval grounding across board evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, governance state, operator settings, Azure sync run summaries, and complexity-field explainability snapshots
 - retrieval filters for domain, scope, diagram scope, and recency before prompt assembly
 - confidence labels
+- deterministic grounding score built from typed board citations, scoped node/edge citations, retrieval hits, proposal/review output evidence, and ambiguity penalties
 - explicit operator-visible citation bundles, including retrieval-backed settings, Azure sync, and explainability hits
+- proposal and review cards show `GROUNDING::score/100`, citation coverage, retrieval coverage, and ambiguity counts so low-evidence output is visible before apply or follow-up work
 - run diagnostics surfaced in the panel
 
 ### Privacy-Aware Retrieval
@@ -272,6 +300,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - the confirmation card is now derived from the active machine request metadata rather than separate panel-local state
 - the OPY header/control field now surfaces `FLOW::...` stage state while a lifecycle is active
 - OPY now emits lifecycle telemetry for stage start/transition/completion/cancellation/failure, not only persisted run completion
+- OPY now persists deterministic `stage_transition` task artifacts for roadmap milestones: `planned`, `proposed`, `confirmed`, `applied`, `verified`, and `rolled_back`
 - telemetry payloads now carry provider/model, configured max-token ceiling, action mode, rollout mode/source, anomaly severity/score, and confirmation requirement metadata for downstream scoring
 - read-side failures now preserve `invoke` vs `persist` provenance, and action-side failures preserve `apply`, `verify`, and `persist` boundaries instead of collapsing to one generic runtime failure
 - the control field now retains the last terminal flow outcome (`complete`, `cancelled`, `failed`) even after the active stage returns to idle
@@ -301,6 +330,9 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - OPY persists per-task execution trail rows in `opy_agent_tool_calls`
 - OPY persists durable context/result/action artifacts in `opy_agent_artifacts`
 - persisted task fields include `request`, `stage`, `status`, timestamps, and error summary
+- persisted task metadata includes request kind/mode, replay kind, confirmation requirement, terminal state, lineage, timestamps, and error summary
+- persisted task snapshot references link to the active board context, proposal pre-apply checkpoint lookup, or rollback checkpoint id when available
+- Settings agent audit builds deterministic replay-readiness plans from persisted requests, snapshot refs, artifacts, and tool traces
 - non-terminal stages are tracked as `running`
 - interrupted work is marked as `interrupted` instead of disappearing on remount
 - trace persistence is best-effort and does not block operator flows if the local trail write fails
@@ -334,7 +366,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - when the active resumable task is dismissed or resolved, OPY auto-advances to the next interrupted task in the queue
 - starting a new OPY lifecycle supersedes any older resumable task for that session
 - current persisted tool calls include context assembly, agent invoke, assistant-message persistence, action resolution, board mutation execution, and post-apply checkpoint refresh
-- current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, action results, resume boundary outcomes, mutation plans, and checkpoint restore previews
+- current persisted artifacts include grounded context bundles, chat/proposal/review results, action descriptors, action results, resume boundary outcomes, mutation plans, stage transitions, and checkpoint restore previews
 - restart recovery is covered by a persistence-level test that proves interrupted runs become failed, interrupted tasks/tool calls remain resumable, and persisted artifacts survive relaunch hydration
 
 ### Current Task History Surface
@@ -358,6 +390,15 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - when the current session is already surfacing the matching review, proposal, plan, or checkpoint artifact, those task-history quick actions now scroll directly to that exact card instead of only opening the parent section
 - those exact-artifact deep links now also set an active OPY focus target, so the matched live card stays highlighted and the widget chrome surfaces a `FOCUS::...` signal until another navigation path replaces it or the operator changes context
 - operators can now explicitly clear that OPY focus target either from the `FOCUS::...` chrome preview or from the focused live card itself, without needing to navigate to a different artifact first
+
+### Current Eval Dashboard
+
+- Settings agent audit now reports p50/p95 terminal task latency from persisted task envelopes
+- Settings agent audit now reports p95 tool-call latency and tool-call success rate from persisted tool traces
+- Settings agent audit now reports replay readiness counts: replayable, partial, and blocked
+- replay readiness is deterministic and based on the stored request replay kind, required artifacts, snapshot linkage, and terminal task status
+- offline Rig fixture evals now cover read-only QA grounding, safe mutation approval metadata, read-only mutation blocking, policy-budget rejection, low-confidence proposal coverage, failed-provider replay blocking, and Azure-heavy rollback preview/approval
+- provider token usage and cost are not yet included because the runtime does not persist provider-reported usage data
 
 ## Run Envelope and Telemetry
 

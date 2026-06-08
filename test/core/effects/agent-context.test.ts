@@ -1,4 +1,9 @@
-import { assembleRigAgentContextWithTools, formatRigAgentCitationBlock } from "@/core/effects/agent-context";
+import {
+  assembleRigAgentContextWithTools,
+  formatRigAgentCitationBlock,
+  mergeRigAgentContextWithRetrieval,
+  scoreRigAgentGroundingConfidence,
+} from "@/core/effects/agent-context";
 import { executeRigReadTool } from "@/core/effects/agent-tools/read-tools";
 import type { RigC4BoardSummary } from "@/core/effects/ai-agent.runtime";
 import type { OpyBoardContextRegistry } from "@/core/effects/opy-board-context";
@@ -162,5 +167,96 @@ describe("agent-context", () => {
     expect(citationBlock).toContain("CITATION::[RETRIEVAL/SETTINGS]");
     expect(citationBlock).toContain("OPERATOR SETTINGS SURFACE");
     expect(citationBlock).toContain("autosave 1500ms");
+  });
+
+  it("keeps under-cited proposals at low confidence even when they contain changes", async () => {
+    const boardSummary = createBoardSummary();
+    const context = await Effect.runPromise(
+      assembleRigAgentContextWithTools({
+        boardSummary,
+        boardContext: null,
+        focus: "serverless events",
+        redactionMode: "off",
+        runReadTool: (tool, input, snapshot) =>
+          Effect.succeed(executeRigReadTool(tool, input as never, snapshot) as never),
+      }),
+    );
+
+    const score = scoreRigAgentGroundingConfidence({
+      context,
+      surface: "proposal",
+      proposalSummary: {
+        newNodes: 2,
+        existingNodes: 0,
+        ambiguousNodes: 0,
+        newEdges: 1,
+        existingEdges: 0,
+        ambiguousEdges: 0,
+        canApply: true,
+        hasChanges: true,
+      },
+    });
+
+    expect(context.citations).toHaveLength(1);
+    expect(score.confidence).toBe("low");
+    expect(score.lowCoverage).toBe(true);
+    expect(score.reason).toContain("LOW COVERAGE");
+  });
+
+  it("recalculates context confidence when retrieval evidence is merged", () => {
+    const mergedContext = mergeRigAgentContextWithRetrieval(
+      {
+        promptContext: [
+          "FOCUS=WHOLE BOARD",
+          "CONFIDENCE=LOW",
+          "CONFIDENCE_REASON=Board summary evidence is available, but scope-specific evidence is limited.",
+        ].join("\n"),
+        citations: [
+          {
+            id: "board:diagram-1",
+            tool: "board_summary",
+            label: "Payments Context",
+            detail: "3 nodes · 2 edges · 1 teams",
+            sourceId: "diagram-1",
+          },
+        ],
+        confidence: "low",
+        confidenceReason: "Board summary evidence is available, but scope-specific evidence is limited.",
+      },
+      {
+        domain: "c4",
+        query: "serverless event driven architecture",
+        diagramScope: "current-diagram",
+        redactionMode: "off",
+        hits: [
+          {
+            id: "settings:c4",
+            scope: "governance",
+            source: "settings",
+            label: "OPERATOR SETTINGS SURFACE",
+            detail: "PRESENCE MISSION · TELEMETRY ON · RETENTION 30D",
+            contentPreview: "opy visible on · explainability on · autosave 1500ms",
+            createdAt: null,
+            score: 0.02,
+          },
+          {
+            id: "history:diagram",
+            scope: "task",
+            source: "task",
+            label: "RECENT DIAGRAM PROPOSAL",
+            detail: "APPLIED · 3 nodes",
+            contentPreview: "serverless event driven architecture",
+            createdAt: 1,
+            score: 0.03,
+          },
+        ],
+        promptContext: "RETRIEVAL=[GOVERNANCE/SETTINGS] OPERATOR SETTINGS SURFACE",
+      },
+    );
+
+    expect(mergedContext.confidence).toBe("medium");
+    expect(mergedContext.confidenceReason).toContain("RETRIEVAL::2");
+    expect(mergedContext.promptContext).toContain("CONFIDENCE=MEDIUM");
+    expect(mergedContext.promptContext).toContain("GROUNDING_SCORE=");
   });
 });

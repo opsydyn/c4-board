@@ -227,6 +227,8 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 
 ### Architecture Tracks
 
+Current OPY/Rig C4 loop status: **phase concluded**. Tracks E2, E4, and E5 are complete for the current OPY scope; E3 and E6 have the required core lifecycle/eval pieces in place. Remaining unchecked items below are deliberate platform expansion, session-management polish, provider-usage budgeting, or release-gate automation rather than blockers for the current OPY agentic loop.
+
 1. **Track E1: Rig Tooling Surface (Typed + Safe)**
    - [ ] Define a Rig tool registry for board read models (`board_summary`, `node_lookup`, `edge_lookup`, `ownership_summary`, `coupling_summary`, `azure_sync_summary`).
    - [ ] Define mutation tools (`update_node`, `create_edge`, `layout_graph`, `set_owner`, `set_setting`) with `Effect Schema` contracts.
@@ -239,12 +241,12 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - [x] Require persisted planner output before any executable action batch.
    - [x] Add iteration budgets and hard timeouts per stage to prevent runaway agent loops.
    - [x] Add cancellation and retry semantics surfaced in UI session state.
-   - [ ] Add deterministic stage transitions logged per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`).
+   - [x] Add deterministic stage transitions logged per run (`planned`, `proposed`, `confirmed`, `applied`, `verified`, `rolled_back`).
 
 3. **Track E3: Memory, Sessions, and Task Lifecycle**
-   - [ ] Extend persisted OPY sessions with task metadata (`intent`, `status`, `last_stage`, `last_error`, `last_artifact`).
-   - [ ] Add first-class task records for long-running operations and resumable workflows.
-   - [ ] Persist board snapshot references per applied task for diff/review.
+   - [x] Extend persisted OPY sessions with task metadata (`intent`, `status`, `last_stage`, `last_error`, `last_artifact`).
+   - [x] Add first-class task records for long-running operations and resumable workflows.
+   - [x] Persist board snapshot references per applied task for diff/review.
    - [ ] Add session operations: rename, archive, restore, pin, and export transcript.
    - [ ] Add background cleanup/retention controls in Settings (TTL + max session count).
 
@@ -253,11 +255,13 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - Current OPY scope now indexes current-board graph evidence, saved-diagram metadata, session messages, tasks, proposals, artifacts, checkpoints, governance snapshots, operator settings state, Azure sync summaries, and complexity-field explainability snapshots locally.
    - [x] Add retrieval filters by domain (`c4`, `ddd`, `azure`), scope (current diagram/all diagrams), and recency.
    - [x] Return explicit citation bundles for every generated recommendation.
-   - [ ] Add confidence scoring tied to citation coverage (low citation coverage => low confidence banner).
+   - [x] Add confidence scoring tied to citation coverage (low citation coverage => low confidence banner).
+   - Current OPY scope now scores chat/review/proposal confidence from typed board citations, scoped node/edge evidence, retrieval hits, and grounded output evidence. Proposal and review cards expose `GROUNDING::...`, citation counts, retrieval counts, and ambiguity counts so under-cited plans stay visibly low confidence even when a model proposes changes.
    - [x] Add redaction pipeline before retrieval/prompt assembly using existing privacy settings.
 
 5. **Track E5: Action Safety, Governance, and Rollout**
-   - [ ] Add approval policies by action class (always-confirm, confirm-on-threshold, auto-apply for read-only).
+   - [x] Add approval policies by action class (always-confirm, confirm-on-threshold; read-only actions remain non-mutating).
+   - Current OPY scope now attaches a typed approval decision to executable action descriptors: low-risk direct adds, reserved layout actions, proposal batch mutations, checkpoint rollback, and settings mutation attempts. The current runtime still requires explicit confirmation for executable board mutations; read-only auto-apply remains scoped to non-mutating actions only.
    - [x] Add per-provider and per-model allow-lists in settings with kill switch support.
    - [x] Add anomaly detection for suspicious prompts/tool-call patterns (prompt injection, unsafe request patterns).
    - Current OPY scope now runs request-preflight anomaly checks for prompt injection, secret exfiltration, policy bypass, and destructive mutation language, and it now extends those checks into suspicious tool-trace summaries plus mutation-plan analysis before apply. All anomaly outcomes persist as `anomaly_assessment` artifacts and surface through `ANOMALY::...` warnings.
@@ -266,12 +270,14 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
    - Current OPY scope also aggregates persisted anomalies, blocked counts, cancellations, failures, decisions, and average terminal-task duration in that audit surface.
 
 6. **Track E6: Developer Experience + Evaluation**
-   - [ ] Add deterministic fixture suite for Rig runs (`read-only qa`, `safe mutation`, `failure recovery`, `rollback`).
+   - [x] Add deterministic fixture suite for Rig runs (`read-only qa`, `safe mutation`, `failure recovery`, `rollback`).
+   - Current eval coverage now exercises read-only QA grounding, safe proposal mutation approval metadata, read-only mutation blocking, policy-budget rejection, low-confidence proposal coverage, failure-recovery replay readiness, and Azure-heavy rollback preview/approval behavior.
    - [ ] Add regression tests for tool contracts and schema migration compatibility.
-   - [ ] Add local replay utility for failed agent runs using stored transcripts and tool traces.
-   - [ ] Add budget/latency dashboards (p50/p95 latency, token usage, cost estimate, tool success rate).
+   - [x] Add local replay-readiness utility for agent runs using stored requests, snapshot refs, artifacts, and tool traces.
+   - [x] Add local latency dashboard for p50/p95 task latency, p95 tool latency, and tool success rate.
+   - [ ] Add provider usage budget dashboard once token usage and cost estimates are persisted.
    - [ ] Add pass/fail quality gates before enabling mutation mode by default.
-   - Current OPY scope now emits browser telemetry for provider/model, configured max-token budget, action mode, rollout mode/source, anomaly severity/score, confirmation requirement, and cancellation/failure outcomes. Provider-reported token usage and cost remain pending runtime support.
+   - Current OPY scope now emits browser telemetry for provider/model, configured max-token budget, action mode, rollout mode/source, anomaly severity/score, confirmation requirement, and cancellation/failure outcomes. The Settings agent audit surface now rolls up replay readiness, p50/p95 task latency, p95 tool latency, and tool-call success rate from persisted OPY traces. Provider-reported token usage and cost remain pending runtime support.
 
 ### Acceptance Criteria
 
@@ -283,10 +289,10 @@ Expose local SQLite `main` DB size (and WAL size) in Settings without adding run
 
 ### Suggested Delivery Sequence
 
-1. E1 typed tool registry + policy metadata.
-2. E2 role orchestration with stage lifecycle controls.
-3. E3 session/task lifecycle and snapshot linkage.
-4. E6 eval/replay dashboards and release gating.
+1. Release gates consuming replay readiness, latency, confidence, anomaly, and approval-policy signals.
+2. Provider usage persistence once the runtime exposes token/cost estimates.
+3. Provider usage budget dashboard after usage persistence exists.
+4. Broader platform expansion: additional read/mutation tools, Azure sync apply controls, and session-management polish.
 
 ## 5) Release Gates
 

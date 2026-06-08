@@ -1,10 +1,12 @@
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { OpyAnomalyAssessment } from "../../../core/effects/opy-anomaly";
-import type { OpyAgentArtifact } from "../../../core/effects/opy-agent.trace";
+import { buildOpyReplayEvalDashboard } from "../../../core/effects/opy-agent.evals";
+import type { OpyAgentArtifact, OpyAgentToolCall } from "../../../core/effects/opy-agent.trace";
 import {
   listAllOpyAgentArtifacts,
   listAllOpyAgentTasks,
+  listAllOpyAgentToolCalls,
   listAllOpyChatSessions,
   listAllOpyDiagramProposals,
   type OpyAgentTask,
@@ -18,6 +20,7 @@ interface AgentAuditSnapshot {
   readonly artifacts: ReadonlyArray<OpyAgentArtifact>;
   readonly sessions: ReadonlyArray<OpyChatSession>;
   readonly tasks: ReadonlyArray<OpyAgentTask>;
+  readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
   readonly proposals: ReadonlyArray<OpyPersistedDiagramProposal>;
 }
 
@@ -70,6 +73,11 @@ const formatDuration = (durationMs: number | null): string => {
 
   return `${(durationMs / 60_000).toFixed(1)}M`;
 };
+
+const formatPercent = (value: number | null): string =>
+  value === null || !Number.isFinite(value)
+    ? "N/A"
+    : `${Math.round(value * 100)}%`;
 
 const isAnomalySeverity = (
   value: unknown,
@@ -233,6 +241,7 @@ export function AgentAuditPanel() {
     artifacts: [],
     sessions: [],
     tasks: [],
+    toolCalls: [],
     proposals: [],
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -249,6 +258,7 @@ export function AgentAuditPanel() {
         artifacts: listAllOpyAgentArtifacts(),
         sessions: listAllOpyChatSessions(),
         tasks: listAllOpyAgentTasks(),
+        toolCalls: listAllOpyAgentToolCalls(),
         proposals: listAllOpyDiagramProposals(),
       }),
     )
@@ -317,17 +327,14 @@ export function AgentAuditPanel() {
     () => snapshot.proposals.filter((proposal) => proposal.decisionStatus !== "pending").length,
     [snapshot.proposals],
   );
-  const averageTerminalTaskDurationMs = useMemo(() => {
-    const terminalDurations = snapshot.tasks
-      .filter((task) => task.completedAt !== null)
-      .map((task) => Math.max(0, (task.completedAt ?? task.createdAt) - task.createdAt));
-    if (terminalDurations.length === 0) {
-      return null;
-    }
-
-    const totalDuration = terminalDurations.reduce((sum, duration) => sum + duration, 0);
-    return totalDuration / terminalDurations.length;
-  }, [snapshot.tasks]);
+  const replayEvalDashboard = useMemo(
+    () => buildOpyReplayEvalDashboard({
+      tasks: snapshot.tasks,
+      artifacts: snapshot.artifacts,
+      toolCalls: snapshot.toolCalls,
+    }),
+    [snapshot.artifacts, snapshot.tasks, snapshot.toolCalls],
+  );
 
   return (
     <article id="agent-audit" className={`${styles.settingsCard} ${styles.settingsCardWide}`}>
@@ -395,7 +402,35 @@ export function AgentAuditPanel() {
         </div>
         <div className={styles.settingsMetricTile}>
           <span className={styles.settingsMetricLabel}>Avg Duration</span>
-          <span className={styles.settingsMetricValue}>{formatDuration(averageTerminalTaskDurationMs)}</span>
+          <span className={styles.settingsMetricValue}>{formatDuration(replayEvalDashboard.taskLatency.averageMs)}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Task p50</span>
+          <span className={styles.settingsMetricValue}>{formatDuration(replayEvalDashboard.taskLatency.p50Ms)}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Task p95</span>
+          <span className={styles.settingsMetricValue}>{formatDuration(replayEvalDashboard.taskLatency.p95Ms)}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Tool p95</span>
+          <span className={styles.settingsMetricValue}>{formatDuration(replayEvalDashboard.toolCallLatency.p95Ms)}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Tool Success</span>
+          <span className={styles.settingsMetricValue}>{formatPercent(replayEvalDashboard.toolSuccessRate)}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Replayable</span>
+          <span className={styles.settingsMetricValue}>{replayEvalDashboard.replayableTaskCount}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Replay Partial</span>
+          <span className={styles.settingsMetricValue}>{replayEvalDashboard.partialTaskCount}</span>
+        </div>
+        <div className={styles.settingsMetricTile}>
+          <span className={styles.settingsMetricLabel}>Replay Blocked</span>
+          <span className={styles.settingsMetricValue}>{replayEvalDashboard.blockedTaskCount}</span>
         </div>
       </div>
       {error && <p className={styles.settingsErrorText}>{error}</p>}

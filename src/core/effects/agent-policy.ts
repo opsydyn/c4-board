@@ -15,6 +15,22 @@ export type RigMutationMode = Schema.Schema.Type<typeof RigMutationModeSchema>;
 export const RigProviderIdentifierSchema = Schema.Literal("openai", "anthropic", "openrouter");
 export type RigProviderIdentifier = Schema.Schema.Type<typeof RigProviderIdentifierSchema>;
 
+export const RigActionApprovalClassSchema = Schema.Literal(
+  "single-add",
+  "layout",
+  "batch-mutation",
+  "rollback",
+  "settings-mutation",
+);
+export type RigActionApprovalClass = Schema.Schema.Type<typeof RigActionApprovalClassSchema>;
+
+export const RigActionApprovalModeSchema = Schema.Literal(
+  "always-confirm",
+  "confirm-on-threshold",
+  "blocked",
+);
+export type RigActionApprovalMode = Schema.Schema.Type<typeof RigActionApprovalModeSchema>;
+
 const RigMaxActionsPerBatchSchema = pipe(
   Schema.Number,
   Schema.filter(
@@ -105,6 +121,18 @@ export interface RigExecutionPolicyViolation {
   readonly recommendedAction: string;
 }
 
+export interface RigActionApprovalPolicyDecision {
+  readonly actionClass: RigActionApprovalClass;
+  readonly label: string;
+  readonly risk: RigToolRisk;
+  readonly approvalMode: RigActionApprovalMode;
+  readonly requiresConfirmation: boolean;
+  readonly thresholdTriggered: boolean;
+  readonly blockedReason: string | null;
+  readonly summary: string;
+  readonly recommendedAction: string;
+}
+
 export const RigToolPolicyMetadataSchema = Schema.Struct({
   capability: RigToolCapabilitySchema,
   risk: RigToolRiskSchema,
@@ -141,6 +169,77 @@ export const summarizeRigMutationPolicySettings = (
   `LIMITS::A${policy.maxActionsPerBatch} · N${policy.maxNodesCreatedPerRun} · E${policy.maxEdgesCreatedPerRun} · SETTINGS::${
     policy.allowSettingsMutation ? "UNLOCKED" : "LOCKED"
   }`;
+
+const formatRigActionApprovalClass = (actionClass: RigActionApprovalClass): string =>
+  actionClass.replace("-", " ").toUpperCase();
+
+export const resolveRigActionApprovalPolicy = (input: {
+  readonly actionClass: RigActionApprovalClass;
+  readonly policy: RigMutationPolicySettings;
+  readonly highestRisk?: RigToolRisk;
+  readonly totalActions: number;
+  readonly totalNodesCreated: number;
+  readonly totalEdgesCreated: number;
+  readonly totalLayoutOperations?: number;
+  readonly touchesSettings?: boolean;
+}): RigActionApprovalPolicyDecision => {
+  const totalLayoutOperations = input.totalLayoutOperations ?? 0;
+  const touchesSettings = input.touchesSettings === true || input.actionClass === "settings-mutation";
+  const blockedReason = touchesSettings && !input.policy.allowSettingsMutation
+    ? "Settings mutation is locked by policy."
+    : null;
+
+  const thresholdTriggered = input.totalActions > 3
+    || input.totalNodesCreated > 3
+    || input.totalEdgesCreated > 3
+    || totalLayoutOperations > 1
+    || input.highestRisk === "high"
+    || input.actionClass === "rollback"
+    || input.actionClass === "settings-mutation";
+
+  const risk: RigToolRisk = input.highestRisk
+    ?? (input.actionClass === "rollback" || input.actionClass === "settings-mutation"
+      ? "high"
+      : input.actionClass === "batch-mutation"
+        ? thresholdTriggered ? "high" : "medium"
+        : "low");
+  const approvalMode: RigActionApprovalMode = blockedReason
+    ? "blocked"
+    : input.actionClass === "single-add" || input.actionClass === "layout"
+      ? "always-confirm"
+      : "confirm-on-threshold";
+  const requiresConfirmation = approvalMode !== "blocked";
+  const label = formatRigActionApprovalClass(input.actionClass);
+  const summary = [
+    `APPROVAL::${label}`,
+    `RISK::${risk.toUpperCase()}`,
+    approvalMode === "blocked"
+      ? "BLOCKED"
+      : approvalMode === "always-confirm"
+        ? "ALWAYS CONFIRM"
+        : thresholdTriggered
+          ? "THRESHOLD CONFIRM"
+          : "STANDARD CONFIRM",
+    `ACTIONS::${input.totalActions}`,
+    input.totalNodesCreated > 0 ? `NODES::${input.totalNodesCreated}` : null,
+    input.totalEdgesCreated > 0 ? `EDGES::${input.totalEdgesCreated}` : null,
+    totalLayoutOperations > 0 ? `LAYOUT::${totalLayoutOperations}` : null,
+  ].filter((part): part is string => part !== null).join(" · ");
+
+  return {
+    actionClass: input.actionClass,
+    label,
+    risk,
+    approvalMode,
+    requiresConfirmation,
+    thresholdTriggered,
+    blockedReason,
+    summary,
+    recommendedAction: blockedReason
+      ? "Unlock the matching policy in Settings or choose a safer action."
+      : "Review the confirmation details before applying the board change.",
+  };
+};
 
 const normalizeRigAllowedValue = (value: string): string => value.trim().toLowerCase();
 

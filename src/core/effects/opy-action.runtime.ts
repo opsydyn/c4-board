@@ -1,6 +1,8 @@
 import { buildRigMutationPlanDiff, type RigRenderedMutationPlan } from "./agent-plan-diff";
 import {
   detectRigMutationPolicyViolation,
+  resolveRigActionApprovalPolicy,
+  type RigActionApprovalPolicyDecision,
   type RigMutationPolicySettings,
 } from "./agent-policy";
 import { formatOpyRollbackSummary } from "./agent-rollback.runtime";
@@ -44,6 +46,7 @@ export interface OpyActionFlowDescriptor {
   readonly requestKind: "add-node" | "apply-proposal" | "rollback";
   readonly requestLabel: string;
   readonly sessionId: string;
+  readonly approvalPolicy: RigActionApprovalPolicyDecision;
   readonly confirmationMessage: string;
   readonly cancelMessage: string;
   readonly failurePrefix: string;
@@ -98,20 +101,39 @@ export const createOpyAddNodeActionFlowDescriptor = (input: {
   readonly sessionId: string;
   readonly nodeType: OpyC4NodeType;
   readonly label: string;
-}): OpyActionFlowDescriptor => ({
-  requestKind: "add-node",
-  requestLabel: `ADD ${input.nodeType.toUpperCase()}`,
-  sessionId: input.sessionId,
-  confirmationMessage: `Apply OPY board action?\n\nADD ${input.nodeType.toUpperCase()} "${input.label}"`,
-  cancelMessage: "ACTION CANCELLED BY OPERATOR.",
-  failurePrefix: "BOARD ACTION FAILED",
-  boardAction: {
-    kind: "add-node",
-    nodeType: input.nodeType,
-    label: input.label,
-  },
-  refreshCheckpointsAfterApply: false,
-});
+  readonly policy: RigMutationPolicySettings;
+}): OpyActionFlowDescriptor => {
+  const approvalPolicy = resolveRigActionApprovalPolicy({
+    actionClass: "single-add",
+    policy: input.policy,
+    highestRisk: "low",
+    totalActions: 1,
+    totalNodesCreated: 1,
+    totalEdgesCreated: 0,
+  });
+
+  return {
+    requestKind: "add-node",
+    requestLabel: `ADD ${input.nodeType.toUpperCase()}`,
+    sessionId: input.sessionId,
+    approvalPolicy,
+    confirmationMessage: [
+      "Apply OPY board action?",
+      "",
+      `ADD ${input.nodeType.toUpperCase()} "${input.label}"`,
+      "",
+      approvalPolicy.summary,
+    ].join("\n"),
+    cancelMessage: "ACTION CANCELLED BY OPERATOR.",
+    failurePrefix: "BOARD ACTION FAILED",
+    boardAction: {
+      kind: "add-node",
+      nodeType: input.nodeType,
+      label: input.label,
+    },
+    refreshCheckpointsAfterApply: false,
+  };
+};
 
 export const resolveOpyExecutableAddNodeActionFlow = (input: {
   readonly actionMode: AiActionMode;
@@ -280,6 +302,25 @@ export const resolveOpyApplyProposalActionFlow = (input: {
     };
   }
 
+  const approvalPolicy = resolveRigActionApprovalPolicy({
+    actionClass: "batch-mutation",
+    policy: input.policy,
+    highestRisk: mutationPlan.plan.highestRisk,
+    totalActions: mutationPlan.plan.totalActions,
+    totalNodesCreated: mutationPlan.plan.totalNodesCreated,
+    totalEdgesCreated: mutationPlan.plan.totalEdgesCreated,
+    totalLayoutOperations: mutationPlan.plan.totalLayoutOperations,
+  });
+  if (approvalPolicy.blockedReason) {
+    return {
+      ok: false,
+      issue: createPolicyIssue(
+        `Plan apply blocked by approval policy. ${approvalPolicy.blockedReason}`,
+        approvalPolicy.recommendedAction,
+      ),
+    };
+  }
+
   return {
     ok: true,
     value: {
@@ -287,8 +328,11 @@ export const resolveOpyApplyProposalActionFlow = (input: {
         requestKind: "apply-proposal",
         requestLabel: "APPLY PROPOSAL",
         sessionId: input.sessionId,
+        approvalPolicy,
         confirmationMessage: [
           "Apply OPY diagram proposal?",
+          "",
+          approvalPolicy.summary,
           "",
           `Plan actions ${mutationPlan.plan.totalActions}`,
           `Create ${mutationPlan.plan.totalNodesCreated} node(s)`,
@@ -357,14 +401,35 @@ export const resolveOpyRollbackActionFlow = (input: {
     };
   }
 
+  const approvalPolicy = resolveRigActionApprovalPolicy({
+    actionClass: "rollback",
+    policy: input.policy,
+    highestRisk: "high",
+    totalActions: 1,
+    totalNodesCreated: 0,
+    totalEdgesCreated: 0,
+  });
+  if (approvalPolicy.blockedReason) {
+    return {
+      ok: false,
+      issue: createPolicyIssue(
+        `Rollback blocked by approval policy. ${approvalPolicy.blockedReason}`,
+        approvalPolicy.recommendedAction,
+      ),
+    };
+  }
+
   return {
     ok: true,
     value: {
       requestKind: "rollback",
       requestLabel: "ROLLBACK",
       sessionId: input.sessionId,
+      approvalPolicy,
       confirmationMessage: [
         "Rollback to OPY checkpoint?",
+        "",
+        approvalPolicy.summary,
         "",
         formatOpyRollbackSummary(input.checkpoint),
         `Created ${new Intl.DateTimeFormat(undefined, {

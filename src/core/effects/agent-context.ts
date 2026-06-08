@@ -9,6 +9,7 @@ import type {
 } from "./ai-agent.runtime";
 import { runRigReadTool } from "./ai-agent.runtime";
 import type { OpyBoardContextRegistry } from "./opy-board-context";
+import type { OpyGroundedProposalSummary } from "./opy-c4-proposals";
 import type { RedactionMode } from "./settings.types";
 
 export type RigAgentContextConfidence = "high" | "medium" | "low";
@@ -28,6 +29,37 @@ export interface RigAgentContextBundle {
   readonly confidenceReason: string;
   readonly retrievalHits?: ReadonlyArray<RigAgentRetrievalHit>;
   readonly retrievalPromptContext?: string;
+}
+
+export type RigAgentGroundingSurface = "chat" | "review" | "proposal";
+
+export interface RigAgentReviewGroundingEvidence {
+  readonly riskCount: number;
+  readonly ambiguityCount: number;
+  readonly recommendedChangeCount: number;
+  readonly missingNodeCount: number;
+  readonly missingEdgeCount: number;
+}
+
+export interface RigAgentGroundingConfidenceScore {
+  readonly confidence: RigAgentContextConfidence;
+  readonly score: number;
+  readonly citationCount: number;
+  readonly retrievalHitCount: number;
+  readonly boardCitationCount: number;
+  readonly scopeCitationCount: number;
+  readonly outputEvidenceCount: number;
+  readonly ambiguousOutputCount: number;
+  readonly lowCoverage: boolean;
+  readonly reason: string;
+  readonly reasons: ReadonlyArray<string>;
+}
+
+export interface ScoreRigAgentGroundingConfidenceInput {
+  readonly context: RigAgentContextBundle;
+  readonly surface?: RigAgentGroundingSurface;
+  readonly proposalSummary?: OpyGroundedProposalSummary | null;
+  readonly reviewEvidence?: RigAgentReviewGroundingEvidence | null;
 }
 
 interface AssembleRigAgentContextInput {
@@ -63,28 +95,109 @@ const redactMetadata = (
   return mode === "strict" ? strictPlaceholder : normalized;
 };
 
-const toConfidence = (citationCount: number): {
-  readonly confidence: RigAgentContextConfidence;
-  readonly reason: string;
-} => {
-  if (citationCount >= 3) {
-    return {
-      confidence: "high",
-      reason: "Multiple board sources resolved through typed read tools.",
-    };
-  }
+const clampScore = (score: number): number => Math.max(0, Math.min(100, Math.round(score)));
 
-  if (citationCount >= 1) {
-    return {
-      confidence: "medium",
-      reason: "Board summary evidence is available, but scope-specific evidence is limited.",
-    };
-  }
+const summarizeConfidenceReasons = (reasons: ReadonlyArray<string>): string =>
+  reasons.length > 0 ? reasons.join(" · ") : "No grounding evidence was available.";
+
+export const scoreRigAgentGroundingConfidence = (
+  input: ScoreRigAgentGroundingConfidenceInput,
+): RigAgentGroundingConfidenceScore => {
+  const surface = input.surface ?? "chat";
+  const citationCount = input.context.citations.length;
+  const retrievalHitCount = input.context.retrievalHits?.length ?? 0;
+  const boardCitationCount = input.context.citations.filter((citation) => citation.tool === "board_summary").length;
+  const scopeCitationCount = input.context.citations.filter((citation) =>
+    citation.tool === "node_lookup" || citation.tool === "edge_lookup"
+  ).length;
+  const proposalSummary = input.proposalSummary ?? null;
+  const reviewEvidence = input.reviewEvidence ?? null;
+  const proposalOutputEvidenceCount = proposalSummary
+    ? proposalSummary.newNodes
+      + proposalSummary.existingNodes
+      + proposalSummary.newEdges
+      + proposalSummary.existingEdges
+    : 0;
+  const reviewOutputEvidenceCount = reviewEvidence
+    ? reviewEvidence.riskCount
+      + reviewEvidence.ambiguityCount
+      + reviewEvidence.recommendedChangeCount
+      + reviewEvidence.missingNodeCount
+      + reviewEvidence.missingEdgeCount
+    : 0;
+  const outputEvidenceCount = Math.max(proposalOutputEvidenceCount, reviewOutputEvidenceCount);
+  const ambiguousOutputCount = proposalSummary
+    ? proposalSummary.ambiguousNodes + proposalSummary.ambiguousEdges
+    : reviewEvidence
+      ? reviewEvidence.ambiguityCount + reviewEvidence.missingNodeCount + reviewEvidence.missingEdgeCount
+      : 0;
+
+  const evidenceSurfaceRequiresCoverage = surface === "proposal" || surface === "review";
+  const lowCoverage = citationCount === 0
+    || (evidenceSurfaceRequiresCoverage && citationCount < 2 && retrievalHitCount === 0);
+
+  const score = clampScore(
+    (boardCitationCount > 0 ? 35 : 0)
+    + Math.min(scopeCitationCount, 3) * 18
+    + Math.min(retrievalHitCount, 3) * 8
+    + Math.min(outputEvidenceCount, 4) * 5
+    - Math.min(ambiguousOutputCount, 4) * 12
+    - (lowCoverage ? 20 : 0),
+  );
+
+  const confidence: RigAgentContextConfidence = lowCoverage || score < 35
+    ? "low"
+    : score >= 70 && citationCount >= 3 && ambiguousOutputCount === 0
+      ? "high"
+      : "medium";
+
+  const reasons = [
+    `CITATIONS::${citationCount}`,
+    `SCOPE::${scopeCitationCount}`,
+    `RETRIEVAL::${retrievalHitCount}`,
+    outputEvidenceCount > 0 ? `OUTPUT::${outputEvidenceCount}` : null,
+    ambiguousOutputCount > 0 ? `AMBIGUOUS::${ambiguousOutputCount}` : null,
+    lowCoverage ? "LOW COVERAGE" : null,
+    `SCORE::${score}`,
+  ].filter((reason): reason is string => reason !== null);
 
   return {
-    confidence: "low",
-    reason: "No board evidence was available for this request.",
+    confidence,
+    score,
+    citationCount,
+    retrievalHitCount,
+    boardCitationCount,
+    scopeCitationCount,
+    outputEvidenceCount,
+    ambiguousOutputCount,
+    lowCoverage,
+    reason: summarizeConfidenceReasons(reasons),
+    reasons,
   };
+};
+
+const replacePromptContextConfidence = (
+  promptContext: string,
+  confidenceScore: RigAgentGroundingConfidenceScore,
+): string => {
+  const lines = promptContext.split("\n");
+  const nextLines = lines.map((line) => {
+    if (line.startsWith("CONFIDENCE=")) {
+      return `CONFIDENCE=${confidenceScore.confidence.toUpperCase()}`;
+    }
+
+    if (line.startsWith("CONFIDENCE_REASON=")) {
+      return `CONFIDENCE_REASON=${confidenceScore.reason}`;
+    }
+
+    return line;
+  });
+
+  if (!nextLines.some((line) => line.startsWith("GROUNDING_SCORE="))) {
+    nextLines.push(`GROUNDING_SCORE=${confidenceScore.score}`);
+  }
+
+  return nextLines.join("\n");
 };
 
 const formatCitationLine = (citation: RigAgentCitation): string =>
@@ -177,11 +290,22 @@ export const mergeRigAgentContextWithRetrieval = (
     return bundle;
   }
 
-  return {
+  const mergedBundle = {
     ...bundle,
     retrievalHits: retrieval.hits,
     retrievalPromptContext: retrieval.promptContext,
     promptContext: `${bundle.promptContext}\n${retrieval.promptContext}`,
+  };
+  const confidenceScore = scoreRigAgentGroundingConfidence({
+    context: mergedBundle,
+    surface: "chat",
+  });
+
+  return {
+    ...mergedBundle,
+    confidence: confidenceScore.confidence,
+    confidenceReason: confidenceScore.reason,
+    promptContext: replacePromptContextConfidence(mergedBundle.promptContext, confidenceScore),
   };
 };
 
@@ -250,13 +374,23 @@ export const assembleRigAgentContextWithTools = (
       }
     }
 
-    const confidence = toConfidence(citations.length);
+    const baseBundle: RigAgentContextBundle = {
+      promptContext: "",
+      citations,
+      confidence: "low",
+      confidenceReason: "",
+    };
+    const confidence = scoreRigAgentGroundingConfidence({
+      context: baseBundle,
+      surface: "chat",
+    });
 
     return {
       promptContext: [
         `FOCUS=${focusLabel(focus)}`,
         `CONFIDENCE=${confidence.confidence.toUpperCase()}`,
         `CONFIDENCE_REASON=${confidence.reason}`,
+        `GROUNDING_SCORE=${confidence.score}`,
         ...citations.map((citation) => `SOURCE=${formatCitationLine(citation)}`),
       ].join("\n"),
       citations,
