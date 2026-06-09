@@ -531,10 +531,10 @@ export const opyCopilotTopline = style({
 export const opyCopilotHideButton = style([
   ownershipLensToggleButton,
   {
-    minWidth: "4.5rem",
-    padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
     borderColor: theme.color.border.secondary,
     backgroundColor: "rgba(6, 13, 10, 0.92)",
+    padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+    minWidth: "4.5rem",
     color: theme.color.foreground.secondary,
     fontSize: theme.typography.size.xs,
   },
@@ -542,9 +542,9 @@ export const opyCopilotHideButton = style([
 
 export const opyCopilotShell = style({
   display: "grid",
+  flex: 1,
   gridTemplateRows: "minmax(0, 1fr) clamp(14rem, 36%, 24rem)",
   gap: theme.spacing["2"],
-  flex: 1,
   height: "100%",
   minHeight: 0,
   overflow: "hidden",
@@ -554,10 +554,10 @@ export const opyCopilotViewport = style({
   display: "flex",
   flexDirection: "column",
   gap: theme.spacing["2"],
-  minHeight: 0,
-  overflowY: "auto",
-  overflowX: "hidden",
   paddingRight: theme.spacing["1"],
+  minHeight: 0,
+  overflowX: "hidden",
+  overflowY: "auto",
 });
 
 export const opyCopilotViewportSection = style({
@@ -570,14 +570,14 @@ export const opyCopilotViewportSection = style({
   padding: theme.spacing["2"],
 
   selectors: {
-    '&[data-tone="ready"]': {
+    "&[data-tone=\"ready\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.ready} 55%, ${theme.color.border.secondary})`,
     },
-    '&[data-tone="caution"]': {
+    "&[data-tone=\"caution\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.caution} 60%, ${theme.color.border.secondary})`,
       boxShadow: `0 0 12px color-mix(in srgb, ${theme.color.status.caution} 18%, transparent)`,
     },
-    '&[data-tone="critical"]': {
+    "&[data-tone=\"critical\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.critical} 68%, ${theme.color.border.secondary})`,
       boxShadow: `0 0 14px color-mix(in srgb, ${theme.color.status.critical} 22%, transparent)`,
     },
@@ -619,10 +619,10 @@ export const opyCopilotViewportSectionSummary = style({
 
 export const opyCopilotViewportSectionSummaryMain = style({
   display: "flex",
+  flex: 1,
   flexDirection: "column",
   gap: theme.spacing["1"],
   minWidth: 0,
-  flex: 1,
 });
 
 export const opyCopilotViewportSectionSummaryTitle = style({
@@ -644,10 +644,10 @@ export const opyCopilotViewportSectionSummaryText = style({
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
+  letterSpacing: theme.typography.letterSpacing.normal,
   whiteSpace: "nowrap",
   color: theme.color.foreground.primary,
   fontSize: theme.typography.size.xs,
-  letterSpacing: theme.typography.letterSpacing.normal,
   selectors: {
     [`${opyCopilotViewportSection}[data-tone="ready"] &`]: {
       color: theme.color.status.ready,
@@ -663,9 +663,9 @@ export const opyCopilotViewportSectionSummaryText = style({
 
 export const opyCopilotViewportSectionSummaryAside = style({
   display: "inline-flex",
+  flexShrink: 0,
   alignItems: "flex-start",
   justifyContent: "flex-end",
-  flexShrink: 0,
 });
 
 export const opyCopilotViewportSectionSummaryMeta = style({
@@ -685,17 +685,17 @@ export const opyCopilotViewportSectionSummaryMeta = style({
 
 export const opyCopilotViewportSectionSummaryMetaGroup = style({
   display: "inline-flex",
-  alignItems: "center",
-  gap: theme.spacing["1"],
   flexWrap: "wrap",
+  alignItems: "center",
   justifyContent: "flex-end",
+  gap: theme.spacing["1"],
 });
 
 export const opyCopilotViewportSectionSummaryFlag = style({
   clipPath: theme.clipPath.base,
   border: `${theme.border.width.thin} solid ${theme.color.status.selected}`,
-  backgroundColor: "rgba(12, 26, 18, 0.98)",
   boxShadow: theme.effect.glow.sm,
+  backgroundColor: "rgba(12, 26, 18, 0.98)",
   padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
   color: theme.color.status.selected,
 });
@@ -711,18 +711,18 @@ export const opyCopilotConversation = style({
   display: "flex",
   flexDirection: "column",
   gap: theme.spacing["2"],
-  minHeight: 0,
   clipPath: theme.clipPath.md,
   border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
   backgroundColor: "rgba(9, 15, 12, 0.94)",
   padding: theme.spacing["2"],
+  minHeight: 0,
 });
 
 export const opyCopilotComposer = style({
   display: "flex",
   flexDirection: "column",
-  gap: theme.spacing["2"],
   flexShrink: 0,
+  gap: theme.spacing["2"],
   borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   paddingTop: theme.spacing["2"],
 });
@@ -773,11 +773,11 @@ export const opyAvatarRing = style({
 
 export const opyCopilotTranscript = style({
   display: "flex",
-  flexDirection: "column",
   flex: 1,
+  flexDirection: "column",
   gap: theme.spacing["2"],
-  minHeight: 0,
   paddingRight: theme.spacing["1"],
+  minHeight: 0,
   overflowY: "auto",
 });
 
@@ -882,10 +882,10 @@ export const opyCopilotProposalHeader = style({
 
 export const opyCopilotProposalHeaderMetaGroup = style({
   display: "inline-flex",
+  flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "flex-end",
   gap: theme.spacing["1"],
-  flexWrap: "wrap",
 });
 
 export const opyCopilotFocusClearButton = style([
@@ -893,8 +893,8 @@ export const opyCopilotFocusClearButton = style([
   {
     flexShrink: 0,
     borderColor: theme.color.status.selected,
-    backgroundColor: "rgba(9, 16, 13, 0.94)",
     boxShadow: "none",
+    backgroundColor: "rgba(9, 16, 13, 0.94)",
     padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
     color: theme.color.status.selected,
     fontSize: theme.typography.size.xs,
@@ -1155,13 +1155,13 @@ export const opyCopilotTaskToggle = style({
   alignItems: "flex-start",
   justifyContent: "space-between",
   gap: theme.spacing["2"],
-  width: "100%",
-  padding: 0,
   border: "none",
   background: "transparent",
-  color: theme.color.foreground.primary,
-  textAlign: "left",
   cursor: "pointer",
+  padding: 0,
+  width: "100%",
+  textAlign: "left",
+  color: theme.color.foreground.primary,
 });
 
 export const opyCopilotTaskToggleMain = style({
@@ -1214,12 +1214,12 @@ export const opyCopilotTaskTraceItem = style({
 export const opyCopilotTaskArtifactPayload = style({
   margin: 0,
   overflowX: "auto",
+  lineHeight: theme.typography.lineHeight.normal,
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.normal,
 });
 
 export const opyCopilotPlanDecisionRow = style({
@@ -1299,12 +1299,13 @@ export const opyCopilotInput = style({
   display: "flex",
   flexDirection: "column",
   alignItems: "stretch",
-  width: "100%",
-  maxWidth: "100%",
   gap: theme.spacing["2"],
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "rgba(10, 16, 13, 0.92)",
   padding: theme.spacing["2"],
+  width: "100%",
+  maxWidth: "100%",
+  overflow: "hidden",
 });
 
 export const opyCopilotCommandPalette = style({
@@ -1326,13 +1327,13 @@ export const opyCopilotCommandDraftRail = style({
   backgroundColor: "rgba(9, 15, 12, 0.95)",
   padding: theme.spacing["2"],
   selectors: {
-    '&[data-tone="ready"]': {
+    "&[data-tone=\"ready\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.ready} 36%, ${theme.color.border.secondary})`,
     },
-    '&[data-tone="caution"]': {
+    "&[data-tone=\"caution\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.caution} 42%, ${theme.color.border.secondary})`,
     },
-    '&[data-tone="critical"]': {
+    "&[data-tone=\"critical\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.critical} 48%, ${theme.color.border.secondary})`,
     },
   },
@@ -1340,10 +1341,10 @@ export const opyCopilotCommandDraftRail = style({
 
 export const opyCopilotCommandDraftHeader = style({
   display: "flex",
+  flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "space-between",
   gap: theme.spacing["2"],
-  flexWrap: "wrap",
 });
 
 export const opyCopilotCommandDraftTitle = style({
@@ -1358,17 +1359,17 @@ export const opyCopilotCommandDraftTitle = style({
 export const opyCopilotCommandDraftStatus = style({
   textTransform: theme.typography.textTransform.uppercase,
   letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  color: theme.color.foreground.secondary,
   selectors: {
-    '&[data-tone="ready"]': {
+    "&[data-tone=\"ready\"]": {
       color: theme.color.status.ready,
     },
-    '&[data-tone="caution"]': {
+    "&[data-tone=\"caution\"]": {
       color: theme.color.status.caution,
     },
-    '&[data-tone="critical"]': {
+    "&[data-tone=\"critical\"]": {
       color: theme.color.status.critical,
     },
   },
@@ -1376,19 +1377,19 @@ export const opyCopilotCommandDraftStatus = style({
 
 export const opyCopilotCommandDraftHint = style({
   margin: 0,
+  textTransform: theme.typography.textTransform.uppercase,
+  lineHeight: theme.typography.lineHeight.relaxed,
+  letterSpacing: theme.typography.letterSpacing.wide,
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.relaxed,
-  textTransform: theme.typography.textTransform.uppercase,
-  letterSpacing: theme.typography.letterSpacing.wide,
 });
 
 export const opyCopilotCommandDraftFields = style({
   display: "flex",
-  gap: theme.spacing["2"],
   flexWrap: "wrap",
   alignItems: "flex-start",
+  gap: theme.spacing["2"],
 });
 
 export const opyCopilotCommandDraftTextarea = style({
@@ -1401,12 +1402,12 @@ export const opyCopilotCommandSuggestion = style({
   alignItems: "flex-start",
   gap: theme.spacing["1"],
   transition: theme.transition.base,
-  width: "100%",
   clipPath: theme.clipPath.sm,
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "rgba(11, 18, 14, 0.94)",
   cursor: "pointer",
   padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  width: "100%",
   textAlign: "left",
 
   selectors: {
@@ -1453,34 +1454,34 @@ export const opyCopilotCommandSuggestionStatus = style({
   flexShrink: 0,
   textTransform: theme.typography.textTransform.uppercase,
   letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  color: theme.color.foreground.secondary,
   selectors: {
-    '&[data-tone="ready"]': {
+    "&[data-tone=\"ready\"]": {
       color: theme.color.status.ready,
     },
-    '&[data-tone="caution"]': {
+    "&[data-tone=\"caution\"]": {
       color: theme.color.status.caution,
     },
-    '&[data-tone="critical"]': {
+    "&[data-tone=\"critical\"]": {
       color: theme.color.status.critical,
     },
   },
 });
 
 export const opyCopilotCommandSuggestionSummary = style({
+  lineHeight: theme.typography.lineHeight.relaxed,
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.relaxed,
 });
 
 export const opyCopilotCommandSuggestionDetail = style({
+  lineHeight: theme.typography.lineHeight.relaxed,
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.relaxed,
 });
 
 export const opyCopilotCommandFeedback = style({
@@ -1492,14 +1493,14 @@ export const opyCopilotCommandFeedback = style({
   backgroundColor: "rgba(11, 18, 14, 0.94)",
   padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
   selectors: {
-    '&[data-tone="ready"]': {
+    "&[data-tone=\"ready\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.ready} 44%, ${theme.color.border.secondary})`,
     },
-    '&[data-tone="caution"]': {
+    "&[data-tone=\"caution\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.caution} 48%, ${theme.color.border.secondary})`,
       backgroundColor: `color-mix(in srgb, ${theme.color.status.caution} 10%, rgba(11, 18, 14, 0.94))`,
     },
-    '&[data-tone="critical"]': {
+    "&[data-tone=\"critical\"]": {
       borderColor: `color-mix(in srgb, ${theme.color.status.critical} 56%, ${theme.color.border.secondary})`,
       backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} 10%, rgba(11, 18, 14, 0.94))`,
     },
@@ -1509,17 +1510,17 @@ export const opyCopilotCommandFeedback = style({
 export const opyCopilotCommandFeedbackLabel = style({
   textTransform: theme.typography.textTransform.uppercase,
   letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
   fontWeight: theme.typography.weight.bold,
-  color: theme.color.foreground.primary,
 });
 
 export const opyCopilotCommandFeedbackDetail = style({
+  lineHeight: theme.typography.lineHeight.relaxed,
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.relaxed,
 });
 
 export const opyCopilotCommandSuggestionHint = style({
@@ -1535,6 +1536,18 @@ globalStyle(`${opyCopilotInput} *`, {
   boxSizing: "border-box",
 });
 
+globalStyle(`${opyCopilotInput} [data-copilotkit]`, {
+  backgroundColor: "transparent",
+  color: theme.color.foreground.primary,
+});
+
+globalStyle(`${opyCopilotInput} div, ${opyCopilotInput} span, ${opyCopilotInput} label`, {
+  borderRadius: 0,
+  boxShadow: "none",
+  backgroundColor: "transparent",
+  backgroundImage: "none",
+});
+
 globalStyle(`${opyCopilotInput} > *`, {
   width: "100%",
   maxWidth: "100%",
@@ -1544,10 +1557,15 @@ globalStyle(`${opyCopilotInput} form`, {
   display: "flex",
   flexDirection: "column",
   alignItems: "stretch",
-  minWidth: 0,
-  width: "100%",
-  maxWidth: "100%",
   gap: theme.spacing["2"],
+  borderRadius: 0,
+  boxShadow: "none",
+  backgroundColor: "transparent",
+  backgroundImage: "none",
+  width: "100%",
+  minWidth: 0,
+  maxWidth: "100%",
+  overflow: "hidden",
 });
 
 globalStyle(`${opyCopilotInput} form > *`, {
@@ -1557,28 +1575,37 @@ globalStyle(`${opyCopilotInput} form > *`, {
 
 globalStyle(`${opyCopilotInput} textarea`, {
   display: "block",
+  appearance: "none",
   flex: 1,
-  minWidth: 0,
-  width: "100%",
-  maxWidth: "100%",
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  borderRadius: 0,
+  boxShadow: "none",
   backgroundColor: "rgba(8, 13, 11, 0.96)",
+  backgroundImage: "none",
   padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
+  width: "100%",
+  minWidth: 0,
+  maxWidth: "100%",
   minHeight: "4.5rem",
   resize: "vertical",
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
+  WebkitAppearance: "none",
 });
 
 globalStyle(`${opyCopilotInput} button`, {
   display: "inline-flex",
+  appearance: "none",
   alignItems: "center",
   justifyContent: "center",
   transition: theme.transition.base,
   clipPath: theme.clipPath.base,
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  borderRadius: 0,
+  boxShadow: "none",
   backgroundColor: "rgba(12, 20, 16, 0.92)",
+  backgroundImage: "none",
   cursor: "pointer",
   padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
   textTransform: theme.typography.textTransform.uppercase,
@@ -1586,6 +1613,7 @@ globalStyle(`${opyCopilotInput} button`, {
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
+  WebkitAppearance: "none",
 });
 
 export const opyCopilotCommandToken = style({
@@ -1743,18 +1771,17 @@ export const opyFlyoutPanel = style({
   display: "flex",
   flexDirection: "column",
   gap: theme.spacing["3"],
+  backdropFilter: "blur(12px)",
   clipPath: theme.clipPath.lg,
   border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
   boxShadow: theme.effect.glow.lg,
-  background:
-    "linear-gradient(180deg, rgba(9, 17, 13, 0.985) 0%, rgba(6, 12, 9, 0.97) 100%)",
+  background: "linear-gradient(180deg, rgba(9, 17, 13, 0.985) 0%, rgba(6, 12, 9, 0.97) 100%)",
   padding: theme.spacing["4"],
   width: "min(38rem, calc(100% - 2rem))",
-  maxWidth: "calc(100% - 2rem)",
   minWidth: "20rem",
+  maxWidth: "calc(100% - 2rem)",
   minHeight: 0,
   overflow: "hidden",
-  backdropFilter: "blur(12px)",
 
   "@media": {
     "(max-width: 960px)": {

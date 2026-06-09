@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
+import type { OpyAgentLifecycleRequest } from "./opy-agent.lifecycle";
 import {
   buildOpyAgentTaskLineage,
+  type OpyAgentTaskLineageShape,
   selectLatestOpyAgentTaskLineageCollectionEntries,
   summarizeOpyAgentTaskLineageCollection,
-  type OpyAgentTaskLineageShape,
 } from "./opy-agent.task-lineage";
-import type { OpyAgentLifecycleRequest } from "./opy-agent.lifecycle";
 
 const createChatRequest = (sessionId: string, prompt: string): OpyAgentLifecycleRequest => ({
   confirmation: null,

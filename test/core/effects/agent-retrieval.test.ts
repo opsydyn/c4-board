@@ -1,9 +1,6 @@
-import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
-import {
-  loadRigAgentRetrievalBundle,
-  type RigAgentGovernanceSnapshot,
-} from "@/core/effects/agent-retrieval";
+import { loadRigAgentRetrievalBundle, type RigAgentGovernanceSnapshot } from "@/core/effects/agent-retrieval";
 import type { RigC4BoardSummary } from "@/core/effects/ai-agent.runtime";
+import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
 import type { OpyBoardContextRegistry } from "@/core/effects/opy-board-context";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
@@ -292,9 +289,9 @@ describe("agent-retrieval", () => {
       queryRows(),
     );
 
-    expect(bundle.hits.some((hit) =>
-      hit.scope === "board" && hit.source === "node" && hit.label.includes("Payments API")
-    )).toBe(true);
+    expect(
+      bundle.hits.some((hit) => hit.scope === "board" && hit.source === "node" && hit.label.includes("Payments API")),
+    ).toBe(true);
     expect(bundle.hits.some((hit) => hit.scope !== "board")).toBe(true);
     expect(bundle.promptContext).toContain("RETRIEVAL=[BOARD/NODE]");
     expect(bundle.promptContext).toContain("Payments API");
@@ -383,9 +380,8 @@ describe("agent-retrieval", () => {
       }),
     );
 
-    expect(allDiagramBundle.hits.some((hit) =>
-      hit.source === "diagram" && hit.label.includes("Inventory Landscape")
-    )).toBe(true);
+    expect(allDiagramBundle.hits.some((hit) => hit.source === "diagram" && hit.label.includes("Inventory Landscape")))
+      .toBe(true);
   });
 
   it("indexes settings, Azure sync summaries, and explainability artifacts into retrieval hits", async () => {

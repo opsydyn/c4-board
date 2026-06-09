@@ -1,34 +1,34 @@
-import { Effect, Data, Schema, pipe, Option } from "effect";
+import { Data, Effect, Option, pipe, Schema } from "effect";
 
 /**
  * Validated request form data
  */
 export interface ValidatedRequestForm {
-	readonly name: string;
-	readonly url: string;
-	readonly method: string;
+  readonly name: string;
+  readonly url: string;
+  readonly method: string;
 }
 
 /**
  * Input form data (raw, untrimmed)
  */
 export interface RequestFormData {
-	readonly name: string;
-	readonly url: string;
-	readonly method: string;
+  readonly name: string;
+  readonly url: string;
+  readonly method: string;
 }
 
 /**
  * Valid HTTP methods for REST API requests
  */
 const VALID_HTTP_METHODS = [
-	"GET",
-	"POST",
-	"PUT",
-	"PATCH",
-	"DELETE",
-	"HEAD",
-	"OPTIONS",
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
 ] as const;
 
 /**
@@ -47,9 +47,7 @@ const VALID_HTTP_METHODS = [
  * const invalid = parseURL("not-a-url");     // None
  * ```
  */
-const parseURL = Option.liftThrowable((urlString: string) =>
-	new URL(urlString.trim()),
-);
+const parseURL = Option.liftThrowable((urlString: string) => new URL(urlString.trim()));
 
 /**
  * Schema for validating request form data
@@ -58,44 +56,43 @@ const parseURL = Option.liftThrowable((urlString: string) =>
  * - method: one of the valid HTTP methods
  */
 const RequestFormSchema = Schema.Struct({
-	name: pipe(
-		Schema.String,
-		Schema.filter((s) => s.trim().length > 0, {
-			message: () => "Request name cannot be empty",
-		}),
-	),
-	url: pipe(
-		Schema.String,
-		Schema.filter((s) => s.trim().length > 0, {
-			message: () => "URL cannot be empty",
-		}),
-		Schema.filter((s) => Option.isSome(parseURL(s)), {
-			message: () => "URL must be a valid URL format",
-		}),
-	),
-	method: pipe(
-		Schema.String,
-		Schema.filter(
-			(s) =>
-				VALID_HTTP_METHODS.includes(
-					s.trim().toUpperCase() as (typeof VALID_HTTP_METHODS)[number],
-				),
-			{
-				message: () =>
-					`HTTP method must be one of: ${VALID_HTTP_METHODS.join(", ")}`,
-			},
-		),
-	),
+  name: pipe(
+    Schema.String,
+    Schema.filter((s) => s.trim().length > 0, {
+      message: () => "Request name cannot be empty",
+    }),
+  ),
+  url: pipe(
+    Schema.String,
+    Schema.filter((s) => s.trim().length > 0, {
+      message: () => "URL cannot be empty",
+    }),
+    Schema.filter((s) => Option.isSome(parseURL(s)), {
+      message: () => "URL must be a valid URL format",
+    }),
+  ),
+  method: pipe(
+    Schema.String,
+    Schema.filter(
+      (s) =>
+        VALID_HTTP_METHODS.includes(
+          s.trim().toUpperCase() as (typeof VALID_HTTP_METHODS)[number],
+        ),
+      {
+        message: () => `HTTP method must be one of: ${VALID_HTTP_METHODS.join(", ")}`,
+      },
+    ),
+  ),
 });
 
 /**
  * Form validation error
  */
 export class FormValidationError extends Data.TaggedError(
-	"FormValidationError",
+  "FormValidationError",
 )<{
-	readonly field: string;
-	readonly message: string;
+  readonly field: string;
+  readonly message: string;
 }> {}
 
 /**
@@ -117,20 +114,20 @@ export class FormValidationError extends Data.TaggedError(
  * ```
  */
 export const validateRequestForm = (
-	formData: RequestFormData,
+  formData: RequestFormData,
 ): Effect.Effect<ValidatedRequestForm, FormValidationError> =>
-	pipe(
-		Schema.decodeUnknown(RequestFormSchema)(formData),
-		Effect.mapError((parseError) => {
-			// ParseError has a message getter that formats the entire error
-			return new FormValidationError({
-				field: "form",
-				message: parseError.message,
-			});
-		}),
-		Effect.map((validated) => ({
-			name: validated.name.trim(),
-			url: validated.url.trim(),
-			method: validated.method.trim().toUpperCase(),
-		})),
-	);
+  pipe(
+    Schema.decodeUnknown(RequestFormSchema)(formData),
+    Effect.mapError((parseError) => {
+      // ParseError has a message getter that formats the entire error
+      return new FormValidationError({
+        field: "form",
+        message: parseError.message,
+      });
+    }),
+    Effect.map((validated) => ({
+      name: validated.name.trim(),
+      url: validated.url.trim(),
+      method: validated.method.trim().toUpperCase(),
+    })),
+  );

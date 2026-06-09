@@ -250,7 +250,9 @@ const assessPatternSet = (input: {
   readonly requestKind: OpyAnomalyRequestKind;
   readonly text: string;
   readonly patterns: ReadonlyArray<OpyAnomalyPattern>;
-  readonly extraSignals?: ReadonlyArray<OpyAnomalySignal & { readonly score?: number; readonly recommendedAction?: string }>;
+  readonly extraSignals?: ReadonlyArray<
+    OpyAnomalySignal & { readonly score?: number; readonly recommendedAction?: string }
+  >;
 }): OpyAnomalyAssessment => {
   const normalizedText = input.text.trim().replace(/\s+/g, " ");
   if (normalizedText.length === 0) {

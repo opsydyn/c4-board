@@ -1,22 +1,22 @@
-import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
 
 class StubResizeObserver implements ResizeObserver {
-	observe(): void {}
-	unobserve(): void {}
-	disconnect(): void {}
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
 }
 
 if (typeof window !== "undefined" && !("ResizeObserver" in window)) {
-	Object.assign(window, { ResizeObserver: StubResizeObserver });
+  Object.assign(window, { ResizeObserver: StubResizeObserver });
 }
 
 if (typeof globalThis !== "undefined" && !("ResizeObserver" in globalThis)) {
-	Object.assign(globalThis, { ResizeObserver: StubResizeObserver });
+  Object.assign(globalThis, { ResizeObserver: StubResizeObserver });
 }
 
 afterEach(() => {
-	vi.clearAllMocks();
-	cleanup();
+  vi.clearAllMocks();
+  cleanup();
 });

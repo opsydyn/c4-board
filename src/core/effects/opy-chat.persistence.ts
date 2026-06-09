@@ -1,9 +1,8 @@
 import { Effect } from "effect";
-import type { RigAgentContextBundle, RigAgentCitation } from "./agent-context";
+import type { RigAgentCitation, RigAgentContextBundle } from "./agent-context";
 import type { RigC4DiagramProposal } from "./ai-agent.runtime";
 import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService, NotFoundError } from "./database.base";
-import { deriveOpyAgentTaskLineageKey } from "./opy-agent.task-lineage";
 import type {
   OpyAgentLifecycleConfirmation,
   OpyAgentLifecycleMode,
@@ -11,6 +10,7 @@ import type {
   OpyAgentLifecycleReplay,
   OpyAgentLifecycleRequest,
 } from "./opy-agent.lifecycle";
+import { deriveOpyAgentTaskLineageKey } from "./opy-agent.task-lineage";
 import type {
   OpyAgentArtifact,
   OpyAgentArtifactKind,
@@ -770,8 +770,7 @@ const isOpyAgentArtifactKind = (value: unknown): value is OpyAgentArtifactKind =
 const isOpyPlanDecisionStatus = (value: unknown): value is OpyPlanDecisionStatus =>
   value === "pending" || value === "approved" || value === "rejected";
 
-const isOpyAgentCheckpointType = (value: unknown): value is OpyAgentCheckpointType =>
-  value === "pre-apply";
+const isOpyAgentCheckpointType = (value: unknown): value is OpyAgentCheckpointType => value === "pre-apply";
 
 const toTimestamp = (value: unknown, fallback = Date.now()): number =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -782,8 +781,7 @@ const toNullableTimestamp = (value: unknown): number | null =>
 const toNullableText = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
 const isOpyAgentTaskLifecycleMetadata = (value: unknown): value is OpyAgentTaskLifecycleMetadata =>
   isRecord(value)
@@ -852,10 +850,9 @@ export const buildOpyAgentTaskLifecycleMetadata = (
   task: OpyAgentTask,
 ): OpyAgentTaskLifecycleMetadata => {
   const lineageKey = task.lineageKey ?? deriveOpyAgentTaskLineageKey(task.request);
-  const terminalStatus =
-    task.status === "completed" || task.status === "failed" || task.status === "cancelled"
-      ? task.status
-      : null;
+  const terminalStatus = task.status === "completed" || task.status === "failed" || task.status === "cancelled"
+    ? task.status
+    : null;
 
   return {
     version: 1,
@@ -1167,7 +1164,8 @@ const isOpyAgentCheckpointSnapshot = (value: unknown): value is OpyAgentCheckpoi
   const candidate = value as Record<string, unknown>;
   return typeof candidate.id === "string"
     && typeof candidate.name === "string"
-    && (candidate.description === undefined || candidate.description === null || typeof candidate.description === "string")
+    && (candidate.description === undefined || candidate.description === null
+      || typeof candidate.description === "string")
     && Array.isArray(candidate.nodes)
     && Array.isArray(candidate.edges)
     && (candidate.savedAt === null || (typeof candidate.savedAt === "number" && Number.isFinite(candidate.savedAt)));
@@ -1272,7 +1270,7 @@ const decodeAgentArtifactRow = (row: AgentArtifactRow): OpyAgentArtifact | null 
     return null;
   }
 
-  let payload: unknown = null;
+  let payload: unknown;
   try {
     payload = JSON.parse(row.payloadJson);
   } catch {
@@ -1517,10 +1515,12 @@ export const getOpyAgentCheckpoint = (checkpointId: string) =>
       .find((row): row is OpyAgentCheckpoint => row !== null);
 
     if (!checkpoint) {
-      return yield* Effect.fail(new NotFoundError({
-        entity: "opy_agent_checkpoint",
-        id: checkpointId,
-      }));
+      return yield* Effect.fail(
+        new NotFoundError({
+          entity: "opy_agent_checkpoint",
+          id: checkpointId,
+        }),
+      );
     }
 
     return checkpoint;

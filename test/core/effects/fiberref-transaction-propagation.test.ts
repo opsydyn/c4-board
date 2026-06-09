@@ -12,8 +12,8 @@
  *     )
  *   )
  */
-import { describe, expect, it } from "vitest";
 import { Effect, FiberRef } from "effect";
+import { describe, expect, it } from "vitest";
 
 describe("FiberRef propagation through uninterruptibleMask + exit + restore", () => {
   it("should see locally-set FiberRef value inside restore(effect)", async () => {
@@ -21,7 +21,7 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
     const observations: number[] = [];
 
     // Simulates the transaction body (what saveDiagram passes to service.transaction)
-    const transactionBody = Effect.gen(function* () {
+    const transactionBody = Effect.gen(function*() {
       const depth = yield* FiberRef.get(depthRef);
       observations.push(depth);
       // Simulate async work (like an invoke call)
@@ -33,7 +33,7 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
     // Simulates withWritePermit → transaction flow
     const program = Effect.locally(depthRef, 1)(
       Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           // Check depth before body (like BEGIN IMMEDIATE point)
           const depthBefore = yield* FiberRef.get(depthRef);
           observations.push(depthBefore);
@@ -49,7 +49,7 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
             return yield* Effect.failCause(exit.cause);
           }
           return exit.value;
-        }),
+        })
       ),
     );
 
@@ -68,7 +68,7 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
     const withWritePermit = <A, E, R>(
       effect: Effect.Effect<A, E, R>,
     ): Effect.Effect<A, E, R> =>
-      Effect.gen(function* () {
+      Effect.gen(function*() {
         const lockDepth = yield* FiberRef.get(depthRef);
         if (lockDepth > 0) {
           log.push("skip-semaphore");
@@ -81,7 +81,7 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
       }) as Effect.Effect<A, E, R>;
 
     // Simulates service.execute() called from inside transaction body
-    const innerExecute = Effect.gen(function* () {
+    const innerExecute = Effect.gen(function*() {
       return yield* withWritePermit(
         Effect.sync(() => {
           log.push("inner-execute-ran");
@@ -92,7 +92,7 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
     // Simulates service.transaction(body)
     const transaction = withWritePermit(
       Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           log.push("begin-immediate");
           const bodyExit = yield* Effect.exit(restore(innerExecute));
           log.push("commit");
@@ -100,7 +100,7 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
             return yield* Effect.failCause(bodyExit.cause);
           }
           return bodyExit.value;
-        }),
+        })
       ),
     );
 
@@ -109,9 +109,9 @@ describe("FiberRef propagation through uninterruptibleMask + exit + restore", ()
     // Expected: outer withWritePermit acquires semaphore,
     // inner withWritePermit skips semaphore (lockDepth=1)
     expect(log).toEqual([
-      "acquire-semaphore",    // outer withWritePermit
+      "acquire-semaphore", // outer withWritePermit
       "begin-immediate",
-      "skip-semaphore",       // inner withWritePermit sees lockDepth=1
+      "skip-semaphore", // inner withWritePermit sees lockDepth=1
       "inner-execute-ran",
       "commit",
     ]);

@@ -1,133 +1,128 @@
 import { style } from "@vanilla-extract/css";
-import { theme } from "../../../styles/theme.css";
 import { componentsLayer } from "../../../styles/layers.css";
+import { theme } from "../../../styles/theme.css";
 
 export const headersContainer = style({
-	"@layer": {
-		[componentsLayer]: {
-			display: "flex",
-			flexDirection: "column",
-			gap: theme.spacing["2"],
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing["2"],
+    },
+  },
 });
 
 export const headerRow = style({
-	"@layer": {
-		[componentsLayer]: {
-			display: "grid",
-			gridTemplateColumns: "auto 1fr 2fr auto",
-			gap: theme.spacing["2"],
-			alignItems: "center",
-		},
-	},
+  "@layer": {
+    [componentsLayer]: {
+      display: "grid",
+      gridTemplateColumns: "auto 1fr 2fr auto",
+      alignItems: "center",
+      gap: theme.spacing["2"],
+    },
+  },
 });
 
 export const headerCheckbox = style({
-	"@layer": {
-		[componentsLayer]: {
-			display: "flex",
-			alignItems: "center",
-			justifyContent: "center",
-			width: "20px",
-			height: "20px",
-			cursor: "pointer",
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      width: "20px",
+      height: "20px",
 
-			// React Aria checkbox styling
-			"::before": {
-				content: '""',
-				display: "block",
-				width: "16px",
-				height: "16px",
-				clipPath: theme.clipPath.sm,
-				border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-				backgroundColor: theme.color.background.input,
-				transition: theme.transition.base,
-			},
+      // React Aria checkbox styling
+      "::before": {
+        display: "block",
+        transition: theme.transition.base,
+        clipPath: theme.clipPath.sm,
+        border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+        backgroundColor: theme.color.background.input,
+        width: "16px",
+        height: "16px",
+        content: "\"\"",
+      },
+      // '[data-selected]::before': {
+      // 	backgroundColor: theme.color.interactive.primary,
+      // 	borderColor: theme.color.interactive.primary,
+      // },
 
-			// '[data-selected]::before': {
-			// 	backgroundColor: theme.color.interactive.primary,
-			// 	borderColor: theme.color.interactive.primary,
-			// },
-
-			// ":hover::before": {
-			// 	borderColor: theme.color.border.primary,
-			// },
-		},
-	},
+      // ":hover::before": {
+      // 	borderColor: theme.color.border.primary,
+      // },
+    },
+  },
 });
 
 export const headerInput = style({
-	"@layer": {
-		[componentsLayer]: {
-			height: "32px",
-			clipPath: theme.clipPath.sm,
-			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-			backgroundColor: theme.color.background.input,
-			color: theme.color.foreground.primary,
-			padding: `0 ${theme.spacing["2"]}`,
-			fontFamily: theme.typography.family.mono,
-			fontSize: theme.typography.size.sm,
-			transition: theme.transition.base,
+  "@layer": {
+    [componentsLayer]: {
+      transition: theme.transition.base,
+      clipPath: theme.clipPath.sm,
+      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      backgroundColor: theme.color.background.input,
+      padding: `0 ${theme.spacing["2"]}`,
+      height: "32px",
+      color: theme.color.foreground.primary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.sm,
 
-			":focus": {
-				outline: "none",
-				borderColor: theme.color.border.focus,
-				boxShadow: theme.effect.glow.sm,
-			},
-		},
-	},
+      ":focus": {
+        outline: "none",
+        borderColor: theme.color.border.focus,
+        boxShadow: theme.effect.glow.sm,
+      },
+    },
+  },
 });
 
-export const headerKeyInput = style({});
-
-export const headerValueInput = style({});
-
 export const headerDeleteButton = style({
-	"@layer": {
-		[componentsLayer]: {
-			display: "flex",
-			alignItems: "center",
-			justifyContent: "center",
-			width: "32px",
-			height: "32px",
-			clipPath: theme.clipPath.sm,
-			border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-			backgroundColor: "transparent",
-			color: theme.color.status.critical,
-			cursor: "pointer",
-			transition: theme.transition.base,
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: theme.transition.base,
+      clipPath: theme.clipPath.sm,
+      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      backgroundColor: "transparent",
+      cursor: "pointer",
+      width: "32px",
+      height: "32px",
+      color: theme.color.status.critical,
 
-			":hover": {
-				backgroundColor: theme.color.status.critical,
-				color: theme.color.background.base,
-				borderColor: theme.color.status.critical,
-			},
-		},
-	},
+      ":hover": {
+        borderColor: theme.color.status.critical,
+        backgroundColor: theme.color.status.critical,
+        color: theme.color.background.base,
+      },
+    },
+  },
 });
 
 export const headerAddButton = style({
-	"@layer": {
-		[componentsLayer]: {
-			display: "flex",
-			alignItems: "center",
-			gap: theme.spacing["2"],
-			padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-			clipPath: theme.clipPath.sm,
-			border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-			backgroundColor: "transparent",
-			color: theme.color.foreground.primary,
-			fontFamily: theme.typography.family.mono,
-			fontSize: theme.typography.size.sm,
-			cursor: "pointer",
-			transition: theme.transition.base,
-			width: "fit-content",
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      alignItems: "center",
+      gap: theme.spacing["2"],
+      transition: theme.transition.base,
+      clipPath: theme.clipPath.sm,
+      border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+      backgroundColor: "transparent",
+      cursor: "pointer",
+      padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+      width: "fit-content",
+      color: theme.color.foreground.primary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.sm,
 
-			":hover": {
-				backgroundColor: theme.color.background.surface,
-				boxShadow: theme.effect.glow.sm,
-			},
-		},
-	},
+      ":hover": {
+        boxShadow: theme.effect.glow.sm,
+        backgroundColor: theme.color.background.surface,
+      },
+    },
+  },
 });

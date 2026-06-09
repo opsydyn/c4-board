@@ -1,6 +1,4 @@
-import {
-  buildRigMutationPlanDiff,
-} from "@/core/effects/agent-plan-diff";
+import { buildRigMutationPlanDiff } from "@/core/effects/agent-plan-diff";
 import type { RigC4BoardSummary, RigC4DiagramProposal } from "@/core/effects/ai-agent.runtime";
 import { buildGroundedProposalDiff } from "@/core/effects/opy-c4-proposals";
 import { describe, expect, it } from "vitest";

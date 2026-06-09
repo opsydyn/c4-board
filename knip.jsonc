@@ -1,0 +1,32 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  // Dependency hardening scope. Export pruning is intentionally deferred until
+  // the public/internal API surface has explicit ownership.
+  "include": ["files", "dependencies", "unlisted"],
+  "ignoreDependencies": [
+    "@astrojs/check",
+    "@tauri-apps/plugin-sql"
+  ],
+  "ignoreFiles": [
+    "http-client-working-example.ts",
+    "src/components/Greet.tsx",
+    "src/core/schema/c4.ts",
+    "src/core/schema/ddd.ts",
+    "src/core/schema/diagram.ts",
+    "src/pages/_index.astro",
+    "src/styles/index.css.ts",
+    "src/styles/themes/dark-nord.css.ts",
+    "src/ui/components/DiagramDetailPanel.css.ts",
+    "src/ui/components/DiagramDetailPanel.tsx",
+    "src/ui/components/EdgeLabelEditor.tsx",
+    "src/ui/components/SearchInput.css.ts",
+    "src/ui/components/SearchInput.tsx",
+    "src/ui/components/postee/PosteeEnvironmentPanel.tsx",
+    "src/ui/components/postee/PosteeWorkspace.original.tsx",
+    "tests/mocks/@vanilla-extract/css.ts",
+    "tests/mocks/vanilla-extract-css-stub.ts",
+    "tests/mocks/vanilla-extract.mock.ts",
+    "tests/setup/bun-test-preload.ts",
+    "tests/utils/index.ts"
+  ]
+}

@@ -120,10 +120,21 @@ const unknownResolver = makeProposalNode("unknown-resolver", "Ownership Resolver
 
 const azureApim = makeNode("azure-apim", "API Management", "externalSystem", "team-platform", "Azure API Management");
 const azureFunction = makeNode("azure-function", "Orders Function", "container", "team-payments", "Azure Functions");
-const azureServiceBus = makeNode("azure-service-bus", "Service Bus", "externalSystem", "team-platform", "Azure Service Bus");
+const azureServiceBus = makeNode(
+  "azure-service-bus",
+  "Service Bus",
+  "externalSystem",
+  "team-platform",
+  "Azure Service Bus",
+);
 const azureCosmos = makeNode("azure-cosmos", "Cosmos DB", "externalSystem", "team-data", "Azure Cosmos DB");
 const azureKeyVault = makeNode("azure-key-vault", "Key Vault", "externalSystem", "team-platform", "Azure Key Vault");
-const azureMonitor = makeProposalNode("azure-monitor", "App Insights", "externalSystem", "Captures traces and metrics.");
+const azureMonitor = makeProposalNode(
+  "azure-monitor",
+  "App Insights",
+  "externalSystem",
+  "Captures traces and metrics.",
+);
 
 export const rigAgentEvalScenarios: ReadonlyArray<RigAgentEvalScenario> = [
   {

@@ -327,7 +327,9 @@ describe("opy-action.runtime", () => {
       },
     });
     expect(resolution.value.confirmationMessage).toContain("Rollback to OPY checkpoint?");
-    expect(resolution.value.confirmationMessage).toContain("This will restore the board to the checkpoint snapshot and save it.");
+    expect(resolution.value.confirmationMessage).toContain(
+      "This will restore the board to the checkpoint snapshot and save it.",
+    );
     expect(resolution.value.approvalPolicy).toMatchObject({
       actionClass: "rollback",
       risk: "high",
@@ -427,7 +429,9 @@ describe("opy-action.runtime", () => {
     expect(resolution.ok).toBe(true);
     if (resolution.ok) {
       expect(resolution.value.descriptor.confirmationMessage).toContain("SIZE POLICY OVERRIDE");
-      expect(resolution.value.descriptor.confirmationMessage).toContain("Batch size 2 exceeds the max action budget 1.");
+      expect(resolution.value.descriptor.confirmationMessage).toContain(
+        "Batch size 2 exceeds the max action budget 1.",
+      );
     }
   });
 

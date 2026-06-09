@@ -5,8 +5,8 @@
  * If it does NOT, two concurrent runPromise calls will interleave
  * and the log will show overlapping critical sections.
  */
-import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
+import { describe, expect, it } from "vitest";
 
 describe("Effect.Semaphore cross-fiber isolation", () => {
   it("should serialize critical sections across separate Effect.runPromise calls", async () => {
@@ -15,7 +15,7 @@ describe("Effect.Semaphore cross-fiber isolation", () => {
 
     const criticalSection = (id: string) =>
       semaphore.withPermits(1)(
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           log.push(`${id}:enter`);
           // Yield to event loop to allow interleaving if semaphore doesn't work
           yield* Effect.promise(() => new Promise((r) => setTimeout(r, 50)));
@@ -24,7 +24,7 @@ describe("Effect.Semaphore cross-fiber isolation", () => {
       );
 
     // Launch two concurrent Effect.runPromise calls (separate fibers)
-    const [, ] = await Promise.all([
+    await Promise.all([
       Effect.runPromise(criticalSection("A")),
       Effect.runPromise(criticalSection("B")),
     ]);

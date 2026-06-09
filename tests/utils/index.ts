@@ -7,9 +7,9 @@
  */
 
 export function warnUnconfiguredTestingLibrary(): void {
-	if (process.env.NODE_ENV !== "test") return;
-	// eslint-disable-next-line no-console
-	console.warn(
-		"tests/utils still needs render helpers. Install @testing-library/react and add utilities here.",
-	);
+  if (process.env.NODE_ENV !== "test") return;
+
+  console.warn(
+    "tests/utils still needs render helpers. Install @testing-library/react and add utilities here.",
+  );
 }

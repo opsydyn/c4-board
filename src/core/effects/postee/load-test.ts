@@ -1,199 +1,193 @@
-import { Effect } from "effect";
 import { invoke } from "@tauri-apps/api/core";
-import {
-	listen,
-	type EventCallback,
-	type UnlistenFn,
-} from "@tauri-apps/api/event";
+import { type EventCallback, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { Effect } from "effect";
 
 const hasTauriInjection = (): boolean => {
-	if (typeof window === "undefined") {
-		return false;
-	}
+  if (typeof window === "undefined") {
+    return false;
+  }
 
-	const anyWindow = window as unknown as Record<string, unknown>;
-	const userAgentLooksLikeTauri =
-		typeof navigator !== "undefined" &&
-		/tauri/i.test(navigator.userAgent ?? "");
+  const anyWindow = window as unknown as Record<string, unknown>;
+  const userAgentLooksLikeTauri = typeof navigator !== "undefined"
+    && /tauri/i.test(navigator.userAgent ?? "");
 
-	return (
-		typeof anyWindow.__TAURI_INTERNALS__ !== "undefined" ||
-		typeof anyWindow.__TAURI_IPC__ === "function" ||
-		typeof anyWindow.__TAURI__ !== "undefined" ||
-		userAgentLooksLikeTauri
-	);
+  return (
+    typeof anyWindow.__TAURI_INTERNALS__ !== "undefined"
+    || typeof anyWindow.__TAURI_IPC__ === "function"
+    || typeof anyWindow.__TAURI__ !== "undefined"
+    || userAgentLooksLikeTauri
+  );
 };
 
 let tauriDetectionPromise: Promise<boolean> | null = null;
 
 export const ensureTauriRuntime = async (): Promise<boolean> => {
-	if (typeof window === "undefined") {
-		return false;
-	}
+  if (typeof window === "undefined") {
+    return false;
+  }
 
-	if (hasTauriInjection()) {
-		return true;
-	}
+  if (hasTauriInjection()) {
+    return true;
+  }
 
-	if (!tauriDetectionPromise) {
-		tauriDetectionPromise = new Promise<boolean>((resolve) => {
-			if (hasTauriInjection()) {
-				resolve(true);
-				return;
-			}
+  if (!tauriDetectionPromise) {
+    tauriDetectionPromise = new Promise<boolean>((resolve) => {
+      if (hasTauriInjection()) {
+        resolve(true);
+        return;
+      }
 
-			const deadlineMs = 5000;
-			const pollIntervalMs = 100;
-			let elapsed = 0;
+      const deadlineMs = 5000;
+      const pollIntervalMs = 100;
+      let elapsed = 0;
 
-			const resolveAndCleanup = (value: boolean) => {
-				window.removeEventListener("tauri://ready", readyHandler);
-				window.clearInterval(pollHandle);
-				resolve(value);
-			};
+      const resolveAndCleanup = (value: boolean) => {
+        window.removeEventListener("tauri://ready", readyHandler);
+        window.clearInterval(pollHandle);
+        resolve(value);
+      };
 
-			const readyHandler = () => resolveAndCleanup(true);
+      const readyHandler = () => resolveAndCleanup(true);
 
-			const pollHandle = window.setInterval(() => {
-				if (hasTauriInjection()) {
-					resolveAndCleanup(true);
-					return;
-				}
+      const pollHandle = window.setInterval(() => {
+        if (hasTauriInjection()) {
+          resolveAndCleanup(true);
+          return;
+        }
 
-				elapsed += pollIntervalMs;
-				if (elapsed >= deadlineMs) {
-					resolveAndCleanup(hasTauriInjection());
-				}
-			}, pollIntervalMs);
+        elapsed += pollIntervalMs;
+        if (elapsed >= deadlineMs) {
+          resolveAndCleanup(hasTauriInjection());
+        }
+      }, pollIntervalMs);
 
-			window.addEventListener("tauri://ready", readyHandler, {
-				once: true,
-			});
-		});
-	}
+      window.addEventListener("tauri://ready", readyHandler, {
+        once: true,
+      });
+    });
+  }
 
-	return tauriDetectionPromise.catch(() => false);
+  return tauriDetectionPromise.catch(() => false);
 };
 
 export const isTauriRuntime = (): boolean => hasTauriInjection();
 
 const requireTauriRuntime = async (): Promise<void> => {
-	const ready = await ensureTauriRuntime();
-	if (!ready) {
-		throw new Error("Load testing requires the desktop runtime.");
-	}
+  const ready = await ensureTauriRuntime();
+  if (!ready) {
+    throw new Error("Load testing requires the desktop runtime.");
+  }
 };
 
 export interface LoadTestConfigInput {
-	url: string;
-	method?: string;
-	headers?: Array<{ key: string; value: string }>;
-	body?: string | null;
-	durationSecs?: number;
-	concurrency?: number;
-	rpsLimit?: number | null;
-	timeoutMs?: number;
+  url: string;
+  method?: string;
+  headers?: Array<{ key: string; value: string }>;
+  body?: string | null;
+  durationSecs?: number;
+  concurrency?: number;
+  rpsLimit?: number | null;
+  timeoutMs?: number;
 }
 
 export interface LoadTestProgress {
-	elapsed_ms: number;
-	requests_sent: number;
-	requests_success: number;
-	requests_failed: number;
-	rps: number;
-	p50_latency_ms: number;
-	p95_latency_ms: number;
-	p99_latency_ms: number;
-	avg_latency_ms: number;
-	min_latency_ms: number;
-	max_latency_ms: number;
-	bytes_received: number;
-	error_count: number;
-	recent_errors: string[];
+  elapsed_ms: number;
+  requests_sent: number;
+  requests_success: number;
+  requests_failed: number;
+  rps: number;
+  p50_latency_ms: number;
+  p95_latency_ms: number;
+  p99_latency_ms: number;
+  avg_latency_ms: number;
+  min_latency_ms: number;
+  max_latency_ms: number;
+  bytes_received: number;
+  error_count: number;
+  recent_errors: string[];
 }
 
 export type LoadTestEventCallback = EventCallback<LoadTestProgress>;
 export type LoadTestErrorCallback = EventCallback<string>;
 
 const toBackendConfig = (input: LoadTestConfigInput) => ({
-	url: input.url,
-	method: input.method ?? "GET",
-	headers:
-		input.headers?.map(({ key, value }) => [key, value] as [string, string]) ??
-		[],
-	body: input.body ?? null,
-	duration_secs: input.durationSecs ?? 10,
-	concurrency: input.concurrency ?? 10,
-	rps_limit: input.rpsLimit ?? null,
-	timeout_ms: input.timeoutMs ?? 30_000,
+  url: input.url,
+  method: input.method ?? "GET",
+  headers: input.headers?.map(({ key, value }) => [key, value] as [string, string])
+    ?? [],
+  body: input.body ?? null,
+  duration_secs: input.durationSecs ?? 10,
+  concurrency: input.concurrency ?? 10,
+  rps_limit: input.rpsLimit ?? null,
+  timeout_ms: input.timeoutMs ?? 30_000,
 });
 
 export const startLoadTest = (
-	config: LoadTestConfigInput,
+  config: LoadTestConfigInput,
 ): Effect.Effect<void, Error> =>
-	Effect.tryPromise({
-		try: async () => {
-			await requireTauriRuntime();
+  Effect.tryPromise({
+    try: async () => {
+      await requireTauriRuntime();
 
-			await invoke("start_load_test", {
-				config: toBackendConfig(config),
-			});
-		},
-		catch: (cause) =>
-			new Error(
-				cause instanceof Error
-					? cause.message
-					: "Failed to start load test",
-			),
-	});
+      await invoke("start_load_test", {
+        config: toBackendConfig(config),
+      });
+    },
+    catch: (cause) =>
+      new Error(
+        cause instanceof Error
+          ? cause.message
+          : "Failed to start load test",
+      ),
+  });
 
 export const listenLoadTestProgress = (
-	callback: LoadTestEventCallback,
+  callback: LoadTestEventCallback,
 ): Effect.Effect<UnlistenFn, Error> =>
-	Effect.tryPromise({
-		try: async () => {
-			await requireTauriRuntime();
+  Effect.tryPromise({
+    try: async () => {
+      await requireTauriRuntime();
 
-			return await listen("load-test-progress", callback);
-		},
-		catch: (cause) =>
-			new Error(
-				cause instanceof Error
-					? cause.message
-					: "Failed to subscribe to load test progress",
-			),
-	});
+      return await listen("load-test-progress", callback);
+    },
+    catch: (cause) =>
+      new Error(
+        cause instanceof Error
+          ? cause.message
+          : "Failed to subscribe to load test progress",
+      ),
+  });
 
 export const listenLoadTestComplete = (
-	callback: LoadTestEventCallback,
+  callback: LoadTestEventCallback,
 ): Effect.Effect<UnlistenFn, Error> =>
-	Effect.tryPromise({
-		try: async () => {
-			await requireTauriRuntime();
+  Effect.tryPromise({
+    try: async () => {
+      await requireTauriRuntime();
 
-			return await listen("load-test-complete", callback);
-		},
-		catch: (cause) =>
-			new Error(
-				cause instanceof Error
-					? cause.message
-					: "Failed to subscribe to load test completion",
-			),
-	});
+      return await listen("load-test-complete", callback);
+    },
+    catch: (cause) =>
+      new Error(
+        cause instanceof Error
+          ? cause.message
+          : "Failed to subscribe to load test completion",
+      ),
+  });
 
 export const listenLoadTestError = (
-	callback: LoadTestErrorCallback,
+  callback: LoadTestErrorCallback,
 ): Effect.Effect<UnlistenFn, Error> =>
-	Effect.tryPromise({
-		try: async () => {
-			await requireTauriRuntime();
+  Effect.tryPromise({
+    try: async () => {
+      await requireTauriRuntime();
 
-			return await listen("load-test-error", callback);
-		},
-		catch: (cause) =>
-			new Error(
-				cause instanceof Error
-					? cause.message
-					: "Failed to subscribe to load test errors",
-			),
-	});
+      return await listen("load-test-error", callback);
+    },
+    catch: (cause) =>
+      new Error(
+        cause instanceof Error
+          ? cause.message
+          : "Failed to subscribe to load test errors",
+      ),
+  });

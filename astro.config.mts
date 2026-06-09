@@ -1,9 +1,23 @@
 import react from "@astrojs/react";
-// import playformCompress from "@playform/compress";
-// import playformInline from "@playform/inline";
 import { vanillaExtractPlugin } from "@vanilla-extract/vite-plugin";
 import { defineConfig } from "astro/config";
 import { viteStaticCopy } from "vite-plugin-static-copy";
+
+type AstroViteConfig = NonNullable<Parameters<typeof defineConfig>[0]["vite"]>;
+type AstroVitePlugins = Exclude<AstroViteConfig["plugins"], undefined>;
+
+const astroVitePlugins = [
+  // Astro bundles its own Vite types; these plugins are runtime-compatible.
+  vanillaExtractPlugin(),
+  viteStaticCopy({
+    targets: [
+      {
+        src: "node_modules/monaco-editor/min/vs",
+        dest: "monaco",
+      },
+    ],
+  }),
+] as unknown as AstroVitePlugins;
 
 // https://astro.build/config
 export default defineConfig({
@@ -39,20 +53,7 @@ export default defineConfig({
         "react-rnd",
       ],
     },
-    plugins: [
-      // Astro bundles its own Vite types; these plugins are runtime-compatible.
-      // @ts-expect-error Plugin type mismatch between Astro's bundled Vite and workspace Vite.
-      vanillaExtractPlugin(),
-      // @ts-expect-error Plugin type mismatch between Astro's bundled Vite and workspace Vite.
-      viteStaticCopy({
-        targets: [
-          {
-            src: "node_modules/monaco-editor/min/vs",
-            dest: "monaco",
-          },
-        ],
-      }),
-    ],
+    plugins: astroVitePlugins,
     resolve: {
       alias: {
         "@/ui": "/src/ui",
@@ -67,7 +68,5 @@ export default defineConfig({
   integrations: [
     // React for all components
     react(),
-    // playformInline(),
-    // playformCompress(),
   ],
 });

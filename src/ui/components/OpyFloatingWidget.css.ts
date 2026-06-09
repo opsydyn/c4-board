@@ -17,15 +17,15 @@ export const widgetLauncher = style({
   color: theme.color.foreground.primary,
 
   selectors: {
-    '&[data-chrome-tone="ready"]': {
+    "&[data-chrome-tone=\"ready\"]": {
       borderColor: theme.color.status.ready,
       boxShadow: `0 0 18px color-mix(in srgb, ${theme.color.status.ready} 24%, transparent)`,
     },
-    '&[data-chrome-tone="caution"]': {
+    "&[data-chrome-tone=\"caution\"]": {
       borderColor: theme.color.status.caution,
       boxShadow: `0 0 18px color-mix(in srgb, ${theme.color.status.caution} 24%, transparent)`,
     },
-    '&[data-chrome-tone="critical"]': {
+    "&[data-chrome-tone=\"critical\"]": {
       borderColor: theme.color.status.critical,
       boxShadow: `0 0 20px color-mix(in srgb, ${theme.color.status.critical} 28%, transparent)`,
     },
@@ -64,7 +64,7 @@ export const widgetChrome = style({
   height: "100%",
 });
 
-export const widgetInteractionLock = style({});
+export const widgetInteractionLock = "opy-widget-interaction-lock";
 
 globalStyle(`html.${widgetInteractionLock}, body.${widgetInteractionLock}`, {
   userSelect: "none",
@@ -99,17 +99,20 @@ export const widgetOrbLauncher = style({
   color: theme.color.foreground.primary,
 
   selectors: {
-    '&[data-chrome-tone="ready"]': {
+    "&[data-chrome-tone=\"ready\"]": {
       borderColor: theme.color.status.ready,
-      boxShadow: `${theme.effect.glow.lg}, 0 16px 36px color-mix(in srgb, ${theme.color.status.ready} 20%, transparent)`,
+      boxShadow:
+        `${theme.effect.glow.lg}, 0 16px 36px color-mix(in srgb, ${theme.color.status.ready} 20%, transparent)`,
     },
-    '&[data-chrome-tone="caution"]': {
+    "&[data-chrome-tone=\"caution\"]": {
       borderColor: theme.color.status.caution,
-      boxShadow: `${theme.effect.glow.lg}, 0 16px 36px color-mix(in srgb, ${theme.color.status.caution} 24%, transparent)`,
+      boxShadow:
+        `${theme.effect.glow.lg}, 0 16px 36px color-mix(in srgb, ${theme.color.status.caution} 24%, transparent)`,
     },
-    '&[data-chrome-tone="critical"]': {
+    "&[data-chrome-tone=\"critical\"]": {
       borderColor: theme.color.status.critical,
-      boxShadow: `${theme.effect.glow.lg}, 0 16px 40px color-mix(in srgb, ${theme.color.status.critical} 28%, transparent)`,
+      boxShadow:
+        `${theme.effect.glow.lg}, 0 16px 40px color-mix(in srgb, ${theme.color.status.critical} 28%, transparent)`,
     },
     "&:hover": {
       transform: "scale(1.06)",
@@ -129,17 +132,20 @@ export const widgetFrame = style({
   height: "100%",
   overflow: "hidden",
   selectors: {
-    '&[data-chrome-tone="ready"]': {
+    "&[data-chrome-tone=\"ready\"]": {
       borderColor: theme.color.status.ready,
-      boxShadow: `${theme.effect.glow.lg}, 0 18px 60px color-mix(in srgb, ${theme.color.status.ready} 14%, transparent)`,
+      boxShadow:
+        `${theme.effect.glow.lg}, 0 18px 60px color-mix(in srgb, ${theme.color.status.ready} 14%, transparent)`,
     },
-    '&[data-chrome-tone="caution"]': {
+    "&[data-chrome-tone=\"caution\"]": {
       borderColor: theme.color.status.caution,
-      boxShadow: `${theme.effect.glow.lg}, 0 18px 60px color-mix(in srgb, ${theme.color.status.caution} 16%, transparent)`,
+      boxShadow:
+        `${theme.effect.glow.lg}, 0 18px 60px color-mix(in srgb, ${theme.color.status.caution} 16%, transparent)`,
     },
-    '&[data-chrome-tone="critical"]': {
+    "&[data-chrome-tone=\"critical\"]": {
       borderColor: theme.color.status.critical,
-      boxShadow: `${theme.effect.glow.lg}, 0 18px 64px color-mix(in srgb, ${theme.color.status.critical} 18%, transparent)`,
+      boxShadow:
+        `${theme.effect.glow.lg}, 0 18px 64px color-mix(in srgb, ${theme.color.status.critical} 18%, transparent)`,
     },
   },
 });
@@ -152,22 +158,22 @@ export const widgetFrameMission = style({
 
 export const widgetHandle = style({
   display: "flex",
+  flexWrap: "wrap",
   alignItems: "flex-start",
   justifyContent: "space-between",
-  flexWrap: "wrap",
   gap: theme.spacing["3"],
   borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   background: "linear-gradient(180deg, rgba(10, 18, 14, 0.98) 0%, rgba(7, 13, 10, 0.94) 100%)",
   cursor: "move",
   padding: `${theme.spacing["4"]} ${theme.spacing["5"]} ${theme.spacing["3"]}`,
   selectors: {
-    '&[data-chrome-tone="ready"]': {
+    "&[data-chrome-tone=\"ready\"]": {
       borderBottomColor: theme.color.status.ready,
     },
-    '&[data-chrome-tone="caution"]': {
+    "&[data-chrome-tone=\"caution\"]": {
       borderBottomColor: theme.color.status.caution,
     },
-    '&[data-chrome-tone="critical"]': {
+    "&[data-chrome-tone=\"critical\"]": {
       borderBottomColor: theme.color.status.critical,
     },
   },
@@ -193,11 +199,11 @@ export const widgetTitleBlock = style({
 export const widgetEyebrow = style({
   margin: 0,
   textTransform: theme.typography.textTransform.uppercase,
+  lineHeight: theme.typography.lineHeight.normal,
   letterSpacing: theme.typography.letterSpacing.wide,
   color: theme.color.status.selected,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
-  lineHeight: theme.typography.lineHeight.normal,
 });
 
 export const widgetEyebrowMission = style({
@@ -221,15 +227,15 @@ export const widgetMeta = style({
 
 export const widgetTelemetry = style({
   display: "flex",
+  flex: "1 1 16rem",
   flexDirection: "column",
   alignItems: "start",
   justifyContent: "flex-end",
   gap: theme.spacing["1"],
   minWidth: "13.5rem",
   maxWidth: "19rem",
-  flex: "1 1 16rem",
   selectors: {
-    '&[data-density="collapsed"]': {
+    "&[data-density=\"collapsed\"]": {
       minWidth: "11rem",
       maxWidth: "100%",
     },
@@ -289,16 +295,16 @@ export const widgetTelemetryPill = style({
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "rgba(11, 18, 15, 0.84)",
   padding: `${theme.spacing["1"]} ${theme.spacing["1"]}`,
+  minWidth: 0,
+  overflow: "hidden",
   textTransform: theme.typography.textTransform.uppercase,
+  textOverflow: "ellipsis",
+  lineHeight: theme.typography.lineHeight.tight,
   letterSpacing: theme.typography.letterSpacing.wide,
+  whiteSpace: "nowrap",
   color: theme.color.foreground.secondary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.tight,
-  minWidth: 0,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
 });
 
 export const widgetSignalPill = style([
@@ -306,30 +312,30 @@ export const widgetSignalPill = style([
   {
     appearance: "none",
     justifyContent: "center",
+    transition: theme.transition.base,
     cursor: "pointer",
     color: theme.color.foreground.primary,
-    transition: theme.transition.base,
     selectors: {
-      '&[data-tone="neutral"]': {
+      "&[data-tone=\"neutral\"]": {
         borderColor: theme.color.border.secondary,
         backgroundColor: "rgba(10, 16, 13, 0.8)",
       },
-      '&[data-tone="ready"]': {
+      "&[data-tone=\"ready\"]": {
         borderColor: theme.color.status.ready,
         backgroundColor: `color-mix(in srgb, ${theme.color.status.ready} 14%, rgba(10, 16, 13, 0.86))`,
         color: theme.color.status.ready,
       },
-      '&[data-tone="caution"]': {
+      "&[data-tone=\"caution\"]": {
         borderColor: theme.color.status.caution,
         backgroundColor: `color-mix(in srgb, ${theme.color.status.caution} 14%, rgba(10, 16, 13, 0.86))`,
         color: theme.color.status.caution,
       },
-      '&[data-tone="critical"]': {
+      "&[data-tone=\"critical\"]": {
         borderColor: theme.color.status.critical,
         backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} 14%, rgba(10, 16, 13, 0.86))`,
         color: theme.color.status.critical,
       },
-      '&[data-fresh="true"]': {
+      "&[data-fresh=\"true\"]": {
         boxShadow: theme.effect.glow.sm,
       },
       "&:hover": {
@@ -355,15 +361,15 @@ export const widgetSignalPreview = style({
   width: "100%",
   minWidth: 0,
   selectors: {
-    '&[data-tone="ready"]': {
+    "&[data-tone=\"ready\"]": {
       borderColor: theme.color.status.ready,
       backgroundColor: `color-mix(in srgb, ${theme.color.status.ready} 9%, rgba(8, 13, 11, 0.84))`,
     },
-    '&[data-tone="caution"]': {
+    "&[data-tone=\"caution\"]": {
       borderColor: theme.color.status.caution,
       backgroundColor: `color-mix(in srgb, ${theme.color.status.caution} 10%, rgba(8, 13, 11, 0.84))`,
     },
-    '&[data-tone="critical"]': {
+    "&[data-tone=\"critical\"]": {
       borderColor: theme.color.status.critical,
       backgroundColor: `color-mix(in srgb, ${theme.color.status.critical} 11%, rgba(8, 13, 11, 0.84))`,
     },
@@ -385,26 +391,26 @@ export const widgetSignalPreviewHeader = style({
 
 export const widgetSignalPreviewActions = style({
   display: "inline-flex",
+  flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "flex-end",
   gap: theme.spacing["1"],
-  flexWrap: "wrap",
 });
 
 export const widgetSignalPreviewActionButton = style({
   appearance: "none",
+  transition: theme.transition.base,
+  clipPath: theme.clipPath.sm,
   border: `${theme.border.width.thin} solid ${theme.color.status.selected}`,
   backgroundColor: "rgba(8, 14, 11, 0.92)",
-  color: theme.color.status.selected,
   cursor: "pointer",
-  clipPath: theme.clipPath.sm,
   padding: `${theme.spacing["0"]} ${theme.spacing["1"]}`,
   textTransform: theme.typography.textTransform.uppercase,
+  lineHeight: theme.typography.lineHeight.tight,
   letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.status.selected,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.tight,
-  transition: theme.transition.base,
 
   selectors: {
     "&:hover": {
@@ -420,11 +426,11 @@ export const widgetSignalPreviewActionButton = style({
 
 export const widgetSignalPreviewDetail = style({
   margin: 0,
+  lineHeight: theme.typography.lineHeight.normal,
+  letterSpacing: theme.typography.letterSpacing.normal,
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  lineHeight: theme.typography.lineHeight.normal,
-  letterSpacing: theme.typography.letterSpacing.normal,
 });
 
 export const widgetTelemetryPillSecondary = style([
@@ -439,8 +445,8 @@ export const widgetTelemetryPillSecondary = style([
 export const widgetTelemetryPillSecondarySummary = style([
   widgetTelemetryPillSecondary,
   {
-    width: "100%",
     justifyContent: "center",
+    width: "100%",
   },
 ]);
 

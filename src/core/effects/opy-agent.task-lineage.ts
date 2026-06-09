@@ -72,8 +72,7 @@ export interface OpyAgentTaskLineageCollectionSummary {
   readonly reuseEfficiencyRatio: number | null;
 }
 
-const normalizeLineageSegment = (value: string): string =>
-  value.trim().toLowerCase().replace(/\s+/g, " ");
+const normalizeLineageSegment = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
 
 const sortByRecencyDesc = <T extends Pick<OpyAgentTaskLineageShape, "updatedAt" | "createdAt">>(
   left: T,
@@ -211,7 +210,7 @@ export const buildOpyAgentTaskLineage = <T extends OpyAgentTaskLineageShape>(
           candidate.createdAt === task.createdAt
           && candidate.updatedAt <= task.updatedAt
         )
-      ),
+      )
     )
     .sort(sortByTimelineAsc);
 
@@ -325,7 +324,10 @@ export const summarizeOpyAgentTaskLineage = <
     inheritedSegmentCount: Math.max(0, lineageTasks.length - 1),
     sessionCount: sessionIds.size,
     sessionIds: [...sessionIds],
-    crossSessionSegmentCount: Math.max(0, lineageTasks.filter((lineageTask) => lineageTask.sessionId !== task.sessionId).length),
+    crossSessionSegmentCount: Math.max(
+      0,
+      lineageTasks.filter((lineageTask) => lineageTask.sessionId !== task.sessionId).length,
+    ),
     completedStepNames,
     artifactKinds,
     resumeOutcomeRollup,

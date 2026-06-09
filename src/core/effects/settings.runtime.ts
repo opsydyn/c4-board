@@ -28,8 +28,7 @@ const OPY_WIDGET_PRESENCE_ALIASES = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const clampNumber = (value: number, min: number, max: number): number =>
-  Math.min(Math.max(value, min), max);
+const clampNumber = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const normalizeEnumValue = <TValue extends string>(
   value: unknown,

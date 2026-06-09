@@ -11,23 +11,23 @@
  * Do not wrap in additional elements - TooltipTrigger works with any focusable child.
  */
 
-import { TooltipTrigger, Tooltip as AriaTooltip } from "react-aria-components";
 import type { ReactNode } from "react";
+import { Tooltip as AriaTooltip, TooltipTrigger } from "react-aria-components";
 import * as styles from "./Tooltip.css";
 
 export interface TooltipProps {
-	content: string;
-	children: ReactNode;
-	delay?: number;
+  content: string;
+  children: ReactNode;
+  delay?: number;
 }
 
 export function Tooltip({ content, children, delay = 500 }: TooltipProps) {
-	return (
-		<TooltipTrigger delay={delay}>
-			{children}
-			<AriaTooltip className={styles.tooltipContent}>
-				{content}
-			</AriaTooltip>
-		</TooltipTrigger>
-	);
+  return (
+    <TooltipTrigger delay={delay}>
+      {children}
+      <AriaTooltip className={styles.tooltipContent}>
+        {content}
+      </AriaTooltip>
+    </TooltipTrigger>
+  );
 }

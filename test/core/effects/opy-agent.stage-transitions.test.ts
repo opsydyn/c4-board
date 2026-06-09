@@ -1,9 +1,9 @@
+import type { OpyAgentLifecycleRequest } from "@/core/effects/opy-agent.lifecycle";
 import {
   createOpyStageTransitionPayload,
   deriveOpyStageTransitionMilestone,
   formatOpyStageTransitionSummary,
 } from "@/core/effects/opy-agent.stage-transitions";
-import type { OpyAgentLifecycleRequest } from "@/core/effects/opy-agent.lifecycle";
 import { describe, expect, it } from "vitest";
 
 const createRequest = (

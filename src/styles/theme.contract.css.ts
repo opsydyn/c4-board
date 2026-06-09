@@ -12,286 +12,286 @@ import { createThemeContract } from "@vanilla-extract/css";
  * All themes (dark, light, custom) must implement this structure
  */
 export const themeContract = createThemeContract({
-	color: {
-		// Background colors - layered from base to surface
-		background: {
-			base: null,        // Canvas background (deepest layer)
-			surface: null,     // Elevated surface (cards, panels)
-			raised: null,      // Hover/focus states
-			input: null,       // Input field backgrounds
-			inputFocus: null,  // Input focus state
-			hover: null,       // Hover background state
-			selected: null,    // Selected item background
-		},
+  color: {
+    // Background colors - layered from base to surface
+    background: {
+      base: null, // Canvas background (deepest layer)
+      surface: null, // Elevated surface (cards, panels)
+      raised: null, // Hover/focus states
+      input: null, // Input field backgrounds
+      inputFocus: null, // Input focus state
+      hover: null, // Hover background state
+      selected: null, // Selected item background
+    },
 
-		// Foreground colors - text hierarchy
-		foreground: {
-			primary: null,     // Headings, important text (highest contrast)
-			secondary: null,   // Body text, descriptions
-			tertiary: null,    // Muted text, placeholders
-			disabled: null,    // Disabled state
-		},
+    // Foreground colors - text hierarchy
+    foreground: {
+      primary: null, // Headings, important text (highest contrast)
+      secondary: null, // Body text, descriptions
+      tertiary: null, // Muted text, placeholders
+      disabled: null, // Disabled state
+    },
 
-		// Interactive colors - user actions
-		interactive: {
-			primary: null,     // Primary actions, links
-			hover: null,       // Hover state
-			active: null,      // Active/pressed state
-			focus: null,       // Focus ring
-		},
+    // Interactive colors - user actions
+    interactive: {
+      primary: null, // Primary actions, links
+      hover: null, // Hover state
+      active: null, // Active/pressed state
+      focus: null, // Focus ring
+    },
 
-		// Semantic colors - element types with meaning
-		semantic: {
-			// C4 Architecture elements
-			person: null,      // C4 Person element (cyan)
-			system: null,      // C4 System element (green)
-			external: null,    // C4 External system (amber)
-			container: null,   // C4 Container element (blue)
-			component: null,   // C4 Component element (purple)
-			relationship: null, // Connections/edges
+    // Semantic colors - element types with meaning
+    semantic: {
+      // C4 Architecture elements
+      person: null, // C4 Person element (cyan)
+      system: null, // C4 System element (green)
+      external: null, // C4 External system (amber)
+      container: null, // C4 Container element (blue)
+      component: null, // C4 Component element (purple)
+      relationship: null, // Connections/edges
 
-			// DDD Strategic elements
-			boundedContext: null,     // DDD Bounded Context (indigo)
-			aggregate: null,          // DDD Aggregate (emerald)
-			domainEvent: null,        // DDD Domain Event (amber)
+      // DDD Strategic elements
+      boundedContext: null, // DDD Bounded Context (indigo)
+      aggregate: null, // DDD Aggregate (emerald)
+      domainEvent: null, // DDD Domain Event (amber)
 
-			// DDD Tactical elements
-			entity: null,             // DDD Entity (blue)
-			valueObject: null,        // DDD Value Object (cyan)
-			domainService: null,      // DDD Domain Service (pink)
-			repository: null,         // DDD Repository (slate)
-			factory: null,            // DDD Factory (orange)
+      // DDD Tactical elements
+      entity: null, // DDD Entity (blue)
+      valueObject: null, // DDD Value Object (cyan)
+      domainService: null, // DDD Domain Service (pink)
+      repository: null, // DDD Repository (slate)
+      factory: null, // DDD Factory (orange)
 
-			// DDD Application elements
-			command: null,            // DDD Command (red)
-			query: null,              // DDD Query (teal)
-			applicationService: null, // DDD Application Service (violet)
+      // DDD Application elements
+      command: null, // DDD Command (red)
+      query: null, // DDD Query (teal)
+      applicationService: null, // DDD Application Service (violet)
 
-			// DDD Infrastructure elements
-			integrationEvent: null,   // DDD Integration Event (fuchsia)
-			acl: null,                // DDD Anti-Corruption Layer (lime)
-			saga: null,               // DDD Saga (rose)
-		},
+      // DDD Infrastructure elements
+      integrationEvent: null, // DDD Integration Event (fuchsia)
+      acl: null, // DDD Anti-Corruption Layer (lime)
+      saga: null, // DDD Saga (rose)
+    },
 
-		// Operational status colors - military/engineering
-		status: {
-			ready: null,       // Green - normal/operational
-			caution: null,     // Amber - warning/unknown
-			critical: null,    // Red - error/critical
-			selected: null,    // Cyan - focus/selected
-		},
+    // Operational status colors - military/engineering
+    status: {
+      ready: null, // Green - normal/operational
+      caution: null, // Amber - warning/unknown
+      critical: null, // Red - error/critical
+      selected: null, // Cyan - focus/selected
+    },
 
-		// Grid and structural colors
-		grid: null,            // Grid line color
+    // Grid and structural colors
+    grid: null, // Grid line color
 
-		// Border colors - structural hierarchy
-		border: {
-			primary: null,     // Main borders
-			secondary: null,   // Subtle borders
-			focus: null,       // Focus indicator
+    // Border colors - structural hierarchy
+    border: {
+      primary: null, // Main borders
+      secondary: null, // Subtle borders
+      focus: null, // Focus indicator
 
-			// C4 node borders
-			person: null,      // Person node border
-			system: null,      // System node border
-			external: null,    // External system border
-			container: null,   // Container node border
-			component: null,   // Component node border
+      // C4 node borders
+      person: null, // Person node border
+      system: null, // System node border
+      external: null, // External system border
+      container: null, // Container node border
+      component: null, // Component node border
 
-			// DDD Strategic borders
-			boundedContext: null,
-			aggregate: null,
-			domainEvent: null,
+      // DDD Strategic borders
+      boundedContext: null,
+      aggregate: null,
+      domainEvent: null,
 
-			// DDD Tactical borders
-			entity: null,
-			valueObject: null,
-			domainService: null,
-			repository: null,
-			factory: null,
+      // DDD Tactical borders
+      entity: null,
+      valueObject: null,
+      domainService: null,
+      repository: null,
+      factory: null,
 
-			// DDD Application borders
-			command: null,
-			query: null,
-			applicationService: null,
+      // DDD Application borders
+      command: null,
+      query: null,
+      applicationService: null,
 
-			// DDD Infrastructure borders
-			integrationEvent: null,
-			acl: null,
-			saga: null,
-		},
+      // DDD Infrastructure borders
+      integrationEvent: null,
+      acl: null,
+      saga: null,
+    },
 
-		// Surface tints - subtle background colors
-		surface: {
-			// C4 node backgrounds
-			person: null,      // Person node background
-			system: null,      // System node background
-			external: null,    // External system background
-			container: null,   // Container node background
-			component: null,   // Component node background
-			containerSelected: null, // Container when selected
+    // Surface tints - subtle background colors
+    surface: {
+      // C4 node backgrounds
+      person: null, // Person node background
+      system: null, // System node background
+      external: null, // External system background
+      container: null, // Container node background
+      component: null, // Component node background
+      containerSelected: null, // Container when selected
 
-			// DDD Strategic backgrounds
-			boundedContext: null,
-			aggregate: null,
-			domainEvent: null,
+      // DDD Strategic backgrounds
+      boundedContext: null,
+      aggregate: null,
+      domainEvent: null,
 
-			// DDD Tactical backgrounds
-			entity: null,
-			valueObject: null,
-			domainService: null,
-			repository: null,
-			factory: null,
+      // DDD Tactical backgrounds
+      entity: null,
+      valueObject: null,
+      domainService: null,
+      repository: null,
+      factory: null,
 
-			// DDD Application backgrounds
-			command: null,
-			query: null,
-			applicationService: null,
+      // DDD Application backgrounds
+      command: null,
+      query: null,
+      applicationService: null,
 
-			// DDD Infrastructure backgrounds
-			integrationEvent: null,
-			acl: null,
-			saga: null,
+      // DDD Infrastructure backgrounds
+      integrationEvent: null,
+      acl: null,
+      saga: null,
 
-			// UI overlays - for dialogs, popovers, elevated panels
-			overlay: null,     // Overlay backgrounds (dropdowns, modals)
-			elevated: null,    // Elevated surfaces (hover states)
-			base: null,        // Base panel surface
-		},
-	},
+      // UI overlays - for dialogs, popovers, elevated panels
+      overlay: null, // Overlay backgrounds (dropdowns, modals)
+      elevated: null, // Elevated surfaces (hover states)
+      base: null, // Base panel surface
+    },
+  },
 
-	// Spacing scale - 4px base (0.25rem)
-	spacing: {
-		"0": null,    // 0px
-		"1": null,    // 4px
-		"2": null,    // 8px
-		"3": null,    // 12px
-		"4": null,    // 16px
-		"5": null,    // 20px
-		"6": null,    // 24px
-		"8": null,    // 32px
-		"10": null,   // 40px
-		"12": null,   // 48px
-		"16": null,   // 64px
-	},
+  // Spacing scale - 4px base (0.25rem)
+  spacing: {
+    "0": null, // 0px
+    "1": null, // 4px
+    "2": null, // 8px
+    "3": null, // 12px
+    "4": null, // 16px
+    "5": null, // 20px
+    "6": null, // 24px
+    "8": null, // 32px
+    "10": null, // 40px
+    "12": null, // 48px
+    "16": null, // 64px
+  },
 
-	// Typography scale
-	typography: {
-		// Font families
-		family: {
-			mono: null,
-			sans: null,
-		},
-		// Font sizes (type scale)
-		size: {
-			xs: null,   // 11px
-			sm: null,   // 12px
-			base: null, // 14px
-			md: null,   // 16px
-			lg: null,   // 18px
-			xl: null,   // 20px
-			"2xl": null, // 24px
-		},
-		// Font weights
-		weight: {
-			regular: null,  // 400
-			medium: null,   // 500
-			semibold: null, // 600
-			bold: null,     // 700
-		},
-		// Line heights
-		lineHeight: {
-			tight: null,   // 1.25
-			normal: null,  // 1.5
-			relaxed: null, // 1.75
-		},
-		// Letter spacing
-		letterSpacing: {
-			tight: null,       // -0.05em
-			normal: null,      // 0
-			wide: null,        // 0.05em
-			wider: null,       // 0.1em
-			engineering: null, // 0.15em - tactical labels
-		},
-		// Text transform
-		textTransform: {
-			uppercase: null,   // UPPERCASE
-			none: null,        // normal
-		},
-	},
+  // Typography scale
+  typography: {
+    // Font families
+    family: {
+      mono: null,
+      sans: null,
+    },
+    // Font sizes (type scale)
+    size: {
+      xs: null, // 11px
+      sm: null, // 12px
+      base: null, // 14px
+      md: null, // 16px
+      lg: null, // 18px
+      xl: null, // 20px
+      "2xl": null, // 24px
+    },
+    // Font weights
+    weight: {
+      regular: null, // 400
+      medium: null, // 500
+      semibold: null, // 600
+      bold: null, // 700
+    },
+    // Line heights
+    lineHeight: {
+      tight: null, // 1.25
+      normal: null, // 1.5
+      relaxed: null, // 1.75
+    },
+    // Letter spacing
+    letterSpacing: {
+      tight: null, // -0.05em
+      normal: null, // 0
+      wide: null, // 0.05em
+      wider: null, // 0.1em
+      engineering: null, // 0.15em - tactical labels
+    },
+    // Text transform
+    textTransform: {
+      uppercase: null, // UPPERCASE
+      none: null, // normal
+    },
+  },
 
-	// Border styles
-	border: {
-		radius: {
-			none: null,  // 0 - use clipPath for terminal aesthetic instead of rounded corners
-		},
-		width: {
-			none: null,  // 0
-			thin: null,  // 1px
-			base: null,  // 2px
-			thick: null, // 3px
-		},
-		style: {
-			solid: null,  // Solid line
-			dashed: null, // Dashed line
-			dotted: null, // Dotted line
-		},
-	},
+  // Border styles
+  border: {
+    radius: {
+      none: null, // 0 - use clipPath for terminal aesthetic instead of rounded corners
+    },
+    width: {
+      none: null, // 0
+      thin: null, // 1px
+      base: null, // 2px
+      thick: null, // 3px
+    },
+    style: {
+      solid: null, // Solid line
+      dashed: null, // Dashed line
+      dotted: null, // Dotted line
+    },
+  },
 
-	// Effects - shadows and glows
-	effect: {
-		// Box shadows (glow effects for terminal aesthetic)
-		glow: {
-			none: null,
-			sm: null,
-			base: null,
-			md: null,
-			lg: null,
-			xl: null,
-		},
-		// Text shadows
-		textGlow: {
-			none: null,
-			sm: null,
-			base: null,
-			md: null,
-		},
-		// Icon shadows
-		iconGlow: null,
-		// Drop shadows for SVG
-		dropShadow: null,
-	},
+  // Effects - shadows and glows
+  effect: {
+    // Box shadows (glow effects for terminal aesthetic)
+    glow: {
+      none: null,
+      sm: null,
+      base: null,
+      md: null,
+      lg: null,
+      xl: null,
+    },
+    // Text shadows
+    textGlow: {
+      none: null,
+      sm: null,
+      base: null,
+      md: null,
+    },
+    // Icon shadows
+    iconGlow: null,
+    // Drop shadows for SVG
+    dropShadow: null,
+  },
 
-	// Clip paths - slanted corners for retro aesthetic
-	clipPath: {
-		none: null,
-		sm: null,   // 2px clips
-		base: null, // 4px clips
-		md: null,   // 6px clips
-		lg: null,   // 8px clips
-	},
+  // Clip paths - slanted corners for retro aesthetic
+  clipPath: {
+    none: null,
+    sm: null, // 2px clips
+    base: null, // 4px clips
+    md: null, // 6px clips
+    lg: null, // 8px clips
+  },
 
-	// Opacity values
-	opacity: {
-		disabled: null,
-		muted: null,
-		overlay: null,
-		grid: null,
-	},
+  // Opacity values
+  opacity: {
+    disabled: null,
+    muted: null,
+    overlay: null,
+    grid: null,
+  },
 
-	// Transitions
-	transition: {
-		fast: null,
-		base: null,
-		slow: null,
-	},
+  // Transitions
+  transition: {
+    fast: null,
+    base: null,
+    slow: null,
+  },
 
-	// Z-index scale
-	zIndex: {
-		base: null,
-		dropdown: null,
-		sticky: null,
-		overlay: null,
-		modal: null,
-		tooltip: null,
-	},
+  // Z-index scale
+  zIndex: {
+    base: null,
+    dropdown: null,
+    sticky: null,
+    overlay: null,
+    modal: null,
+    tooltip: null,
+  },
 });

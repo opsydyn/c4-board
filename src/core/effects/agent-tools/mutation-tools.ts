@@ -1,11 +1,11 @@
 import { Schema } from "effect";
-import { ALL_LAYOUT_PRESETS, type LayoutPresetName } from "../layout";
 import {
-  RigToolPolicyMetadataSchema,
   pickHigherRigToolRisk,
   type RigToolPolicyMetadata,
+  RigToolPolicyMetadataSchema,
   type RigToolRisk,
 } from "../agent-policy";
+import { ALL_LAYOUT_PRESETS, type LayoutPresetName } from "../layout";
 import { RigC4BoardNodeTypeSchema } from "./contracts";
 
 export const RigMutationToolNameSchema = Schema.Literal(
@@ -92,31 +92,27 @@ export const RigCreateNodesValidationSummarySchema = Schema.Struct({
   nodeKeys: Schema.Array(Schema.String),
   labels: Schema.Array(Schema.String),
 });
-export type RigCreateNodesValidationSummary =
-  Schema.Schema.Type<typeof RigCreateNodesValidationSummarySchema>;
+export type RigCreateNodesValidationSummary = Schema.Schema.Type<typeof RigCreateNodesValidationSummarySchema>;
 
 export const RigUpdateNodesValidationSummarySchema = Schema.Struct({
   nodeCount: Schema.Number,
   nodeIds: Schema.Array(Schema.String),
   fieldCount: Schema.Number,
 });
-export type RigUpdateNodesValidationSummary =
-  Schema.Schema.Type<typeof RigUpdateNodesValidationSummarySchema>;
+export type RigUpdateNodesValidationSummary = Schema.Schema.Type<typeof RigUpdateNodesValidationSummarySchema>;
 
 export const RigCreateEdgesValidationSummarySchema = Schema.Struct({
   edgeCount: Schema.Number,
   connectionRefs: Schema.Array(Schema.String),
 });
-export type RigCreateEdgesValidationSummary =
-  Schema.Schema.Type<typeof RigCreateEdgesValidationSummarySchema>;
+export type RigCreateEdgesValidationSummary = Schema.Schema.Type<typeof RigCreateEdgesValidationSummarySchema>;
 
 export const RigApplyLayoutValidationSummarySchema = Schema.Struct({
   preset: Schema.String,
   target: RigApplyLayoutTargetSchema,
   nodeCount: Schema.Number,
 });
-export type RigApplyLayoutValidationSummary =
-  Schema.Schema.Type<typeof RigApplyLayoutValidationSummarySchema>;
+export type RigApplyLayoutValidationSummary = Schema.Schema.Type<typeof RigApplyLayoutValidationSummarySchema>;
 
 export interface RigMutationToolSummaryByName {
   readonly create_nodes: RigCreateNodesValidationSummary;
@@ -181,8 +177,7 @@ const countEdgesCreated = (action: RigValidatedMutationAction): number =>
     ? (action.input as RigCreateEdgesInput).edges.length
     : 0;
 
-const countLayoutOperations = (action: RigValidatedMutationAction): number =>
-  action.tool === "apply_layout" ? 1 : 0;
+const countLayoutOperations = (action: RigValidatedMutationAction): number => action.tool === "apply_layout" ? 1 : 0;
 
 const layoutPresetNames = new Set<string>(Object.keys(ALL_LAYOUT_PRESETS));
 
@@ -346,9 +341,8 @@ const createEdgesTool: RigMutationToolDefinition<
   summarize: (input) => ({
     edgeCount: input.edges.length,
     connectionRefs: input.edges.map((edge) =>
-      `${formatNodeRef(edge.sourceRef)} -> ${formatNodeRef(edge.targetRef)}${
-        edge.label ? ` (${edge.label})` : ""
-      }`),
+      `${formatNodeRef(edge.sourceRef)} -> ${formatNodeRef(edge.targetRef)}${edge.label ? ` (${edge.label})` : ""}`
+    ),
   }),
 };
 

@@ -30,19 +30,20 @@ import * as Tone from "tone";
 import type { Actor, AnyStateMachine, StateFrom } from "xstate";
 import { waitFor } from "xstate";
 import type { ModuleCouplingSnapshot } from "../../core/balancedCoupling";
-import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
-import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
+import {
+  buildOpyCheckpointRecord,
+  buildOpyCheckpointSnapshot,
+  checkpointSnapshotToLoadedDiagram,
+} from "../../core/effects/agent-apply.runtime";
 import type {
   RigAgentAzureSyncRetrievalSnapshot,
   RigAgentExplainabilityModuleSnapshot,
   RigAgentExplainabilityRetrievalSnapshot,
   RigAgentSettingsRetrievalSnapshot,
 } from "../../core/effects/agent-retrieval";
-import {
-  buildOpyCheckpointRecord,
-  buildOpyCheckpointSnapshot,
-  checkpointSnapshotToLoadedDiagram,
-} from "../../core/effects/agent-apply.runtime";
+import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../../core/effects/ai-agent.runtime";
+import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
+import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import {
   createNewDiagram,
   listAllDiagrams,
@@ -51,19 +52,16 @@ import {
   saveDiagram,
 } from "../../core/effects/canvas-persistence";
 import { patchSettings } from "../../core/effects/database";
-import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../../core/effects/ai-agent.runtime";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
+import { getRigAgentV1Flag, resolveEffectiveRigAgentV1Rollout } from "../../core/effects/feature-flags";
 import { autoLayoutSelected, getPreset, type LayoutPresetName } from "../../core/effects/layout";
-import { createOpyAgentCheckpoint, getOpyAgentCheckpoint } from "../../core/effects/opy-chat.persistence";
-import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
+import type { OpyBoardAction } from "../../core/effects/opy-action.runtime";
+import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import { buildGroundedProposalDiff, summarizeGroundedProposalDiff } from "../../core/effects/opy-c4-proposals";
-import {
-  getRigAgentV1Flag,
-  resolveEffectiveRigAgentV1Rollout,
-} from "../../core/effects/feature-flags";
+import { createOpyAgentCheckpoint, getOpyAgentCheckpoint } from "../../core/effects/opy-chat.persistence";
 import { useAppSettings } from "../../core/effects/useAppSettings";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { flex } from "../../styles/sprinkles.css";
@@ -89,14 +87,13 @@ import { DDDToolbar } from "./DDDToolbar";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
-import { OpyFloatingWidget } from "./OpyFloatingWidget";
 import {
   areOpyWidgetChromeStatusesEqual,
   type OpyWidgetChromeFocusRequest,
   type OpyWidgetChromeStatus,
 } from "./opyChromeStatus";
-import type { OpyBoardAction } from "../../core/effects/opy-action.runtime";
 import { OpyCopilotPanel } from "./OpyCopilotPanel";
+import { OpyFloatingWidget } from "./OpyFloatingWidget";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
@@ -129,11 +126,11 @@ const OWNERSHIP_FILTER_ALL = "__all__";
 const OWNERSHIP_FILTER_UNASSIGNED = "__unassigned__";
 
 const isRigC4BoardNodeType = (value: unknown): value is RigC4BoardNodeType =>
-  value === "person" ||
-  value === "system" ||
-  value === "externalSystem" ||
-  value === "container" ||
-  value === "component";
+  value === "person"
+  || value === "system"
+  || value === "externalSystem"
+  || value === "container"
+  || value === "component";
 
 const normalizeTeamOwnership = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -1325,7 +1322,10 @@ export function C4CanvasContainer() {
             );
           } catch (error) {
             throw new Error(
-              `Failed to apply edge "${edgeDiff.edge.label}" (${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey}): ${error instanceof Error ? error.message : String(error)}`,
+              `Failed to apply edge "${edgeDiff.edge.label}" (${edgeDiff.edge.sourceKey} -> ${edgeDiff.edge.targetKey}): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+              { cause: error },
             );
           }
         }
@@ -1366,26 +1366,24 @@ export function C4CanvasContainer() {
           },
         };
 
-        try {
-          cancelAutosave();
+        cancelAutosave();
 
-          const didSave = await requestSave("manual", {
-            overrideInput: saveInput,
-          });
+        const didSave = await requestSave("manual", {
+          overrideInput: saveInput,
+        });
 
-          if (!didSave) {
-            const saveError = saveActorRef.getSnapshot().context.errorMessage;
-            const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
-            throw new Error(`OPY proposal apply save failed: ${detail}`);
-          }
-
-          send(loadEvent);
-          cancelAutosave();
-        } catch (error) {
-          throw error;
+        if (!didSave) {
+          const saveError = saveActorRef.getSnapshot().context.errorMessage;
+          const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+          throw new Error(`OPY proposal apply save failed: ${detail}`);
         }
 
-        return `PROPOSAL APPLIED:: +${summary.newNodes} NODE(S) · +${summary.newEdges} EDGE(S) · REUSED ${summary.existingNodes} NODE(S) / ${summary.existingEdges} EDGE(S) · CHECKPOINT::${checkpointRecord.id.slice(0, 8)}.`;
+        send(loadEvent);
+        cancelAutosave();
+
+        return `PROPOSAL APPLIED:: +${summary.newNodes} NODE(S) · +${summary.newEdges} EDGE(S) · REUSED ${summary.existingNodes} NODE(S) / ${summary.existingEdges} EDGE(S) · CHECKPOINT::${
+          checkpointRecord.id.slice(0, 8)
+        }.`;
       }
 
       if (action.kind === "rollback-checkpoint") {
@@ -1444,7 +1442,9 @@ export function C4CanvasContainer() {
           throw error;
         }
 
-        return `ROLLBACK APPLIED:: CHECKPOINT::${checkpoint.id.slice(0, 8)} · ${checkpoint.snapshot.nodes.length} NODE(S) · ${checkpoint.snapshot.edges.length} EDGE(S).`;
+        return `ROLLBACK APPLIED:: CHECKPOINT::${
+          checkpoint.id.slice(0, 8)
+        } · ${checkpoint.snapshot.nodes.length} NODE(S) · ${checkpoint.snapshot.edges.length} EDGE(S).`;
       }
 
       return "NO ACTION APPLIED.";
@@ -2284,8 +2284,7 @@ export function C4CanvasContainer() {
       ? balancedCouplingModel.snapshots.find((snapshot) => snapshot.id === state.context.selectedNodeId) ?? null
       : null;
     const topRiskSnapshot = balancedCouplingModel.snapshots.reduce<ModuleCouplingSnapshot | null>(
-      (currentTop, snapshot) =>
-        !currentTop || snapshot.systemicRisk > currentTop.systemicRisk ? snapshot : currentTop,
+      (currentTop, snapshot) => !currentTop || snapshot.systemicRisk > currentTop.systemicRisk ? snapshot : currentTop,
       null,
     );
 

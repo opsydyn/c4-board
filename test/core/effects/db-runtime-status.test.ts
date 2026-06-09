@@ -1,7 +1,4 @@
-import {
-  DatabaseRuntimeProbeSchema,
-  DatabaseRuntimeStatusSchema,
-} from "@/core/effects/db-runtime-status";
+import { DatabaseRuntimeProbeSchema, DatabaseRuntimeStatusSchema } from "@/core/effects/db-runtime-status";
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 

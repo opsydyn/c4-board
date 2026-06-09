@@ -8,449 +8,443 @@
  * - Request status indicators
  */
 
-import { useState, useCallback, useMemo, type FormEvent } from "react";
-import type { Key, Selection } from "@react-types/shared";
-import {
-	Tree,
-	TreeItem,
-	TreeItemContent,
-	ToggleButton,
-	Button,
-} from "react-aria-components";
-import {
-	CaretLeftIcon,
-	FolderIcon,
-	FileIcon,
-	TrashSimpleIcon,
-	PencilLineIcon,
-	CaretRightIcon,
-	GearSixIcon,
-} from "@phosphor-icons/react";
-import type {
-	PosteeCollection,
-	PosteeRequest,
-} from "@/core/effects/database.postee";
+import type { PosteeCollection, PosteeRequest } from "@/core/effects/database.postee";
 import type { RequestStatus } from "@/core/effects/postee/status-derivation";
 import type { CollectionId, RequestId } from "@/core/effects/postee/types";
+import {
+  CaretLeftIcon,
+  CaretRightIcon,
+  FileIcon,
+  FolderIcon,
+  GearSixIcon,
+  PencilLineIcon,
+  TrashSimpleIcon,
+} from "@phosphor-icons/react";
+import type { Key, Selection } from "@react-types/shared";
+import { type FormEvent, useCallback, useMemo, useState } from "react";
+import { Button, ToggleButton, Tree, TreeItem, TreeItemContent } from "react-aria-components";
+import { flex } from "../../../styles/sprinkles.css";
 import { InlineEditor } from "../nodes/InlineEditor";
 import { PosteeSearchBox } from "./PosteeSearchBox";
-import { flex } from "../../../styles/sprinkles.css";
 
-import * as styles from "./PosteeWorkspace.css";
 import * as layoutStyles from "../styles.css";
+import * as styles from "./PosteeWorkspace.css";
 
 const sidebarBrandMetaClass = flex({
-	direction: "column",
-	align: "start",
-	gap: "1",
+  direction: "column",
+  align: "start",
+  gap: "1",
 });
 
 export interface PosteeSidebarProps {
-	collections: PosteeCollection[];
-	requestsByCollection: Record<string, PosteeRequest[]>;
-	requestStatuses: Map<string, RequestStatus>;
-	activeCollectionId: CollectionId | null;
-	activeRequestId: RequestId | null;
-	onCreateCollection: (name: string) => void;
-	onSelectCollection: (collectionId: string) => void;
-	onSelectRequest: (requestId: string) => void;
-	onDeleteCollections: (collectionIds: string[]) => void;
-	onRenameCollection: (collectionId: string, newName: string) => void;
-	onToggleSidebar: () => void;
-	onNavigateToBoard?: () => void;
-	onNavigateToSettings?: () => void;
+  collections: PosteeCollection[];
+  requestsByCollection: Record<string, PosteeRequest[]>;
+  requestStatuses: Map<string, RequestStatus>;
+  activeCollectionId: CollectionId | null;
+  activeRequestId: RequestId | null;
+  onCreateCollection: (name: string) => void;
+  onSelectCollection: (collectionId: string) => void;
+  onSelectRequest: (requestId: string) => void;
+  onDeleteCollections: (collectionIds: string[]) => void;
+  onRenameCollection: (collectionId: string, newName: string) => void;
+  onToggleSidebar: () => void;
+  onNavigateToBoard?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
 export function PosteeSidebar({
-	collections,
-	requestsByCollection,
-	requestStatuses,
-	activeCollectionId,
-	onCreateCollection,
-	onSelectCollection,
-	onSelectRequest,
-	onDeleteCollections,
-	onRenameCollection,
-	onToggleSidebar,
-	onNavigateToBoard,
-	onNavigateToSettings,
+  collections,
+  requestsByCollection,
+  requestStatuses,
+  activeCollectionId,
+  onCreateCollection,
+  onSelectCollection,
+  onSelectRequest,
+  onDeleteCollections,
+  onRenameCollection,
+  onToggleSidebar,
+  onNavigateToBoard,
+  onNavigateToSettings,
 }: PosteeSidebarProps) {
-	const [newCollectionName, setNewCollectionName] = useState("");
-	const [expandedKeys, setExpandedKeys] = useState<Set<Key> | "all">(
-		() => new Set<Key>(),
-	);
-	const [selectedTreeKeys, setSelectedTreeKeys] = useState<Selection>(
-		() => new Set<Key>(),
-	);
-	const [isRenamingCollectionId, setRenamingCollectionId] = useState<
-		string | null
-	>(null);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [expandedKeys, setExpandedKeys] = useState<Set<Key> | "all">(
+    () => new Set<Key>(),
+  );
+  const [selectedTreeKeys, setSelectedTreeKeys] = useState<Selection>(
+    () => new Set<Key>(),
+  );
+  const [isRenamingCollectionId, setRenamingCollectionId] = useState<
+    string | null
+  >(null);
 
-	const statusColors: Record<"Success" | "Error" | "Unknown", string> = {
-		Success: "var(--icon-success, #4CC38A)",
-		Error: "var(--icon-error, #FF6B6B)",
-		Unknown: "var(--icon-neutral, #8FD6FF)",
-	};
+  const statusColors: Record<"Success" | "Error" | "Unknown", string> = {
+    Success: "var(--icon-success, #4CC38A)",
+    Error: "var(--icon-error, #FF6B6B)",
+    Unknown: "var(--icon-neutral, #8FD6FF)",
+  };
 
-	const requestStatusMap = useMemo(() => {
-		const map = new Map<string, "Success" | "Error" | "Unknown">();
-		requestStatuses.forEach((status, requestId) => {
-			map.set(requestId, status._tag);
-		});
-		return map;
-	}, [requestStatuses]);
+  const requestStatusMap = useMemo(() => {
+    const map = new Map<string, "Success" | "Error" | "Unknown">();
+    requestStatuses.forEach((status, requestId) => {
+      map.set(requestId, status._tag);
+    });
+    return map;
+  }, [requestStatuses]);
 
-	const requestCollectionMap = useMemo(() => {
-		const map = new Map<string, string>();
-		for (const collection of collections) {
-			for (const request of requestsByCollection[collection.id] ?? []) {
-				map.set(request.id, collection.id);
-			}
-		}
-		return map;
-	}, [collections, requestsByCollection]);
+  const requestCollectionMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const collection of collections) {
+      for (const request of requestsByCollection[collection.id] ?? []) {
+        map.set(request.id, collection.id);
+      }
+    }
+    return map;
+  }, [collections, requestsByCollection]);
 
-	const activeCollectionKey = activeCollectionId
-		? (activeCollectionId as unknown as string)
-		: null;
+  const activeCollectionKey = activeCollectionId
+    ? (activeCollectionId as unknown as string)
+    : null;
 
-	const handleCreateCollection = useCallback(
-		(event: FormEvent<HTMLFormElement>) => {
-			event.preventDefault();
-			const trimmed = newCollectionName.trim();
-			const name = trimmed.length > 0 ? trimmed : "Untitled Collection";
-			onCreateCollection(name);
-			setNewCollectionName("");
-		},
-		[newCollectionName, onCreateCollection],
-	);
+  const handleCreateCollection = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = newCollectionName.trim();
+      const name = trimmed.length > 0 ? trimmed : "Untitled Collection";
+      onCreateCollection(name);
+      setNewCollectionName("");
+    },
+    [newCollectionName, onCreateCollection],
+  );
 
-	const handleTreeSelectionChange = useCallback(
-		(keys: Selection) => {
-			if (keys === "all") {
-				setSelectedTreeKeys(keys);
-				return;
-			}
+  const handleTreeSelectionChange = useCallback(
+    (keys: Selection) => {
+      if (keys === "all") {
+        setSelectedTreeKeys(keys);
+        return;
+      }
 
-			setSelectedTreeKeys(keys);
+      setSelectedTreeKeys(keys);
 
-			const iterator = keys.values();
-			const first = iterator.next();
-			if (first.done) {
-				return;
-			}
+      const iterator = keys.values();
+      const first = iterator.next();
+      if (first.done) {
+        return;
+      }
 
-			const key = String(first.value);
-			if (key.startsWith("collection:")) {
-				const collectionId = key.replace("collection:", "");
-				onSelectCollection(collectionId);
-				setRenamingCollectionId(null);
-			} else if (key.startsWith("request:")) {
-				const requestId = key.replace("request:", "");
-				const collectionId = requestCollectionMap.get(requestId);
-				if (collectionId && collectionId !== activeCollectionKey) {
-					onSelectCollection(collectionId);
-				}
-				onSelectRequest(requestId);
-				setRenamingCollectionId(null);
-			}
-		},
-		[
-			onSelectCollection,
-			onSelectRequest,
-			requestCollectionMap,
-			activeCollectionKey,
-		],
-	);
+      const key = String(first.value);
+      if (key.startsWith("collection:")) {
+        const collectionId = key.replace("collection:", "");
+        onSelectCollection(collectionId);
+        setRenamingCollectionId(null);
+      } else if (key.startsWith("request:")) {
+        const requestId = key.replace("request:", "");
+        const collectionId = requestCollectionMap.get(requestId);
+        if (collectionId && collectionId !== activeCollectionKey) {
+          onSelectCollection(collectionId);
+        }
+        onSelectRequest(requestId);
+        setRenamingCollectionId(null);
+      }
+    },
+    [
+      onSelectCollection,
+      onSelectRequest,
+      requestCollectionMap,
+      activeCollectionKey,
+    ],
+  );
 
-	const handleExpandedChange = useCallback((keys: Iterable<Key> | "all") => {
-		if (keys === "all") {
-			setExpandedKeys("all");
-			return;
-		}
+  const handleExpandedChange = useCallback((keys: Iterable<Key> | "all") => {
+    if (keys === "all") {
+      setExpandedKeys("all");
+      return;
+    }
 
-		setExpandedKeys(new Set(keys));
-	}, []);
+    setExpandedKeys(new Set(keys));
+  }, []);
 
-	const selectedCollectionIds = useMemo(() => {
-		if (selectedTreeKeys === "all") {
-			return collections.map((collection) => collection.id);
-		}
+  const selectedCollectionIds = useMemo(() => {
+    if (selectedTreeKeys === "all") {
+      return collections.map((collection) => collection.id);
+    }
 
-		const ids: string[] = [];
-		selectedTreeKeys.forEach((key) => {
-			if (typeof key === "string" && key.startsWith("collection:")) {
-				ids.push(key.replace("collection:", ""));
-			}
-		});
-		return ids;
-	}, [selectedTreeKeys, collections]);
+    const ids: string[] = [];
+    selectedTreeKeys.forEach((key) => {
+      if (typeof key === "string" && key.startsWith("collection:")) {
+        ids.push(key.replace("collection:", ""));
+      }
+    });
+    return ids;
+  }, [selectedTreeKeys, collections]);
 
-	const canRenameCollection = selectedCollectionIds.length === 1;
-	const canDeleteCollections = selectedCollectionIds.length > 0;
-	const selectionCount = selectedCollectionIds.length;
+  const canRenameCollection = selectedCollectionIds.length === 1;
+  const canDeleteCollections = selectedCollectionIds.length > 0;
+  const selectionCount = selectedCollectionIds.length;
 
-	const handleStartRename = useCallback(() => {
-		if (!canRenameCollection) {
-			return;
-		}
+  const handleStartRename = useCallback(() => {
+    if (!canRenameCollection) {
+      return;
+    }
 
-		setRenamingCollectionId(selectedCollectionIds[0] ?? null);
-	}, [canRenameCollection, selectedCollectionIds]);
+    setRenamingCollectionId(selectedCollectionIds[0] ?? null);
+  }, [canRenameCollection, selectedCollectionIds]);
 
-	const handleDeleteCollections = useCallback(() => {
-		if (!canDeleteCollections) {
-			return;
-		}
+  const handleDeleteCollections = useCallback(() => {
+    if (!canDeleteCollections) {
+      return;
+    }
 
-		onDeleteCollections(selectedCollectionIds);
-	}, [canDeleteCollections, selectedCollectionIds, onDeleteCollections]);
+    onDeleteCollections(selectedCollectionIds);
+  }, [canDeleteCollections, selectedCollectionIds, onDeleteCollections]);
 
-	const handleRenameSubmit = useCallback(
-		(collectionId: string, newName: string) => {
-			onRenameCollection(collectionId, newName);
-			setRenamingCollectionId(null);
-		},
-		[onRenameCollection],
-	);
+  const handleRenameSubmit = useCallback(
+    (collectionId: string, newName: string) => {
+      onRenameCollection(collectionId, newName);
+      setRenamingCollectionId(null);
+    },
+    [onRenameCollection],
+  );
 
-	return (
-		<aside className={styles.sidebar} aria-label="Collections panel">
-			<div className={layoutStyles.sidebarBrand}>
-				<span className={layoutStyles.sidebarBrandIdentity}>
-					<img
-						src="/app-icon.png"
-						alt="OPSYDYN logo"
-						className={layoutStyles.sidebarBrandIcon}
-						width={50}
-						height={50}
-					/>
-					<span className={sidebarBrandMetaClass}>
-						<span>OPSYDYN HUD::9000</span>
-						<span>V1.0.0</span>
-					</span>
-				</span>
-				{onNavigateToSettings ? (
-					<a
-						className={layoutStyles.sidebarBrandAction}
-						href="/settings"
-						aria-label="Open global settings"
-						title="Open global settings"
-						onClick={(event) => {
-							event.preventDefault();
-							onNavigateToSettings();
-						}}
-					>
-						<GearSixIcon size={16} weight="duotone" />
-					</a>
-				) : (
-					<a
-						className={layoutStyles.sidebarBrandAction}
-						href="/settings"
-						aria-label="Open global settings"
-						title="Open global settings"
-					>
-						<GearSixIcon size={16} weight="duotone" />
-					</a>
-				)}
-			</div>
-			<p className={layoutStyles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
-			<nav className={layoutStyles.sidebarQuickActions} aria-label="Workspace shortcuts">
-				{onNavigateToBoard ? (
-					<a
-						className={layoutStyles.sidebarQuickActionLink}
-						href="/"
-						onClick={(event) => {
-							event.preventDefault();
-							onNavigateToBoard();
-						}}
-					>
-						C4:BOARD
-					</a>
-				) : (
-					<a className={layoutStyles.sidebarQuickActionLink} href="/">
-						C4:BOARD
-					</a>
-				)}
-			</nav>
-			<div className={layoutStyles.panelHeader}>
-				<ToggleButton
-					isSelected={true}
-					onChange={onToggleSidebar}
-					className={layoutStyles.collapseToggle}
-					aria-label="Collapse collections panel"
-				>
-					<CaretLeftIcon size={16} weight="bold" />
-					Hide
-				</ToggleButton>
-			</div>
-			<header className={styles.branding}>
-				<span>Postee Collections</span>
-				<span>{collections.length}</span>
-			</header>
+  return (
+    <aside className={styles.sidebar} aria-label="Collections panel">
+      <div className={layoutStyles.sidebarBrand}>
+        <span className={layoutStyles.sidebarBrandIdentity}>
+          <img
+            src="/app-icon.png"
+            alt="OPSYDYN logo"
+            className={layoutStyles.sidebarBrandIcon}
+            width={50}
+            height={50}
+          />
+          <span className={sidebarBrandMetaClass}>
+            <span>OPSYDYN HUD::9000</span>
+            <span>V1.0.0</span>
+          </span>
+        </span>
+        {onNavigateToSettings
+          ? (
+            <a
+              className={layoutStyles.sidebarBrandAction}
+              href="/settings"
+              aria-label="Open global settings"
+              title="Open global settings"
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigateToSettings();
+              }}
+            >
+              <GearSixIcon size={16} weight="duotone" />
+            </a>
+          )
+          : (
+            <a
+              className={layoutStyles.sidebarBrandAction}
+              href="/settings"
+              aria-label="Open global settings"
+              title="Open global settings"
+            >
+              <GearSixIcon size={16} weight="duotone" />
+            </a>
+          )}
+      </div>
+      <p className={layoutStyles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
+      <nav className={layoutStyles.sidebarQuickActions} aria-label="Workspace shortcuts">
+        {onNavigateToBoard
+          ? (
+            <a
+              className={layoutStyles.sidebarQuickActionLink}
+              href="/"
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigateToBoard();
+              }}
+            >
+              C4:BOARD
+            </a>
+          )
+          : (
+            <a className={layoutStyles.sidebarQuickActionLink} href="/">
+              C4:BOARD
+            </a>
+          )}
+      </nav>
+      <div className={layoutStyles.panelHeader}>
+        <ToggleButton
+          isSelected={true}
+          onChange={onToggleSidebar}
+          className={layoutStyles.collapseToggle}
+          aria-label="Collapse collections panel"
+        >
+          <CaretLeftIcon size={16} weight="bold" />
+          Hide
+        </ToggleButton>
+      </div>
+      <header className={styles.branding}>
+        <span>Postee Collections</span>
+        <span>{collections.length}</span>
+      </header>
 
-			<PosteeSearchBox
-				collections={collections}
-				requestsByCollection={requestsByCollection}
-				onSelectCollection={onSelectCollection}
-				onSelectRequest={onSelectRequest}
-			/>
+      <PosteeSearchBox
+        collections={collections}
+        requestsByCollection={requestsByCollection}
+        onSelectCollection={onSelectCollection}
+        onSelectRequest={onSelectRequest}
+      />
 
-			<form className={styles.collectionForm} onSubmit={handleCreateCollection}>
-				<input
-					className={styles.textInput}
-					type="text"
-					placeholder="New collection name"
-					value={newCollectionName}
-					onChange={(event) => setNewCollectionName(event.target.value)}
-					aria-label="New collection name"
-				/>
-				<button
-					className={styles.submitButton}
-					type="submit"
-					disabled={!newCollectionName.trim()}
-				>
-					Add Collection
-				</button>
-			</form>
+      <form className={styles.collectionForm} onSubmit={handleCreateCollection}>
+        <input
+          className={styles.textInput}
+          type="text"
+          placeholder="New collection name"
+          value={newCollectionName}
+          onChange={(event) => setNewCollectionName(event.target.value)}
+          aria-label="New collection name"
+        />
+        <button
+          className={styles.submitButton}
+          type="submit"
+          disabled={!newCollectionName.trim()}
+        >
+          Add Collection
+        </button>
+      </form>
 
-			{selectionCount > 0 && (
-				<div className={styles.selectionToolbar}>
-					<span>
-						{selectionCount} collection
-						{selectionCount === 1 ? "" : "s"} selected
-					</span>
-					<div style={{ display: "flex", gap: "0.5rem" }}>
-						<button
-							type="button"
-							className={styles.selectionToolbarButton}
-							onClick={handleStartRename}
-							disabled={!canRenameCollection}
-							aria-label="Rename collection"
-						>
-							<PencilLineIcon size={14} weight="bold" />
-							<span>Rename</span>
-						</button>
-						<button
-							type="button"
-							className={styles.selectionToolbarButton}
-							onClick={handleDeleteCollections}
-							disabled={!canDeleteCollections}
-							aria-label="Delete selected collections"
-						>
-							<TrashSimpleIcon size={14} weight="bold" />
-							<span>Delete ({selectionCount})</span>
-						</button>
-					</div>
-				</div>
-			)}
+      {selectionCount > 0 && (
+        <div className={styles.selectionToolbar}>
+          <span>
+            {selectionCount} collection
+            {selectionCount === 1 ? "" : "s"} selected
+          </span>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              type="button"
+              className={styles.selectionToolbarButton}
+              onClick={handleStartRename}
+              disabled={!canRenameCollection}
+              aria-label="Rename collection"
+            >
+              <PencilLineIcon size={14} weight="bold" />
+              <span>Rename</span>
+            </button>
+            <button
+              type="button"
+              className={styles.selectionToolbarButton}
+              onClick={handleDeleteCollections}
+              disabled={!canDeleteCollections}
+              aria-label="Delete selected collections"
+            >
+              <TrashSimpleIcon size={14} weight="bold" />
+              <span>Delete ({selectionCount})</span>
+            </button>
+          </div>
+        </div>
+      )}
 
-			<div className={styles.collectionTree}>
-				{collections.length === 0 ? (
-					<div className={styles.emptyState}>
-						<strong>No collections</strong>
-						<span>Create your first collection to get started.</span>
-					</div>
-				) : (
-					<Tree
-						aria-label="Collections and requests"
-						selectionMode="multiple"
-						expandedKeys={expandedKeys}
-						onExpandedChange={handleExpandedChange}
-						selectedKeys={selectedTreeKeys}
-						onSelectionChange={handleTreeSelectionChange}
-					>
-						{collections.map((collection) => {
-							const collectionRequests =
-								requestsByCollection[collection.id] ?? [];
-							const isRenaming = isRenamingCollectionId === collection.id;
+      <div className={styles.collectionTree}>
+        {collections.length === 0
+          ? (
+            <div className={styles.emptyState}>
+              <strong>No collections</strong>
+              <span>Create your first collection to get started.</span>
+            </div>
+          )
+          : (
+            <Tree
+              aria-label="Collections and requests"
+              selectionMode="multiple"
+              expandedKeys={expandedKeys}
+              onExpandedChange={handleExpandedChange}
+              selectedKeys={selectedTreeKeys}
+              onSelectionChange={handleTreeSelectionChange}
+            >
+              {collections.map((collection) => {
+                const collectionRequests = requestsByCollection[collection.id] ?? [];
+                const isRenaming = isRenamingCollectionId === collection.id;
 
-							return (
-								<TreeItem
-									key={`collection:${collection.id}`}
-									id={`collection:${collection.id}`}
-									textValue={collection.name}
-								>
-									<TreeItemContent>
-										{(renderProps) => (
-											<div className={styles.treeCollectionRow}>
-												<Button
-													slot="chevron"
-													aria-label="Expand/collapse collection"
-													className={styles.treeChevronButton}
-													data-expanded={renderProps.isExpanded || undefined}
-												>
-													<CaretRightIcon size={14} weight="bold" />
-												</Button>
-												<span className={styles.treeIcon}>
-													<FolderIcon
-														size={18}
-														weight="duotone"
-													/>
-												</span>
-												{isRenaming ? (
-													<InlineEditor
-														value={collection.name}
-														mode="plain"
-														onSave={(newName: string) =>
-															handleRenameSubmit(collection.id, newName)
-														}
-														onCancel={() => setRenamingCollectionId(null)}
-														autoFocus
-													/>
-												) : (
-													<>
-														<span>{collection.name}</span>
-														<span style={{ marginLeft: "auto", opacity: 0.6 }}>
-															{collectionRequests.length}
-														</span>
-													</>
-												)}
-											</div>
-										)}
-									</TreeItemContent>
-									{collectionRequests.map((request) => {
-										const requestStatus =
-											requestStatusMap.get(request.id) ?? "Unknown";
-										const requestColor =
-											statusColors[requestStatus] ?? statusColors.Unknown;
-										return (
-											<TreeItem
-												key={`request:${request.id}`}
-												id={`request:${request.id}`}
-												textValue={`${request.method} ${request.name}`}
-											>
-												<TreeItemContent>
-													{(itemProps) => (
-														<div
-															className={styles.treeRequestRow}
-															data-selected={itemProps.isSelected || undefined}
-														>
-															<span className={styles.treeIcon}>
-																<FileIcon
-																	size={18}
-																	weight="duotone"
-																	color={requestColor}
-																/>
-															</span>
-															<span className={styles.treeMethodBadge}>
-																{request.method}
-															</span>
-															<span className={styles.treeRequestName}>
-																{request.name}
-															</span>
-														</div>
-													)}
-												</TreeItemContent>
-											</TreeItem>
-										);
-									})}
-								</TreeItem>
-							);
-						})}
-					</Tree>
-				)}
-			</div>
-		</aside>
-	);
+                return (
+                  <TreeItem
+                    key={`collection:${collection.id}`}
+                    id={`collection:${collection.id}`}
+                    textValue={collection.name}
+                  >
+                    <TreeItemContent>
+                      {(renderProps) => (
+                        <div className={styles.treeCollectionRow}>
+                          <Button
+                            slot="chevron"
+                            aria-label="Expand/collapse collection"
+                            className={styles.treeChevronButton}
+                            data-expanded={renderProps.isExpanded || undefined}
+                          >
+                            <CaretRightIcon size={14} weight="bold" />
+                          </Button>
+                          <span className={styles.treeIcon}>
+                            <FolderIcon
+                              size={18}
+                              weight="duotone"
+                            />
+                          </span>
+                          {isRenaming
+                            ? (
+                              <InlineEditor
+                                value={collection.name}
+                                mode="plain"
+                                onSave={(newName: string) => handleRenameSubmit(collection.id, newName)}
+                                onCancel={() => setRenamingCollectionId(null)}
+                                autoFocus
+                              />
+                            )
+                            : (
+                              <>
+                                <span>{collection.name}</span>
+                                <span style={{ marginLeft: "auto", opacity: 0.6 }}>
+                                  {collectionRequests.length}
+                                </span>
+                              </>
+                            )}
+                        </div>
+                      )}
+                    </TreeItemContent>
+                    {collectionRequests.map((request) => {
+                      const requestStatus = requestStatusMap.get(request.id) ?? "Unknown";
+                      const requestColor = statusColors[requestStatus] ?? statusColors.Unknown;
+                      return (
+                        <TreeItem
+                          key={`request:${request.id}`}
+                          id={`request:${request.id}`}
+                          textValue={`${request.method} ${request.name}`}
+                        >
+                          <TreeItemContent>
+                            {(itemProps) => (
+                              <div
+                                className={styles.treeRequestRow}
+                                data-selected={itemProps.isSelected || undefined}
+                              >
+                                <span className={styles.treeIcon}>
+                                  <FileIcon
+                                    size={18}
+                                    weight="duotone"
+                                    color={requestColor}
+                                  />
+                                </span>
+                                <span className={styles.treeMethodBadge}>
+                                  {request.method}
+                                </span>
+                                <span className={styles.treeRequestName}>
+                                  {request.name}
+                                </span>
+                              </div>
+                            )}
+                          </TreeItemContent>
+                        </TreeItem>
+                      );
+                    })}
+                  </TreeItem>
+                );
+              })}
+            </Tree>
+          )}
+      </div>
+    </aside>
+  );
 }

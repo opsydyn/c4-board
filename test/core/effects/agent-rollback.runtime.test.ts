@@ -1,4 +1,3 @@
-import type { Edge, Node } from "@xyflow/react";
 import {
   buildOpyCheckpointRestorePreview,
   formatOpyRollbackSummary,
@@ -6,6 +5,7 @@ import {
 } from "@/core/effects/agent-rollback.runtime";
 import type { RigC4BoardSummary } from "@/core/effects/agent-tools/contracts";
 import type { OpyAgentCheckpoint } from "@/core/effects/opy-chat.persistence";
+import type { Edge, Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 const createCheckpointNode = (

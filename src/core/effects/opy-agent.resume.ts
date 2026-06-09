@@ -1,8 +1,5 @@
 import type { OpyAgentLifecycleRequest } from "./opy-agent.lifecycle";
-import type {
-  OpyAgentTaskLineageDiagnostics,
-  OpyAgentTaskLineageResumeOutcomeRollup,
-} from "./opy-agent.task-lineage";
+import type { OpyAgentTaskLineageDiagnostics, OpyAgentTaskLineageResumeOutcomeRollup } from "./opy-agent.task-lineage";
 import type { OpyAgentToolCallName } from "./opy-agent.trace";
 
 export type OpyResumeBoundaryOrigin = "current-session" | "inherited-session" | "fresh";
@@ -147,12 +144,12 @@ export const summarizeOpyTaskLineageAttention = (
   const headline = hasResumableTask || status === "interrupted"
     ? "INTERRUPTED RESUME CHAIN"
     : status === "running"
-      ? "ACTIVE CONTINUITY CHAIN"
-      : reuseEfficiencyRatio !== null && reuseEfficiencyRatio < LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD
-        ? "LOW EFFICIENCY CHAIN"
-        : lineageDiagnostics.crossSessionSegmentCount > 0
-          ? "CROSS-SESSION CONTINUITY"
-          : "STABLE CONTINUITY CHAIN";
+    ? "ACTIVE CONTINUITY CHAIN"
+    : reuseEfficiencyRatio !== null && reuseEfficiencyRatio < LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD
+    ? "LOW EFFICIENCY CHAIN"
+    : lineageDiagnostics.crossSessionSegmentCount > 0
+    ? "CROSS-SESSION CONTINUITY"
+    : "STABLE CONTINUITY CHAIN";
 
   return {
     headline,

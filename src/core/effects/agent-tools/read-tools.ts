@@ -1,5 +1,8 @@
 import { Schema } from "effect";
 import {
+  type RigC4BoardEdge,
+  type RigC4BoardNode,
+  type RigC4BoardSummary,
   RigC4BoardSummarySchema,
   RigReadBoardSummaryInputSchema,
   RigReadBoardSummaryResultSchema,
@@ -7,9 +10,6 @@ import {
   RigReadEdgeLookupResultSchema,
   RigReadNodeLookupInputSchema,
   RigReadNodeLookupResultSchema,
-  type RigC4BoardEdge,
-  type RigC4BoardNode,
-  type RigC4BoardSummary,
   type RigReadToolInputByName,
   type RigReadToolName,
   type RigReadToolResultByName,
@@ -59,11 +59,13 @@ const sortNodesByLabel = (nodes: ReadonlyArray<RigC4BoardNode>): ReadonlyArray<R
   [...nodes].sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
 
 const getOwnershipTeams = (boardSummary: RigC4BoardSummary): ReadonlyArray<string> =>
-  [...new Set(
-    boardSummary.nodes
-      .map((node) => node.teamOwnership?.trim())
-      .filter((value): value is string => Boolean(value)),
-  )].sort((left, right) => left.localeCompare(right));
+  [
+    ...new Set(
+      boardSummary.nodes
+        .map((node) => node.teamOwnership?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ].sort((left, right) => left.localeCompare(right));
 
 const buildNodeIndex = (boardSummary: RigC4BoardSummary): ReadonlyMap<string, RigC4BoardNode> =>
   new Map(boardSummary.nodes.map((node) => [node.id, node] as const));
@@ -76,7 +78,11 @@ const findConnectedEdges = (
     boardSummary.edges.filter((edge) => edge.sourceId === nodeId || edge.targetId === nodeId),
   );
 
-const boardSummaryTool: RigReadToolDefinition<"board_summary", RigReadToolInputByName["board_summary"], RigReadToolResultByName["board_summary"]> = {
+const boardSummaryTool: RigReadToolDefinition<
+  "board_summary",
+  RigReadToolInputByName["board_summary"],
+  RigReadToolResultByName["board_summary"]
+> = {
   tool: "board_summary",
   description: "Return the current board snapshot with stable ownership metadata.",
   decodeInput: (input) => Schema.decodeUnknownSync(RigReadBoardSummaryInputSchema)(input),
@@ -95,7 +101,11 @@ const boardSummaryTool: RigReadToolDefinition<"board_summary", RigReadToolInputB
   },
 };
 
-const edgeLookupTool: RigReadToolDefinition<"edge_lookup", RigReadToolInputByName["edge_lookup"], RigReadToolResultByName["edge_lookup"]> = {
+const edgeLookupTool: RigReadToolDefinition<
+  "edge_lookup",
+  RigReadToolInputByName["edge_lookup"],
+  RigReadToolResultByName["edge_lookup"]
+> = {
   tool: "edge_lookup",
   description: "Return one board edge plus its resolved source and target nodes.",
   decodeInput: (input) => {
@@ -126,7 +136,11 @@ const edgeLookupTool: RigReadToolDefinition<"edge_lookup", RigReadToolInputByNam
   },
 };
 
-const nodeLookupTool: RigReadToolDefinition<"node_lookup", RigReadToolInputByName["node_lookup"], RigReadToolResultByName["node_lookup"]> = {
+const nodeLookupTool: RigReadToolDefinition<
+  "node_lookup",
+  RigReadToolInputByName["node_lookup"],
+  RigReadToolResultByName["node_lookup"]
+> = {
   tool: "node_lookup",
   description: "Return one board node plus its directly connected edges.",
   decodeInput: (input) => {

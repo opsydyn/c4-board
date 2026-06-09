@@ -19,10 +19,10 @@
  * @enduml
  */
 
+import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Effect } from "effect";
-import type { Node, Edge, Viewport } from "@xyflow/react";
-import type { C4Type, NodeData } from "./node-operations";
 import type { EdgeData } from "./edge-operations";
+import type { C4Type, NodeData } from "./node-operations";
 
 // ============================================================================
 // Type Definitions
@@ -32,27 +32,27 @@ import type { EdgeData } from "./edge-operations";
  * PlantUML C4 element types mapped to C4-PlantUML macros
  */
 const C4_PLANTUML_MACROS: Record<C4Type, string> = {
-	person: "Person",
-	system: "System",
-	externalSystem: "System_Ext",
-	container: "Container",
-	component: "Component",
+  person: "Person",
+  system: "System",
+  externalSystem: "System_Ext",
+  container: "Container",
+  component: "Component",
 };
 
 /**
  * Export options for PlantUML generation
  */
 export interface PlantUMLExportOptions {
-	/** Include description fields as third parameter */
-	includeDescriptions?: boolean;
-	/** Include technology/stack as second parameter */
-	includeTechnology?: boolean;
-	/** Diagram title */
-	title?: string;
-	/** Include C4-PlantUML library import */
-	includeLibraryImport?: boolean;
-	/** ReactFlow viewport state (pan/zoom) to preserve */
-	viewport?: Viewport;
+  /** Include description fields as third parameter */
+  includeDescriptions?: boolean;
+  /** Include technology/stack as second parameter */
+  includeTechnology?: boolean;
+  /** Diagram title */
+  title?: string;
+  /** Include C4-PlantUML library import */
+  includeLibraryImport?: boolean;
+  /** ReactFlow viewport state (pan/zoom) to preserve */
+  viewport?: Viewport;
 }
 
 // ============================================================================
@@ -63,44 +63,44 @@ export interface PlantUMLExportOptions {
  * Escape special characters for PlantUML strings
  */
 function escapeString(str: string): string {
-	return str
-		.replace(/\\/g, "\\\\")
-		.replace(/"/g, '\\"')
-		.replace(/\n/g, "\\n");
+  return str
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, "\\\"")
+    .replace(/\n/g, "\\n");
 }
 
 /**
  * Extract C4Type from node
  */
 function getNodeC4Type(node: Node): C4Type | null {
-	const data = (node.data ?? {}) as Partial<NodeData>;
-	const c4Type = data.c4Type ?? (node.type as C4Type | undefined);
+  const data = (node.data ?? {}) as Partial<NodeData>;
+  const c4Type = data.c4Type ?? (node.type as C4Type | undefined);
 
-	if (!c4Type || !isC4Type(c4Type)) {
-		return null;
-	}
+  if (!c4Type || !isC4Type(c4Type)) {
+    return null;
+  }
 
-	return c4Type;
+  return c4Type;
 }
 
 /**
  * Type guard for C4Type
  */
 function isC4Type(value: unknown): value is C4Type {
-	return (
-		value === "person" ||
-		value === "system" ||
-		value === "externalSystem" ||
-		value === "container" ||
-		value === "component"
-	);
+  return (
+    value === "person"
+    || value === "system"
+    || value === "externalSystem"
+    || value === "container"
+    || value === "component"
+  );
 }
 
 /**
  * Extract node data safely
  */
 function getNodeData(node: Node): Partial<NodeData> {
-	return (node.data ?? {}) as Partial<NodeData>;
+  return (node.data ?? {}) as Partial<NodeData>;
 }
 
 /**
@@ -108,101 +108,101 @@ function getNodeData(node: Node): Partial<NodeData> {
  * PlantUML identifiers must start with letter and contain only alphanumeric + underscore
  */
 function toPlantUMLId(id: string): string {
-	// Remove hyphens and special chars, replace with underscore
-	const cleaned = id.replace(/[^a-zA-Z0-9_]/g, "_");
-	// Ensure starts with letter
-	return /^[a-zA-Z]/.test(cleaned) ? cleaned : `n_${cleaned}`;
+  // Remove hyphens and special chars, replace with underscore
+  const cleaned = id.replace(/[^a-zA-Z0-9_]/g, "_");
+  // Ensure starts with letter
+  return /^[a-zA-Z]/.test(cleaned) ? cleaned : `n_${cleaned}`;
 }
 
 /**
  * Convert a single C4 node to PlantUML element definition with position metadata
  */
 function nodeToPlantUML(node: Node, options: PlantUMLExportOptions): string | null {
-	const c4Type = getNodeC4Type(node);
-	if (!c4Type) {
-		return null; // Skip non-C4 nodes (DDD nodes)
-	}
+  const c4Type = getNodeC4Type(node);
+  if (!c4Type) {
+    return null; // Skip non-C4 nodes (DDD nodes)
+  }
 
-	const data = getNodeData(node);
-	const macro = C4_PLANTUML_MACROS[c4Type];
-	const id = toPlantUMLId(node.id);
-	const label = escapeString(data.label ?? "Unnamed");
+  const data = getNodeData(node);
+  const macro = C4_PLANTUML_MACROS[c4Type];
+  const id = toPlantUMLId(node.id);
+  const label = escapeString(data.label ?? "Unnamed");
 
-	// Build parameters array
-	const params: string[] = [id, `"${label}"`];
+  // Build parameters array
+  const params: string[] = [id, `"${label}"`];
 
-	// Add technology/stack (optional second parameter)
-	if (options.includeTechnology && data.technology) {
-		params.push(`"${escapeString(data.technology)}"`);
-	} else if (options.includeDescriptions && data.description) {
-		// If we want description but no technology, add empty string for technology
-		params.push('""');
-	}
+  // Add technology/stack (optional second parameter)
+  if (options.includeTechnology && data.technology) {
+    params.push(`"${escapeString(data.technology)}"`);
+  } else if (options.includeDescriptions && data.description) {
+    // If we want description but no technology, add empty string for technology
+    params.push("\"\"");
+  }
 
-	// Add description (optional third parameter)
-	if (options.includeDescriptions && data.description) {
-		params.push(`"${escapeString(data.description)}"`);
-	}
+  // Add description (optional third parameter)
+  if (options.includeDescriptions && data.description) {
+    params.push(`"${escapeString(data.description)}"`);
+  }
 
-	const nodeLine = `${macro}(${params.join(", ")})`;
+  const nodeLine = `${macro}(${params.join(", ")})`;
 
-	// Add position metadata as comment for round-trip preservation
-	// Format: ' @pos(x,y,width,height)
-	const posMetadata = `' @pos(${node.position.x},${node.position.y},${node.width ?? 0},${node.height ?? 0})`;
+  // Add position metadata as comment for round-trip preservation
+  // Format: ' @pos(x,y,width,height)
+  const posMetadata = `' @pos(${node.position.x},${node.position.y},${node.width ?? 0},${node.height ?? 0})`;
 
-	return `${nodeLine}\n${posMetadata}`;
+  return `${nodeLine}\n${posMetadata}`;
 }
 
 /**
  * Convert an edge to PlantUML relationship with metadata
  */
 function edgeToPlantUML(edge: Edge, nodes: Node[]): string | null {
-	// Find source and target nodes to verify they're C4 types
-	const sourceNode = nodes.find(n => n.id === edge.source);
-	const targetNode = nodes.find(n => n.id === edge.target);
+  // Find source and target nodes to verify they're C4 types
+  const sourceNode = nodes.find(n => n.id === edge.source);
+  const targetNode = nodes.find(n => n.id === edge.target);
 
-	if (!sourceNode || !targetNode) {
-		return null;
-	}
+  if (!sourceNode || !targetNode) {
+    return null;
+  }
 
-	// Skip if either node is not a C4 node
-	const sourceC4Type = getNodeC4Type(sourceNode);
-	const targetC4Type = getNodeC4Type(targetNode);
+  // Skip if either node is not a C4 node
+  const sourceC4Type = getNodeC4Type(sourceNode);
+  const targetC4Type = getNodeC4Type(targetNode);
 
-	if (!sourceC4Type || !targetC4Type) {
-		return null;
-	}
+  if (!sourceC4Type || !targetC4Type) {
+    return null;
+  }
 
-	const sourceId = toPlantUMLId(edge.source);
-	const targetId = toPlantUMLId(edge.target);
-	const label = typeof edge.label === "string" ? escapeString(edge.label) : "uses";
+  const sourceId = toPlantUMLId(edge.source);
+  const targetId = toPlantUMLId(edge.target);
+  const label = typeof edge.label === "string" ? escapeString(edge.label) : "uses";
 
-	// Get edge metadata
-	const edgeData = edge.data as EdgeData | undefined;
-	const metadata = edgeData?.metadata;
+  // Get edge metadata
+  const edgeData = edge.data as EdgeData | undefined;
+  const metadata = edgeData?.metadata;
 
-	const lines: string[] = [];
+  const lines: string[] = [];
 
-	// Main relationship line
-	lines.push(`Rel(${sourceId}, ${targetId}, "${label}")`);
+  // Main relationship line
+  lines.push(`Rel(${sourceId}, ${targetId}, "${label}")`);
 
-	// Add OVL metadata as comment for round-trip preservation
-	if (metadata) {
-		const metaParts: string[] = [];
+  // Add OVL metadata as comment for round-trip preservation
+  if (metadata) {
+    const metaParts: string[] = [];
 
-		if (metadata.protocol) metaParts.push(`protocol=${metadata.protocol}`);
-		if (metadata.communicationStyle) metaParts.push(`style=${metadata.communicationStyle}`);
-		if (metadata.requestVolume !== undefined) metaParts.push(`volume=${metadata.requestVolume}`);
-		if (metadata.latency !== undefined) metaParts.push(`latency=${metadata.latency}`);
-		if (metadata.animationSpeed) metaParts.push(`animation=${metadata.animationSpeed}`);
-		if (metadata.notes) metaParts.push(`notes=${escapeString(metadata.notes)}`);
+    if (metadata.protocol) metaParts.push(`protocol=${metadata.protocol}`);
+    if (metadata.communicationStyle) metaParts.push(`style=${metadata.communicationStyle}`);
+    if (metadata.requestVolume !== undefined) metaParts.push(`volume=${metadata.requestVolume}`);
+    if (metadata.latency !== undefined) metaParts.push(`latency=${metadata.latency}`);
+    if (metadata.animationSpeed) metaParts.push(`animation=${metadata.animationSpeed}`);
+    if (metadata.notes) metaParts.push(`notes=${escapeString(metadata.notes)}`);
 
-		if (metaParts.length > 0) {
-			lines.push(`' @ovl: ${metaParts.join(", ")}`);
-		}
-	}
+    if (metaParts.length > 0) {
+      lines.push(`' @ovl: ${metaParts.join(", ")}`);
+    }
+  }
 
-	return lines.join("\n");
+  return lines.join("\n");
 }
 
 // ============================================================================
@@ -216,81 +216,81 @@ function edgeToPlantUML(edge: Edge, nodes: Node[]): string | null {
  * This is a pure function - no side effects, just string transformation.
  */
 export const exportC4ToPlantUML = (
-	nodes: Node[],
-	edges: Edge[],
-	options: PlantUMLExportOptions = {}
+  nodes: Node[],
+  edges: Edge[],
+  options: PlantUMLExportOptions = {},
 ): Effect.Effect<string> =>
-	Effect.gen(function* () {
-		const opts: Required<Omit<PlantUMLExportOptions, "viewport">> = {
-			includeDescriptions: options.includeDescriptions ?? true,
-			includeTechnology: options.includeTechnology ?? true,
-			title: options.title ?? "C4 Diagram",
-			includeLibraryImport: options.includeLibraryImport ?? true,
-		};
+  Effect.succeed((() => {
+    const opts: Required<Omit<PlantUMLExportOptions, "viewport">> = {
+      includeDescriptions: options.includeDescriptions ?? true,
+      includeTechnology: options.includeTechnology ?? true,
+      title: options.title ?? "C4 Diagram",
+      includeLibraryImport: options.includeLibraryImport ?? true,
+    };
 
-		const lines: string[] = [];
+    const lines: string[] = [];
 
-		// Header
-		lines.push("@startuml");
+    // Header
+    lines.push("@startuml");
 
-		// ReactFlow viewport metadata (preserved as comment for round-trip import)
-		if (options.viewport) {
-			lines.push(`' ReactFlow Viewport: ${JSON.stringify(options.viewport)}`);
-		}
+    // ReactFlow viewport metadata (preserved as comment for round-trip import)
+    if (options.viewport) {
+      lines.push(`' ReactFlow Viewport: ${JSON.stringify(options.viewport)}`);
+    }
 
-		// C4-PlantUML library import
-		if (opts.includeLibraryImport) {
-			lines.push("!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml");
-			lines.push("");
-		}
+    // C4-PlantUML library import
+    if (opts.includeLibraryImport) {
+      lines.push("!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml");
+      lines.push("");
+    }
 
-		// Title
-		if (opts.title) {
-			lines.push(`title ${opts.title}`);
-			lines.push("");
-		}
+    // Title
+    if (opts.title) {
+      lines.push(`title ${opts.title}`);
+      lines.push("");
+    }
 
-		// Filter to only C4 nodes
-		const c4Nodes = nodes.filter(node => getNodeC4Type(node) !== null);
+    // Filter to only C4 nodes
+    const c4Nodes = nodes.filter(node => getNodeC4Type(node) !== null);
 
-		if (c4Nodes.length === 0) {
-			lines.push("' No C4 elements found in diagram");
-		} else {
-			// Convert nodes to PlantUML elements
-			lines.push("' Elements");
-			for (const node of c4Nodes) {
-				const element = nodeToPlantUML(node, opts);
-				if (element) {
-					lines.push(element);
-				}
-			}
+    if (c4Nodes.length === 0) {
+      lines.push("' No C4 elements found in diagram");
+    } else {
+      // Convert nodes to PlantUML elements
+      lines.push("' Elements");
+      for (const node of c4Nodes) {
+        const element = nodeToPlantUML(node, opts);
+        if (element) {
+          lines.push(element);
+        }
+      }
 
-			lines.push("");
+      lines.push("");
 
-			// Convert edges to PlantUML relationships
-			if (edges.length > 0) {
-				lines.push("' Relationships");
-				for (const edge of edges) {
-					const relationship = edgeToPlantUML(edge, nodes);
-					if (relationship) {
-						lines.push(relationship);
-					}
-				}
-			}
-		}
+      // Convert edges to PlantUML relationships
+      if (edges.length > 0) {
+        lines.push("' Relationships");
+        for (const edge of edges) {
+          const relationship = edgeToPlantUML(edge, nodes);
+          if (relationship) {
+            lines.push(relationship);
+          }
+        }
+      }
+    }
 
-		lines.push("");
-		lines.push("@enduml");
+    lines.push("");
+    lines.push("@enduml");
 
-		return lines.join("\n");
-	});
+    return lines.join("\n");
+  })());
 
 /**
  * Generate PlantUML filename from diagram name
  */
 export const generatePlantUMLFilename = (diagramName?: string): Effect.Effect<string> =>
-	Effect.succeed(
-		diagramName
-			? `${diagramName.replace(/[^a-zA-Z0-9-_]/g, "_")}.puml`
-			: "c4-diagram.puml"
-	);
+  Effect.succeed(
+    diagramName
+      ? `${diagramName.replace(/[^a-zA-Z0-9-_]/g, "_")}.puml`
+      : "c4-diagram.puml",
+  );

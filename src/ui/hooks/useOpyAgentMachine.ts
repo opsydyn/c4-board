@@ -1,15 +1,12 @@
 import { useMachine } from "@xstate/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { OpyAgentLifecycleNonTerminalStage } from "../../core/effects/opy-agent.lifecycle";
 import {
   getOpyAgentLifecycleRemainingRetries,
   getOpyAgentLifecycleRetryBudget,
   getOpyAgentLifecycleStageGuardrail,
 } from "../../core/effects/opy-agent.orchestration";
-import {
-  emitOpyAgentFlowTelemetry,
-  type OpyAgentTelemetryContext,
-} from "../../core/effects/opy-agent.telemetry";
-import type { OpyAgentLifecycleNonTerminalStage } from "../../core/effects/opy-agent.lifecycle";
+import { emitOpyAgentFlowTelemetry, type OpyAgentTelemetryContext } from "../../core/effects/opy-agent.telemetry";
 import {
   createOpyAgentMachine,
   type OpyAgentLifecycleFailurePhase,

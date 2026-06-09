@@ -14,9 +14,9 @@ import { DDDElement } from "./ddd";
  * Specifies which modeling approach(es) the diagram uses
  */
 export const DiagramDomain = S.Union(
-	S.Literal("c4"), // Pure C4 architecture modeling
-	S.Literal("ddd"), // Pure Domain-Driven Design modeling
-	S.Literal("mixed"), // Hybrid diagrams with both C4 and DDD elements
+  S.Literal("c4"), // Pure C4 architecture modeling
+  S.Literal("ddd"), // Pure Domain-Driven Design modeling
+  S.Literal("mixed"), // Hybrid diagrams with both C4 and DDD elements
 );
 
 export type DiagramDomain = S.Schema.Type<typeof DiagramDomain>;
@@ -26,13 +26,13 @@ export type DiagramDomain = S.Schema.Type<typeof DiagramDomain>;
  * Can contain elements from both C4 and DDD modeling approaches
  */
 export const Diagram = S.Struct({
-	id: S.String,
-	name: S.String.pipe(S.minLength(1)),
-	description: S.optional(S.String),
-	domain: DiagramDomain,
-	elements: S.Array(S.Union(C4Element, DDDElement)), // Can contain both!
-	createdAt: S.String, // Consider Schema.DateFromString for stricter validation
-	updatedAt: S.String,
+  id: S.String,
+  name: S.String.pipe(S.minLength(1)),
+  description: S.optional(S.String),
+  domain: DiagramDomain,
+  elements: S.Array(S.Union(C4Element, DDDElement)), // Can contain both!
+  createdAt: S.String, // Consider Schema.DateFromString for stricter validation
+  updatedAt: S.String,
 });
 
 export type Diagram = S.Schema.Type<typeof Diagram>;
@@ -42,10 +42,10 @@ export type Diagram = S.Schema.Type<typeof Diagram>;
  * For backwards compatibility with existing C4 diagrams
  */
 export const DiagramLevel = S.Union(
-	S.Literal("context"),
-	S.Literal("container"),
-	S.Literal("component"),
-	S.Literal("code"),
+  S.Literal("context"),
+  S.Literal("container"),
+  S.Literal("component"),
+  S.Literal("code"),
 );
 
 export type DiagramLevel = S.Schema.Type<typeof DiagramLevel>;

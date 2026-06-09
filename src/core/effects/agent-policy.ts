@@ -201,13 +201,13 @@ export const resolveRigActionApprovalPolicy = (input: {
     ?? (input.actionClass === "rollback" || input.actionClass === "settings-mutation"
       ? "high"
       : input.actionClass === "batch-mutation"
-        ? thresholdTriggered ? "high" : "medium"
-        : "low");
+      ? thresholdTriggered ? "high" : "medium"
+      : "low");
   const approvalMode: RigActionApprovalMode = blockedReason
     ? "blocked"
     : input.actionClass === "single-add" || input.actionClass === "layout"
-      ? "always-confirm"
-      : "confirm-on-threshold";
+    ? "always-confirm"
+    : "confirm-on-threshold";
   const requiresConfirmation = approvalMode !== "blocked";
   const label = formatRigActionApprovalClass(input.actionClass);
   const summary = [
@@ -216,10 +216,10 @@ export const resolveRigActionApprovalPolicy = (input: {
     approvalMode === "blocked"
       ? "BLOCKED"
       : approvalMode === "always-confirm"
-        ? "ALWAYS CONFIRM"
-        : thresholdTriggered
-          ? "THRESHOLD CONFIRM"
-          : "STANDARD CONFIRM",
+      ? "ALWAYS CONFIRM"
+      : thresholdTriggered
+      ? "THRESHOLD CONFIRM"
+      : "STANDARD CONFIRM",
     `ACTIONS::${input.totalActions}`,
     input.totalNodesCreated > 0 ? `NODES::${input.totalNodesCreated}` : null,
     input.totalEdgesCreated > 0 ? `EDGES::${input.totalEdgesCreated}` : null,
@@ -270,7 +270,9 @@ const summarizeRigAllowedValues = (
 export const summarizeRigExecutionPolicySettings = (
   policy: RigExecutionPolicySettings,
 ): string =>
-  `EXEC::${policy.killSwitchEnabled ? "OFFLINE" : "LIVE"} · PROVIDERS::${summarizeRigAllowedValues(policy.allowedProviders)} · MODELS::${summarizeRigAllowedValues(policy.allowedModels)}`;
+  `EXEC::${policy.killSwitchEnabled ? "OFFLINE" : "LIVE"} · PROVIDERS::${
+    summarizeRigAllowedValues(policy.allowedProviders)
+  } · MODELS::${summarizeRigAllowedValues(policy.allowedModels)}`;
 
 export const detectRigExecutionPolicyViolation = (input: {
   readonly policy: RigExecutionPolicySettings;
@@ -340,7 +342,8 @@ export const detectRigMutationPolicyViolation = (input: {
       kind: "nodes",
       actual: input.totalNodesCreated,
       limit: input.policy.maxNodesCreatedPerRun,
-      message: `Node creation count ${input.totalNodesCreated} exceeds the max node budget ${input.policy.maxNodesCreatedPerRun}.`,
+      message:
+        `Node creation count ${input.totalNodesCreated} exceeds the max node budget ${input.policy.maxNodesCreatedPerRun}.`,
     };
   }
 
@@ -349,7 +352,8 @@ export const detectRigMutationPolicyViolation = (input: {
       kind: "edges",
       actual: input.totalEdgesCreated,
       limit: input.policy.maxEdgesCreatedPerRun,
-      message: `Edge creation count ${input.totalEdgesCreated} exceeds the max edge budget ${input.policy.maxEdgesCreatedPerRun}.`,
+      message:
+        `Edge creation count ${input.totalEdgesCreated} exceeds the max edge budget ${input.policy.maxEdgesCreatedPerRun}.`,
     };
   }
 

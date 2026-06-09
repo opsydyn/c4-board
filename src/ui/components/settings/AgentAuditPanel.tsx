@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { OpyAnomalyAssessment } from "../../../core/effects/opy-anomaly";
 import { buildOpyReplayEvalDashboard } from "../../../core/effects/opy-agent.evals";
 import type { OpyAgentArtifact, OpyAgentToolCall } from "../../../core/effects/opy-agent.trace";
+import type { OpyAnomalyAssessment } from "../../../core/effects/opy-anomaly";
 import {
   listAllOpyAgentArtifacts,
   listAllOpyAgentTasks,
@@ -56,7 +56,9 @@ const formatSessionLabel = (session: OpyChatSession | undefined): string => {
     return "UNKNOWN SESSION";
   }
 
-  return `${session.title.toUpperCase()} · ${session.domain.toUpperCase()}${session.diagramId ? ` · ${session.diagramId}` : ""}`;
+  return `${session.title.toUpperCase()} · ${session.domain.toUpperCase()}${
+    session.diagramId ? ` · ${session.diagramId}` : ""
+  }`;
 };
 
 const formatDuration = (durationMs: number | null): string => {
@@ -81,8 +83,7 @@ const formatPercent = (value: number | null): string =>
 
 const isAnomalySeverity = (
   value: unknown,
-): value is OpyAnomalyAssessment["severity"] =>
-  value === "none" || value === "caution" || value === "critical";
+): value is OpyAnomalyAssessment["severity"] => value === "none" || value === "caution" || value === "critical";
 
 const isAnomalySignalKind = (value: unknown): value is OpyAnomalyAssessment["signals"][number]["kind"] =>
   value === "prompt-injection"
@@ -179,8 +180,7 @@ const describeTaskWho = (task: OpyAgentTask): string =>
     ? "OPY NET + OPERATOR"
     : "OPY NET";
 
-const describeTaskStatus = (task: OpyAgentTask): string =>
-  `${task.status.toUpperCase()} · ${task.stage.toUpperCase()}`;
+const describeTaskStatus = (task: OpyAgentTask): string => `${task.status.toUpperCase()} · ${task.stage.toUpperCase()}`;
 
 const buildAuditEntries = (
   snapshot: AgentAuditSnapshot,
@@ -225,15 +225,15 @@ const buildAuditEntries = (
         : "PREFLIGHT · CAUTION",
       why: payload.assessment.summary,
       sourceSession: formatSessionLabel(sessionById.get(artifact.sessionId)),
-      detail: `REQUEST ${payload.assessment.requestKind.toUpperCase()} · SCORE ${payload.assessment.score} · ${payload.requestText}`,
+      detail:
+        `REQUEST ${payload.assessment.requestKind.toUpperCase()} · SCORE ${payload.assessment.score} · ${payload.requestText}`,
     }] satisfies ReadonlyArray<AgentAuditEntry>;
   });
 
   return [...taskEntries, ...proposalEntries, ...anomalyEntries].sort((left, right) => right.at - left.at);
 };
 
-const toErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
+const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
 export function AgentAuditPanel() {
   const { runEffect } = useDatabase();
@@ -304,15 +304,16 @@ export function AgentAuditPanel() {
     [snapshot.tasks],
   );
   const anomalyArtifacts = useMemo(
-    () => snapshot.artifacts
-      .map((artifact) => ({
-        artifact,
-        payload: decodePersistedAnomalyArtifact(artifact),
-      }))
-      .filter((entry): entry is {
-        readonly artifact: OpyAgentArtifact;
-        readonly payload: PersistedAnomalyAssessmentPayload;
-      } => entry.payload !== null && entry.payload.assessment.severity !== "none"),
+    () =>
+      snapshot.artifacts
+        .map((artifact) => ({
+          artifact,
+          payload: decodePersistedAnomalyArtifact(artifact),
+        }))
+        .filter((entry): entry is {
+          readonly artifact: OpyAgentArtifact;
+          readonly payload: PersistedAnomalyAssessmentPayload;
+        } => entry.payload !== null && entry.payload.assessment.severity !== "none"),
     [snapshot.artifacts],
   );
   const anomalyCount = useMemo(
@@ -328,11 +329,12 @@ export function AgentAuditPanel() {
     [snapshot.proposals],
   );
   const replayEvalDashboard = useMemo(
-    () => buildOpyReplayEvalDashboard({
-      tasks: snapshot.tasks,
-      artifacts: snapshot.artifacts,
-      toolCalls: snapshot.toolCalls,
-    }),
+    () =>
+      buildOpyReplayEvalDashboard({
+        tasks: snapshot.tasks,
+        artifacts: snapshot.artifacts,
+        toolCalls: snapshot.toolCalls,
+      }),
     [snapshot.artifacts, snapshot.tasks, snapshot.toolCalls],
   );
 
@@ -402,7 +404,9 @@ export function AgentAuditPanel() {
         </div>
         <div className={styles.settingsMetricTile}>
           <span className={styles.settingsMetricLabel}>Avg Duration</span>
-          <span className={styles.settingsMetricValue}>{formatDuration(replayEvalDashboard.taskLatency.averageMs)}</span>
+          <span className={styles.settingsMetricValue}>
+            {formatDuration(replayEvalDashboard.taskLatency.averageMs)}
+          </span>
         </div>
         <div className={styles.settingsMetricTile}>
           <span className={styles.settingsMetricLabel}>Task p50</span>
@@ -414,7 +418,9 @@ export function AgentAuditPanel() {
         </div>
         <div className={styles.settingsMetricTile}>
           <span className={styles.settingsMetricLabel}>Tool p95</span>
-          <span className={styles.settingsMetricValue}>{formatDuration(replayEvalDashboard.toolCallLatency.p95Ms)}</span>
+          <span className={styles.settingsMetricValue}>
+            {formatDuration(replayEvalDashboard.toolCallLatency.p95Ms)}
+          </span>
         </div>
         <div className={styles.settingsMetricTile}>
           <span className={styles.settingsMetricLabel}>Tool Success</span>

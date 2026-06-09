@@ -107,9 +107,9 @@ export const scoreRigAgentGroundingConfidence = (
   const citationCount = input.context.citations.length;
   const retrievalHitCount = input.context.retrievalHits?.length ?? 0;
   const boardCitationCount = input.context.citations.filter((citation) => citation.tool === "board_summary").length;
-  const scopeCitationCount = input.context.citations.filter((citation) =>
-    citation.tool === "node_lookup" || citation.tool === "edge_lookup"
-  ).length;
+  const scopeCitationCount =
+    input.context.citations.filter((citation) => citation.tool === "node_lookup" || citation.tool === "edge_lookup")
+      .length;
   const proposalSummary = input.proposalSummary ?? null;
   const reviewEvidence = input.reviewEvidence ?? null;
   const proposalOutputEvidenceCount = proposalSummary
@@ -129,8 +129,8 @@ export const scoreRigAgentGroundingConfidence = (
   const ambiguousOutputCount = proposalSummary
     ? proposalSummary.ambiguousNodes + proposalSummary.ambiguousEdges
     : reviewEvidence
-      ? reviewEvidence.ambiguityCount + reviewEvidence.missingNodeCount + reviewEvidence.missingEdgeCount
-      : 0;
+    ? reviewEvidence.ambiguityCount + reviewEvidence.missingNodeCount + reviewEvidence.missingEdgeCount
+    : 0;
 
   const evidenceSurfaceRequiresCoverage = surface === "proposal" || surface === "review";
   const lowCoverage = citationCount === 0
@@ -138,18 +138,18 @@ export const scoreRigAgentGroundingConfidence = (
 
   const score = clampScore(
     (boardCitationCount > 0 ? 35 : 0)
-    + Math.min(scopeCitationCount, 3) * 18
-    + Math.min(retrievalHitCount, 3) * 8
-    + Math.min(outputEvidenceCount, 4) * 5
-    - Math.min(ambiguousOutputCount, 4) * 12
-    - (lowCoverage ? 20 : 0),
+      + Math.min(scopeCitationCount, 3) * 18
+      + Math.min(retrievalHitCount, 3) * 8
+      + Math.min(outputEvidenceCount, 4) * 5
+      - Math.min(ambiguousOutputCount, 4) * 12
+      - (lowCoverage ? 20 : 0),
   );
 
   const confidence: RigAgentContextConfidence = lowCoverage || score < 35
     ? "low"
     : score >= 70 && citationCount >= 3 && ambiguousOutputCount === 0
-      ? "high"
-      : "medium";
+    ? "high"
+    : "medium";
 
   const reasons = [
     `CITATIONS::${citationCount}`,
@@ -276,11 +276,12 @@ const pushCitation = (
   target.push(nextCitation);
 };
 
-export const formatRigAgentCitationBlock = (bundle: RigAgentContextBundle): string => [
-  `CONFIDENCE::${bundle.confidence.toUpperCase()} · ${bundle.confidenceReason}`,
-  ...bundle.citations.map((citation) => `CITATION::${formatCitationLine(citation)}`),
-  ...(bundle.retrievalHits ?? []).map((hit) => `CITATION::${formatRetrievalCitationLine(hit)}`),
-].join("\n");
+export const formatRigAgentCitationBlock = (bundle: RigAgentContextBundle): string =>
+  [
+    `CONFIDENCE::${bundle.confidence.toUpperCase()} · ${bundle.confidenceReason}`,
+    ...bundle.citations.map((citation) => `CITATION::${formatCitationLine(citation)}`),
+    ...(bundle.retrievalHits ?? []).map((hit) => `CITATION::${formatRetrievalCitationLine(hit)}`),
+  ].join("\n");
 
 export const mergeRigAgentContextWithRetrieval = (
   bundle: RigAgentContextBundle,
@@ -312,7 +313,7 @@ export const mergeRigAgentContextWithRetrieval = (
 export const assembleRigAgentContextWithTools = (
   input: AssembleRigAgentContextWithToolsInput,
 ): Effect.Effect<RigAgentContextBundle, AgentError> =>
-  Effect.gen(function* () {
+  Effect.gen(function*() {
     const { boardSummary, boardContext, focus, runReadTool } = input;
     const redactionMode = input.redactionMode ?? "strict";
 

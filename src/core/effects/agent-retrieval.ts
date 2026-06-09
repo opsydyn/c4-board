@@ -1,8 +1,11 @@
-import Fuse, { type IFuseOptions } from "fuse.js";
 import { Effect } from "effect";
+import Fuse, { type IFuseOptions } from "fuse.js";
+import type { RigExecutionPolicySettings, RigMutationPolicySettings } from "./agent-policy";
+import type { RigC4BoardNode, RigC4BoardSummary } from "./ai-agent.runtime";
+import { type Diagram, listDiagrams } from "./database";
 import type { EffectiveRigAgentV1RolloutState } from "./feature-flags";
-import type { OpyBoardContextRegistry } from "./opy-board-context";
 import type { OpyAgentArtifact } from "./opy-agent.trace";
+import type { OpyBoardContextRegistry } from "./opy-board-context";
 import {
   listOpyAgentArtifacts,
   listOpyAgentCheckpoints,
@@ -15,9 +18,6 @@ import {
   type OpyChatMessage,
   type OpyPersistedDiagramProposal,
 } from "./opy-chat.persistence";
-import type { RigC4BoardNode, RigC4BoardSummary } from "./ai-agent.runtime";
-import { listDiagrams, type Diagram } from "./database";
-import type { RigExecutionPolicySettings, RigMutationPolicySettings } from "./agent-policy";
 import type { AiActionMode, AiProvider, RedactionMode } from "./settings.types";
 
 export type RigAgentRetrievalDomain = OpyChatDomain | "azure";
@@ -192,11 +192,9 @@ const DEFAULT_SCOPES: ReadonlyArray<RigAgentRetrievalScope> = [
 const DEFAULT_MAX_HITS = 4;
 const DEFAULT_RECENCY_MS = 1000 * 60 * 60 * 24 * 30;
 const SECRET_TOKEN_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g;
-const UUID_PATTERN =
-  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
+const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
 const AZURE_RESOURCE_ID_PATTERN = /\/subscriptions\/[^\s]+/gi;
-const INTERNAL_ID_PATTERN =
-  /\b(session|task|request|checkpoint|artifact|diagram|tool)-[A-Za-z0-9-]+\b/gi;
+const INTERNAL_ID_PATTERN = /\b(session|task|request|checkpoint|artifact|diagram|tool)-[A-Za-z0-9-]+\b/gi;
 
 const retrievalFuseOptions: IFuseOptions<RigAgentRetrievalDocument> = {
   keys: [
@@ -613,7 +611,8 @@ const buildGovernanceDocument = (input: {
   scope: "governance",
   source: "governance",
   title: "RIG GOVERNANCE SNAPSHOT",
-  detail: `MODE ${input.governance.actionMode.toUpperCase()} · ROLLOUT ${input.governance.rigAgentRollout.mode.toUpperCase()} · REDACTION ${input.governance.redactionMode.toUpperCase()}`,
+  detail:
+    `MODE ${input.governance.actionMode.toUpperCase()} · ROLLOUT ${input.governance.rigAgentRollout.mode.toUpperCase()} · REDACTION ${input.governance.redactionMode.toUpperCase()}`,
   content: [
     `provider ${input.governance.aiProvider}`,
     `model ${input.governance.aiModel}`,
@@ -644,7 +643,9 @@ const buildSettingsDocument = (input: {
     scope: "governance",
     source: "settings",
     title: "OPERATOR SETTINGS SURFACE",
-    detail: `PRESENCE ${input.settings.opyWidgetPresence.toUpperCase()} · TELEMETRY ${input.settings.telemetryEnabled ? "ON" : "OFF"} · RETENTION ${input.settings.historyRetentionDays}D`,
+    detail: `PRESENCE ${input.settings.opyWidgetPresence.toUpperCase()} · TELEMETRY ${
+      input.settings.telemetryEnabled ? "ON" : "OFF"
+    } · RETENTION ${input.settings.historyRetentionDays}D`,
     content: [
       `opy visible ${toOnOff(input.settings.opyVisible)}`,
       `azure panel ${toOnOff(input.settings.azurePanelVisible)}`,
@@ -678,7 +679,8 @@ const buildAzureSyncDocument = (input: {
     scope: "governance",
     source: "azure_sync",
     title: "AZURE SYNC RUN SUMMARY",
-    detail: `AUTH ${input.snapshot.authState.toUpperCase()} · ${input.snapshot.subscriptionCount} subs · ${input.snapshot.previewResourceCount} resources · ${input.snapshot.previewRelationshipCount} links`,
+    detail:
+      `AUTH ${input.snapshot.authState.toUpperCase()} · ${input.snapshot.subscriptionCount} subs · ${input.snapshot.previewResourceCount} resources · ${input.snapshot.previewRelationshipCount} links`,
     content: [
       `strategy ${normalizeText(input.snapshot.authStrategy, "unconfigured")}`,
       `resource groups ${input.snapshot.resourceGroupCount}`,
@@ -717,7 +719,9 @@ const buildExplainabilityDocument = (input: {
     scope: "board",
     source: "explainability",
     title: "COMPLEXITY FIELD EXPLAINABILITY",
-    detail: `${input.snapshot.totalModules} modules · avg risk ${input.snapshot.averageRisk.toFixed(1)} · focus ${focusDetail}`,
+    detail: `${input.snapshot.totalModules} modules · avg risk ${
+      input.snapshot.averageRisk.toFixed(1)
+    } · focus ${focusDetail}`,
     content: [
       `panel ${toOnOff(input.snapshot.explainabilityVisible)}`,
       `threshold ${input.snapshot.mudAlertThreshold.toFixed(1)}`,
@@ -725,10 +729,14 @@ const buildExplainabilityDocument = (input: {
       `average balance ${input.snapshot.averageBalance.toFixed(1)}`,
       `propagation ${input.snapshot.totalPropagation.toFixed(1)}`,
       focusedModule
-        ? `focus module ${focusedModule.label} · ${focusedModule.subdomainType} · ${focusedModule.integrationType} · strategy ${focusedModule.strategy ?? "legacy"}`
+        ? `focus module ${focusedModule.label} · ${focusedModule.subdomainType} · ${focusedModule.integrationType} · strategy ${
+          focusedModule.strategy ?? "legacy"
+        }`
         : "",
       input.snapshot.topRiskModule
-        ? `top risk ${input.snapshot.topRiskModule.label} ${input.snapshot.topRiskModule.systemicRisk.toFixed(1)} ${input.snapshot.topRiskModule.riskTier.toUpperCase()}`
+        ? `top risk ${input.snapshot.topRiskModule.label} ${
+          input.snapshot.topRiskModule.systemicRisk.toFixed(1)
+        } ${input.snapshot.topRiskModule.riskTier.toUpperCase()}`
         : "",
     ].filter((value) => value.length > 0).join(" · "),
     createdAt: null,

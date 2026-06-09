@@ -1,10 +1,5 @@
 import type { Edge as ReactFlowEdge, Node as ReactFlowNode } from "@xyflow/react";
-import type {
-  RigC4BoardEdge,
-  RigC4BoardNode,
-  RigC4BoardNodeType,
-  RigC4BoardSummary,
-} from "./agent-tools/contracts";
+import type { RigC4BoardEdge, RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "./agent-tools/contracts";
 import type { NodeData } from "./node-operations";
 import type { OpyAgentCheckpoint } from "./opy-chat.persistence";
 
@@ -178,16 +173,17 @@ const sortImpacts = (
   [...impacts].sort((left, right) =>
     compareImpactStatus(left.status) - compareImpactStatus(right.status)
     || left.category.localeCompare(right.category)
-    || left.title.localeCompare(right.title));
+    || left.title.localeCompare(right.title)
+  );
 
 export const selectLatestOpyAgentCheckpoint = (
   checkpoints: ReadonlyArray<OpyAgentCheckpoint>,
 ): OpyAgentCheckpoint | null => checkpoints[0] ?? null;
 
 export const formatOpyRollbackSummary = (checkpoint: OpyAgentCheckpoint): string =>
-  `ROLLBACK READY:: CHECKPOINT ${checkpoint.id.slice(0, 8)} · ${
-    checkpoint.snapshot.nodes.length
-  } NODE(S) · ${checkpoint.snapshot.edges.length} EDGE(S)`;
+  `ROLLBACK READY:: CHECKPOINT ${
+    checkpoint.id.slice(0, 8)
+  } · ${checkpoint.snapshot.nodes.length} NODE(S) · ${checkpoint.snapshot.edges.length} EDGE(S)`;
 
 export const buildOpyCheckpointRestorePreview = (
   checkpoint: OpyAgentCheckpoint,

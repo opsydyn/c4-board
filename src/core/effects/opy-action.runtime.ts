@@ -9,9 +9,9 @@ import { formatOpyRollbackSummary } from "./agent-rollback.runtime";
 import type { RigC4BoardSummary, RigC4DiagramProposal } from "./ai-agent.runtime";
 import {
   buildGroundedProposalDiff,
-  summarizeGroundedProposalDiff,
   type OpyGroundedProposalDiff,
   type OpyGroundedProposalSummary,
+  summarizeGroundedProposalDiff,
 } from "./opy-c4-proposals";
 import type { OpyAgentCheckpoint, OpyPlanDecisionStatus } from "./opy-chat.persistence";
 import type { AiActionMode } from "./settings.types";
@@ -142,7 +142,10 @@ export const resolveOpyExecutableAddNodeActionFlow = (input: {
   readonly sessionId: string;
   readonly nodeType: OpyC4NodeType;
   readonly label: string;
-}): { readonly ok: true; readonly value: OpyActionFlowDescriptor } | { readonly ok: false; readonly issue: OpyActionFlowIssue } => {
+}): { readonly ok: true; readonly value: OpyActionFlowDescriptor } | {
+  readonly ok: false;
+  readonly issue: OpyActionFlowIssue;
+} => {
   if (input.domain !== "c4") {
     return {
       ok: false,
@@ -195,7 +198,8 @@ export const resolveOpyApplyProposalActionFlow = (input: {
   readonly sessionId: string;
 }):
   | { readonly ok: true; readonly value: OpyApplyProposalActionResolution }
-  | { readonly ok: false; readonly issue: OpyActionFlowIssue } => {
+  | { readonly ok: false; readonly issue: OpyActionFlowIssue } =>
+{
   if (input.actionMode !== "apply-with-confirmation") {
     return {
       ok: false,
@@ -367,7 +371,10 @@ export const resolveOpyRollbackActionFlow = (input: {
   readonly policy: RigMutationPolicySettings;
   readonly checkpoint: OpyAgentCheckpoint | null;
   readonly sessionId: string;
-}): { readonly ok: true; readonly value: OpyActionFlowDescriptor } | { readonly ok: false; readonly issue: OpyActionFlowIssue } => {
+}): { readonly ok: true; readonly value: OpyActionFlowDescriptor } | {
+  readonly ok: false;
+  readonly issue: OpyActionFlowIssue;
+} => {
   if (input.actionMode !== "apply-with-confirmation") {
     return {
       ok: false,
@@ -432,12 +439,14 @@ export const resolveOpyRollbackActionFlow = (input: {
         approvalPolicy.summary,
         "",
         formatOpyRollbackSummary(input.checkpoint),
-        `Created ${new Intl.DateTimeFormat(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        }).format(input.checkpoint.createdAt)}`,
+        `Created ${
+          new Intl.DateTimeFormat(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }).format(input.checkpoint.createdAt)
+        }`,
         "",
         "This will restore the board to the checkpoint snapshot and save it.",
       ].join("\n"),

@@ -169,13 +169,13 @@ const createEdgeId = (existingEdges: Edge[]): string => {
   const createdAt = Date.now();
   const existingIds = new Set(existingEdges.map((edge) => edge.id));
 
-  do {
+  for (;;) {
     edgeIdSequence += 1;
     const candidate = `edge-${createdAt}-${edgeIdSequence.toString(36)}`;
     if (!existingIds.has(candidate)) {
       return candidate;
     }
-  } while (true);
+  }
 };
 
 const createEdge = (

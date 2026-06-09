@@ -1,10 +1,10 @@
-import type { RigC4BoardNode, RigC4BoardSummary } from "./ai-agent.runtime";
 import type {
   RigReadBoardSummaryResult,
   RigReadEdgeLookupResult,
   RigReadNodeLookupResult,
 } from "./agent-tools/contracts";
 import { executeRigReadTool } from "./agent-tools/read-tools";
+import type { RigC4BoardNode, RigC4BoardSummary } from "./ai-agent.runtime";
 
 export interface OpyBoardContextNodeSnapshot {
   readonly id: string;
@@ -149,7 +149,9 @@ export const buildOpyBoardContextRegistry = (
   const hotspotNodeLookup = boardSummaryResult.nodes
     .map((node) => executeRigReadTool("node_lookup", { nodeId: node.id }, boardSummary))
     .filter((lookup): lookup is RigReadNodeLookupResult => lookup.found)
-    .sort((left, right) => right.relationshipCount - left.relationshipCount || left.node!.label.localeCompare(right.node!.label))[0]
+    .sort((left, right) =>
+      right.relationshipCount - left.relationshipCount || left.node!.label.localeCompare(right.node!.label)
+    )[0]
     ?? null;
   const hotspotNode = hotspotNodeLookup?.found ? toNodeSnapshot(hotspotNodeLookup) : null;
 

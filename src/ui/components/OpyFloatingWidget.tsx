@@ -1,6 +1,15 @@
 import { CloudIcon, GearSixIcon, RobotIcon, UsersFourIcon } from "@phosphor-icons/react";
 import { animated, useTransition } from "@react-spring/web";
-import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   type Position,
   Rnd,
@@ -61,6 +70,9 @@ const WIDGET_PRESETS = {
 
 type WidgetPresetName = keyof typeof WIDGET_PRESETS;
 type WidgetRenderState = "launcher" | "orb" | "surface";
+type AnimatedDivStyle = ComponentProps<typeof animated.div>["style"];
+
+const toAnimatedDivStyle = (style: unknown): AnimatedDivStyle => style as AnimatedDivStyle;
 
 interface OpyFloatingWidgetProps {
   readonly visible: boolean;
@@ -1076,7 +1088,7 @@ export function OpyFloatingWidget({
       snapTarget: nextSnapTarget,
       x: 0,
       y: 0,
-      });
+    });
   };
 
   const handleResizeStart: RndResizeStartCallback = () => {
@@ -1170,10 +1182,7 @@ export function OpyFloatingWidget({
           return (
             <animated.div
               className={styles.widgetLauncherTransition}
-              style={{
-                opacity: transitionStyle.opacity,
-                transform: transitionStyle.scale.to((scale) => `scale(${scale})`),
-              }}
+              style={toAnimatedDivStyle(transitionStyle)}
             >
               <button
                 type="button"
@@ -1192,12 +1201,11 @@ export function OpyFloatingWidget({
           return (
             <animated.div
               className={styles.widgetOrbLauncherMount}
-              style={{
+              style={toAnimatedDivStyle({
+                ...transitionStyle,
                 left: orbPosition.x,
                 top: orbPosition.y,
-                opacity: transitionStyle.opacity,
-                transform: transitionStyle.scale.to((scale) => `scale(${scale})`),
-              }}
+              })}
             >
               <button
                 type="button"
@@ -1216,10 +1224,7 @@ export function OpyFloatingWidget({
           <animated.div
             className={styles.widgetRoot}
             ref={widgetRootRef}
-            style={{
-              opacity: transitionStyle.opacity,
-              transform: transitionStyle.scale.to((scale) => `scale(${scale})`),
-            }}
+            style={toAnimatedDivStyle(transitionStyle)}
           >
             <Rnd
               bounds="parent"

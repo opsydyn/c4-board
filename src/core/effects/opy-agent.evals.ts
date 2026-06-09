@@ -45,8 +45,7 @@ export interface OpyReplayEvalDashboard {
 
 const uniqueArtifactKinds = (
   artifacts: ReadonlyArray<OpyAgentArtifact>,
-): ReadonlyArray<OpyAgentArtifactKind> =>
-  [...new Set(artifacts.map((artifact) => artifact.kind))].sort();
+): ReadonlyArray<OpyAgentArtifactKind> => [...new Set(artifacts.map((artifact) => artifact.kind))].sort();
 
 export const getOpyReplayRequiredArtifactKinds = (
   replayKind: OpyAgentTask["request"]["replay"]["kind"],
@@ -138,9 +137,7 @@ export const buildOpyReplayEvalPlans = (input: {
       const taskToolCalls = toolCallsByTaskId.get(task.id) ?? [];
       const requiredArtifactKinds = getOpyReplayRequiredArtifactKinds(task.request.replay.kind);
       const availableArtifactKinds = uniqueArtifactKinds(taskArtifacts);
-      const missingArtifactKinds = requiredArtifactKinds.filter((kind) =>
-        !availableArtifactKinds.includes(kind)
-      );
+      const missingArtifactKinds = requiredArtifactKinds.filter((kind) => !availableArtifactKinds.includes(kind));
       const snapshotLinked = task.snapshotRef !== null && typeof task.snapshotRef !== "undefined";
       const terminalDurationMs = toDuration(task.createdAt, task.completedAt);
       const completedToolCallCount = taskToolCalls.filter((toolCall) => toolCall.status === "completed").length;

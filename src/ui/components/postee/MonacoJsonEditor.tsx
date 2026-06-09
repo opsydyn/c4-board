@@ -11,7 +11,7 @@
 
 import Editor, { loader, type Monaco } from "@monaco-editor/react";
 import { CaretDownIcon, CaretRightIcon, CopySimpleIcon, TextAlignLeftIcon } from "@phosphor-icons/react";
-import type { editor } from "monaco-editor";
+import type { editor, languages } from "monaco-editor";
 import { useCallback, useRef } from "react";
 import { actionBar, actionButton, monacoEditorContainer, monacoEditorWrapper } from "./MonacoJsonEditor.css";
 
@@ -134,19 +134,8 @@ export function MonacoJsonEditor({
 
     // Register Code Lens provider for JSON
     monaco.languages.registerCodeLensProvider("json", {
-      provideCodeLenses: (model) => {
-        const lenses: {
-          range: {
-            startLineNumber: number;
-            startColumn: number;
-            endLineNumber: number;
-            endColumn: number;
-          };
-          command?: {
-            id: string;
-            title: string;
-          };
-        }[] = [];
+      provideCodeLenses: (model: editor.ITextModel) => {
+        const lenses: languages.CodeLens[] = [];
         try {
           const content = model.getValue();
           const parsed = JSON.parse(content.replace(/\{\{[^}]+\}\}/g, "\"\""));

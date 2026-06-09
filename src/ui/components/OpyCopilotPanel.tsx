@@ -5,44 +5,30 @@ import {
   assembleRigAgentContext,
   formatRigAgentCitationBlock,
   mergeRigAgentContextWithRetrieval,
-  scoreRigAgentGroundingConfidence,
   type RigAgentContextBundle,
+  scoreRigAgentGroundingConfidence,
 } from "../../core/effects/agent-context";
+import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
+import {
+  detectRigExecutionPolicyViolation,
+  type RigExecutionPolicySettings,
+  type RigMutationPolicySettings,
+  summarizeRigExecutionPolicySettings,
+  summarizeRigMutationPolicySettings,
+  summarizeRigToolPolicy,
+} from "../../core/effects/agent-policy";
 import {
   loadRigAgentRetrievalBundle,
   type RigAgentAzureSyncRetrievalSnapshot,
   type RigAgentExplainabilityRetrievalSnapshot,
   type RigAgentSettingsRetrievalSnapshot,
 } from "../../core/effects/agent-retrieval";
-import { buildRigMutationPlanDiff } from "../../core/effects/agent-plan-diff";
-import {
-  detectRigExecutionPolicyViolation,
-  summarizeRigExecutionPolicySettings,
-  summarizeRigMutationPolicySettings,
-  summarizeRigToolPolicy,
-  type RigExecutionPolicySettings,
-  type RigMutationPolicySettings,
-} from "../../core/effects/agent-policy";
 import {
   buildOpyCheckpointRestorePreview,
   formatOpyRollbackSummary,
   type OpyCheckpointRestoreImpactStatus,
   selectLatestOpyAgentCheckpoint,
 } from "../../core/effects/agent-rollback.runtime";
-import {
-  detectOpyCommandToken,
-  formatOpyStructuredCommandDraft,
-  getOpyCommandAvailabilityForOption,
-  getOpyDraftCommandFeedback,
-  getOpySlashCommandSuggestions,
-  getOpyStructuredCommandDraft,
-  OPY_COMMAND_CONTROL_HINTS,
-  parseOpyCommand,
-  type OpyBoardReviewCommand,
-  type OpyDiagramProposalCommand,
-  type OpySlashCommandOption,
-  type OpyStructuredCommandDraft,
-} from "../../core/effects/opy-command-registry";
 import type {
   RigApplyLayoutValidationSummary,
   RigCreateEdgesValidationSummary,
@@ -68,6 +54,7 @@ import {
   summarizeAgentError,
   withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
+import type { EffectiveRigAgentV1RolloutState } from "../../core/effects/feature-flags";
 import {
   createOpyAddNodeActionFlowDescriptor,
   type OpyActionFlowDescriptor,
@@ -78,40 +65,43 @@ import {
   resolveOpyRollbackActionFlow,
 } from "../../core/effects/opy-action.runtime";
 import {
-  buildOpyAgentTaskLineage,
-  deriveOpyAgentTaskContinuityKey,
-  deriveOpyAgentTaskLineageKey,
-  findOpyAgentTaskLineagePredecessor,
-  selectLatestOpyAgentTaskLineageCollectionEntries,
-  selectLatestOpyAgentTasksByLineage,
-  summarizeOpyAgentTaskLineageCollection,
-  summarizeOpyAgentTaskLineage,
-} from "../../core/effects/opy-agent.task-lineage";
-import {
-  emitOpyAgentRunTelemetry,
-  type OpyAgentTelemetryContext,
-} from "../../core/effects/opy-agent.telemetry";
-import {
-  createOpyStageTransitionPayload,
-  formatOpyStageTransitionSummary,
-  type OpyStageTransitionPayload,
-} from "../../core/effects/opy-agent.stage-transitions";
-import {
   buildResumeBoundaryDrilldownFromOutcome,
   buildResumeBoundaryDrilldownFromPlan,
   calculateReuseEfficiencyRatio,
-  formatReuseEfficiency,
   formatLineageResumeOutcomeRollup,
+  formatReuseEfficiency,
   LOW_EFFICIENCY_REUSE_RATIO_THRESHOLD,
-  summarizeOpyTaskLineageAttention,
-  summarizeResumeBoundaryHealthDrivers,
   type OpyPersistedResumeBoundaryOutcomeItem,
   type OpyPersistedResumeBoundaryOutcomePayload,
   type OpyResumeBoundaryOrigin,
   type OpyResumeBoundaryOutcome,
   type OpyResumeBoundaryPlanItem,
   type OpyTaskLineageAttentionSummary,
+  summarizeOpyTaskLineageAttention,
+  summarizeResumeBoundaryHealthDrivers,
 } from "../../core/effects/opy-agent.resume";
+import {
+  createOpyStageTransitionPayload,
+  formatOpyStageTransitionSummary,
+  type OpyStageTransitionPayload,
+} from "../../core/effects/opy-agent.stage-transitions";
+import {
+  buildOpyAgentTaskLineage,
+  deriveOpyAgentTaskContinuityKey,
+  deriveOpyAgentTaskLineageKey,
+  findOpyAgentTaskLineagePredecessor,
+  selectLatestOpyAgentTaskLineageCollectionEntries,
+  selectLatestOpyAgentTasksByLineage,
+  summarizeOpyAgentTaskLineage,
+  summarizeOpyAgentTaskLineageCollection,
+} from "../../core/effects/opy-agent.task-lineage";
+import { emitOpyAgentRunTelemetry, type OpyAgentTelemetryContext } from "../../core/effects/opy-agent.telemetry";
+import type {
+  OpyAgentArtifact,
+  OpyAgentArtifactKind,
+  OpyAgentToolCall,
+  OpyAgentToolCallName,
+} from "../../core/effects/opy-agent.trace";
 import {
   assessOpyMutationPlanAnomaly,
   assessOpyRequestAnomaly,
@@ -119,12 +109,6 @@ import {
   type OpyAnomalyAssessment,
   type OpyAnomalyRequestKind,
 } from "../../core/effects/opy-anomaly";
-import type {
-  OpyAgentArtifact,
-  OpyAgentArtifactKind,
-  OpyAgentToolCall,
-  OpyAgentToolCallName,
-} from "../../core/effects/opy-agent.trace";
 import type { OpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import {
   buildGroundedProposalDiff,
@@ -145,7 +129,6 @@ import {
   listOpyChatMessages,
   listOpyChatSessions,
   listOpyDiagramProposals,
-  restoreInterruptedOpyAgentSessionState,
   type OpyAgentCheckpoint,
   type OpyAgentRun,
   type OpyAgentRunIntent,
@@ -157,19 +140,33 @@ import {
   type OpyPersistedDiagramProposal,
   type OpyPlanDecisionStatus,
   renameOpyChatSession,
+  restoreInterruptedOpyAgentSessionState,
   updateOpyAgentRun,
   upsertOpyAgentTask,
   upsertOpyAgentToolCall,
   upsertOpyDiagramProposal,
 } from "../../core/effects/opy-chat.persistence";
-import type { EffectiveRigAgentV1RolloutState } from "../../core/effects/feature-flags";
+import {
+  detectOpyCommandToken,
+  formatOpyStructuredCommandDraft,
+  getOpyCommandAvailabilityForOption,
+  getOpyDraftCommandFeedback,
+  getOpySlashCommandSuggestions,
+  getOpyStructuredCommandDraft,
+  OPY_COMMAND_CONTROL_HINTS,
+  type OpyBoardReviewCommand,
+  type OpyDiagramProposalCommand,
+  type OpySlashCommandOption,
+  type OpyStructuredCommandDraft,
+  parseOpyCommand,
+} from "../../core/effects/opy-command-registry";
 import type {
-  AiSettings,
   AiActionMode,
+  AiSettings,
   OpyTaskHistoryBoundaryFilter,
   OpyTaskHistoryChainScopeFilter,
-  OpyTaskHistoryFilterState,
   OpyTaskHistoryFiltersBySession,
+  OpyTaskHistoryFilterState,
   OpyViewportSectionKey,
   OpyViewportSections,
   RedactionMode,
@@ -637,8 +634,7 @@ const isPersistedActionDescriptorArtifactPayload = (
 
 const isPersistedActionResultArtifactPayload = (
   value: unknown,
-): value is OpyPersistedActionResultArtifactPayload =>
-  isRecord(value) && typeof value.message === "string";
+): value is OpyPersistedActionResultArtifactPayload => isRecord(value) && typeof value.message === "string";
 
 const isPersistedPlannerPlanArtifactPayload = (
   value: unknown,
@@ -876,15 +872,13 @@ const formatTaskStageLabel = (stage: OpyAgentTaskStage): string =>
     ? "FAILED"
     : LIFECYCLE_STAGE_LABEL[stage];
 
-const formatLineageCompletedStep = (name: OpyAgentToolCallName): string =>
-  name.replaceAll("_", " ").toUpperCase();
+const formatLineageCompletedStep = (name: OpyAgentToolCallName): string => name.replaceAll("_", " ").toUpperCase();
 
 const formatTaskLineageSummary = (input: {
   readonly artifactCount: number;
   readonly completedStepCount: number;
   readonly segmentCount: number;
-}): string =>
-  `CHAIN::${input.segmentCount} · READY::${input.completedStepCount} · ARTIFACTS::${input.artifactCount}`;
+}): string => `CHAIN::${input.segmentCount} · READY::${input.completedStepCount} · ARTIFACTS::${input.artifactCount}`;
 
 const formatLineageSessionScope = (
   sessionIds: readonly string[],
@@ -903,7 +897,9 @@ const formatTaskHistoryChainFilterLabel = (task: OpyAgentTask): string => {
     case "review":
       return `REVIEW · ${summarizeInlineText(task.request.replay.focus ?? "WHOLE BOARD", "WHOLE BOARD")}`;
     case "add-node":
-      return `ADD ${task.request.replay.nodeType.toUpperCase()} · ${summarizeInlineText(task.request.replay.label, "NODE")}`;
+      return `ADD ${task.request.replay.nodeType.toUpperCase()} · ${
+        summarizeInlineText(task.request.replay.label, "NODE")
+      }`;
     case "apply-proposal":
       return `APPLY PROPOSAL · ${String(task.request.replay.proposalRespondedAtMs)}`;
     case "rollback":
@@ -966,7 +962,8 @@ const compareTaskHistoryChainAttention = (
   left: OpyChainHistoryEntry,
   right: OpyChainHistoryEntry,
 ): number => {
-  const scoreDifference = summarizeTaskHistoryChainAttention(right).score - summarizeTaskHistoryChainAttention(left).score;
+  const scoreDifference = summarizeTaskHistoryChainAttention(right).score
+    - summarizeTaskHistoryChainAttention(left).score;
   return scoreDifference !== 0
     ? scoreDifference
     : right.latestEntry.task.updatedAt - left.latestEntry.task.updatedAt;
@@ -1490,7 +1487,8 @@ const describeActionMode = (
     return {
       tone: "critical",
       label: "ROLLOUT GATE ACTIVE",
-      detail: `${rolloutDetail} OPY chat remains available for context, but proposal and mutation routes stay offline. ${policySummary}`,
+      detail:
+        `${rolloutDetail} OPY chat remains available for context, but proposal and mutation routes stay offline. ${policySummary}`,
     };
   }
 
@@ -1503,25 +1501,29 @@ const describeActionMode = (
       return {
         tone: "critical",
         label: "MUTATION ROUTES OFFLINE",
-        detail: `${rolloutPrefix}Board writes and proposal generation are blocked. Chat and board review remain read-only. ${policySummary}`,
+        detail:
+          `${rolloutPrefix}Board writes and proposal generation are blocked. Chat and board review remain read-only. ${policySummary}`,
       };
     case "read-only":
       return {
         tone: "critical",
         label: "READ-ONLY BOUNDARY ACTIVE",
-        detail: `${rolloutPrefix}Use chat and /review for inspection. /add, /diagram, and apply paths are blocked in this mode. ${policySummary}`,
+        detail:
+          `${rolloutPrefix}Use chat and /review for inspection. /add, /diagram, and apply paths are blocked in this mode. ${policySummary}`,
       };
     case "propose":
       return {
         tone: "warning",
         label: "PROPOSAL BOUNDARY ACTIVE",
-        detail: `${rolloutPrefix}OPY can prepare changes, but apply paths stay blocked until APPLY-WITH-CONFIRMATION is enabled. ${policySummary}`,
+        detail:
+          `${rolloutPrefix}OPY can prepare changes, but apply paths stay blocked until APPLY-WITH-CONFIRMATION is enabled. ${policySummary}`,
       };
     case "apply-with-confirmation":
       return {
         tone: "ready",
         label: "CONFIRMED APPLY BOUNDARY",
-        detail: `${rolloutPrefix}Mutations still require operator confirmation before the board is changed. ${policySummary}`,
+        detail:
+          `${rolloutPrefix}Mutations still require operator confirmation before the board is changed. ${policySummary}`,
       };
   }
 };
@@ -1755,8 +1757,7 @@ export function OpyCopilotPanel({
     ],
   );
   const getLifecycleTelemetryContext = useCallback(
-    (request: OpyAgentLifecycleRequest | null) =>
-      buildTelemetryContextForSessionId(request?.replay.sessionId ?? null),
+    (request: OpyAgentLifecycleRequest | null) => buildTelemetryContextForSessionId(request?.replay.sessionId ?? null),
     [buildTelemetryContextForSessionId],
   );
   const agentLifecycle = useOpyAgentMachine({
@@ -2059,13 +2060,14 @@ export function OpyCopilotPanel({
     ],
   );
   const actionModeSurface = useMemo(
-    () => describeActionMode(
-      actionMode,
-      agentPolicy,
-      rigExecutionPolicy,
-      rigExecutionPolicyViolation,
-      rigAgentRollout,
-    ),
+    () =>
+      describeActionMode(
+        actionMode,
+        agentPolicy,
+        rigExecutionPolicy,
+        rigExecutionPolicyViolation,
+        rigAgentRollout,
+      ),
     [actionMode, agentPolicy, rigAgentRollout, rigExecutionPolicy, rigExecutionPolicyViolation],
   );
   const actionBoundaryText = useMemo(
@@ -2394,7 +2396,8 @@ export function OpyCopilotPanel({
             key: "focus",
             targetSection: "proposal",
             label: formatArtifactFocusSignalLabel(activeArtifactFocusTarget),
-            detail: `PLAN ${activeMutationPlan.plan.totalActions} ACTION(S) · ${activeDiagramProposal.proposal.summary}`,
+            detail:
+              `PLAN ${activeMutationPlan.plan.totalActions} ACTION(S) · ${activeDiagramProposal.proposal.summary}`,
             tone: proposalSectionTone,
             isFresh: false,
           }
@@ -2831,9 +2834,9 @@ export function OpyCopilotPanel({
         current[task.sessionId] === task.id
           ? current
           : {
-              ...current,
-              [task.sessionId]: task.id,
-            }
+            ...current,
+            [task.sessionId]: task.id,
+          }
       );
       agentLifecycle.hydrateResumableRequest({
         request: task.request,
@@ -3390,8 +3393,7 @@ export function OpyCopilotPanel({
   }, []);
 
   const formatAnomalyAssessmentMessage = useCallback(
-    (assessment: OpyAnomalyAssessment): string =>
-      `${assessment.summary} ACTION::${assessment.recommendedAction}`,
+    (assessment: OpyAnomalyAssessment): string => `${assessment.summary} ACTION::${assessment.recommendedAction}`,
     [],
   );
 
@@ -3940,7 +3942,8 @@ export function OpyCopilotPanel({
       await appendAgentNotice(
         sessionId,
         makeAgentConfigError({
-          message: `Runtime currently supports OPENAI only. Provider ${aiSettings.provider.toUpperCase()} is not executable yet.`,
+          message:
+            `Runtime currently supports OPENAI only. Provider ${aiSettings.provider.toUpperCase()} is not executable yet.`,
           recommendedAction: "Switch provider to OPENAI in Settings > AI Agent.",
         }),
       );
@@ -4107,10 +4110,10 @@ export function OpyCopilotPanel({
       try {
         const resumeTrail = getTaskResumeTrail(taskId);
         const persistedContext = selectReusableCompletedTaskToolCall(
-          input.sessionId,
-          resumeTrail.toolCalls,
-          "assemble_context",
-        )
+            input.sessionId,
+            resumeTrail.toolCalls,
+            "assemble_context",
+          )
           ? selectPersistedContextBundle(resumeTrail.artifacts)
           : null;
         if (!persistedContext) {
@@ -4138,10 +4141,10 @@ export function OpyCopilotPanel({
         agentLifecycle.markContextReady();
 
         const persistedResult = selectReusableCompletedTaskToolCall(
-          input.sessionId,
-          resumeTrail.toolCalls,
-          input.invokeToolCallName,
-        )
+            input.sessionId,
+            resumeTrail.toolCalls,
+            input.invokeToolCallName,
+          )
           ? selectPersistedReadResultArtifact(input.lifecycleRequest, resumeTrail.artifacts) as T | null
           : null;
         if (!persistedResult) {
@@ -4153,9 +4156,9 @@ export function OpyCopilotPanel({
           sessionId: input.sessionId,
           name: input.invokeToolCallName,
           inputSummary: summarizeInlineText(
-            `ROLE::${INVOKE_TOOL_CALL_ROLE_LABEL[input.invokeToolCallName]} · ${
-              input.lifecycleRequest.kind.toUpperCase()
-            } · ${input.lifecycleRequest.label}`,
+            `ROLE::${
+              INVOKE_TOOL_CALL_ROLE_LABEL[input.invokeToolCallName]
+            } · ${input.lifecycleRequest.kind.toUpperCase()} · ${input.lifecycleRequest.label}`,
             input.lifecycleRequest.label,
           ),
           execute: () => input.execute(context),
@@ -4168,11 +4171,13 @@ export function OpyCopilotPanel({
           stage: "persist",
         });
 
-        if (selectReusableCompletedTaskToolCall(
-          input.sessionId,
-          resumeTrail.toolCalls,
-          "persist_assistant_message",
-        )) {
+        if (
+          selectReusableCompletedTaskToolCall(
+            input.sessionId,
+            resumeTrail.toolCalls,
+            "persist_assistant_message",
+          )
+        ) {
           throwIfLifecycleRequestInactive(taskId);
           await persistResumeBoundaryOutcomeArtifact({
             taskId,
@@ -4715,7 +4720,9 @@ export function OpyCopilotPanel({
       readonly onAfterApplied?: () => Promise<void> | void;
     }): Promise<string | null> => {
       const sessionId = input.lifecycleRequest.confirmation?.sessionId ?? input.lifecycleRequest.replay.sessionId;
-      const persistActionTaskEnvelope = async (stage: Extract<OpyAgentTaskStage, "awaiting_confirmation" | "applying">) => {
+      const persistActionTaskEnvelope = async (
+        stage: Extract<OpyAgentTaskStage, "awaiting_confirmation" | "applying">,
+      ) => {
         const now = Date.now();
         const existingTask = agentTaskIndexRef.current[input.lifecycleRequest.id];
         await persistOpyTask({
@@ -5269,10 +5276,11 @@ export function OpyCopilotPanel({
           intent: "plan-c4-diagram",
           invokeToolCallName: getReadInvokeToolCallName("proposal"),
           preflightArtifacts: proposalAnomalyAssessment.preflightArtifacts,
-          contextualize: () => resolveRigAgentContext({
-            focus: opyCommand.proposal.description,
-            sessionId,
-          }),
+          contextualize: () =>
+            resolveRigAgentContext({
+              focus: opyCommand.proposal.description,
+              sessionId,
+            }),
           execute: async (context) => {
             const proposal = await runEffect(
               planRigC4Diagram({
@@ -5398,10 +5406,11 @@ export function OpyCopilotPanel({
           intent: "review-c4-board",
           invokeToolCallName: getReadInvokeToolCallName("review"),
           preflightArtifacts: reviewAnomalyAssessment.preflightArtifacts,
-          contextualize: () => resolveRigAgentContext({
-            focus: reviewFocus ?? null,
-            sessionId,
-          }),
+          contextualize: () =>
+            resolveRigAgentContext({
+              focus: reviewFocus ?? null,
+              sessionId,
+            }),
           execute: async (context) => {
             const review = await runEffect(
               reviewRigC4Board({
@@ -5485,10 +5494,11 @@ export function OpyCopilotPanel({
         intent: "chat",
         invokeToolCallName: getReadInvokeToolCallName("chat"),
         preflightArtifacts: chatAnomalyAssessment.preflightArtifacts,
-        contextualize: () => resolveRigAgentContext({
-          focus: trimmed,
-          sessionId,
-        }),
+        contextualize: () =>
+          resolveRigAgentContext({
+            focus: trimmed,
+            sessionId,
+          }),
         execute: async (context) => {
           const response = await runEffect(
             runRigHello({
@@ -5744,7 +5754,7 @@ export function OpyCopilotPanel({
       replay: OpyAgentLifecycleRequest["replay"],
       request?: OpyAgentLifecycleRequest,
     ): Promise<OpyExecutableActionReplayResolution | null> => {
-      let liveResolution: OpyExecutableActionReplayResolution | null = null;
+      let liveResolution: OpyExecutableActionReplayResolution | null;
 
       switch (replay.kind) {
         case "add-node":
@@ -5911,7 +5921,8 @@ export function OpyCopilotPanel({
               severity: "caution",
               blocked: false,
               summary: "ANOMALY OVERRIDDEN :: MUTATION-PLAN :: SIZE-BATCH",
-              recommendedAction: "Proceeding under explicit operator size override; final confirmation remains required.",
+              recommendedAction:
+                "Proceeding under explicit operator size override; final confirmation remains required.",
             }
             : mutationPlanAssessment;
 
@@ -6315,10 +6326,11 @@ export function OpyCopilotPanel({
             sessionId: replay.sessionId,
             intent: "chat",
             invokeToolCallName: getReadInvokeToolCallName("chat"),
-            contextualize: () => resolveRigAgentContext({
-              focus: replay.prompt,
-              sessionId: replay.sessionId,
-            }),
+            contextualize: () =>
+              resolveRigAgentContext({
+                focus: replay.prompt,
+                sessionId: replay.sessionId,
+              }),
             execute: async (context) => {
               const response = await runEffect(
                 runRigHello({
@@ -6358,10 +6370,11 @@ export function OpyCopilotPanel({
             sessionId: replay.sessionId,
             intent: "plan-c4-diagram",
             invokeToolCallName: getReadInvokeToolCallName("proposal"),
-            contextualize: () => resolveRigAgentContext({
-              focus: replay.description,
-              sessionId: replay.sessionId,
-            }),
+            contextualize: () =>
+              resolveRigAgentContext({
+                focus: replay.description,
+                sessionId: replay.sessionId,
+              }),
             execute: async (context) => {
               const proposal = await runEffect(
                 planRigC4Diagram({
@@ -6431,10 +6444,11 @@ export function OpyCopilotPanel({
             sessionId: replay.sessionId,
             intent: "review-c4-board",
             invokeToolCallName: getReadInvokeToolCallName("review"),
-            contextualize: () => resolveRigAgentContext({
-              focus: reviewFocus ?? null,
-              sessionId: replay.sessionId,
-            }),
+            contextualize: () =>
+              resolveRigAgentContext({
+                focus: reviewFocus ?? null,
+                sessionId: replay.sessionId,
+              }),
             execute: async (context) => {
               const review = await runEffect(
                 reviewRigC4Board({
@@ -6686,15 +6700,9 @@ export function OpyCopilotPanel({
   const lifecyclePolicyText = agentLifecycle.stage !== "idle"
       && agentLifecycle.stage !== "completed"
       && agentLifecycle.stage !== "failed"
-    ? `FLOW POLICY::ENTRY ${
-      agentLifecycle.activeStageEntryCount ?? 0
-    }/${
+    ? `FLOW POLICY::ENTRY ${agentLifecycle.activeStageEntryCount ?? 0}/${
       agentLifecycle.activeStageEntryBudget ?? 0
-    } · RETRIES ${
-      agentLifecycle.retryCount
-    }/${
-      agentLifecycle.retryAttemptBudget
-    } · TIMEBOX ${
+    } · RETRIES ${agentLifecycle.retryCount}/${agentLifecycle.retryAttemptBudget} · TIMEBOX ${
       formatShortDuration(agentLifecycle.activeStageTimeoutMs)
     }${
       agentLifecycle.activeStageDeadlineAt ? ` · DEADLINE ${formatClockTime(agentLifecycle.activeStageDeadlineAt)}` : ""
@@ -6708,9 +6716,7 @@ export function OpyCopilotPanel({
     ? "CONTROL::FLOW LOCKED UNTIL CURRENT APPLY/VERIFY STAGE SETTLES."
     : null;
   const retryPolicyText = agentLifecycle.lastRequest
-    ? `RETRY POLICY::${agentLifecycle.remainingRetryAttempts}/${agentLifecycle.retryAttemptBudget} REMAINING · USED::${
-      agentLifecycle.retryCount
-    }`
+    ? `RETRY POLICY::${agentLifecycle.remainingRetryAttempts}/${agentLifecycle.retryAttemptBudget} REMAINING · USED::${agentLifecycle.retryCount}`
     : null;
   const copilotChatInputPlaceholder = useMemo(
     () =>
@@ -6860,74 +6866,77 @@ export function OpyCopilotPanel({
         return checkpointCardRefs.current[target.checkpointId] ?? null;
     }
   }, []);
-  const resolveTaskHistoryArtifactFocusTarget = useCallback((entry: OpyTaskHistoryEntry): OpyArtifactFocusTarget | null => {
-    switch (entry.task.request.kind) {
-      case "chat": {
-        const persistedChat = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
-        return persistedChat
-          && isGroundedChatResponsePayload(persistedChat)
-          && latestDiagnosticsSurface?.kind === "chat"
-          && latestDiagnosticsSurface.respondedAtMs === persistedChat.response.respondedAtMs
-          ? {
-            kind: "diagnostics",
-            respondedAtMs: persistedChat.response.respondedAtMs,
-            section: "diagnostics",
-          }
-          : null;
+  const resolveTaskHistoryArtifactFocusTarget = useCallback(
+    (entry: OpyTaskHistoryEntry): OpyArtifactFocusTarget | null => {
+      switch (entry.task.request.kind) {
+        case "chat": {
+          const persistedChat = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
+          return persistedChat
+              && isGroundedChatResponsePayload(persistedChat)
+              && latestDiagnosticsSurface?.kind === "chat"
+              && latestDiagnosticsSurface.respondedAtMs === persistedChat.response.respondedAtMs
+            ? {
+              kind: "diagnostics",
+              respondedAtMs: persistedChat.response.respondedAtMs,
+              section: "diagnostics",
+            }
+            : null;
+        }
+        case "review": {
+          const persistedReview = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
+          return persistedReview
+              && isGroundedBoardReviewPayload(persistedReview)
+              && activeBoardReview
+              && activeBoardReview.review.respondedAtMs === persistedReview.review.respondedAtMs
+            ? {
+              kind: "review",
+              respondedAtMs: persistedReview.review.respondedAtMs,
+              section: "review",
+            }
+            : null;
+        }
+        case "proposal": {
+          const persistedProposal = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
+          return persistedProposal
+              && isGroundedDiagramProposalPayload(persistedProposal)
+              && activeDiagramProposal
+              && activeDiagramProposal.proposal.respondedAtMs === persistedProposal.proposal.respondedAtMs
+            ? {
+              kind: "proposal",
+              respondedAtMs: persistedProposal.proposal.respondedAtMs,
+              section: "proposal",
+            }
+            : null;
+        }
+        case "apply-proposal": {
+          const replay = entry.task.request.replay;
+          return replay.kind === "apply-proposal"
+              && activeDiagramProposal
+              && activeDiagramProposal.proposal.respondedAtMs === replay.proposalRespondedAtMs
+            ? {
+              kind: "plan",
+              proposalRespondedAtMs: replay.proposalRespondedAtMs,
+              section: "proposal",
+            }
+            : null;
+        }
+        case "rollback": {
+          const replay = entry.task.request.replay;
+          return replay.kind === "rollback"
+              && activeCheckpointById.has(replay.checkpointId)
+            ? {
+              kind: "checkpoint",
+              checkpointId: replay.checkpointId,
+              section: "checkpoints",
+            }
+            : null;
+        }
+        case "add-node":
+          return null;
       }
-      case "review": {
-        const persistedReview = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
-        return persistedReview
-          && isGroundedBoardReviewPayload(persistedReview)
-          && activeBoardReview
-          && activeBoardReview.review.respondedAtMs === persistedReview.review.respondedAtMs
-          ? {
-            kind: "review",
-            respondedAtMs: persistedReview.review.respondedAtMs,
-            section: "review",
-          }
-          : null;
-      }
-      case "proposal": {
-        const persistedProposal = selectPersistedReadResultArtifact(entry.task.request, entry.artifacts);
-        return persistedProposal
-          && isGroundedDiagramProposalPayload(persistedProposal)
-          && activeDiagramProposal
-          && activeDiagramProposal.proposal.respondedAtMs === persistedProposal.proposal.respondedAtMs
-          ? {
-            kind: "proposal",
-            respondedAtMs: persistedProposal.proposal.respondedAtMs,
-            section: "proposal",
-          }
-          : null;
-      }
-      case "apply-proposal": {
-        const replay = entry.task.request.replay;
-        return replay.kind === "apply-proposal"
-          && activeDiagramProposal
-          && activeDiagramProposal.proposal.respondedAtMs === replay.proposalRespondedAtMs
-          ? {
-            kind: "plan",
-            proposalRespondedAtMs: replay.proposalRespondedAtMs,
-            section: "proposal",
-          }
-          : null;
-      }
-      case "rollback": {
-        const replay = entry.task.request.replay;
-        return replay.kind === "rollback"
-          && activeCheckpointById.has(replay.checkpointId)
-          ? {
-            kind: "checkpoint",
-            checkpointId: replay.checkpointId,
-            section: "checkpoints",
-          }
-          : null;
-      }
-      case "add-node":
-        return null;
-    }
-  }, [activeBoardReview, activeCheckpointById, activeDiagramProposal, latestDiagnosticsSurface]);
+    },
+    [activeBoardReview, activeCheckpointById, activeDiagramProposal, latestDiagnosticsSurface],
+  );
   const revealViewportSection = useCallback(
     (
       targetSection: OpyViewportSectionKey,
@@ -7033,7 +7042,12 @@ export function OpyCopilotPanel({
       focusTarget?.section ?? resolveTaskHistoryFocusSection(entry.task),
       focusTarget ? () => resolveFocusedArtifactNode(focusTarget) : undefined,
     );
-  }, [commitArtifactFocusTarget, resolveFocusedArtifactNode, resolveTaskHistoryArtifactFocusTarget, revealViewportSection]);
+  }, [
+    commitArtifactFocusTarget,
+    resolveFocusedArtifactNode,
+    resolveTaskHistoryArtifactFocusTarget,
+    revealViewportSection,
+  ]);
   useEffect(() => {
     if (slashCommandSuggestions.length === 0) {
       if (activeSlashCommandIndex !== 0) {
@@ -7042,9 +7056,7 @@ export function OpyCopilotPanel({
       return;
     }
 
-    setActiveSlashCommandIndex((current) =>
-      current < slashCommandSuggestions.length ? current : 0
-    );
+    setActiveSlashCommandIndex((current) => current < slashCommandSuggestions.length ? current : 0);
   }, [activeSlashCommandIndex, slashCommandSuggestions]);
 
   useEffect(() => {
@@ -7060,17 +7072,13 @@ export function OpyCopilotPanel({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        setActiveSlashCommandIndex((current) =>
-          current >= slashCommandSuggestions.length - 1 ? 0 : current + 1
-        );
+        setActiveSlashCommandIndex((current) => current >= slashCommandSuggestions.length - 1 ? 0 : current + 1);
         return;
       }
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        setActiveSlashCommandIndex((current) =>
-          current <= 0 ? slashCommandSuggestions.length - 1 : current - 1
-        );
+        setActiveSlashCommandIndex((current) => current <= 0 ? slashCommandSuggestions.length - 1 : current - 1);
         return;
       }
 
@@ -7103,7 +7111,7 @@ export function OpyCopilotPanel({
     }
 
     const targetNodeResolver = activeArtifactFocusTarget
-      && activeArtifactFocusTarget.section === chromeSectionRequest.section
+        && activeArtifactFocusTarget.section === chromeSectionRequest.section
       ? () => resolveFocusedArtifactNode(activeArtifactFocusTarget)
       : undefined;
     revealViewportSection(chromeSectionRequest.section, targetNodeResolver);
@@ -7198,9 +7206,7 @@ export function OpyCopilotPanel({
             }`
             : null
         )
-        ?? `BOARD::${currentBoardLabel} · SESSION::${
-          selectedSession?.title ?? "NONE"
-        } · ${actionBoundaryText}`,
+        ?? `BOARD::${currentBoardLabel} · SESSION::${selectedSession?.title ?? "NONE"} · ${actionBoundaryText}`,
     "CONTROL SURFACE READY.",
   );
   const diagnosticsSectionSummary = latestDiagnosticsSurface
@@ -7559,11 +7565,13 @@ export function OpyCopilotPanel({
                             <span className={styles.opyCopilotTaskToggleMain}>
                               <span>{`${task.request.label} :: ${LIFECYCLE_STAGE_LABEL[task.stage]}`}</span>
                               <span>{isSelected ? "ACTIVE RESUME SLOT" : "SELECT FOR RESUME"}</span>
-                              <span>{formatTaskLineageSummary({
-                                artifactCount: lineageDiagnostics.artifactKinds.length,
-                                completedStepCount: lineageDiagnostics.completedStepNames.length,
-                                segmentCount: lineageDiagnostics.segmentCount,
-                              })}</span>
+                              <span>
+                                {formatTaskLineageSummary({
+                                  artifactCount: lineageDiagnostics.artifactKinds.length,
+                                  completedStepCount: lineageDiagnostics.completedStepNames.length,
+                                  segmentCount: lineageDiagnostics.segmentCount,
+                                })}
+                              </span>
                               {lineageDiagnostics.sessionCount > 1 && (
                                 <span>{`SESSIONS::${lineageDiagnostics.sessionCount}`}</span>
                               )}
@@ -7573,9 +7581,7 @@ export function OpyCopilotPanel({
                               {lineageDiagnostics.crossSessionSegmentCount > 0 && (
                                 <span>{`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`}</span>
                               )}
-                              {completedStepPreview.length > 0 && (
-                                <span>{`READY STEPS::${completedStepPreview}`}</span>
-                              )}
+                              {completedStepPreview.length > 0 && <span>{`READY STEPS::${completedStepPreview}`}</span>}
                               <span>{resumeOutcomeRollup}</span>
                             </span>
                             <span className={styles.opyCopilotTaskMeta}>
@@ -7601,9 +7607,11 @@ export function OpyCopilotPanel({
                 <section className={styles.opyCopilotPlanCard} aria-label="OPY resumable task">
                   <div className={styles.opyCopilotProposalHeader}>
                     <span>{`RESUME::${agentLifecycle.resumableRequest.label}`}</span>
-                    <span>{`INTERRUPTED AT ${LIFECYCLE_STAGE_LABEL[agentLifecycle.resumableStage]} · ${
-                      activeInterruptedTasks.length
-                    } PENDING`}</span>
+                    <span>
+                      {`INTERRUPTED AT ${
+                        LIFECYCLE_STAGE_LABEL[agentLifecycle.resumableStage]
+                      } · ${activeInterruptedTasks.length} PENDING`}
+                    </span>
                   </div>
                   <p className={styles.opyCopilotProposalSummary}>
                     {`TASK ${agentLifecycle.resumableTaskId?.slice(0, 8) ?? "UNKNOWN"} · ${
@@ -7632,9 +7640,7 @@ export function OpyCopilotPanel({
                     return (
                       <>
                         <p className={styles.ownershipLensHint}>
-                          {`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount} · INHERITS::${
-                            lineageDiagnostics.inheritedSegmentCount
-                          } · READY::${
+                          {`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount} · INHERITS::${lineageDiagnostics.inheritedSegmentCount} · READY::${
                             completedSteps.length > 0 ? completedSteps : "FRESH EXECUTION"
                           }`}
                         </p>
@@ -7719,25 +7725,15 @@ export function OpyCopilotPanel({
                     PERSISTED TASKS, TOOL CALLS, AND ARTIFACTS FOR THIS SESSION.
                   </p>
                   <p className={styles.ownershipLensHint}>
-                    {`CONTINUITY::${filteredChainHistorySummary.chainCount} CHAINS · ${
-                      filteredChainHistorySummary.activeChainCount
-                    } ACTIVE · ${filteredChainHistorySummary.interruptedChainCount} INTERRUPTED · ${
-                      filteredChainHistorySummary.pendingChainCount
-                    } PENDING`}
+                    {`CONTINUITY::${filteredChainHistorySummary.chainCount} CHAINS · ${filteredChainHistorySummary.activeChainCount} ACTIVE · ${filteredChainHistorySummary.interruptedChainCount} INTERRUPTED · ${filteredChainHistorySummary.pendingChainCount} PENDING`}
                   </p>
                   <p className={styles.ownershipLensHint}>
-                    {`REUSE EFFICIENCY::${formatReuseEfficiency(filteredChainHistorySummary.reuseEfficiencyRatio)} · RESOLVED::${
-                      filteredChainHistorySummary.resolvedBoundaryCount
-                    }/${filteredChainHistorySummary.boundaryCount} · LOCAL::${
-                      filteredChainHistorySummary.reusedCurrentSessionCount
-                    } · INHERITED::${filteredChainHistorySummary.reusedInheritedSessionCount} · RERAN::${
-                      filteredChainHistorySummary.reranCount
-                    }`}
+                    {`REUSE EFFICIENCY::${
+                      formatReuseEfficiency(filteredChainHistorySummary.reuseEfficiencyRatio)
+                    } · RESOLVED::${filteredChainHistorySummary.resolvedBoundaryCount}/${filteredChainHistorySummary.boundaryCount} · LOCAL::${filteredChainHistorySummary.reusedCurrentSessionCount} · INHERITED::${filteredChainHistorySummary.reusedInheritedSessionCount} · RERAN::${filteredChainHistorySummary.reranCount}`}
                   </p>
                   <p className={styles.ownershipLensHint}>
-                    {`SESSION REACH::${filteredChainHistorySummary.sessionCount} · CROSS-SESSION CHAINS::${
-                      filteredChainHistorySummary.crossSessionChainCount
-                    } · PENDING BOUNDARIES::${filteredChainHistorySummary.pendingCount}`}
+                    {`SESSION REACH::${filteredChainHistorySummary.sessionCount} · CROSS-SESSION CHAINS::${filteredChainHistorySummary.crossSessionChainCount} · PENDING BOUNDARIES::${filteredChainHistorySummary.pendingCount}`}
                   </p>
                   {filteredChainHistoryEntries.length > 0 && (
                     <>
@@ -7746,7 +7742,8 @@ export function OpyCopilotPanel({
                         <span>{`${filteredChainHistoryEntries.length} CHAIN(S)`}</span>
                       </div>
                       <p className={styles.ownershipLensHint}>
-                        DEDUPED CONTINUITY CHAINS FOR THE CURRENT FILTER SCOPE. USE THESE TO RESUME OR DRILL INTO ONE LINEAGE.
+                        DEDUPED CONTINUITY CHAINS FOR THE CURRENT FILTER SCOPE. USE THESE TO RESUME OR DRILL INTO ONE
+                        LINEAGE.
                       </p>
                       <div className={styles.formInlineRow}>
                         <div className={styles.inputGrow}>
@@ -7803,17 +7800,15 @@ export function OpyCopilotPanel({
                               <span>{attention.headline}</span>
                             </div>
                             <p className={styles.opyCopilotProposalSummary}>
-                              {`${formatTaskHistoryChainFilterLabel(task)} · LATEST::${TASK_STATUS_LABEL[task.status]} · ${
-                                formatTaskStageLabel(task.stage)
-                              }`}
+                              {`${formatTaskHistoryChainFilterLabel(task)} · LATEST::${
+                                TASK_STATUS_LABEL[task.status]
+                              } · ${formatTaskStageLabel(task.stage)}`}
                             </p>
                             <p className={styles.ownershipLensHint}>
                               {attention.reasons.join(" · ")}
                             </p>
                             <p className={styles.ownershipLensHint}>
-                              {`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount} · ${
-                                lineageResumeOutcomeRollup
-                              }`}
+                              {`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount} · ${lineageResumeOutcomeRollup}`}
                             </p>
                             <p className={styles.ownershipLensHint}>
                               {resumeDiagnosticsSummary}
@@ -7894,8 +7889,12 @@ export function OpyCopilotPanel({
                               <div className={styles.opyCopilotTaskToggle}>
                                 <span className={styles.opyCopilotTaskToggleMain}>
                                   <span>{formatTaskHistoryChainFilterLabel(task)}</span>
-                                  <span>{`LATEST::${TASK_STATUS_LABEL[task.status]} · ${formatTaskStageLabel(task.stage)}`}</span>
-                                  <span>{`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount}`}</span>
+                                  <span>
+                                    {`LATEST::${TASK_STATUS_LABEL[task.status]} · ${formatTaskStageLabel(task.stage)}`}
+                                  </span>
+                                  <span>
+                                    {`CHAIN::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount}`}
+                                  </span>
                                   {lineageDiagnostics.crossSessionSegmentCount > 0 && (
                                     <span>{`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`}</span>
                                   )}
@@ -8003,11 +8002,13 @@ export function OpyCopilotPanel({
                   </p>
                   <div className={styles.opyCopilotTaskTimeline}>
                     {filteredTaskHistoryEntries.slice(0, 6).map((entry) => {
-                      const { task, toolCalls, artifacts, lineageDiagnostics, resumePlan, persistedResumeOutcome } = entry;
+                      const { task, toolCalls, artifacts, lineageDiagnostics, resumePlan, persistedResumeOutcome } =
+                        entry;
                       const isExpanded = expandedTaskIds.includes(task.id);
                       const isLoading = taskDetailLoadingByTaskId[task.id] === true;
                       const isResumable = agentLifecycle.resumableTaskId === task.id;
-                      const resumableChainTask = resumableTaskByContinuityKey.get(lineageDiagnostics.continuityKey) ?? null;
+                      const resumableChainTask = resumableTaskByContinuityKey.get(lineageDiagnostics.continuityKey)
+                        ?? null;
                       const resumeDiagnosticsSummary = persistedResumeOutcome
                         ? summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)
                         : summarizeTaskResumeBoundaryPlan(resumePlan);
@@ -8042,11 +8043,13 @@ export function OpyCopilotPanel({
                             <span className={styles.opyCopilotTaskToggleMain}>
                               <span>{`${task.request.label} :: ${TASK_STATUS_LABEL[task.status]}`}</span>
                               <span>{`STAGE::${formatTaskStageLabel(task.stage)}`}</span>
-                              <span>{formatTaskLineageSummary({
-                                artifactCount: lineageDiagnostics.artifactKinds.length,
-                                completedStepCount: lineageDiagnostics.completedStepNames.length,
-                                segmentCount: lineageDiagnostics.segmentCount,
-                              })}</span>
+                              <span>
+                                {formatTaskLineageSummary({
+                                  artifactCount: lineageDiagnostics.artifactKinds.length,
+                                  completedStepCount: lineageDiagnostics.completedStepNames.length,
+                                  segmentCount: lineageDiagnostics.segmentCount,
+                                })}
+                              </span>
                               {lineageDiagnostics.sessionCount > 1 && (
                                 <span>{`SESSIONS::${lineageDiagnostics.sessionCount}`}</span>
                               )}
@@ -8056,9 +8059,7 @@ export function OpyCopilotPanel({
                               {lineageDiagnostics.crossSessionSegmentCount > 0 && (
                                 <span>{`CROSS-SESSION::${lineageDiagnostics.crossSessionSegmentCount}`}</span>
                               )}
-                              {completedStepPreview.length > 0 && (
-                                <span>{`READY::${completedStepPreview}`}</span>
-                              )}
+                              {completedStepPreview.length > 0 && <span>{`READY::${completedStepPreview}`}</span>}
                               <span>{lineageResumeOutcomeRollup}</span>
                               <span>{resumeDiagnosticsSummary}</span>
                               {isResumable && <span>RESUMABLE</span>}
@@ -8103,16 +8104,14 @@ export function OpyCopilotPanel({
                                 {`TASK::${task.id} · MODE::${task.request.mode.toUpperCase()} · KIND::${task.request.kind.toUpperCase()}`}
                               </p>
                               <p className={styles.ownershipLensHint}>
-                                {`CONTINUITY::${lineageDiagnostics.continuityKey} · LINEAGE::${lineageDiagnostics.lineageKey} · SEGMENTS::${
-                                  lineageDiagnostics.segmentCount
-                                } · SESSIONS::${lineageDiagnostics.sessionCount} · INHERITED::${
-                                  lineageDiagnostics.inheritedSegmentCount
-                                }`}
+                                {`CONTINUITY::${lineageDiagnostics.continuityKey} · LINEAGE::${lineageDiagnostics.lineageKey} · SEGMENTS::${lineageDiagnostics.segmentCount} · SESSIONS::${lineageDiagnostics.sessionCount} · INHERITED::${lineageDiagnostics.inheritedSegmentCount}`}
                               </p>
                               <p className={styles.ownershipLensHint}>
                                 {formatLineageResumeOutcomeRollup(lineageDiagnostics.resumeOutcomeRollup)}
                               </p>
-                              <p className={styles.ownershipLensHint}>{`RESUME PLAN::${summarizeTaskResumeBoundaryPlan(resumePlan)}`}</p>
+                              <p className={styles.ownershipLensHint}>
+                                {`RESUME PLAN::${summarizeTaskResumeBoundaryPlan(resumePlan)}`}
+                              </p>
                               {persistedResumeOutcome && (
                                 <p className={styles.ownershipLensHint}>
                                   {`RESUME OUTCOME::${summarizePersistedResumeBoundaryOutcome(persistedResumeOutcome)}`}
@@ -8421,20 +8420,17 @@ export function OpyCopilotPanel({
                             checkpointCardRefs.current[checkpoint.id] = node;
                           }}
                           className={styles.opyCopilotProposalItem}
-                          data-focused={
-                            activeArtifactFocusTarget?.kind === "checkpoint"
+                          data-focused={activeArtifactFocusTarget?.kind === "checkpoint"
                               && activeArtifactFocusTarget.checkpointId === checkpoint.id
-                              ? "true"
-                              : "false"
-                          }
+                            ? "true"
+                            : "false"}
                         >
                           <div className={styles.opyCopilotProposalItemMeta}>
                             <span>{`CHECKPOINT::${checkpoint.id.slice(0, 8)}`}</span>
                             <span className={styles.opyCopilotProposalHeaderMetaGroup}>
                               <span>{index === 0 ? "LATEST" : checkpoint.checkpointType.toUpperCase()}</span>
                               {renderArtifactFocusClearButton({
-                                isFocused:
-                                  activeArtifactFocusTarget?.kind === "checkpoint"
+                                isFocused: activeArtifactFocusTarget?.kind === "checkpoint"
                                   && activeArtifactFocusTarget.checkpointId === checkpoint.id,
                                 ariaLabel: `Clear focus for checkpoint ${checkpoint.id.slice(0, 8)}`,
                               })}
@@ -8574,7 +8570,9 @@ export function OpyCopilotPanel({
                 <p className={styles.opyCopilotProposalSummary}>{activeBoardReview.review.summary}</p>
                 <p className={styles.opyCopilotProposalHint}>
                   {`CONFIDENCE:: ${
-                    formatConfidence(activeReviewGroundingConfidence?.confidence ?? activeBoardReview.context.confidence)
+                    formatConfidence(
+                      activeReviewGroundingConfidence?.confidence ?? activeBoardReview.context.confidence,
+                    )
                   } · ${activeReviewGroundingConfidence?.reason ?? activeBoardReview.context.confidenceReason}`}
                 </p>
                 <p className={styles.ownershipLensHint}>
@@ -8584,7 +8582,9 @@ export function OpyCopilotPanel({
                   <div className={styles.opyCopilotProposalStats}>
                     <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
                     {activeReviewGroundingConfidence && (
-                      <span>{`GROUNDING::${activeReviewGroundingConfidence.score}/100 · CITATIONS::${activeReviewGroundingConfidence.citationCount} · RETRIEVAL::${activeReviewGroundingConfidence.retrievalHitCount}`}</span>
+                      <span>
+                        {`GROUNDING::${activeReviewGroundingConfidence.score}/100 · CITATIONS::${activeReviewGroundingConfidence.citationCount} · RETRIEVAL::${activeReviewGroundingConfidence.retrievalHitCount}`}
+                      </span>
                     )}
                     <span>{`STRENGTHS::${activeBoardReview.review.strengths.length}`}</span>
                     <span>{`RISKS::${activeBoardReview.review.risks.length}`}</span>
@@ -8777,7 +8777,9 @@ export function OpyCopilotPanel({
                 <p className={styles.opyCopilotProposalRationale}>{activeDiagramProposal.proposal.rationale}</p>
                 <p className={styles.opyCopilotProposalHint}>
                   {`CONFIDENCE:: ${
-                    formatConfidence(activeProposalGroundingConfidence?.confidence ?? activeDiagramProposal.context.confidence)
+                    formatConfidence(
+                      activeProposalGroundingConfidence?.confidence ?? activeDiagramProposal.context.confidence,
+                    )
                   } · ${activeProposalGroundingConfidence?.reason ?? activeDiagramProposal.context.confidenceReason}`}
                 </p>
                 <p className={styles.ownershipLensHint}>
@@ -8796,7 +8798,9 @@ export function OpyCopilotPanel({
                   <div className={styles.opyCopilotProposalStats}>
                     <span>{`BOARD::${boardSummary.nodeCount}N/${boardSummary.edgeCount}E`}</span>
                     {activeProposalGroundingConfidence && (
-                      <span>{`GROUNDING::${activeProposalGroundingConfidence.score}/100 · CITATIONS::${activeProposalGroundingConfidence.citationCount} · AMBIG::${activeProposalGroundingConfidence.ambiguousOutputCount}`}</span>
+                      <span>
+                        {`GROUNDING::${activeProposalGroundingConfidence.score}/100 · CITATIONS::${activeProposalGroundingConfidence.citationCount} · AMBIG::${activeProposalGroundingConfidence.ambiguousOutputCount}`}
+                      </span>
                     )}
                     <span>
                       {`NODE DIFF::${activeProposalSummary.newNodes} NEW · ${activeProposalSummary.existingNodes} MATCH · ${activeProposalSummary.ambiguousNodes} AMBIG`}
@@ -9086,7 +9090,9 @@ export function OpyCopilotPanel({
                               ? "APPLYING..."
                               : isRunning
                               ? activePlanDecision.status === "approved" ? "BUSY..." : "APPROVING..."
-                              : activePlanDecision.status === "approved" ? "APPLY PROPOSAL" : "APPROVE PLAN"}
+                              : activePlanDecision.status === "approved"
+                              ? "APPLY PROPOSAL"
+                              : "APPROVE PLAN"}
                           </button>
                           {isActiveProposalAwaitingConfirmation && (
                             <button
@@ -9111,10 +9117,14 @@ export function OpyCopilotPanel({
                           {isActiveProposalAwaitingConfirmation && pendingLifecycleConfirmation && (
                             <div className={styles.opyCopilotPlanActionList}>
                               {pendingLifecycleConfirmation.confirmationLines
-                                .filter((line) => line.trim().length > 0)
+                                .filter((line) =>
+                                  line.trim().length > 0
+                                )
                                 .map((line, index) => (
                                   <article
-                                    key={`${activeProposalLifecycleRequest?.id ?? "active-proposal"}-inline-confirm-${index}`}
+                                    key={`${
+                                      activeProposalLifecycleRequest?.id ?? "active-proposal"
+                                    }-inline-confirm-${index}`}
                                     className={styles.opyCopilotProposalItem}
                                   >
                                     <p>{line}</p>

@@ -1,17 +1,6 @@
-import type { Edge, Node } from "@xyflow/react";
-import { Effect } from "effect";
-import { executeRigReadTool } from "@/core/effects/agent-tools/read-tools";
-import {
-  assembleRigAgentContextWithTools,
-  scoreRigAgentGroundingConfidence,
-} from "@/core/effects/agent-context";
-import {
-  resolveOpyApplyProposalActionFlow,
-  resolveOpyRollbackActionFlow,
-} from "@/core/effects/opy-action.runtime";
+import { assembleRigAgentContextWithTools, scoreRigAgentGroundingConfidence } from "@/core/effects/agent-context";
 import { buildOpyCheckpointRestorePreview } from "@/core/effects/agent-rollback.runtime";
-import { buildOpyReplayEvalDashboard } from "@/core/effects/opy-agent.evals";
-import type { OpyAgentArtifact, OpyAgentToolCall } from "@/core/effects/opy-agent.trace";
+import { executeRigReadTool } from "@/core/effects/agent-tools/read-tools";
 import type {
   RigC4BoardEdge,
   RigC4BoardNode,
@@ -20,10 +9,15 @@ import type {
   RigReadToolName,
   RigReadToolResultByName,
 } from "@/core/effects/ai-agent.runtime";
-import type { OpyAgentCheckpoint, OpyAgentTask } from "@/core/effects/opy-chat.persistence";
+import { resolveOpyApplyProposalActionFlow, resolveOpyRollbackActionFlow } from "@/core/effects/opy-action.runtime";
+import { buildOpyReplayEvalDashboard } from "@/core/effects/opy-agent.evals";
+import type { OpyAgentArtifact, OpyAgentToolCall } from "@/core/effects/opy-agent.trace";
 import { buildOpyBoardContextRegistry } from "@/core/effects/opy-board-context";
 import { buildGroundedProposalDiff, summarizeGroundedProposalDiff } from "@/core/effects/opy-c4-proposals";
+import type { OpyAgentCheckpoint, OpyAgentTask } from "@/core/effects/opy-chat.persistence";
 import { DEFAULT_APP_SETTINGS } from "@/core/effects/settings.types";
+import type { Edge, Node } from "@xyflow/react";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { rigAgentEvalScenarios } from "./fixtures";
 
@@ -42,8 +36,7 @@ const runLocalReadTool = <TTool extends RigReadToolName>(
   tool: TTool,
   input: RigReadToolInputByName[TTool],
   boardSummary: RigC4BoardSummary,
-): Effect.Effect<RigReadToolResultByName[TTool]> =>
-  Effect.sync(() => executeRigReadTool(tool, input, boardSummary));
+): Effect.Effect<RigReadToolResultByName[TTool]> => Effect.sync(() => executeRigReadTool(tool, input, boardSummary));
 
 const toCheckpointNode = (node: RigC4BoardNode): Node => ({
   id: node.id,
@@ -184,7 +177,9 @@ describe("rig-agent eval harness", () => {
       expect(bundle.citations[0]?.tool).toBe("board_summary");
       expect(bundle.citations.some((citation) => citation.tool === "node_lookup")).toBe(true);
       expect(bundle.citations.some((citation) => citation.tool === "edge_lookup")).toBe(true);
-      expect(bundle.promptContext).toContain(`FOCUS=${boardContext.scopes[1]?.focus ?? boardContext.scopes[0]?.focus ?? "WHOLE BOARD"}`);
+      expect(bundle.promptContext).toContain(
+        `FOCUS=${boardContext.scopes[1]?.focus ?? boardContext.scopes[0]?.focus ?? "WHOLE BOARD"}`,
+      );
       expect(bundle.promptContext).toContain("CONFIDENCE=HIGH");
     },
   );
@@ -458,7 +453,8 @@ describe("rig-agent eval harness", () => {
               technology: "Azure Container Apps",
               description: "Runtime drifted from the checkpoint baseline.",
             }
-            : node)
+            : node
+        )
         .concat([
           {
             id: "azure-redis",
@@ -498,9 +494,14 @@ describe("rig-agent eval harness", () => {
       revertEdges: 0,
       removeEdges: 1,
     });
-    expect(preview.impactedEntities.some((entity) => entity.status === "restore" && entity.title.includes("Key Vault"))).toBe(true);
-    expect(preview.impactedEntities.some((entity) => entity.status === "revert" && entity.title.includes("Orders Function"))).toBe(true);
-    expect(preview.impactedEntities.some((entity) => entity.status === "remove" && entity.title.includes("Redis Cache"))).toBe(true);
+    expect(preview.impactedEntities.some((entity) => entity.status === "restore" && entity.title.includes("Key Vault")))
+      .toBe(true);
+    expect(
+      preview.impactedEntities.some((entity) => entity.status === "revert" && entity.title.includes("Orders Function")),
+    ).toBe(true);
+    expect(
+      preview.impactedEntities.some((entity) => entity.status === "remove" && entity.title.includes("Redis Cache")),
+    ).toBe(true);
   });
 
   it("resolves azure-heavy rollback as a high-risk approval action", () => {

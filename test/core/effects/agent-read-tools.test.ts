@@ -93,8 +93,8 @@ describe("agent read tools", () => {
   });
 
   it("fails fast on blank lookup identifiers", () => {
-    expect(() =>
-      executeRigReadTool("node_lookup", { nodeId: "   " }, createBoardSummary())
-    ).toThrowError(RigReadToolContractError);
+    expect(() => executeRigReadTool("node_lookup", { nodeId: "   " }, createBoardSummary())).toThrowError(
+      RigReadToolContractError,
+    );
   });
 });

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  SqliteErrorClass,
   classifySqliteError,
   collectErrorMessages,
   isRetryable,
+  SqliteErrorClass,
 } from "../../../src/core/effects/sqlite-error-class";
 
 describe("collectErrorMessages", () => {

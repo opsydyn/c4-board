@@ -243,10 +243,10 @@ export function AzureSyncPanel({
     const authState = !authStatus
       ? "unknown"
       : !authStatus.available
-        ? "unavailable"
-        : authStatus.authenticated
-          ? "ready"
-          : "required";
+      ? "unavailable"
+      : authStatus.authenticated
+      ? "ready"
+      : "required";
 
     return {
       authState,

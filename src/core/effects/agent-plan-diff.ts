@@ -1,3 +1,10 @@
+import {
+  type RigMutationNodeRef,
+  type RigMutationToolName,
+  type RigValidatedMutationAction,
+  type RigValidatedMutationPlan,
+  validateRigMutationPlan,
+} from "./agent-tools/mutation-tools";
 import type {
   RigC4BoardEdge,
   RigC4BoardNode,
@@ -5,13 +12,6 @@ import type {
   RigC4ProposalEdge,
   RigC4ProposalNode,
 } from "./ai-agent.runtime";
-import {
-  validateRigMutationPlan,
-  type RigMutationNodeRef,
-  type RigMutationToolName,
-  type RigValidatedMutationAction,
-  type RigValidatedMutationPlan,
-} from "./agent-tools/mutation-tools";
 import type {
   OpyGroundedProposalDiff,
   OpyGroundedProposalEdgeDiff,
@@ -104,7 +104,8 @@ const sortImpacts = (impacts: ReadonlyArray<RigPlanImpactEntity>): ReadonlyArray
   [...impacts].sort((left, right) =>
     compareImpactStatus(left.status) - compareImpactStatus(right.status)
     || left.category.localeCompare(right.category)
-    || left.title.localeCompare(right.title));
+    || left.title.localeCompare(right.title)
+  );
 
 const buildNodeIssues = (
   nodeDiffs: ReadonlyArray<OpyGroundedProposalNodeDiff>,
@@ -240,8 +241,7 @@ const buildMutationActionInputs = (
 
 const sortActions = (
   actions: ReadonlyArray<RigValidatedMutationAction>,
-): ReadonlyArray<RigValidatedMutationAction> =>
-  [...actions].sort((left, right) => left.tool.localeCompare(right.tool));
+): ReadonlyArray<RigValidatedMutationAction> => [...actions].sort((left, right) => left.tool.localeCompare(right.tool));
 
 export const buildRigMutationPlanDiff = (
   proposal: RigC4DiagramProposal,

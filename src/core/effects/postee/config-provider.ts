@@ -17,15 +17,7 @@
  * @see https://effect.website/docs/configuration/
  */
 
-import {
-	Effect,
-	Context,
-	Config,
-	ConfigProvider as EffectConfigProvider,
-	ConfigError,
-	Redacted,
-	Layer,
-} from "effect";
+import { Config, ConfigError, ConfigProvider as EffectConfigProvider, Context, Effect, Layer, Redacted } from "effect";
 import type { EnvironmentVariable } from "./schema";
 
 // =============================================================================
@@ -37,51 +29,51 @@ import type { EnvironmentVariable } from "./schema";
  * Wraps Effect Config with Postee-specific functionality
  */
 export interface PosteeConfigProviderService {
-	/**
-	 * Get string variable using Effect Config
-	 */
-	readonly getString: (
-		key: string,
-	) => Effect.Effect<string, ConfigError.ConfigError>;
+  /**
+   * Get string variable using Effect Config
+   */
+  readonly getString: (
+    key: string,
+  ) => Effect.Effect<string, ConfigError.ConfigError>;
 
-	/**
-	 * Get secret variable (value is redacted in logs)
-	 */
-	readonly getSecret: (
-		key: string,
-	) => Effect.Effect<Redacted.Redacted, ConfigError.ConfigError>;
+  /**
+   * Get secret variable (value is redacted in logs)
+   */
+  readonly getSecret: (
+    key: string,
+  ) => Effect.Effect<Redacted.Redacted, ConfigError.ConfigError>;
 
-	/**
-	 * Get URL variable with validation
-	 */
-	readonly getUrl: (key: string) => Effect.Effect<URL, ConfigError.ConfigError>;
+  /**
+   * Get URL variable with validation
+   */
+  readonly getUrl: (key: string) => Effect.Effect<URL, ConfigError.ConfigError>;
 
-	/**
-	 * Resolve template string with variables
-	 * Replaces {{varName}} with actual values
-	 *
-	 * @example
-	 * resolveTemplate("{{baseUrl}}/api/users")
-	 * // => "https://api.dev.example.com/api/users"
-	 */
-	readonly resolveTemplate: (
-		template: string,
-	) => Effect.Effect<string, ConfigError.ConfigError>;
+  /**
+   * Resolve template string with variables
+   * Replaces {{varName}} with actual values
+   *
+   * @example
+   * resolveTemplate("{{baseUrl}}/api/users")
+   * // => "https://api.dev.example.com/api/users"
+   */
+  readonly resolveTemplate: (
+    template: string,
+  ) => Effect.Effect<string, ConfigError.ConfigError>;
 
-	/**
-	 * Validate all variables in current environment
-	 * Returns map of variable key → validation status
-	 */
-	readonly validateAll: (
-		keys: string[],
-	) => Effect.Effect<Record<string, boolean>, never>;
+  /**
+   * Validate all variables in current environment
+   * Returns map of variable key → validation status
+   */
+  readonly validateAll: (
+    keys: string[],
+  ) => Effect.Effect<Record<string, boolean>, never>;
 }
 
 /**
  * Service Tag for dependency injection
  */
 export class PosteeConfigProvider extends Context.Tag(
-	"PosteeConfigProvider",
+  "PosteeConfigProvider",
 )<PosteeConfigProvider, PosteeConfigProviderService>() {}
 
 // =============================================================================
@@ -92,85 +84,85 @@ export class PosteeConfigProvider extends Context.Tag(
  * Implementation of PosteeConfigProviderService using Effect Config
  */
 class PosteeConfigProviderImpl implements PosteeConfigProviderService {
-	getString(key: string): Effect.Effect<string, ConfigError.ConfigError> {
-		// Use Effect's Config.string to get a string config value
-		return Config.string(key);
-	}
+  getString(key: string): Effect.Effect<string, ConfigError.ConfigError> {
+    // Use Effect's Config.string to get a string config value
+    return Config.string(key);
+  }
 
-	getSecret(
-		key: string,
-	): Effect.Effect<Redacted.Redacted, ConfigError.ConfigError> {
-		// Use Effect's Config.secret for sensitive values
-		return Config.redacted(key);
-	}
+  getSecret(
+    key: string,
+  ): Effect.Effect<Redacted.Redacted, ConfigError.ConfigError> {
+    // Use Effect's Config.secret for sensitive values
+    return Config.redacted(key);
+  }
 
-	getUrl(key: string): Effect.Effect<URL, ConfigError.ConfigError> {
-		// Get string and validate it's a URL
-		return Config.string(key).pipe(
-			Effect.flatMap((value) => {
-				try {
-					return Effect.succeed(new URL(value));
-				} catch {
-					return Effect.fail(
-						ConfigError.InvalidData(
-							[key],
-							`"${key}" is not a valid URL: ${value}`,
-						),
-					);
-				}
-			}),
-		);
-	}
+  getUrl(key: string): Effect.Effect<URL, ConfigError.ConfigError> {
+    // Get string and validate it's a URL
+    return Config.string(key).pipe(
+      Effect.flatMap((value) => {
+        try {
+          return Effect.succeed(new URL(value));
+        } catch {
+          return Effect.fail(
+            ConfigError.InvalidData(
+              [key],
+              `"${key}" is not a valid URL: ${value}`,
+            ),
+          );
+        }
+      }),
+    );
+  }
 
-	resolveTemplate(
-		template: string,
-	): Effect.Effect<string, ConfigError.ConfigError> {
-		// Find all {{varName}} patterns
-		const matches = Array.from(template.matchAll(/\{\{([^}]+)\}\}/g));
+  resolveTemplate(
+    template: string,
+  ): Effect.Effect<string, ConfigError.ConfigError> {
+    // Find all {{varName}} patterns
+    const matches = Array.from(template.matchAll(/\{\{([^}]+)\}\}/g));
 
-		if (matches.length === 0) {
-			return Effect.succeed(template);
-		}
+    if (matches.length === 0) {
+      return Effect.succeed(template);
+    }
 
-		return Effect.gen(this, function* () {
-			let result = template;
+    return Effect.gen(this, function*() {
+      let result = template;
 
-			for (const match of matches) {
-				const fullMatch = match[0]; // "{{varName}}"
-				const varName = match[1]?.trim(); // "varName"
+      for (const match of matches) {
+        const fullMatch = match[0]; // "{{varName}}"
+        const varName = match[1]?.trim(); // "varName"
 
-				if (!varName) continue;
+        if (!varName) continue;
 
-				// Get variable value using Config
-				const value = yield* Config.string(varName);
+        // Get variable value using Config
+        const value = yield* Config.string(varName);
 
-				// Replace in result
-				result = result.replace(fullMatch, value);
-			}
+        // Replace in result
+        result = result.replace(fullMatch, value);
+      }
 
-			return result;
-		});
-	}
+      return result;
+    });
+  }
 
-	validateAll(
-		keys: string[],
-	): Effect.Effect<Record<string, boolean>, never> {
-		return Effect.gen(this, function* () {
-			const results: Record<string, boolean> = {};
+  validateAll(
+    keys: string[],
+  ): Effect.Effect<Record<string, boolean>, never> {
+    return Effect.gen(this, function*() {
+      const results: Record<string, boolean> = {};
 
-			for (const key of keys) {
-				// Try to get the value
-				const result = yield* Config.string(key).pipe(
-					Effect.map(() => true),
-					Effect.catchAll(() => Effect.succeed(false)),
-				);
+      for (const key of keys) {
+        // Try to get the value
+        const result = yield* Config.string(key).pipe(
+          Effect.map(() => true),
+          Effect.catchAll(() => Effect.succeed(false)),
+        );
 
-				results[key] = result;
-			}
+        results[key] = result;
+      }
 
-			return results;
-		});
-	}
+      return results;
+    });
+  }
 }
 
 // =============================================================================
@@ -182,33 +174,33 @@ class PosteeConfigProviderImpl implements PosteeConfigProviderService {
  * This is the key part - we create a ConfigProvider.Provider that Effect Config uses
  */
 export const makeEffectConfigProvider = (
-	variables: EnvironmentVariable[],
+  variables: EnvironmentVariable[],
 ): EffectConfigProvider.ConfigProvider => {
-	// Build a map of enabled variables
-	const variableMap = new Map(
-		variables
-			.filter((v) => v.is_enabled === 1)
-			.map((v) => [v.key, v.value ?? ""]),
-	);
+  // Build a map of enabled variables
+  const variableMap = new Map(
+    variables
+      .filter((v) => v.is_enabled === 1)
+      .map((v) => [v.key, v.value ?? ""]),
+  );
 
-	// Create a ConfigProvider.Provider using Effect's fromMap
-	return EffectConfigProvider.fromMap(variableMap);
+  // Create a ConfigProvider.Provider using Effect's fromMap
+  return EffectConfigProvider.fromMap(variableMap);
 };
 
 /**
  * Create a Layer that provides both Effect's ConfigProvider and our PosteeConfigProvider
  */
 export const PosteeConfigProviderLive = (
-	variables: EnvironmentVariable[],
+  variables: EnvironmentVariable[],
 ): Layer.Layer<PosteeConfigProvider> => {
-	return Layer.sync(PosteeConfigProvider, () => {
-		return new PosteeConfigProviderImpl();
-	}).pipe(
-		// Set the ConfigProvider in the Effect runtime
-		Layer.provide(
-			Layer.setConfigProvider(makeEffectConfigProvider(variables)),
-		),
-	);
+  return Layer.sync(PosteeConfigProvider, () => {
+    return new PosteeConfigProviderImpl();
+  }).pipe(
+    // Set the ConfigProvider in the Effect runtime
+    Layer.provide(
+      Layer.setConfigProvider(makeEffectConfigProvider(variables)),
+    ),
+  );
 };
 
 /**
@@ -219,9 +211,9 @@ export const PosteeConfigProviderLive = (
  * uses Effect Config which gets values from the Layer's ConfigProvider
  */
 export const makeConfigProvider = (
-	_variables?: EnvironmentVariable[],
+  _variables?: EnvironmentVariable[],
 ): PosteeConfigProviderService => {
-	return new PosteeConfigProviderImpl();
+  return new PosteeConfigProviderImpl();
 };
 
 // =============================================================================
@@ -233,17 +225,17 @@ export const makeConfigProvider = (
  * No Effect wrapper needed - pure computation
  */
 export const extractVariableNames = (template: string): string[] => {
-	const matches = template.matchAll(/\{\{([^}]+)\}\}/g);
-	return Array.from(matches)
-		.map((match) => match[1]?.trim())
-		.filter((name): name is string => name !== undefined);
+  const matches = template.matchAll(/\{\{([^}]+)\}\}/g);
+  return Array.from(matches)
+    .map((match) => match[1]?.trim())
+    .filter((name): name is string => name !== undefined);
 };
 
 /**
  * Pure function to check if string contains template variables
  */
 export const hasVariables = (text: string): boolean => {
-	return /\{\{[^}]+\}\}/.test(text);
+  return /\{\{[^}]+\}\}/.test(text);
 };
 
 /**
@@ -251,15 +243,15 @@ export const hasVariables = (text: string): boolean => {
  * Useful for testing without Effect context
  */
 export const resolveTemplateSync = (
-	template: string,
-	variables: Record<string, string>,
+  template: string,
+  variables: Record<string, string>,
 ): string => {
-	let result = template;
+  let result = template;
 
-	for (const [key, value] of Object.entries(variables)) {
-		const pattern = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
-		result = result.replace(pattern, value);
-	}
+  for (const [key, value] of Object.entries(variables)) {
+    const pattern = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
+    result = result.replace(pattern, value);
+  }
 
-	return result;
+  return result;
 };

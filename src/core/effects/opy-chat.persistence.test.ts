@@ -1,19 +1,19 @@
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vitest";
 import { DatabaseService } from "./database.base";
+import type { OpyAgentLifecycleRequest } from "./opy-agent.lifecycle";
+import type { OpyAgentArtifact, OpyAgentToolCall } from "./opy-agent.trace";
 import {
   createOpyAgentArtifact,
   createOpyAgentRun,
   listOpyAgentArtifacts,
   listOpyAgentToolCalls,
+  type OpyAgentRun,
+  type OpyAgentTask,
   restoreInterruptedOpyAgentSessionState,
   upsertOpyAgentTask,
   upsertOpyAgentToolCall,
-  type OpyAgentRun,
-  type OpyAgentTask,
 } from "./opy-chat.persistence";
-import type { OpyAgentLifecycleRequest } from "./opy-agent.lifecycle";
-import type { OpyAgentArtifact, OpyAgentToolCall } from "./opy-agent.trace";
 
 interface AgentRunRecord {
   id: string;

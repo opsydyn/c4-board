@@ -30,7 +30,7 @@ describe("opy-command-registry", () => {
   });
 
   it("parses review and add-node commands with normalized payloads", () => {
-    expect(parseOpyCommand('/review "payments boundary"')).toEqual({
+    expect(parseOpyCommand("/review \"payments boundary\"")).toEqual({
       type: "board-review",
       review: {
         kind: "review-c4-board",
@@ -38,7 +38,7 @@ describe("opy-command-registry", () => {
       },
     });
 
-    expect(parseOpyCommand('/add external-system "Azure Service Bus"')).toEqual({
+    expect(parseOpyCommand("/add external-system \"Azure Service Bus\"")).toEqual({
       type: "action",
       action: {
         kind: "add-node",
@@ -155,7 +155,7 @@ describe("opy-command-registry", () => {
       description: "event-driven payments",
     });
 
-    expect(getOpyStructuredCommandDraft('/add external-system "Azure Service Bus"')).toEqual({
+    expect(getOpyStructuredCommandDraft("/add external-system \"Azure Service Bus\"")).toEqual({
       kind: "action",
       token: "/add",
       typeToken: "external",

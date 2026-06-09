@@ -21,7 +21,8 @@ describe("balancedCoupling scenario fixtures", () => {
     });
 
     const hasOrganizationalContributor = model.snapshots.some((snapshot) =>
-      (snapshot.contributors ?? []).some((contributor) => contributor.id === "organizational"));
+      (snapshot.contributors ?? []).some((contributor) => contributor.id === "organizational")
+    );
 
     expect(model.snapshots.length).toBeGreaterThan(0);
     expect(hasOrganizationalContributor).toBe(false);
@@ -34,7 +35,8 @@ describe("balancedCoupling scenario fixtures", () => {
     });
 
     const organizationalContributors = model.snapshots.flatMap((snapshot) =>
-      (snapshot.contributors ?? []).filter((contributor) => contributor.id === "organizational"));
+      (snapshot.contributors ?? []).filter((contributor) => contributor.id === "organizational")
+    );
 
     expect(model.snapshots.length).toBeGreaterThan(0);
     expect(organizationalContributors.length).toBeGreaterThan(0);
@@ -49,8 +51,7 @@ describe("balancedCoupling scenario fixtures", () => {
       version: "v2",
     });
 
-    const unknownNodeSnapshot = model.snapshots.find((snapshot) =>
-      snapshot.id === "unknown-service-a");
+    const unknownNodeSnapshot = model.snapshots.find((snapshot) => snapshot.id === "unknown-service-a");
     expect(unknownNodeSnapshot).toBeDefined();
     if (!unknownNodeSnapshot) {
       return;
@@ -63,4 +64,3 @@ describe("balancedCoupling scenario fixtures", () => {
     expect(organizational?.volatility ?? 0).toBeGreaterThan(0);
   });
 });
-

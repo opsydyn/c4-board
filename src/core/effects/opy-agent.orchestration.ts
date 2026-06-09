@@ -1,7 +1,4 @@
-import type {
-  OpyAgentLifecycleFailurePhase,
-  OpyAgentLifecycleNonTerminalStage,
-} from "./opy-agent.lifecycle";
+import type { OpyAgentLifecycleFailurePhase, OpyAgentLifecycleNonTerminalStage } from "./opy-agent.lifecycle";
 
 export interface OpyAgentLifecycleStageGuardrail {
   readonly maxEntries: number;

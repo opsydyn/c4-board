@@ -1,9 +1,9 @@
 import { pipe, Schema } from "effect";
 import {
-  RigExecutionPolicySettingsSchema,
   type RigExecutionPolicySettings,
-  RigMutationPolicySettingsSchema,
+  RigExecutionPolicySettingsSchema,
   type RigMutationPolicySettings,
+  RigMutationPolicySettingsSchema,
 } from "./agent-policy";
 
 export const TransitionIntensitySchema = Schema.Literal("low", "normal", "high");

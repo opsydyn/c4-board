@@ -1,17 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Data, Effect, Schema } from "effect";
 import {
-  RigC4BoardNodeTypeSchema,
-  RigReadBoardSummaryResultSchema,
-  RigReadEdgeLookupResultSchema,
-  RigReadNodeLookupResultSchema,
-  RigReadToolNameSchema,
   type RigC4BoardEdge,
   type RigC4BoardNode,
   type RigC4BoardNodeType,
+  RigC4BoardNodeTypeSchema,
   type RigC4BoardSummary,
+  RigReadBoardSummaryResultSchema,
+  RigReadEdgeLookupResultSchema,
+  RigReadNodeLookupResultSchema,
   type RigReadToolInputByName,
   type RigReadToolName,
+  RigReadToolNameSchema,
   type RigReadToolResultByName,
 } from "./agent-tools/contracts";
 
@@ -74,8 +74,8 @@ const RigC4DiagramProposalSchema = Schema.Struct({
 export type RigC4ProposalNode = Schema.Schema.Type<typeof RigC4ProposalNodeSchema>;
 export type RigC4ProposalEdge = Schema.Schema.Type<typeof RigC4ProposalEdgeSchema>;
 export type RigC4DiagramProposal = Schema.Schema.Type<typeof RigC4DiagramProposalSchema>;
-export type { RigC4BoardNode, RigC4BoardEdge, RigC4BoardSummary, RigC4BoardNodeType };
-export type { RigReadToolName, RigReadToolInputByName, RigReadToolResultByName };
+export type { RigC4BoardEdge, RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary };
+export type { RigReadToolInputByName, RigReadToolName, RigReadToolResultByName };
 
 const RigC4ReviewPrioritySchema = Schema.Literal("low", "medium", "high");
 export type RigC4ReviewPriority = Schema.Schema.Type<typeof RigC4ReviewPrioritySchema>;
@@ -305,10 +305,13 @@ export const withAgentErrorContext = (
     return rebuildAgentError(error, overrides);
   }
 
-  return rebuildAgentError(classifyAgentInvokeFailure({
-    message: toCauseMessage(error),
-    cause: error,
-  }), overrides);
+  return rebuildAgentError(
+    classifyAgentInvokeFailure({
+      message: toCauseMessage(error),
+      cause: error,
+    }),
+    overrides,
+  );
 };
 
 const AGENT_ERROR_KIND_LABEL: Record<AgentError["_tag"], string> = {
@@ -516,7 +519,8 @@ export const runRigReadTool = <TTool extends RigReadToolName>(
       return buildAgentRuntimeError({
         message: `Rig read tool request failed for ${tool}: ${toCauseMessage(cause)}`,
         stage: "invoke",
-        recommendedAction: "Retry the read tool request. If it keeps failing, inspect the board snapshot and tool contract.",
+        recommendedAction:
+          "Retry the read tool request. If it keeps failing, inspect the board snapshot and tool contract.",
         cause,
       });
     },

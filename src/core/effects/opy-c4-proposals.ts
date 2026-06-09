@@ -39,8 +39,7 @@ export interface OpyGroundedProposalSummary {
   readonly hasChanges: boolean;
 }
 
-const normalizeComparisonText = (value: string | null | undefined): string =>
-  (value ?? "").trim().toLowerCase();
+const normalizeComparisonText = (value: string | null | undefined): string => (value ?? "").trim().toLowerCase();
 
 const edgeMatchesSameDirection = (
   edge: RigC4BoardEdge,
@@ -70,9 +69,7 @@ export const findBoardNodeMatches = (
     return exactMatches;
   }
 
-  return existingNodes.filter((existingNode) =>
-    normalizeComparisonText(existingNode.label) === normalizedLabel
-  );
+  return existingNodes.filter((existingNode) => normalizeComparisonText(existingNode.label) === normalizedLabel);
 };
 
 export const buildGroundedProposalDiff = (

@@ -5,8 +5,8 @@
  * Reproduces the exact architecture from database.runtime.ts to check
  * if "cannot start a transaction within a transaction" can occur.
  */
-import { describe, expect, it } from "vitest";
 import { Effect, FiberRef } from "effect";
+import { describe, expect, it } from "vitest";
 
 describe("Concurrent transaction serialization (reproducer)", () => {
   it("should never interleave BEGIN/COMMIT across concurrent Effect.runPromise calls", async () => {
@@ -48,7 +48,7 @@ describe("Concurrent transaction serialization (reproducer)", () => {
     const withWritePermit = <A, E, R>(
       effect: Effect.Effect<A, E, R>,
     ): Effect.Effect<A, E, R> =>
-      Effect.gen(function* () {
+      Effect.gen(function*() {
         const lockDepth = yield* FiberRef.get(writeLockDepthRef);
         if (lockDepth > 0) {
           return yield* effect;
@@ -60,7 +60,7 @@ describe("Concurrent transaction serialization (reproducer)", () => {
 
     // Simulate ensureSettingsBootstrapped
     const ensureSettingsBootstrapped = () =>
-      Effect.gen(function* () {
+      Effect.gen(function*() {
         const shouldBootstrap = yield* Effect.sync(() => {
           if (settingsBootstrapStarted) {
             return false;
@@ -72,7 +72,7 @@ describe("Concurrent transaction serialization (reproducer)", () => {
         if (shouldBootstrap) {
           // Bootstrap: writes some settings (like the real code)
           yield* withWritePermit(
-            Effect.gen(function* () {
+            Effect.gen(function*() {
               yield* executeRaw("INSERT INTO app_settings VALUES (...)");
               yield* executeRaw("INSERT INTO app_settings VALUES (...)");
             }),
@@ -95,27 +95,25 @@ describe("Concurrent transaction serialization (reproducer)", () => {
         Effect.flatMap(() =>
           withWritePermit(
             Effect.uninterruptibleMask((restore) =>
-              Effect.gen(function* () {
+              Effect.gen(function*() {
                 yield* executeRaw("BEGIN IMMEDIATE");
                 const operationExit = yield* Effect.exit(restore(effect));
                 if (operationExit._tag === "Success") {
                   yield* executeRaw("COMMIT");
                   return operationExit.value;
                 }
-                yield* Effect.catchAll(executeRaw("ROLLBACK"), () =>
-                  Effect.succeed(undefined),
-                );
+                yield* Effect.catchAll(executeRaw("ROLLBACK"), () => Effect.succeed(undefined));
                 return yield* Effect.failCause(operationExit.cause);
-              }),
+              })
             ),
-          ),
+          )
         ),
       );
 
     // Simulate saveDiagram (uses transaction with inner executes)
     const saveDiagram = () =>
       transaction(
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           yield* execute("INSERT INTO diagrams ...");
           yield* execute("INSERT INTO nodes ...");
           yield* execute("INSERT INTO edges ...");
@@ -126,7 +124,7 @@ describe("Concurrent transaction serialization (reproducer)", () => {
     // Simulate patchSettings (also uses transaction)
     const patchSettings = () =>
       transaction(
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           yield* execute("INSERT INTO app_settings ...");
           return { saved: true };
         }),
