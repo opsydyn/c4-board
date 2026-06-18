@@ -2,7 +2,7 @@
 
 This adds a minimal Rust-powered `rig-core` agent command and a UI trigger in Settings.
 
-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
+Example key value intentionally omitted. Do not commit real API keys.
 
 ## Runtime Wiring
 
