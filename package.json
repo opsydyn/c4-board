@@ -20,6 +20,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "release:surface": "bun .github/scripts/prepare-release-plz-surface.ts",
+    "docs:dev": "bun run --cwd docs dev",
+    "docs:build": "bun run --cwd docs build",
+    "docs:check": "bun run --cwd docs check",
+    "docs:preview": "bun run --cwd docs preview",
     "prepare": "effect-language-service patch"
   },
   "dependencies": {

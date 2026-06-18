@@ -1,0 +1,17 @@
+{
+  "name": "c4-board-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "astro check",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/check": "0.9.9",
+    "@astrojs/starlight": "0.40.0",
+    "astro": "6.4.5",
+    "typescript": "6.0.3"
+  }
+}
