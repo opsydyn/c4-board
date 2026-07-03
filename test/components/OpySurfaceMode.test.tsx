@@ -12,8 +12,12 @@ describe("getNextOpySurfaceMode", () => {
 });
 
 describe("resolveOpyHostMode", () => {
-  it("uses no OPY host when OPY is closed", () => {
+  it("uses no OPY host when OPY is closed in drawer mode", () => {
     expect(resolveOpyHostMode({ isOpen: false, surfaceMode: "drawer" })).toBe("closed");
+  });
+
+  it("keeps the floating host mounted when OPY is closed in floating mode", () => {
+    expect(resolveOpyHostMode({ isOpen: false, surfaceMode: "floating" })).toBe("floating");
   });
 
   it("uses drawer host when OPY is open and drawer mode is selected", () => {

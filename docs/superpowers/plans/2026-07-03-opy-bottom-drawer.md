@@ -8,6 +8,8 @@
 
 **Tech Stack:** Astro 6, React 19, TypeScript, vanilla-extract, Effect Schema settings runtime, XState-adjacent React state, Vitest, Testing Library.
 
+**Implementation Status:** Implemented on branch `codex/opy-bottom-drawer`. The final host routing lazily activates a stable portal mount for `OpyCopilotPanel` after OPY is opened, so drawer/floating chrome changes do not remount the panel, and floating mode remains mounted when closed so the existing launcher behavior is preserved.
+
 ---
 
 ## File Structure

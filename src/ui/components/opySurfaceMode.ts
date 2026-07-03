@@ -8,7 +8,7 @@ export const resolveOpyHostMode = (input: {
   readonly isOpen: boolean;
   readonly surfaceMode: "drawer" | "floating";
 }): OpyHostMode => {
-  if (!input.isOpen) {
+  if (!input.isOpen && input.surfaceMode === "drawer") {
     return "closed";
   }
   return input.surfaceMode;

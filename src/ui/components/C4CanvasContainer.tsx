@@ -24,8 +24,9 @@ import { emit } from "@tauri-apps/api/event";
 import { useMachine } from "@xstate/react";
 import { type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from "@xyflow/react";
 import { Duration, Effect } from "effect";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ToggleButton } from "react-aria-components";
+import { createPortal } from "react-dom";
 import * as Tone from "tone";
 import type { Actor, AnyStateMachine, StateFrom } from "xstate";
 import { waitFor } from "xstate";
@@ -121,6 +122,7 @@ type SaveDiagramPayload = Parameters<typeof saveDiagram>[0];
 
 const AUTO_SAVE_SOUND_COOLDOWN = Duration.seconds(5);
 const SAVE_REQUEST_TIMEOUT_MS = 20_000;
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 const toSaveSynthVolumeDb = (masterVolume: number): number =>
   masterVolume <= 0
     ? -60
@@ -270,6 +272,32 @@ export function C4CanvasContainer() {
   const rigAgentRolloutFlag = getRigAgentV1Flag();
   const canvasRegionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<C4CanvasRef>(null);
+  const opyFloatingPanelSlotRef = useRef<HTMLDivElement>(null);
+  const opyDrawerPanelSlotRef = useRef<HTMLDivElement>(null);
+  const opyPanelPortalElement = useMemo(() => {
+    if (typeof document === "undefined") {
+      return null;
+    }
+
+    const element = document.createElement("div");
+    element.dataset.opyPanelMount = "true";
+    element.style.display = "flex";
+    element.style.flexDirection = "column";
+    element.style.width = "100%";
+    element.style.height = "100%";
+    element.style.minHeight = "0";
+    return element;
+  }, []);
+  const opyPanelSlotStyle = useMemo<CSSProperties>(
+    () => ({
+      display: "flex",
+      flexDirection: "column",
+      width: "100%",
+      height: "100%",
+      minHeight: 0,
+    }),
+    [],
+  );
   const lastDiagramIdRef = useRef<string | null>(null);
   const lastPersistedFingerprintRef = useRef<string | null>(null);
   const seededDiagramIdRef = useRef<string | null>(null);
@@ -398,6 +426,13 @@ export function C4CanvasContainer() {
     persistPatch: persistPanelPreferencePatch,
     onPersistFailure: handlePanelPreferencePersistFailure,
   });
+  const [hasOpyPanelActivated, setOpyPanelActivated] = useState(isOpy9000Open);
+
+  useEffect(() => {
+    if (isOpy9000Open) {
+      setOpyPanelActivated(true);
+    }
+  }, [isOpy9000Open]);
 
   const revealOpyPresence = useCallback(() => {
     if (!isOpy9000Open && appSettings.opyWidgetPresence === "orb") {
@@ -2205,6 +2240,27 @@ export function C4CanvasContainer() {
   });
   const rowTrack = isDataBarOpen || opyHostMode === "drawer" ? "1fr auto" : "1fr";
   const opyDrawerChromeTone: OpyWidgetChromeTone = opyChromeStatus?.frameTone ?? "neutral";
+  useIsomorphicLayoutEffect(() => {
+    if (!opyPanelPortalElement || !hasOpyPanelActivated) {
+      opyPanelPortalElement?.remove();
+      return;
+    }
+
+    const targetSlot = opyHostMode === "drawer"
+      ? opyDrawerPanelSlotRef.current
+      : opyHostMode === "floating" && isOpy9000Open
+      ? opyFloatingPanelSlotRef.current
+      : null;
+
+    if (targetSlot) {
+      if (opyPanelPortalElement.parentElement !== targetSlot) {
+        targetSlot.appendChild(opyPanelPortalElement);
+      }
+      return;
+    }
+
+    opyPanelPortalElement.remove();
+  }, [hasOpyPanelActivated, isOpy9000Open, opyHostMode, opyPanelPortalElement]);
   const canvasAmbientTone = useMemo<"c4" | "ddd" | "azure">(() => {
     if (isAzurePanelOpen) {
       return "azure";
@@ -2379,6 +2435,9 @@ export function C4CanvasContainer() {
       chromeSectionRequest={opyChromeSectionRequest}
     />
   );
+  const opyPanelPortal = opyPanelPortalElement && hasOpyPanelActivated
+    ? createPortal(opyPanel, opyPanelPortalElement)
+    : null;
 
   return (
     <div
@@ -2658,7 +2717,7 @@ export function C4CanvasContainer() {
         />
         {opyHostMode === "floating" && (
           <OpyFloatingWidget
-            visible
+            visible={isOpy9000Open}
             domain={state.context.currentDomain}
             diagramName={state.context.diagramName}
             nodeCount={state.context.nodes.length}
@@ -2699,7 +2758,7 @@ export function C4CanvasContainer() {
               void navigateWithSave("/postee");
             }}
           >
-            {opyPanel}
+            <div ref={opyFloatingPanelSlotRef} style={opyPanelSlotStyle} />
           </OpyFloatingWidget>
         )}
         {!isSidebarOpen && (
@@ -2774,9 +2833,10 @@ export function C4CanvasContainer() {
           onCollapse={toggleOpyCopilot}
           onSwitchToFloating={handleSwitchOpyToFloating}
         >
-          {opyPanel}
+          <div ref={opyDrawerPanelSlotRef} style={opyPanelSlotStyle} />
         </OpyDrawer>
       )}
+      {opyPanelPortal}
       {isDataBarOpen && opyHostMode !== "drawer" && (
         <DataBar
           isOpen={isDataBarOpen}
