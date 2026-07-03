@@ -14,6 +14,7 @@ import {
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  RobotIcon,
   StackIcon,
   UserIcon,
 } from "@phosphor-icons/react";
@@ -41,6 +42,8 @@ interface ToolbarProps {
   onDiagramNameChange: (name: string) => void;
   onSessionNameChange: (name: string) => void;
   onToggleAnimations: () => void;
+  opySurfaceMode: "drawer" | "floating";
+  onToggleOpySurfaceMode: () => void;
   onOpenSavedDiagrams?: () => void;
   sessionName: string;
   isSaving?: boolean;
@@ -99,6 +102,8 @@ export function Toolbar({
   onDiagramNameChange,
   onSessionNameChange,
   onToggleAnimations,
+  opySurfaceMode,
+  onToggleOpySurfaceMode,
   onOpenSavedDiagrams,
   sessionName,
   isSaving = false,
@@ -201,6 +206,15 @@ export function Toolbar({
             </>
           )}
       </Button>
+
+      <button
+        type="button"
+        className={toolbarButton}
+        onClick={onToggleOpySurfaceMode}
+      >
+        <RobotIcon size={20} weight="duotone" />
+        {opySurfaceMode === "drawer" ? "OPY::DRAWER" : "OPY::FLOAT"}
+      </button>
 
       {/* Auto-layout menus */}
       <LayoutMenu

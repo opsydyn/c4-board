@@ -96,7 +96,7 @@ import {
 import { OpyCopilotPanel } from "./OpyCopilotPanel";
 import { OpyDrawer } from "./OpyDrawer";
 import { OpyFloatingWidget } from "./OpyFloatingWidget";
-import { resolveOpyHostMode } from "./opySurfaceMode";
+import { getNextOpySurfaceMode, resolveOpyHostMode } from "./opySurfaceMode";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
@@ -265,6 +265,7 @@ export function C4CanvasContainer() {
     settings: appSettings,
     isLoading: isSettingsLoading,
     settingsV1Enabled,
+    reload: reloadAppSettings,
   } = useAppSettings();
   const rigAgentRolloutFlag = getRigAgentV1Flag();
   const canvasRegionRef = useRef<HTMLElement>(null);
@@ -2325,10 +2326,22 @@ export function C4CanvasContainer() {
   const handleSwitchOpyToFloating = useCallback(() => {
     void runEffect(
       patchSettings({ opySurfaceMode: "floating" }),
-    ).catch((error) => {
-      console.warn("⚠️ Failed to persist OPY surface mode", error);
-    });
-  }, [runEffect]);
+    )
+      .then(() => reloadAppSettings())
+      .catch((error) => {
+        console.warn("⚠️ Failed to persist OPY surface mode", error);
+      });
+  }, [reloadAppSettings, runEffect]);
+  const handleToggleOpySurfaceMode = useCallback(() => {
+    const nextMode = getNextOpySurfaceMode(appSettings.opySurfaceMode);
+    void runEffect(
+      patchSettings({ opySurfaceMode: nextMode }),
+    )
+      .then(() => reloadAppSettings())
+      .catch((error) => {
+        console.warn("⚠️ Failed to persist OPY surface mode", error);
+      });
+  }, [appSettings.opySurfaceMode, reloadAppSettings, runEffect]);
   const opyPanel = (
     <OpyCopilotPanel
       domain={state.context.currentDomain}
@@ -2564,6 +2577,8 @@ export function C4CanvasContainer() {
                 diagramName={state.context.diagramName}
                 onToggleAnimations={handleToggleAnimations}
                 animationsEnabled={state.context.animationsEnabled}
+                opySurfaceMode={appSettings.opySurfaceMode}
+                onToggleOpySurfaceMode={handleToggleOpySurfaceMode}
                 saveError={state.context.saveError}
                 saveVolStatusLabel={saveVolStatus.label}
                 saveVolStatusHint={saveVolStatus.hint}

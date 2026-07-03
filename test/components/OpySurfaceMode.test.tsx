@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { resolveOpyHostMode } from "../../src/ui/components/opySurfaceMode";
+import { getNextOpySurfaceMode, resolveOpyHostMode } from "../../src/ui/components/opySurfaceMode";
+
+describe("getNextOpySurfaceMode", () => {
+  it("switches drawer to floating", () => {
+    expect(getNextOpySurfaceMode("drawer")).toBe("floating");
+  });
+
+  it("switches floating to drawer", () => {
+    expect(getNextOpySurfaceMode("floating")).toBe("drawer");
+  });
+});
 
 describe("resolveOpyHostMode", () => {
   it("uses no OPY host when OPY is closed", () => {
