@@ -7,6 +7,8 @@ export const drawerRoot = style({
     [componentsLayer]: {
       display: "flex",
       flexDirection: "column",
+      gridRow: "2 / 3",
+      gridColumn: "1 / -1",
       clipPath: theme.clipPath.lg,
       border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
       boxShadow: `${theme.effect.glow.lg}, 0 -18px 60px rgba(0, 0, 0, 0.46)`,

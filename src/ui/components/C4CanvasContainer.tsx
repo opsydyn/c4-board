@@ -91,9 +91,12 @@ import {
   areOpyWidgetChromeStatusesEqual,
   type OpyWidgetChromeFocusRequest,
   type OpyWidgetChromeStatus,
+  type OpyWidgetChromeTone,
 } from "./opyChromeStatus";
 import { OpyCopilotPanel } from "./OpyCopilotPanel";
+import { OpyDrawer } from "./OpyDrawer";
 import { OpyFloatingWidget } from "./OpyFloatingWidget";
+import { resolveOpyHostMode } from "./opySurfaceMode";
 import { PropertiesPanel } from "./PropertiesPanel";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
@@ -124,6 +127,8 @@ const toSaveSynthVolumeDb = (masterVolume: number): number =>
     : -24 + Math.max(0, Math.min(1, masterVolume)) * 20;
 const OWNERSHIP_FILTER_ALL = "__all__";
 const OWNERSHIP_FILTER_UNASSIGNED = "__unassigned__";
+
+export { resolveOpyHostMode } from "./opySurfaceMode";
 
 const isRigC4BoardNodeType = (value: unknown): value is RigC4BoardNodeType =>
   value === "person"
@@ -2193,7 +2198,12 @@ export function C4CanvasContainer() {
 
   const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
   const rightTrack = !isCompactLayout && isDetailsOpen ? "minmax(340px, 420px)" : "0px";
-  const rowTrack = isDataBarOpen ? "1fr auto" : "1fr";
+  const opyHostMode = resolveOpyHostMode({
+    isOpen: isOpy9000Open,
+    surfaceMode: appSettings.opySurfaceMode,
+  });
+  const rowTrack = isDataBarOpen || opyHostMode === "drawer" ? "1fr auto" : "1fr";
+  const opyDrawerChromeTone: OpyWidgetChromeTone = opyChromeStatus?.frameTone ?? "neutral";
   const canvasAmbientTone = useMemo<"c4" | "ddd" | "azure">(() => {
     if (isAzurePanelOpen) {
       return "azure";
@@ -2312,6 +2322,50 @@ export function C4CanvasContainer() {
     state.context.currentDomain,
     state.context.selectedNodeId,
   ]);
+  const handleSwitchOpyToFloating = useCallback(() => {
+    void runEffect(
+      patchSettings({ opySurfaceMode: "floating" }),
+    ).catch((error) => {
+      console.warn("⚠️ Failed to persist OPY surface mode", error);
+    });
+  }, [runEffect]);
+  const opyPanel = (
+    <OpyCopilotPanel
+      domain={state.context.currentDomain}
+      diagramId={state.context.currentDiagramId}
+      diagramName={state.context.diagramName}
+      nodeCount={state.context.nodes.length}
+      edgeCount={state.context.edges.length}
+      boardSummary={opyBoardSummary}
+      boardContext={opyBoardContext}
+      aiSettings={appSettings.aiSettings}
+      actionMode={opyActionMode}
+      redactionMode={appSettings.redactionMode}
+      agentPolicy={appSettings.agentPolicy}
+      rigExecutionPolicy={appSettings.rigExecutionPolicy}
+      rigAgentRollout={rigAgentRollout}
+      settingsSnapshot={opySettingsSnapshot}
+      azureSyncSnapshot={opyAzureSyncSnapshot}
+      explainabilitySnapshot={opyExplainabilitySnapshot}
+      viewportSections={appSettings.opyViewportSections}
+      onViewportSectionsChange={(nextSections) => {
+        void persistOpyViewportSections(nextSections);
+      }}
+      taskHistoryFiltersBySession={appSettings.opyTaskHistoryFiltersBySession}
+      onTaskHistoryFiltersBySessionChange={(nextFiltersBySession) => {
+        void persistOpyTaskHistoryFiltersBySession(nextFiltersBySession);
+      }}
+      onApplyBoardAction={handleApplyOpyBoardAction}
+      onOpenAiSettings={() => {
+        void navigateWithSave("/settings");
+      }}
+      onHide={toggleOpyCopilot}
+      onChromeStatusChange={(nextStatus) => {
+        setOpyChromeStatus((current) => areOpyWidgetChromeStatusesEqual(current, nextStatus) ? current : nextStatus);
+      }}
+      chromeSectionRequest={opyChromeSectionRequest}
+    />
+  );
 
   return (
     <div
@@ -2587,86 +2641,52 @@ export function C4CanvasContainer() {
           animationsEnabled={state.context.animationsEnabled}
           ambientTone={canvasAmbientTone}
         />
-        <OpyFloatingWidget
-          visible={isOpy9000Open}
-          domain={state.context.currentDomain}
-          diagramName={state.context.diagramName}
-          nodeCount={state.context.nodes.length}
-          edgeCount={state.context.edges.length}
-          boardContext={opyBoardContext}
-          chromeStatus={opyChromeStatus}
-          presence={appSettings.opyWidgetPresence}
-          layout={appSettings.opyWidgetLayout}
-          modeLayouts={appSettings.opyWidgetModeLayouts}
-          containerRef={canvasRegionRef}
-          onOpen={toggleOpyCopilot}
-          onStateCommit={(nextState) => {
-            void persistOpyWidgetState(nextState);
-          }}
-          onChromeSignalAction={(signal) => {
-            setOpyChromeSectionRequest({
-              action: "focus-section",
-              section: signal.targetSection,
-              signalKey: signal.key,
-              nonce: Date.now(),
-            });
-          }}
-          onChromeSignalClearAction={(signal) => {
-            setOpyChromeSectionRequest({
-              action: "clear-focus",
-              section: signal.targetSection,
-              signalKey: signal.key,
-              nonce: Date.now(),
-            });
-          }}
-          onOpenSettings={() => {
-            void navigateWithSave("/settings");
-          }}
-          onOpenSavedDiagrams={() => {
-            void navigateWithSave("/saved-diagrams");
-          }}
-          onOpenPostee={() => {
-            void navigateWithSave("/postee");
-          }}
-        >
-          <OpyCopilotPanel
+        {opyHostMode === "floating" && (
+          <OpyFloatingWidget
+            visible
             domain={state.context.currentDomain}
-            diagramId={state.context.currentDiagramId}
             diagramName={state.context.diagramName}
             nodeCount={state.context.nodes.length}
             edgeCount={state.context.edges.length}
-            boardSummary={opyBoardSummary}
             boardContext={opyBoardContext}
-            aiSettings={appSettings.aiSettings}
-            actionMode={opyActionMode}
-            redactionMode={appSettings.redactionMode}
-            agentPolicy={appSettings.agentPolicy}
-            rigExecutionPolicy={appSettings.rigExecutionPolicy}
-            rigAgentRollout={rigAgentRollout}
-            settingsSnapshot={opySettingsSnapshot}
-            azureSyncSnapshot={opyAzureSyncSnapshot}
-            explainabilitySnapshot={opyExplainabilitySnapshot}
-            viewportSections={appSettings.opyViewportSections}
-            onViewportSectionsChange={(nextSections) => {
-              void persistOpyViewportSections(nextSections);
+            chromeStatus={opyChromeStatus}
+            presence={appSettings.opyWidgetPresence}
+            layout={appSettings.opyWidgetLayout}
+            modeLayouts={appSettings.opyWidgetModeLayouts}
+            containerRef={canvasRegionRef}
+            onOpen={toggleOpyCopilot}
+            onStateCommit={(nextState) => {
+              void persistOpyWidgetState(nextState);
             }}
-            taskHistoryFiltersBySession={appSettings.opyTaskHistoryFiltersBySession}
-            onTaskHistoryFiltersBySessionChange={(nextFiltersBySession) => {
-              void persistOpyTaskHistoryFiltersBySession(nextFiltersBySession);
+            onChromeSignalAction={(signal) => {
+              setOpyChromeSectionRequest({
+                action: "focus-section",
+                section: signal.targetSection,
+                signalKey: signal.key,
+                nonce: Date.now(),
+              });
             }}
-            onApplyBoardAction={handleApplyOpyBoardAction}
-            onOpenAiSettings={() => {
+            onChromeSignalClearAction={(signal) => {
+              setOpyChromeSectionRequest({
+                action: "clear-focus",
+                section: signal.targetSection,
+                signalKey: signal.key,
+                nonce: Date.now(),
+              });
+            }}
+            onOpenSettings={() => {
               void navigateWithSave("/settings");
             }}
-            onHide={toggleOpyCopilot}
-            onChromeStatusChange={(nextStatus) => {
-              setOpyChromeStatus((current) =>
-                areOpyWidgetChromeStatusesEqual(current, nextStatus) ? current : nextStatus
-              );
+            onOpenSavedDiagrams={() => {
+              void navigateWithSave("/saved-diagrams");
             }}
-            chromeSectionRequest={opyChromeSectionRequest}
-          />
-        </OpyFloatingWidget>
+            onOpenPostee={() => {
+              void navigateWithSave("/postee");
+            }}
+          >
+            {opyPanel}
+          </OpyFloatingWidget>
+        )}
         {!isSidebarOpen && (
           <ToggleButton
             isSelected={isSidebarOpen}
@@ -2687,7 +2707,7 @@ export function C4CanvasContainer() {
             <CaretLeftIcon size={16} weight="bold" />
           </ToggleButton>
         )}
-        {!isDataBarOpen && (
+        {!isDataBarOpen && opyHostMode !== "drawer" && (
           <ToggleButton
             isSelected={isDataBarOpen}
             onChange={(selected) => setDataBarOpen(selected)}
@@ -2730,7 +2750,19 @@ export function C4CanvasContainer() {
         </aside>
       )}
 
-      {isDataBarOpen && (
+      {opyHostMode === "drawer" && (
+        <OpyDrawer
+          diagramName={state.context.diagramName}
+          nodeCount={state.context.nodes.length}
+          edgeCount={state.context.edges.length}
+          chromeTone={opyDrawerChromeTone}
+          onCollapse={toggleOpyCopilot}
+          onSwitchToFloating={handleSwitchOpyToFloating}
+        >
+          {opyPanel}
+        </OpyDrawer>
+      )}
+      {isDataBarOpen && opyHostMode !== "drawer" && (
         <DataBar
           isOpen={isDataBarOpen}
           onToggle={setDataBarOpen}
