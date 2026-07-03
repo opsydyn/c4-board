@@ -3,6 +3,18 @@ import { DEFAULT_APP_SETTINGS } from "@/core/effects/settings.types";
 import { describe, expect, it } from "vitest";
 
 describe("settings.runtime", () => {
+  it("normalizes invalid OPY surface mode values to the fallback setting", () => {
+    const normalized = normalizeAppSettingsCandidate(
+      {
+        ...DEFAULT_APP_SETTINGS,
+        opySurfaceMode: "fullscreen",
+      },
+      DEFAULT_APP_SETTINGS,
+    );
+
+    expect(normalized.opySurfaceMode).toBe("drawer");
+  });
+
   it("normalizes legacy OPY persisted settings into schema-safe values", () => {
     const normalized = normalizeAppSettingsCandidate(
       {

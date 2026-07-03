@@ -122,6 +122,9 @@ export type OpyWidgetMode = Schema.Schema.Type<typeof OpyWidgetModeSchema>;
 export const OpyWidgetPresenceSchema = Schema.Literal("orb", "field", "mission");
 export type OpyWidgetPresence = Schema.Schema.Type<typeof OpyWidgetPresenceSchema>;
 
+export const OpySurfaceModeSchema = Schema.Literal("drawer", "floating");
+export type OpySurfaceMode = Schema.Schema.Type<typeof OpySurfaceModeSchema>;
+
 export const OpyViewportSectionKeySchema = Schema.Literal(
   "control",
   "diagnostics",
@@ -258,6 +261,7 @@ export const AppSettingsSchema = Schema.Struct({
   ownershipLensVisible: Schema.Boolean,
   couplingExplainabilityVisible: Schema.Boolean,
   opyCopilotVisible: Schema.Boolean,
+  opySurfaceMode: OpySurfaceModeSchema,
   opyWidgetPresence: OpyWidgetPresenceSchema,
   opyWidgetLayout: OpyWidgetLayoutSchema,
   opyWidgetModeLayouts: OpyWidgetModeLayoutsSchema,
@@ -292,6 +296,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   ownershipLensVisible: false,
   couplingExplainabilityVisible: false,
   opyCopilotVisible: false,
+  opySurfaceMode: "drawer",
   opyWidgetPresence: "field",
   opyWidgetLayout: {
     placement: "centered",

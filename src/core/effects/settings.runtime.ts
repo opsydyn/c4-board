@@ -176,6 +176,11 @@ export const normalizeAppSettingsCandidate = (
     fallback.opyWidgetPresence,
     OPY_WIDGET_PRESENCE_ALIASES,
   ),
+  opySurfaceMode: normalizeEnumValue(
+    input.opySurfaceMode,
+    ["drawer", "floating"],
+    fallback.opySurfaceMode,
+  ),
   opyWidgetLayout: normalizeOpyWidgetLayout(input.opyWidgetLayout, fallback.opyWidgetLayout),
   opyWidgetModeLayouts: normalizeOpyWidgetModeLayouts(
     input.opyWidgetModeLayouts,

@@ -57,6 +57,14 @@ describe("settings.types", () => {
     expect(isAppSettingKey("not_a_real_setting")).toBe(false);
   });
 
+  it("defaults OPY to the drawer surface mode", () => {
+    expect(DEFAULT_APP_SETTINGS.opySurfaceMode).toBe("drawer");
+  });
+
+  it("exports OPY surface mode as a stable setting key", () => {
+    expect(isAppSettingKey("opySurfaceMode")).toBe(true);
+  });
+
   it("defaults panel toggles to hidden", () => {
     expect(DEFAULT_APP_SETTINGS.azurePanelVisible).toBe(false);
     expect(DEFAULT_APP_SETTINGS.ownershipLensVisible).toBe(false);
@@ -102,6 +110,15 @@ describe("settings.types", () => {
       Schema.decodeUnknownSync(AppSettingsSchema)({
         ...DEFAULT_APP_SETTINGS,
         rigAgentRolloutPreference: "enabled",
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid OPY surface mode values", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AppSettingsSchema)({
+        ...DEFAULT_APP_SETTINGS,
+        opySurfaceMode: "fullscreen",
       })
     ).toThrow();
   });
