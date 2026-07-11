@@ -66,7 +66,7 @@ import { patchSettings } from "../../core/effects/database";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import { getRigAgentV1Flag, resolveEffectiveRigAgentV1Rollout } from "../../core/effects/feature-flags";
-import { autoLayoutSelected, getPreset, type LayoutPresetName } from "../../core/effects/layout";
+import { autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetName } from "../../core/effects/layout";
 import {
   applyLayoutResultToEdges,
   createAsyncLayoutPreview,
@@ -371,6 +371,7 @@ export function C4CanvasContainer() {
     {
       preset: LayoutPresetName;
       scope: LayoutPreviewScope;
+      options?: Partial<LayoutOptions>;
     } | null
   >(null);
   const lastValidLayoutPreviewRef = useRef<
@@ -2152,13 +2153,20 @@ export function C4CanvasContainer() {
   const openLayoutPreview = useCallback((
     preset: LayoutPresetName,
     scope: LayoutPreviewScope,
+    options?: Partial<LayoutOptions>,
   ) => {
     setDataBarOpen(false);
     layoutPreviewAbortRef.current?.abort();
     const requestId = ++layoutPreviewRequestIdRef.current;
-    lastLayoutPreviewRequestRef.current = { preset, scope };
-    const input = { nodes: state.context.nodes, edges: state.context.edges, preset, scope };
-    const sourceKey = JSON.stringify({ nodes: input.nodes, edges: input.edges });
+    lastLayoutPreviewRequestRef.current = { preset, scope, ...(options && { options }) };
+    const input = {
+      nodes: state.context.nodes,
+      edges: state.context.edges,
+      preset,
+      scope,
+      ...(options && { options }),
+    };
+    const sourceKey = JSON.stringify({ nodes: input.nodes, edges: input.edges, options });
     const lastValidPreview = lastValidLayoutPreviewRef.current;
     const cachedPreview = lastValidPreview
         && lastValidPreview.diagramId === state.context.currentDiagramId
@@ -2228,8 +2236,17 @@ export function C4CanvasContainer() {
   const handleRetryLayoutPreview = useCallback(() => {
     const request = lastLayoutPreviewRequestRef.current;
     if (!request) return;
-    openLayoutPreview(request.preset, request.scope);
+    openLayoutPreview(request.preset, request.scope, request.options);
   }, [openLayoutPreview]);
+
+  const handleTryLayoutRecommendation = useCallback(() => {
+    if (!layoutPreview?.recommendation) return;
+    openLayoutPreview(
+      layoutPreview.preset,
+      layoutPreview.requestedScope,
+      { ...layoutPreview.options, ...layoutPreview.recommendation.options },
+    );
+  }, [layoutPreview, openLayoutPreview]);
 
   // Handle auto-layout action
   const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
@@ -3083,6 +3100,7 @@ export function C4CanvasContainer() {
           onCancel={handleCancelLayoutPreview}
           failure={layoutPreviewFailure}
           onRetry={handleRetryLayoutPreview}
+          onTryRecommendation={handleTryLayoutRecommendation}
         />
       )}
       {layoutPreviewStatus && (

@@ -16,12 +16,20 @@ export interface LayoutOptions {
 
 export type LayoutEngine = "dagre" | "elk" | "custom";
 
+export interface LayoutRecommendation {
+  id: "change-direction" | "reduce-rank-spacing";
+  label: string;
+  rationale: string;
+  options: Partial<LayoutOptions>;
+}
+
 export interface LayoutDiagnostic {
   code: string;
   severity: "info" | "warning" | "error";
   message: string;
   nodeIds?: string[];
   edgeIds?: string[];
+  recommendation?: LayoutRecommendation;
 }
 
 export interface LayoutQualityMetrics {

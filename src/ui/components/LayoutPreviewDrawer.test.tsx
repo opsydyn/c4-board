@@ -125,4 +125,28 @@ describe("LayoutPreviewDrawer", () => {
     expect(routed).toHaveTextContent("Routed crossings2");
     expect(routed).toHaveTextContent("Routed length1,245");
   });
+
+  it("offers a deterministic preview-only recommendation action", async () => {
+    const user = userEvent.setup();
+    const onTryRecommendation = vi.fn();
+    const preview = createPreview();
+    preview.recommendation = {
+      id: "change-direction",
+      label: "Try top-to-bottom routing",
+      rationale: "Separate competing route channels.",
+      options: { direction: "TB" },
+    };
+    render(
+      <LayoutPreviewDrawer
+        preview={preview}
+        onCenterChange={() => {}}
+        onApply={() => {}}
+        onCancel={() => {}}
+        onTryRecommendation={onTryRecommendation}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Try top-to-bottom routing" }));
+    expect(onTryRecommendation).toHaveBeenCalledOnce();
+  });
 });

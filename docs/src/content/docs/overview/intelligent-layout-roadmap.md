@@ -954,6 +954,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Add deterministic route-quality recommendations to diagnostics, such as direction or spacing adjustments.
-- [ ] Let preview Retry apply a recommended safe adjustment without mutating the board.
+- [x] Add deterministic route-quality recommendations to diagnostics, such as direction or spacing adjustments.
+- [x] Let preview Retry apply a recommended safe adjustment without mutating the board.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 17 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added typed layout recommendations to warning diagnostics.
+- [x] Recommended the alternate primary axis for crossing-heavy routes.
+- [x] Recommended a bounded 25% rank-spacing reduction for unusually long routes.
+- [x] Added a single Try recommended action using the diagnostic's concrete label and option patch.
+- [x] Reran the asynchronous preview with merged options while leaving canvas nodes and edges unchanged.
+- [x] Preserved recommended options through worker failure and ordinary Retry.
+- [x] Kept Apply as the only transition that commits preview geometry to the canvas machine.
+- [x] Added real-engine recommendation assertions and drawer interaction coverage.
+
+Next slice:
+
+- [ ] Evaluate the recommended alternative before presenting it and suppress recommendations that do not improve route quality.
+- [ ] Show before-versus-recommended routed metric deltas when an alternative is accepted for preview.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

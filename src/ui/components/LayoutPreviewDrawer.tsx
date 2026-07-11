@@ -17,6 +17,7 @@ export interface LayoutPreviewDrawerProps {
   onCancel: () => void;
   failure?: { message: string; attemptedLabel: string } | null;
   onRetry?: () => void;
+  onTryRecommendation?: () => void;
 }
 
 const formatMetric = (value: number, key: LayoutQualityDelta["key"]): string => {
@@ -43,6 +44,7 @@ export function LayoutPreviewDrawer({
   onCancel,
   failure = null,
   onRetry,
+  onTryRecommendation,
 }: LayoutPreviewDrawerProps) {
   const warnings = preview.result.diagnostics.filter(
     (diagnostic) => diagnostic.severity === "warning" || diagnostic.severity === "error",
@@ -194,6 +196,12 @@ export function LayoutPreviewDrawer({
             <h3>Diagnostics</h3>
           </div>
           <div className={styles.diagnosticsList}>
+            {preview.recommendation && onTryRecommendation && (
+              <button type="button" className={styles.retryButton} onClick={onTryRecommendation}>
+                <ArrowClockwiseIcon size={16} weight="bold" aria-hidden="true" />
+                {preview.recommendation.label}
+              </button>
+            )}
             {preview.result.diagnostics.length === 0
               ? <p className={styles.emptyDiagnostics}>No layout warnings</p>
               : preview.result.diagnostics.map((diagnostic, index) => (

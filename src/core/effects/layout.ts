@@ -24,6 +24,7 @@ export type {
   LayoutInput,
   LayoutOptions,
   LayoutQualityMetrics,
+  LayoutRecommendation,
   LayoutResult,
   LayoutRoutedQualityMetrics,
   LayoutStrategy,

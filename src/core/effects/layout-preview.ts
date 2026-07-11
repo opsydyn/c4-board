@@ -9,6 +9,7 @@ import {
   type LayoutOptions,
   type LayoutPresetName,
   type LayoutQualityMetrics,
+  type LayoutRecommendation,
   type LayoutResult,
   type LayoutRoutedQualityMetrics,
 } from "./layout";
@@ -44,6 +45,7 @@ export interface LayoutPreviewModel {
   centerControl: LayoutCenterControl | null;
   portSummary: LayoutPortSummary | null;
   routedQuality: LayoutRoutedQualityMetrics | null;
+  recommendation: LayoutRecommendation | null;
 }
 
 export interface LayoutPortSummary {
@@ -137,6 +139,8 @@ function buildLayoutPreviewModel(
     routedQuality: result.edgeRoutes?.length
       ? evaluateRoutedEdgeQuality(result.edgeRoutes)
       : null,
+    recommendation: result.diagnostics.find((diagnostic) => diagnostic.recommendation)
+      ?.recommendation ?? null,
   };
 }
 

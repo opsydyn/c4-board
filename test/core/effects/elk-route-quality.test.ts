@@ -25,6 +25,17 @@ describe("ELK routed quality gates", () => {
     expect(quality.totalEdgeLength / fixture.edges.length).toBeLessThan(300);
     expect(result.diagnostics.some(({ code }) => code === "elk-route-crossing-heavy"))
       .toBe(expected.warning);
+    const crossingDiagnostic = result.diagnostics.find(({ code }) => code === "elk-route-crossing-heavy");
+    expect(crossingDiagnostic?.recommendation).toEqual(
+      expected.warning
+        ? {
+          id: "change-direction",
+          label: "Try top-to-bottom routing",
+          rationale: expect.any(String),
+          options: { direction: "TB" },
+        }
+        : undefined,
+    );
     expect(result.diagnostics.map(({ code }) => code)).not.toContain("elk-route-length-high");
   });
 
@@ -49,5 +60,10 @@ describe("ELK routed quality gates", () => {
     const result = mapElkLayeredResult(input, graph);
 
     expect(result.diagnostics.map(({ code }) => code)).toContain("elk-route-length-high");
+    expect(result.diagnostics.find(({ code }) => code === "elk-route-length-high")?.recommendation)
+      .toMatchObject({
+        id: "reduce-rank-spacing",
+        options: { rankSpacing: 75 },
+      });
   });
 });

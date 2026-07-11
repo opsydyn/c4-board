@@ -143,12 +143,19 @@ export function mapElkLayeredResult(
   }
 
   if (routedAssessment.crossingHeavy) {
+    const recommendedDirection = alternateDirection(options.direction);
     diagnostics.push({
       code: "elk-route-crossing-heavy",
       severity: "warning",
       message:
         `ELK produced ${routedQuality.edgeCrossingCount} routed crossing(s) across ${input.edges.length} edge(s). This exceeds the evidence-based density gate of 0.5 crossings per edge and ${routedAssessment.crossingCountThreshold} total crossings.`,
       edgeIds: input.edges.map((edge) => edge.id),
+      recommendation: {
+        id: "change-direction",
+        label: `Try ${directionLabel(recommendedDirection)} routing`,
+        rationale: "Changing the primary layering axis can separate competing route channels.",
+        options: { direction: recommendedDirection },
+      },
     });
   }
 
@@ -160,6 +167,12 @@ export function mapElkLayeredResult(
         Math.round(routedAssessment.averageEdgeLengthThreshold)
       }px gate for the current rank spacing.`,
       edgeIds: input.edges.map((edge) => edge.id),
+      recommendation: {
+        id: "reduce-rank-spacing",
+        label: "Try tighter rank spacing",
+        rationale: "Reducing distance between layers can shorten long orthogonal route sections.",
+        options: { rankSpacing: Math.max(60, Math.round(options.rankSpacing * 0.75)) },
+      },
     });
   }
 
@@ -416,4 +429,12 @@ function snapPosition(x: number, y: number, enabled: boolean | undefined, gridSi
 
 function toElkDirection(direction: string): string {
   return { TB: "DOWN", BT: "UP", LR: "RIGHT", RL: "LEFT" }[direction] ?? "DOWN";
+}
+
+function alternateDirection(direction: LayoutOptions["direction"]): LayoutOptions["direction"] {
+  return direction === "LR" || direction === "RL" ? "TB" : "LR";
+}
+
+function directionLabel(direction: LayoutOptions["direction"]): string {
+  return direction === "TB" ? "top-to-bottom" : "left-to-right";
 }
