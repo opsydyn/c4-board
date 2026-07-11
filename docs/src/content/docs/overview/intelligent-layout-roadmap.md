@@ -453,7 +453,7 @@ Exit criteria:
 
 **Goal**: make architecture pattern semantics visible in geometry.
 
-- [ ] Implement ports-and-adapters role schema.
+- [x] Implement the shared Phase 4 role schema and initial ports-and-adapters inference.
 - [ ] Add Hexagonal core, port, adapter, and infrastructure placement.
 - [ ] Add Event-Driven publisher, bus, processor, and subscriber lanes.
 - [ ] Add Client-Server client, service, domain, and persistence columns.
@@ -1297,7 +1297,29 @@ Delivered:
 
 Next slice:
 
-- [ ] Add a Copy fingerprint command with accessible completion feedback.
-- [ ] Add signed artifacts only when an organization identity and trust model is defined.
-- [ ] Add artifact import only when a concrete review or migration workflow requires it.
+- [x] Reconcile phase status against delivered code and verification evidence.
+- [x] Regroup on Phase 4 semantic layouts rather than continuing export polish.
+- [ ] Keep Copy fingerprint, signed artifacts, and artifact import in the evidence-exchange backlog.
+
+### Slice 32 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added schema-validated architecture patterns for Hexagonal, Event-Driven, and Client-Server.
+- [x] Added one shared semantic-role vocabulary covering all three Phase 4 patterns.
+- [x] Enforced pattern-specific role validity at the assignment schema boundary.
+- [x] Added confidence, inference source, and grounded evidence to every role assignment.
+- [x] Reserved explicit `data.layoutRole` as the highest-priority future correction input.
+- [x] Rejected cross-pattern explicit roles with visible mismatch and ambiguity diagnostics.
+- [x] Added deterministic Hexagonal inference from explicit roles, C4/DDD node types, labels, edge direction, and stable topology ranking.
+- [x] Classified the representative core, inbound adapters, outbound port, and outbound adapters with confidence of at least 0.7.
+- [x] Added input-order invariance and ambiguous-node coverage.
+
+Next slice:
+
+- [ ] Implement deterministic Hexagonal core, port, adapter, and infrastructure geometry from the classified roles.
+- [ ] Surface role evidence, confidence, and ambiguity in the layout preview.
+- [ ] Add explicit role correction controls only after the inferred geometry is visible for review.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
