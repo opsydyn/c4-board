@@ -141,6 +141,25 @@ describe("LayoutPreviewDrawer", () => {
       .toHaveTextContent("CORE95%LABEL");
   });
 
+  it("requests an explicit semantic role correction", async () => {
+    const user = userEvent.setup();
+    const onRoleChange = vi.fn();
+    render(
+      <LayoutPreviewDrawer
+        preview={createHexagonalPreview()}
+        onCenterChange={() => {}}
+        onRoleChange={onRoleChange}
+        onApply={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Correct Worker semantic role" }));
+    await user.click(screen.getByRole("option", { name: "Core" }));
+
+    expect(onRoleChange).toHaveBeenCalledWith("worker", "core");
+  });
+
   it("labels straight baselines and surfaces routed geometry only when available", () => {
     const preview = createPreview();
     preview.routedQuality = { edgeCrossingCount: 2, totalEdgeLength: 1_245.4 };

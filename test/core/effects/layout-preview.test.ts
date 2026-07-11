@@ -2,6 +2,7 @@ import {
   applyLayoutResultToEdges,
   buildLayoutApplicationAudit,
   buildLayoutComparisonMetrics,
+  correctLayoutPreviewRole,
   createAsyncLayoutPreview,
   createLayoutPreview,
   evaluateLayoutRecommendation,
@@ -19,6 +20,22 @@ const fixture = (name: string) =>
   );
 
 describe("createLayoutPreview", () => {
+  it("recomputes a corrected Hexagonal role without mutating the source graph", () => {
+    const graph = fixture("hexagonal");
+    const sourceNode = graph.nodes.find(({ id }) => id === "rest-adapter")!;
+    const preview = createLayoutPreview({ ...graph, preset: "hexagonal", scope: "graph" });
+
+    const corrected = correctLayoutPreviewRole(preview, "rest-adapter", "outbound-adapter");
+
+    expect(sourceNode.data.layoutRole).toBeUndefined();
+    expect(corrected.result.nodes.find(({ id }) => id === "rest-adapter")?.data.layoutRole)
+      .toBe("outbound-adapter");
+    expect(corrected.result.semanticRoles?.find(({ nodeId }) => nodeId === "rest-adapter"))
+      .toMatchObject({ role: "outbound-adapter", confidence: 1, source: "explicit" });
+    expect(corrected.result.nodes.find(({ id }) => id === "rest-adapter")?.position.x)
+      .toBeGreaterThan(corrected.result.nodes.find(({ id }) => id === "domain-core")!.position.x);
+  });
+
   it("keeps only recommendations that improve routed quality", () => {
     const recommendation = {
       id: "change-direction" as const,

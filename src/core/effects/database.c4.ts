@@ -71,6 +71,7 @@ export interface Node {
   extent: "parent" | null;
   expand_parent: number;
   icon_id: string | null;
+  semantic_role: string | null;
   coupling_state_version: number;
   coupling_state_json: string | null;
 
@@ -156,6 +157,7 @@ export interface CreateNodeInput {
   extent?: "parent";
   expand_parent?: boolean;
   icon_id?: string;
+  semantic_role?: string;
   coupling_state_version?: number;
   coupling_state_json?: string | null;
 
@@ -200,6 +202,7 @@ export interface UpdateNodeInput {
   extent?: "parent";
   expand_parent?: boolean;
   icon_id?: string | null;
+  semantic_role?: string | null;
   coupling_state_version?: number;
   coupling_state_json?: string | null;
   team_ownership?: string | null;
@@ -331,9 +334,9 @@ export const createNode = (input: CreateNodeInput) =>
 				managed_aggregate, persistence_technology, created_objects, creation_rules,
 				parameters, target_aggregate, return_type, use_cases, dependencies,
 				publishing_context, subscribing_contexts, from_context, to_context, translation_rules,
-				saga_steps, compensation_logic,
+				saga_steps, compensation_logic, semantic_role,
 				created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.id,
         input.diagram_id,
@@ -379,6 +382,7 @@ export const createNode = (input: CreateNodeInput) =>
         toJson(input.translation_rules),
         toJson(input.saga_steps),
         toJson(input.compensation_logic),
+        input.semantic_role ?? null,
         now,
         now,
       ],
@@ -400,6 +404,7 @@ export const createNode = (input: CreateNodeInput) =>
       extent: input.extent ?? null,
       expand_parent: input.expand_parent ? 1 : 0,
       icon_id: input.icon_id ?? null,
+      semantic_role: input.semantic_role ?? null,
       coupling_state_version: input.coupling_state_version ?? 1,
       coupling_state_json: input.coupling_state_json ?? null,
       // DDD fields
@@ -495,6 +500,10 @@ export const updateNode = (id: string, input: UpdateNodeInput) =>
     if (input.icon_id !== undefined) {
       updates.push("icon_id = ?");
       values.push(input.icon_id ?? null);
+    }
+    if (input.semantic_role !== undefined) {
+      updates.push("semantic_role = ?");
+      values.push(input.semantic_role ?? null);
     }
     if (input.coupling_state_version !== undefined) {
       updates.push("coupling_state_version = ?");

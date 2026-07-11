@@ -7,6 +7,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import type { KeyboardEvent } from "react";
+import { type ArchitectureSemanticRole, getRolesForPattern } from "../../core/effects/architecture-role-classification";
 import type { LayoutComparisonMetric, LayoutPreviewModel, LayoutQualityDelta } from "../../core/effects/layout-preview";
 import * as styles from "./LayoutPreviewDrawer.css";
 import { TacticalSelect } from "./TacticalSelect";
@@ -22,6 +23,7 @@ export interface LayoutPreviewDrawerProps {
   comparisonMode?: "original" | "recommended" | null;
   onComparisonModeChange?: (mode: "original" | "recommended") => void;
   comparisonMetrics?: LayoutComparisonMetric[];
+  onRoleChange?: (nodeId: string, role: ArchitectureSemanticRole | null) => void;
 }
 
 const formatMetric = (value: number, key: LayoutQualityDelta["key"]): string => {
@@ -52,6 +54,7 @@ export function LayoutPreviewDrawer({
   comparisonMode = null,
   onComparisonModeChange,
   comparisonMetrics = [],
+  onRoleChange,
 }: LayoutPreviewDrawerProps) {
   const warnings = preview.result.diagnostics.filter(
     (diagnostic) => diagnostic.severity === "warning" || diagnostic.severity === "error",
@@ -231,6 +234,30 @@ export function LayoutPreviewDrawer({
                         <span>{assignment.source.toUpperCase()}</span>
                       </div>
                       <p>{assignment.evidence.join(" ")}</p>
+                      {onRoleChange && (
+                        <div className={styles.semanticRoleControl}>
+                          <TacticalSelect
+                            id={`layout-role-${assignment.nodeId}`}
+                            ariaLabel={`Correct ${label} semantic role`}
+                            value={assignment.source === "explicit" ? assignment.role : "auto"}
+                            options={[
+                              { value: "auto", label: "Infer automatically" },
+                              ...getRolesForPattern(assignment.pattern)
+                                .filter((role) => role !== "unclassified")
+                                .map((role) => ({
+                                  value: role,
+                                  label: role.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                                    .join(" "),
+                                })),
+                            ]}
+                            onChange={(value) =>
+                              onRoleChange(
+                                assignment.nodeId,
+                                value === "auto" ? null : value as ArchitectureSemanticRole,
+                              )}
+                          />
+                        </div>
+                      )}
                     </li>
                   );
                 })}

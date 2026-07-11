@@ -53,6 +53,7 @@ import type {
   RigAgentSettingsRetrievalSnapshot,
 } from "../../core/effects/agent-retrieval";
 import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../../core/effects/ai-agent.runtime";
+import type { ArchitectureSemanticRole } from "../../core/effects/architecture-role-classification";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import {
@@ -79,6 +80,7 @@ import {
   applyLayoutResultToEdges,
   buildLayoutApplicationAudit,
   buildLayoutComparisonMetrics,
+  correctLayoutPreviewRole,
   createAsyncLayoutPreview,
   createLayoutPreview,
   isCurrentLayoutPreviewRequest,
@@ -2380,6 +2382,17 @@ export function C4CanvasContainer() {
     });
   }, [state.context.edges, state.context.nodes]);
 
+  const handleLayoutPreviewRoleChange = useCallback((
+    nodeId: string,
+    role: ArchitectureSemanticRole | null,
+  ) => {
+    setLayoutPreview((current) => current ? correctLayoutPreviewRole(current, nodeId, role) : current);
+    setLayoutPreviewComparison(null);
+    requestAnimationFrame(() => {
+      canvasRef.current?.fitViewToGraph();
+    });
+  }, []);
+
   const handleApplyLayoutPreview = useCallback(() => {
     if (!layoutPreview) return;
     const audit = buildLayoutApplicationAudit(
@@ -3195,6 +3208,7 @@ export function C4CanvasContainer() {
         <LayoutPreviewDrawer
           preview={layoutPreview}
           onCenterChange={handleLayoutPreviewCenterChange}
+          onRoleChange={handleLayoutPreviewRoleChange}
           onApply={handleApplyLayoutPreview}
           onCancel={handleCancelLayoutPreview}
           failure={layoutPreviewFailure}

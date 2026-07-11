@@ -457,7 +457,7 @@ Exit criteria:
 - [x] Add Hexagonal core, port, adapter, and infrastructure placement.
 - [ ] Add Event-Driven publisher, bus, processor, and subscriber lanes.
 - [ ] Add Client-Server client, service, domain, and persistence columns.
-- [ ] Add role correction controls in the layout preview.
+- [x] Add role correction controls in the layout preview.
 - [ ] Add semantic violation diagnostics independent from layout quality.
 
 Exit criteria:
@@ -1365,6 +1365,28 @@ Delivered:
 
 Next slice:
 
-- [ ] Add explicit role correction controls that recompute Hexagonal geometry non-destructively.
-- [ ] Persist accepted role corrections only when the reviewed layout is applied.
+- [x] Add explicit role correction controls that recompute Hexagonal geometry non-destructively.
+- [x] Persist accepted role corrections only when the reviewed layout is applied.
 - [ ] Add native Hexagonal desktop and narrow-HUD visual baselines after correction UX stabilizes.
+
+### Slice 35 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added pattern-valid semantic role menus to every Hexagonal role evidence row.
+- [x] Added Infer automatically to remove an explicit correction and return to deterministic inference.
+- [x] Recomputed role evidence, diagnostics, quality metrics, and geometry from cloned preview nodes after every correction.
+- [x] Preserved earlier transient corrections across repeated preview edits.
+- [x] Kept live canvas nodes and persistence unchanged until explicit Apply.
+- [x] Reused the exact-preview Apply boundary so Cancel discards corrections without a second mutation path.
+- [x] Added migration 030 with a constrained nullable `semantic_role` node column.
+- [x] Added validated React Flow-to-database conversion, hydration, save change detection, INSERT, and UPDATE support.
+- [x] Added focused correction, geometry movement, conversion round-trip, and SQL column/value alignment coverage.
+
+Next slice:
+
+- [ ] Add native Hexagonal desktop and narrow-HUD visual baselines for inference and corrected-role states.
+- [ ] Implement Event-Driven publisher, bus, processor, and subscriber inference using the shared role contract.
+- [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.

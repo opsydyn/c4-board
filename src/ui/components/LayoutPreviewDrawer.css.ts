@@ -512,6 +512,11 @@ globalStyle(`${semanticRoleList} p`, {
   fontSize: theme.typography.size.xs,
 });
 
+export const semanticRoleControl = style({
+  gridColumn: "1 / -1",
+  minWidth: 0,
+});
+
 export const tableWrap = style({
   "@layer": {
     [componentsLayer]: {

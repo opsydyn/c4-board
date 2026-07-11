@@ -18,6 +18,7 @@
 
 import type { Edge as ReactFlowEdge, Node as ReactFlowNode } from "@xyflow/react";
 import { Effect, pipe } from "effect";
+import { isArchitectureSemanticRole } from "./architecture-role-classification";
 import {
   createDiagram,
   type CreateDiagramInput,
@@ -399,6 +400,9 @@ export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
       ...(teamOwnership && teamOwnership.length > 0
         ? { teamOwnership }
         : {}),
+      ...(isArchitectureSemanticRole(dbNode.semantic_role)
+        ? { layoutRole: dbNode.semantic_role }
+        : {}),
       ...couplingState,
     },
     // Initialize measured dimensions for ReactFlow v12+
@@ -471,6 +475,9 @@ export function reactFlowNodeToDb(
   const resolvedIconId = iconValue ?? getDefaultIconId(resolvedType as C4Type);
   const label = typeof labelValue === "string" && labelValue.length > 0 ? labelValue : "Unnamed";
   const couplingStateJson = encodeCouplingState(dataRecord);
+  const semanticRole = isArchitectureSemanticRole(dataRecord.layoutRole)
+    ? dataRecord.layoutRole
+    : undefined;
 
   return {
     id: node.id,
@@ -489,6 +496,7 @@ export function reactFlowNodeToDb(
     ...optional("extent", node.extent as "parent" | undefined),
     ...optional("expand_parent", node.expandParent),
     ...optional("icon_id", resolvedIconId),
+    ...optional("semantic_role", semanticRole),
     ...optional(
       "team_ownership",
       teamOwnership.length > 0 ? teamOwnership : undefined,
@@ -627,6 +635,7 @@ const hasNodeChanges = (
     || existing.extent !== toNullableExtent(next.extent)
     || existing.expand_parent !== toExpandParentInt(next.expand_parent)
     || existing.icon_id !== toNullableString(next.icon_id)
+    || existing.semantic_role !== toNullableString(next.semantic_role)
     || existing.team_ownership !== toNullableString(next.team_ownership)
     || existing.coupling_state_version
       !== toCouplingStateVersion(next.coupling_state_version)
@@ -748,6 +757,7 @@ export const saveDiagram = (
               ...(dbNodeInput.icon_id !== undefined
                 ? { icon_id: dbNodeInput.icon_id }
                 : {}),
+              semantic_role: dbNodeInput.semantic_role ?? null,
               team_ownership: dbNodeInput.team_ownership ?? null,
               coupling_state_version: couplingStateVersion,
               coupling_state_json: couplingStateJson,

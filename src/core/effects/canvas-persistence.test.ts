@@ -114,6 +114,17 @@ describe("reactFlowNodeToDb", () => {
 
     expect(result.team_ownership).toBeUndefined();
   });
+
+  it("persists an explicit semantic layout role", () => {
+    const result = reactFlowNodeToDb({
+      id: "node-role",
+      type: "component",
+      position: { x: 0, y: 0 },
+      data: { label: "Domain", layoutRole: "core" },
+    }, "diagram-1");
+
+    expect(result.semantic_role).toBe("core");
+  });
 });
 
 describe("edge layout persistence", () => {
@@ -186,6 +197,30 @@ describe("edge layout persistence", () => {
 });
 
 describe("dbNodeToReactFlow", () => {
+  it("hydrates a persisted semantic layout role", () => {
+    const result = dbNodeToReactFlow({
+      id: "node-role",
+      diagram_id: "diagram-1",
+      type: "component",
+      label: "Domain",
+      semantic_role: "core",
+      technology: null,
+      description: null,
+      position_x: 0,
+      position_y: 0,
+      width: null,
+      height: null,
+      parent_id: null,
+      extent: null,
+      expand_parent: 0,
+      icon_id: null,
+      created_at: 1,
+      updated_at: 2,
+    } as DbNode);
+
+    expect(result.data.layoutRole).toBe("core");
+  });
+
   it("falls back to the default icon when the database value is null", () => {
     const dbNode: Partial<DbNode> = {
       id: "node-3",

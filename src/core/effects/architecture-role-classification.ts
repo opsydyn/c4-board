@@ -62,6 +62,13 @@ export const isRoleAllowedForPattern = (
   role: ArchitectureSemanticRole,
 ): boolean => ROLES_BY_PATTERN[pattern].has(role);
 
+export const getRolesForPattern = (
+  pattern: ArchitecturePattern,
+): ArchitectureSemanticRole[] => [...ROLES_BY_PATTERN[pattern]];
+
+export const isArchitectureSemanticRole = (value: unknown): value is ArchitectureSemanticRole =>
+  typeof value === "string" && ArchitectureSemanticRoleSchema.literals.includes(value as ArchitectureSemanticRole);
+
 const ConfidenceSchema = pipe(
   Schema.Number,
   Schema.filter((value) => Number.isFinite(value) && value >= 0 && value <= 1, {
@@ -131,7 +138,7 @@ const nodeType = (node: Node) => {
 
 const explicitRole = (node: Node): ArchitectureSemanticRole | null => {
   const value = node.data?.layoutRole;
-  return typeof value === "string" && ALL_ROLES.has(value as ArchitectureSemanticRole)
+  return isArchitectureSemanticRole(value) && ALL_ROLES.has(value)
     ? value as ArchitectureSemanticRole
     : null;
 };

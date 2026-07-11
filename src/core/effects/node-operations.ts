@@ -9,6 +9,7 @@
 import type { Node } from "@xyflow/react";
 import { Effect } from "effect";
 import { nanoid } from "nanoid";
+import type { ArchitectureSemanticRole } from "./architecture-role-classification";
 
 /**
  * C4 model node types
@@ -105,6 +106,7 @@ export interface NodeData extends Record<string, unknown> {
   couplingScoreMode?: CouplingScoreMode;
   couplingOverrides?: CouplingOverrides;
   iconId?: NodeIconId;
+  layoutRole?: ArchitectureSemanticRole;
 
   // DDD-specific fields
   aggregateRoot?: string;

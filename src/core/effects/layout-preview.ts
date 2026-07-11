@@ -1,4 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { ArchitectureSemanticRole } from "./architecture-role-classification";
 import { type ElkLayeredExecutionOptions, layoutWithElk } from "./elk-layered-layout-strategy";
 import {
   calculateLayout,
@@ -109,6 +110,30 @@ export function createLayoutPreview(input: LayoutPreviewInput): LayoutPreviewMod
     ? calculateSelectedLayout(input.nodes, input.edges, selectedNodeIds, options)
     : calculateLayout(input.nodes, input.edges, options);
   return buildLayoutPreviewModel(input, options, appliedScope, result);
+}
+
+export function correctLayoutPreviewRole(
+  preview: LayoutPreviewModel,
+  nodeId: string,
+  role: ArchitectureSemanticRole | null,
+): LayoutPreviewModel {
+  const nodes = preview.result.nodes.map((node) => {
+    if (node.id !== nodeId) return node;
+    const data = { ...node.data };
+    if (role === null) {
+      delete data.layoutRole;
+    } else {
+      data.layoutRole = role;
+    }
+    return { ...node, data };
+  });
+  return createLayoutPreview({
+    nodes,
+    edges: preview.result.edges,
+    preset: preview.preset,
+    scope: preview.requestedScope,
+    options: preview.options,
+  });
 }
 
 export async function createAsyncLayoutPreview(
