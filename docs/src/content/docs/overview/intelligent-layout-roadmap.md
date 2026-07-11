@@ -1234,6 +1234,31 @@ Delivered:
 
 Next slice:
 
-- [ ] Add a review-artifact summary and integrity fingerprint for evidence exchange.
+- [x] Add a review-artifact summary and integrity fingerprint for evidence exchange.
+- [ ] Add artifact import only when a concrete review or migration workflow requires it.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 30 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Upgraded new review artifacts to contract version 2.
+- [x] Added derived application counts, first and latest timestamps, selected-variant counts, and engine counts.
+- [x] Validated every summary field against the encoded audit sequence rather than trusting caller input.
+- [x] Added canonical recursive key ordering so integrity does not depend on JSON formatting or property insertion order.
+- [x] Added a lowercase SHA-256 fingerprint over every artifact field except the fingerprint itself.
+- [x] Added a reusable verifier that rejects schema-invalid or fingerprint-mismatched artifacts.
+- [x] Used the platform Web Crypto implementation without adding a hashing dependency.
+- [x] Made asynchronous export guarded, inert while pending, and able to surface runtime failures.
+- [x] Added valid-fingerprint and modified-evidence detection coverage.
+
+The fingerprint provides integrity evidence, not signer identity or authenticity. Signed review artifacts remain a separate governance decision.
+
+Next slice:
+
+- [ ] Surface the artifact summary and fingerprint in the History UX before download.
+- [ ] Add signed artifacts only when an organization identity and trust model is defined.
 - [ ] Add artifact import only when a concrete review or migration workflow requires it.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

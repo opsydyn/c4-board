@@ -7,7 +7,7 @@ export interface LayoutHistoryTableProps {
   audits: ReadonlyArray<LayoutApplicationAudit>;
   onDeleteAudit?: (appliedAt: number) => Promise<void>;
   onClearAudits?: () => Promise<void>;
-  onExportAudits?: () => void;
+  onExportAudits?: () => Promise<void> | void;
 }
 
 const metricLabels: Record<LayoutApplicationAudit["comparisonMetrics"][number]["key"], string> = {
@@ -48,7 +48,7 @@ export function LayoutHistoryTable({
       await operation();
       setConfirmation(null);
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "Layout history deletion failed");
+      setDeleteError(error instanceof Error ? error.message : "Layout history operation failed");
     } finally {
       setDeleting(false);
     }
@@ -108,7 +108,7 @@ export function LayoutHistoryTable({
                   className={styles.exportButton}
                   disabled={isDeleting}
                   aria-label="Export layout audit history"
-                  onClick={onExportAudits}
+                  onClick={() => void runDeletion(async () => onExportAudits())}
                 >
                   <DownloadSimpleIcon size={15} aria-hidden="true" /> Export JSON
                 </button>

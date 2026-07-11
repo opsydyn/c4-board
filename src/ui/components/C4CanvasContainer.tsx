@@ -2340,8 +2340,8 @@ export function C4CanvasContainer() {
     send({ type: "CLEAR_LAYOUT_AUDITS_SUCCESS" });
   }, [send, state.context.currentDiagramId]);
 
-  const handleExportLayoutAudits = useCallback(() => {
-    const artifact = buildLayoutHistoryArtifact({
+  const handleExportLayoutAudits = useCallback(async () => {
+    const artifact = await buildLayoutHistoryArtifact({
       diagramId: state.context.currentDiagramId ?? "unsaved",
       diagramName: state.context.diagramName,
       exportedAt: Date.now(),

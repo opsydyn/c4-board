@@ -3,6 +3,7 @@ import {
   buildLayoutHistoryArtifact,
   createLayoutHistoryFilename,
   serializeLayoutHistoryArtifact,
+  verifyLayoutHistoryArtifactFingerprint,
 } from "./layout-history-export";
 import type { LayoutApplicationAudit } from "./layout.types";
 
@@ -17,8 +18,8 @@ const audit = (appliedAt: number): LayoutApplicationAudit => ({
 });
 
 describe("layout history export", () => {
-  it("builds a versioned newest-first review artifact", () => {
-    const artifact = buildLayoutHistoryArtifact({
+  it("builds a summarized, fingerprinted, newest-first review artifact", async () => {
+    const artifact = await buildLayoutHistoryArtifact({
       diagramId: "diagram-1",
       diagramName: "Checkout Platform",
       exportedAt: 500,
@@ -27,13 +28,25 @@ describe("layout history export", () => {
 
     expect(artifact).toEqual({
       schema: "opsydyn.layout-history",
-      version: 1,
+      version: 2,
       exportedAt: 500,
       diagram: { id: "diagram-1", name: "Checkout Platform" },
       retention: { limit: 100, exportedCount: 2 },
+      summary: {
+        applicationCount: 2,
+        firstAppliedAt: 100,
+        lastAppliedAt: 300,
+        variants: { single: 0, original: 0, recommended: 2 },
+        engines: { dagre: 0, elk: 2, custom: 0 },
+      },
       audits: [audit(300), audit(100)],
+      fingerprint: {
+        algorithm: "SHA-256",
+        value: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
     });
     expect(JSON.parse(serializeLayoutHistoryArtifact(artifact))).toEqual(artifact);
+    expect(await verifyLayoutHistoryArtifactFingerprint(artifact)).toBe(true);
   });
 
   it("creates a filesystem-safe descriptive filename", () => {
@@ -43,20 +56,36 @@ describe("layout history export", () => {
     expect(createLayoutHistoryFilename("***")).toBe("diagram-layout-history.json");
   });
 
-  it("rejects unsupported versions and inconsistent export counts", () => {
-    const artifact = buildLayoutHistoryArtifact({
+  it("rejects unsupported versions and inconsistent export counts", async () => {
+    const artifact = await buildLayoutHistoryArtifact({
       diagramId: "diagram-1",
       diagramName: "Checkout Platform",
       exportedAt: 500,
       audits: [audit(100)],
     });
 
-    expect(() => serializeLayoutHistoryArtifact({ ...artifact, version: 2 } as never)).toThrow();
+    expect(() => serializeLayoutHistoryArtifact({ ...artifact, version: 3 } as never)).toThrow();
     expect(() =>
       serializeLayoutHistoryArtifact({
         ...artifact,
         retention: { ...artifact.retention, exportedCount: 99 },
       })
     ).toThrow();
+  });
+
+  it("detects changes to fingerprinted evidence", async () => {
+    const artifact = await buildLayoutHistoryArtifact({
+      diagramId: "diagram-1",
+      diagramName: "Checkout Platform",
+      exportedAt: 500,
+      audits: [audit(100)],
+    });
+
+    expect(
+      await verifyLayoutHistoryArtifactFingerprint({
+        ...artifact,
+        diagram: { ...artifact.diagram, name: "Changed" },
+      }),
+    ).toBe(false);
   });
 });

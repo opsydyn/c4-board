@@ -25,7 +25,7 @@ interface DataBarProps {
   layoutAudits: ReadonlyArray<LayoutApplicationAudit>;
   onDeleteLayoutAudit: (appliedAt: number) => Promise<void>;
   onClearLayoutAudits: () => Promise<void>;
-  onExportLayoutAudits: () => void;
+  onExportLayoutAudits: () => Promise<void> | void;
 }
 
 const TABS: Array<{ id: DataBarTab; label: string }> = [
