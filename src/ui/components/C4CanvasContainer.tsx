@@ -709,6 +709,7 @@ export function C4CanvasContainer() {
       name: context.diagramName,
       nodes: context.nodes,
       edges: context.edges,
+      ...(context.lastLayoutAudit && { layoutAudit: context.lastLayoutAudit }),
     };
 
     if (context.diagramDescription) {
@@ -768,6 +769,7 @@ export function C4CanvasContainer() {
       description: input.description ?? null,
       nodes: normalizedNodes,
       edges: normalizedEdges,
+      layoutAudit: input.layoutAudit ?? null,
     });
   }, []);
 
@@ -993,12 +995,14 @@ export function C4CanvasContainer() {
       nodes: Node[];
       edges: Edge[];
       savedAt?: number;
+      layoutAudit?: SaveDiagramPayload["layoutAudit"];
     }) => {
       const saveInput: SaveDiagramPayload = {
         id: diagram.id,
         name: diagram.name,
         nodes: diagram.nodes,
         edges: diagram.edges,
+        ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
       };
 
       if (diagram.description) {
@@ -1072,6 +1076,7 @@ export function C4CanvasContainer() {
               nodes: diagram.nodes,
               edges: diagram.edges,
               updatedAt: diagram.updatedAt,
+              ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
               ...(diagram.description ? { description: diagram.description } : {}),
             },
           };
@@ -1082,6 +1087,7 @@ export function C4CanvasContainer() {
             description: diagram.description,
             nodes: diagram.nodes,
             edges: diagram.edges,
+            ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
             savedAt: diagram.updatedAt,
           });
           // Clear the query parameter
@@ -1145,6 +1151,7 @@ export function C4CanvasContainer() {
               nodes: diagram.nodes,
               edges: diagram.edges,
               updatedAt: diagram.updatedAt,
+              ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
               ...(diagram.description ? { description: diagram.description } : {}),
             },
           };
@@ -1155,6 +1162,7 @@ export function C4CanvasContainer() {
             description: diagram.description,
             nodes: diagram.nodes,
             edges: diagram.edges,
+            ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
             savedAt: diagram.updatedAt,
           });
         } else {
@@ -1234,6 +1242,7 @@ export function C4CanvasContainer() {
           nodes: diagram.nodes,
           edges: diagram.edges,
           updatedAt: diagram.updatedAt,
+          ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
           ...(diagram.description ? { description: diagram.description } : {}),
         },
       });
@@ -1243,6 +1252,7 @@ export function C4CanvasContainer() {
         description: diagram.description,
         nodes: diagram.nodes,
         edges: diagram.edges,
+        ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
         savedAt: diagram.updatedAt,
       });
       setDataBarOpen(false);
@@ -2328,7 +2338,7 @@ export function C4CanvasContainer() {
       layoutPreviewComparison?.active ?? "single",
       layoutComparisonMetrics,
     );
-    const edges = applyLayoutResultToEdges(layoutPreview.result, audit);
+    const edges = applyLayoutResultToEdges(layoutPreview.result);
     send({
       type: "APPLY_LAYOUT_PREVIEW",
       preset: layoutPreview.preset,

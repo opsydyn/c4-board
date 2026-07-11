@@ -144,7 +144,7 @@ describe("createLayoutPreview", () => {
     const preview = createLayoutPreview({ ...graph, preset: "systemContext", scope: "graph" });
     const metrics = buildLayoutComparisonMetrics(preview, preview);
     const audit = buildLayoutApplicationAudit(preview, "original", metrics, 123);
-    const edges = applyLayoutResultToEdges(preview.result, audit);
+    const edges = applyLayoutResultToEdges(preview.result);
 
     expect(audit).toMatchObject({
       version: 1,
@@ -155,7 +155,7 @@ describe("createLayoutPreview", () => {
       selectedVariant: "original",
     });
     expect(audit.comparisonMetrics).toHaveLength(2);
-    expect(edges.every((edge) => edge.data?.layoutAudit === audit)).toBe(true);
+    expect(edges.every((edge) => edge.data?.layoutAudit === undefined)).toBe(true);
   });
 
   it("rejects cancelled and superseded asynchronous preview completions", () => {

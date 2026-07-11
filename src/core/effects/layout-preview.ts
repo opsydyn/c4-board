@@ -317,7 +317,6 @@ export function buildLayoutApplicationAudit(
 
 export function applyLayoutResultToEdges(
   result: LayoutResult,
-  audit?: LayoutApplicationAudit,
 ): Edge[] {
   const routeByEdgeId = new Map(
     result.edgeRoutes?.map((route) => [route.edgeId, route.sections]) ?? [],
@@ -341,7 +340,6 @@ export function applyLayoutResultToEdges(
       data: {
         ...data,
         ...(layoutRoute && { layoutRoute }),
-        ...(audit && { layoutAudit: audit }),
       },
     };
   });

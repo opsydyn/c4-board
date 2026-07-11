@@ -107,6 +107,7 @@ export type CanvasEvent =
       nodes: Node[];
       edges: Edge[];
       updatedAt: number;
+      layoutAudit?: LayoutApplicationAudit;
     };
   }
   | { type: "LOAD_VISUAL_FIXTURE"; name: string; nodes: Node[]; edges: Edge[] }
@@ -829,9 +830,10 @@ const canvasMachineDefinition = setup({
       },
       lastLayoutAudit: ({ event }) => {
         if (event.type !== "LOAD_DIAGRAM_SUCCESS") return null;
-        return event.diagram.edges
+        return event.diagram.layoutAudit ?? event.diagram.edges
           .map((edge) => (edge.data as EdgeData | undefined)?.layoutAudit)
-          .find((audit): audit is LayoutApplicationAudit => audit !== undefined) ?? null;
+          .find((audit): audit is LayoutApplicationAudit => audit !== undefined)
+          ?? null;
       },
     }),
 

@@ -45,6 +45,7 @@ import {
   ValidationError,
 } from "./database";
 import type { EdgeData, EdgeMetadata } from "./edge-operations";
+import type { LayoutApplicationAudit } from "./layout.types";
 import {
   type C4Type,
   type CouplingOverrides,
@@ -69,6 +70,8 @@ export interface CanvasDiagram {
   edges: ReactFlowEdge[];
   createdAt: number;
   updatedAt: number;
+  layoutAudit?: LayoutApplicationAudit;
+  layoutAudits: LayoutApplicationAudit[];
 }
 
 export interface SaveDiagramInput {
@@ -77,7 +80,66 @@ export interface SaveDiagramInput {
   description?: string;
   nodes: ReactFlowNode[];
   edges: ReactFlowEdge[];
+  layoutAudit?: LayoutApplicationAudit;
 }
+
+interface LayoutAuditRow {
+  audit_json: string;
+}
+
+const parseLayoutAudit = (value: unknown): LayoutApplicationAudit | null => {
+  if (!isRecord(value) || value.version !== 1 || !isFiniteNumber(value.appliedAt)) return null;
+  if (
+    typeof value.preset !== "string"
+    || typeof value.strategyId !== "string"
+    || (value.engine !== "dagre" && value.engine !== "elk" && value.engine !== "custom")
+    || (value.selectedVariant !== "single"
+      && value.selectedVariant !== "original"
+      && value.selectedVariant !== "recommended")
+    || !Array.isArray(value.comparisonMetrics)
+  ) return null;
+  return value as unknown as LayoutApplicationAudit;
+};
+
+export const appendLayoutAudit = (
+  diagramId: string,
+  audit: LayoutApplicationAudit,
+) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(
+      `INSERT OR IGNORE INTO layout_audits (
+        id, diagram_id, version, applied_at, audit_json
+      ) VALUES (?, ?, ?, ?, ?)`,
+      [
+        `${diagramId}:${audit.appliedAt}`,
+        diagramId,
+        audit.version,
+        audit.appliedAt,
+        JSON.stringify(audit),
+      ],
+    );
+  });
+
+export const getLayoutAudits = (diagramId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<LayoutAuditRow>(
+      `SELECT audit_json
+       FROM layout_audits
+       WHERE diagram_id = ?
+       ORDER BY applied_at DESC`,
+      [diagramId],
+    );
+    return rows.flatMap((row) => {
+      try {
+        const audit = parseLayoutAudit(JSON.parse(row.audit_json) as unknown);
+        return audit ? [audit] : [];
+      } catch {
+        return [];
+      }
+    });
+  });
 
 // ============================================================================
 // Conversion Utilities (Pure Functions)
@@ -590,6 +652,10 @@ export const saveDiagram = (
           });
         }
 
+        if (input.layoutAudit) {
+          yield* appendLayoutAudit(input.id, input.layoutAudit);
+        }
+
         // 2. Get existing nodes and edges to determine what to delete/update
         const existingNodes = yield* getNodesByDiagram(input.id);
         const existingEdges = yield* getEdgesByDiagram(input.id);
@@ -756,6 +822,11 @@ export const loadDiagram = (diagramId: string) =>
     // 4. Convert to ReactFlow format and sort parent nodes before children
     const nodes = sortNodesByParentHierarchy(dbNodes.map(dbNodeToReactFlow));
     const edges = dbEdges.map(dbEdgeToReactFlow);
+    const layoutAudits = yield* getLayoutAudits(diagramId);
+    const legacyAudit = edges
+      .map((edge) => (edge.data as EdgeData | undefined)?.layoutAudit)
+      .find((audit): audit is LayoutApplicationAudit => audit !== undefined);
+    const layoutAudit = layoutAudits[0] ?? legacyAudit;
 
     return {
       id: diagram.id,
@@ -767,6 +838,8 @@ export const loadDiagram = (diagramId: string) =>
       edges,
       createdAt: diagram.created_at,
       updatedAt: diagram.updated_at,
+      ...(layoutAudit && { layoutAudit }),
+      layoutAudits,
     } satisfies CanvasDiagram;
   });
 
@@ -793,6 +866,7 @@ export const createNewDiagram = (name: string, description?: string) =>
       edges: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      layoutAudits: [],
     } satisfies CanvasDiagram;
   });
 
@@ -904,6 +978,7 @@ export const duplicateDiagram = (sourceDiagramId: string, newName: string) =>
       edges: newEdges,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      layoutAudits: [],
     } satisfies CanvasDiagram;
   });
 const extractNumericDimension = (value: unknown): number | undefined => {

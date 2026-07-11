@@ -1102,5 +1102,29 @@ Delivered:
 Next slice:
 
 - [ ] Surface the latest layout audit in the preview or history UX without duplicating it per visible edge.
-- [ ] Define diagram-level audit persistence for edge-free boards and future multi-step layout history.
+- [x] Define diagram-level audit persistence for edge-free boards and future multi-step layout history.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 24 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added migration 029 with a diagram-owned append-only `layout_audits` table.
+- [x] Stored version, application timestamp, and validated audit JSON under a diagram foreign key.
+- [x] Added deterministic audit identity from diagram ID and Apply timestamp for idempotent saves.
+- [x] Persisted the latest canvas audit directly from save input, including edge-free boards.
+- [x] Loaded complete newest-first layout audit history and exposed the latest record on `CanvasDiagram`.
+- [x] Restored latest diagram-owned audit into canvas machine state on board load.
+- [x] Stopped attaching new audit records to every applied edge.
+- [x] Retained edge-embedded audit hydration as a compatibility fallback for pre-migration saves.
+- [x] Kept malformed or unsupported audit rows out of runtime state.
+- [x] Added focused append, ordered-history, malformed-row, migration-build, and edge-free persistence coverage.
+
+Next slice:
+
+- [ ] Add a dedicated layout history surface using diagram-owned audit records.
+- [ ] Surface the latest accepted layout audit without duplicating it per visible edge.
+- [ ] Support selecting an audit entry to inspect its chosen variant and metric evidence.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
