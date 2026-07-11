@@ -296,8 +296,11 @@ const inferHexagonalRole = (
 
 const hasEventBusLabel = (label: string): boolean => {
   const tokens = label.split(/[^a-z0-9]+/).filter(Boolean);
-  return tokens.some((token) => ["broker", "queue", "topic"].includes(token))
-    || tokens.some((token, index) => token === "event" && ["bus", "stream"].includes(tokens[index + 1] ?? ""));
+  const hasStreamFlowRole = tokens.some((token) =>
+    ["processor", "subscriber", "consumer", "publisher", "producer"].includes(token)
+  );
+  return tokens.some((token) => ["broker", "queue", "topic", "bus"].includes(token))
+    || (tokens.includes("stream") && !hasStreamFlowRole);
 };
 
 const isEventBus = (node: Node): boolean => {
@@ -395,7 +398,7 @@ const inferEventDrivenRole = (
       role: "subscriber",
       confidence: 0.8,
       source: "label",
-      evidence: ["Subscriber label with no onward output."],
+      evidence: ["Subscriber label with no event-flow continuation."],
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }

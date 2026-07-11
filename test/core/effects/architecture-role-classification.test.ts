@@ -180,6 +180,40 @@ describe("architecture role classification", () => {
     });
   });
 
+  it("recognizes standalone bus and stream labels without treating stream flow roles as buses", () => {
+    const result = inferEventDrivenRoles([
+      { id: "orders-bus", type: "system", position: { x: 0, y: 0 }, data: { label: "Orders Bus" } },
+      { id: "kafka-stream", type: "system", position: { x: 0, y: 0 }, data: { label: "Kafka Stream" } },
+      { id: "upstream-api", type: "system", position: { x: 0, y: 0 }, data: { label: "Upstream API" } },
+      { id: "stream-processor", type: "component", position: { x: 0, y: 0 }, data: { label: "Stream Processor" } },
+      { id: "audit", type: "component", position: { x: 0, y: 0 }, data: { label: "Audit" } },
+    ], [
+      { id: "bus-to-processor", source: "orders-bus", target: "stream-processor", label: "order event" },
+      { id: "processor-to-audit", source: "stream-processor", target: "audit", label: "emits event" },
+    ]);
+
+    expect(Object.fromEntries(result.assignments.map(({ nodeId, role }) => [nodeId, role]))).toMatchObject({
+      "kafka-stream": "event-bus",
+      "orders-bus": "event-bus",
+      "stream-processor": "processor",
+      "upstream-api": "unclassified",
+    });
+  });
+
+  it("describes subscriber fallback evidence in terms of event-flow continuation", () => {
+    const result = inferEventDrivenRoles([
+      { id: "audit-subscriber", type: "component", position: { x: 0, y: 0 }, data: { label: "Audit Subscriber" } },
+      { id: "audit-database", type: "component", position: { x: 0, y: 0 }, data: { label: "Audit Database" } },
+    ], [
+      { id: "subscriber-writes", source: "audit-subscriber", target: "audit-database", label: "writes audit record" },
+    ]);
+
+    expect(result.assignments.find(({ nodeId }) => nodeId === "audit-subscriber")).toMatchObject({
+      role: "subscriber",
+      evidence: ["Subscriber label with no event-flow continuation."],
+    });
+  });
+
   it("falls through after contradictory explicit Event-Driven role evidence", () => {
     const fixture = eventDrivenFixture();
     const node = fixture.nodes.find(({ id }) => id === "orders-publisher")!;
