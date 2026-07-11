@@ -35,24 +35,25 @@ The product advantage is the combination of:
 
 ## 2) Current Baseline
 
-The existing implementation provides a useful deterministic starting point:
+The shipped implementation now provides an architecture-grade deterministic foundation:
 
-- `autoLayout` uses Dagre for all presets.
-- Presets vary direction, node spacing, rank spacing, and edge spacing.
-- Layout can be applied to the whole board or a selected subgraph.
-- Top-level node dimensions are passed to Dagre.
-- Results can snap to the tactical grid.
-- Layout mutations can flow through OPY's existing proposal and approval path.
+- A strategy registry routes hierarchical presets to Dagre, product radial patterns to custom geometry, and advanced compound layout to ELK Layered.
+- Whole-board and selected-subgraph Dagre workflows remain available.
+- Hub-Spoke and System Context have dedicated multi-ring geometry, center inference, overrides, role sectors, and diagnostics.
+- ELK runs in a cancellable Vite-managed worker and returns compound bounds, orthogonal routes, fixed-side ports, stable multi-port assignments, and congestion evidence.
+- Every layout enters a non-destructive preview with quality comparison, recommendations, exact Apply semantics, and last-valid fallback.
+- Accepted layouts have diagram-owned audit history, retention, confirmed deletion, and schema-validated review-artifact export.
+- Layout mutations still flow through the existing undo, checkpoint, persistence, and OPY proposal boundaries.
 
 Known limitations:
 
-- Preset identity does not select a different algorithm.
-- Node type, architecture role, ownership, and edge meaning do not influence layout.
-- Child nodes and hierarchy-crossing edges are excluded from layout calculation.
-- Dagre edge routes are not carried into the rendered graph.
-- No strategy can currently express rings, sectors, lanes, fixed columns, clusters, or explicit ports.
-- No dedicated fixture suite measures layout quality or visual regressions.
-- OPY can apply a known preset, but cannot classify a board, explain strategy selection, or create a reusable layout definition.
+- Several legacy menu presets still differ only by Dagre spacing and direction.
+- Hexagonal, Event-Driven, and Client-Server do not yet have semantic role schemas or dedicated geometry.
+- Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
+- ELK Radial has not justified replacing the product-specific radial strategies.
+- Native visual baselines cover dense ELK Event-Driven and Client-Server fixtures, but radial and full preset coverage remain open.
+- Browser-worker startup and enforced large-board interaction budgets remain incomplete.
+- OPY can apply known layouts, but cannot yet classify architecture patterns, correct semantic roles, or author reusable `LayoutSpec` definitions.
 
 ## 3) Target Architecture
 
@@ -380,11 +381,13 @@ Test layers:
 **Goal**: make layout quality visible before changing output.
 
 - [ ] Add representative C4 and DDD graph fixtures for every current preset.
-- [ ] Add overlap, crossing, edge-length, aspect-ratio, and displacement metrics.
-- [ ] Capture current Dagre output as explicit baseline fixtures.
-- [ ] Define `ArchitectureGraph`, `LayoutStrategy`, `LayoutResult`, and diagnostic schemas.
-- [ ] Add deterministic seeds and stable node ordering.
-- [ ] Document performance budgets and preview cancellation behavior.
+- [x] Add overlap, crossing, edge-length, aspect-ratio, and displacement metrics.
+- [x] Capture representative Dagre output as explicit baseline fixtures.
+- [x] Define `ArchitectureGraph`, `LayoutStrategy`, `LayoutResult`, and diagnostic contracts.
+- [x] Add stable node ordering and deterministic tie-breaking for shipped strategies.
+- [ ] Add deterministic seeds when stochastic engines are introduced.
+- [x] Define and implement preview cancellation behavior.
+- [ ] Define and enforce browser-worker performance budgets.
 
 Exit criteria:
 
@@ -434,8 +437,10 @@ Exit criteria:
 - [x] Implement the ELK worker adapter with timeout and cancellation.
 - [x] Map React Flow hierarchy, dimensions, ports, and edges into ELK JSON.
 - [x] Return compound bounds and edge routes through `LayoutResult`.
-- [ ] Add ELK Layered and Radial strategy adapters.
-- [ ] Benchmark bundle size, startup cost, and 25-500 node performance.
+- [x] Add the ELK Layered strategy adapter.
+- [ ] Add ELK Radial only if evidence shows an advantage over product radial geometry.
+- [x] Record bundle isolation and initial 25-500 node engine benchmarks.
+- [ ] Enforce browser-worker startup and execution budgets on realistic fixtures.
 - [x] Add fallback behavior for worker or engine failure.
 
 Exit criteria:
@@ -520,16 +525,16 @@ Exit criteria:
 
 ## 9) Milestone Priorities
 
-| Priority | Milestone | Product impact | Dependency |
-| --- | --- | --- | --- |
-| P0 | Metrics, fixtures, and strategy contract | Makes future layout work safe and measurable | None |
-| P0 | True Hub-Spoke and System Context | Immediate visible differentiation | Strategy contract |
-| P0 | ELK worker and compound graph support | Unlocks architecture-grade constraints and routing | Strategy contract |
-| P1 | Hexagonal and Event-Driven | Strong semantic differentiation | ELK/custom geometry |
-| P1 | OPY/Rig classifier | Natural-language strategy and role selection | Stable strategy schemas |
-| P1 | Client-Server and improved hierarchical family | Completes common architecture patterns | Strategy runtime |
-| P2 | Microservices and mixed strategies | Handles dense enterprise boards | ELK and classification |
-| P2 | OPY Custom Layout Studio | Turns user intent into reusable product knowledge | Constraint grammar and persistence |
+| Priority | Milestone | Status | Product impact | Dependency |
+| --- | --- | --- | --- | --- |
+| P0 | Metrics, fixtures, and strategy contract | Foundation shipped; full preset coverage open | Makes future layout work safe and measurable | None |
+| P0 | True Hub-Spoke and System Context | Shipped | Immediate visible differentiation | Strategy contract |
+| P0 | ELK worker and compound graph support | Shipped; browser budgets open | Unlocks architecture-grade constraints and routing | Strategy contract |
+| P1 | Hexagonal and Event-Driven | Next | Strong semantic differentiation | Shared semantic role schema |
+| P1 | OPY/Rig classifier | Queued | Natural-language strategy and role selection | Stable role and strategy schemas |
+| P1 | Client-Server and improved hierarchical family | Queued | Completes common architecture patterns | Shared semantic role schema |
+| P2 | Microservices and mixed strategies | Future | Handles dense enterprise boards | ELK and classification |
+| P2 | OPY Custom Layout Studio | Future | Turns user intent into reusable product knowledge | Constraint grammar and persistence |
 
 ## 10) Product and UX Principles
 
@@ -577,17 +582,28 @@ Quality measures:
 - Classification accuracy and calibration across the Rig eval set.
 - Layout completion within the agreed interaction budget for 95% of supported boards.
 
-## 13) Immediate Next Slice
+## 13) Current Regroup
 
-Start with **Phase 0 plus the strategy boundary from Phase 1**:
+The foundation through Phase 3 is substantially shipped: strategy boundaries, quality metrics, radial strategies, asynchronous ELK Layered, routed preview, recommendations, audit history, and portable review evidence are in production code.
 
-1. Add six representative fixtures: hierarchy, pipeline, system context, hub-spoke, hexagonal, and event-driven.
-2. Implement overlap, crossing, edge-length, aspect-ratio, and displacement metrics.
-3. Capture current output as the baseline.
-4. Introduce `LayoutStrategy` and a Dagre adapter with no intended visual change.
-5. Define `LayoutResult` diagnostics and preview compatibility.
+The next product workstream is **Phase 4 semantic architecture layouts**, sequenced as follows:
 
-This creates the evidence and contract needed to implement true Hub-Spoke next without coupling ELK, Rig classification, persistence, and UX into one risky change.
+1. Define one schema-validated semantic role contract shared by Hexagonal, Event-Driven, and Client-Server.
+2. Add deterministic role inference with evidence, confidence, ambiguity, and contradiction diagnostics.
+3. Implement Hexagonal core, port, adapter, and infrastructure geometry as the first consumer.
+4. Add role correction controls to the non-destructive preview and persist accepted corrections.
+5. Reuse the same contract for Event-Driven lanes and Client-Server columns.
+6. Expose stable role evidence to OPY/Rig only after deterministic inference and correction UX are evaluated.
+
+Open foundation debt remains visible but does not block the Phase 4 role-contract slice:
+
+- Remaining C4 and DDD preset fixtures and radial visual baselines.
+- Browser-worker startup and realistic performance budgets.
+- Advanced Dagre controls and semantic preprocessing.
+- Strategy-specific menu status.
+- Native baseline refresh when macOS capture is available.
+
+The next implementation slice should stop export-history polish and begin the shared semantic role schema plus deterministic Hexagonal inference fixtures.
 
 ### Slice 1 Delivery Record
 
