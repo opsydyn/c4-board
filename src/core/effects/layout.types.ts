@@ -1,4 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { ArchitectureRoleAssignment } from "./architecture-role-classification";
 
 export interface LayoutOptions {
   direction: "TB" | "LR" | "BT" | "RL";
@@ -64,6 +65,7 @@ export interface LayoutResult {
   edgeRoutes?: LayoutEdgeRoute[];
   edgePortAssignments?: LayoutEdgePortAssignment[];
   portCongestion?: LayoutPortCongestion[];
+  semanticRoles?: ReadonlyArray<ArchitectureRoleAssignment>;
   strategyId: string;
   engine: LayoutEngine;
   diagnostics: LayoutDiagnostic[];

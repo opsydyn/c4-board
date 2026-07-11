@@ -437,6 +437,81 @@ export const controlLabel = style({
   },
 });
 
+export const semanticRoleReview = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  minHeight: 0,
+});
+
+export const semanticRoleHeading = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  textTransform: "uppercase",
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  fontWeight: theme.typography.weight.semibold,
+});
+
+export const semanticRoleList = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  margin: 0,
+  padding: 0,
+  listStyle: "none",
+});
+
+globalStyle(`${semanticRoleList} > li`, {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+  borderLeft: `3px solid ${theme.color.status.ready}`,
+  backgroundColor: theme.color.background.raised,
+  padding: theme.spacing["2"],
+});
+
+globalStyle(`${semanticRoleList} > li[data-tone="warning"]`, {
+  borderLeftColor: theme.color.status.caution,
+});
+
+export const semanticRoleIdentity = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["1"],
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${semanticRoleIdentity} span`, {
+  color: theme.color.status.selected,
+});
+
+export const semanticRoleMeta = style({
+  display: "flex",
+  alignItems: "flex-start",
+  gap: theme.spacing["2"],
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${semanticRoleList} p`, {
+  gridColumn: "1 / -1",
+  margin: 0,
+  overflowWrap: "anywhere",
+  letterSpacing: 0,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
 export const tableWrap = style({
   "@layer": {
     [componentsLayer]: {

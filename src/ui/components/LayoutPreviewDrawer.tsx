@@ -57,6 +57,20 @@ export function LayoutPreviewDrawer({
     (diagnostic) => diagnostic.severity === "warning" || diagnostic.severity === "error",
   ).length;
   const centerLabel = preview.centerControl?.kind === "hub" ? "Hub" : "System of interest";
+  const semanticWarningNodeIds = new Set(
+    preview.result.diagnostics
+      .filter(({ code }) => code === "semantic-role-ambiguous" || code === "semantic-role-pattern-mismatch")
+      .flatMap(({ nodeIds }) => nodeIds ?? []),
+  );
+  const semanticRoles = [...(preview.result.semanticRoles ?? [])].sort((left, right) => {
+    const warningDifference = Number(semanticWarningNodeIds.has(right.nodeId))
+      - Number(semanticWarningNodeIds.has(left.nodeId));
+    return warningDifference || left.confidence - right.confidence || left.nodeId.localeCompare(right.nodeId);
+  });
+  const nodeLabelById = new Map(preview.result.nodes.map((node) => [
+    node.id,
+    typeof node.data?.label === "string" ? node.data.label : node.id,
+  ]));
   const handleDrawerKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (!comparisonMode || !onComparisonModeChange || !event.altKey) return;
     if (event.key === "ArrowLeft") {
@@ -190,6 +204,37 @@ export function LayoutPreviewDrawer({
                 }))}
                 onChange={onCenterChange}
               />
+            </div>
+          )}
+          {semanticRoles.length > 0 && (
+            <div className={styles.semanticRoleReview}>
+              <div className={styles.semanticRoleHeading}>
+                <span>Semantic roles</span>
+                <span>{semanticWarningNodeIds.size > 0 ? `${semanticWarningNodeIds.size} review` : "Ready"}</span>
+              </div>
+              <ul className={styles.semanticRoleList} aria-label="Semantic role evidence">
+                {semanticRoles.map((assignment) => {
+                  const warning = semanticWarningNodeIds.has(assignment.nodeId) || assignment.confidence < 0.65;
+                  const label = nodeLabelById.get(assignment.nodeId) ?? assignment.nodeId;
+                  return (
+                    <li
+                      key={assignment.nodeId}
+                      aria-label={`${label} semantic role`}
+                      data-tone={warning ? "warning" : "ready"}
+                    >
+                      <div className={styles.semanticRoleIdentity}>
+                        <strong>{label}</strong>
+                        <span>{assignment.role.toUpperCase()}</span>
+                      </div>
+                      <div className={styles.semanticRoleMeta}>
+                        <span>{`${Math.round(assignment.confidence * 100)}%`}</span>
+                        <span>{assignment.source.toUpperCase()}</span>
+                      </div>
+                      <p>{assignment.evidence.join(" ")}</p>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
         </section>

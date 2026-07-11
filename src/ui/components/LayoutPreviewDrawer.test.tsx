@@ -16,6 +16,19 @@ const createPreview = () => {
   });
 };
 
+const createHexagonalPreview = () => {
+  const graph = cloneLayoutFixture(
+    layoutGraphFixtures.find((fixture) => fixture.name === "hexagonal")!,
+  );
+  graph.nodes.push({
+    id: "worker",
+    type: "component",
+    position: { x: 0, y: 0 },
+    data: { label: "Worker", layoutRole: "publisher" },
+  });
+  return createLayoutPreview({ ...graph, preset: "hexagonal", scope: "graph" });
+};
+
 describe("LayoutPreviewDrawer", () => {
   it("renders strategy, scope, quality metrics, diagnostics, and center control", () => {
     render(
@@ -105,6 +118,27 @@ describe("LayoutPreviewDrawer", () => {
     expect(summary).toHaveTextContent("Assigned edges12");
     expect(summary).toHaveTextContent("Congested sides1");
     expect(summary).toHaveTextContent("Busiest side12/9 BOTTOM");
+  });
+
+  it("surfaces semantic role evidence and prioritizes ambiguous assignments", () => {
+    render(
+      <LayoutPreviewDrawer
+        preview={createHexagonalPreview()}
+        onCenterChange={() => {}}
+        onApply={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    const roles = screen.getByRole("list", { name: "Semantic role evidence" });
+    const items = screen.getAllByRole("listitem");
+    expect(roles).toBeInTheDocument();
+    expect(items[0]).toHaveAccessibleName("Worker semantic role");
+    expect(items[0]).toHaveAttribute("data-tone", "warning");
+    expect(items[0]).toHaveTextContent("UNCLASSIFIED25%FALLBACK");
+    expect(items[0]).toHaveTextContent("No grounded Hexagonal role evidence was found.");
+    expect(screen.getByRole("listitem", { name: "domain-core semantic role" }))
+      .toHaveTextContent("CORE95%LABEL");
   });
 
   it("labels straight baselines and surfaces routed geometry only when available", () => {

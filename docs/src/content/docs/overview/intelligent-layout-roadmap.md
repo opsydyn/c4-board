@@ -1342,7 +1342,29 @@ Delivered:
 
 Next slice:
 
-- [ ] Surface role, inference source, confidence, and evidence in the layout preview drawer.
-- [ ] Highlight ambiguous and contradictory nodes without mutating the board.
+- [x] Surface role, inference source, confidence, and evidence in the layout preview drawer.
+- [x] Highlight ambiguous and contradictory nodes without mutating the board.
 - [ ] Add explicit role correction controls after role evidence is reviewable.
 - [ ] Add native Hexagonal desktop and narrow-HUD visual baselines.
+
+### Slice 34 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added optional typed semantic-role evidence to `LayoutResult`.
+- [x] Returned the exact assignments that drove Hexagonal geometry through the preview boundary.
+- [x] Added a compact Semantic Roles review surface inside Placement.
+- [x] Displayed node label, assigned role, confidence percentage, inference source, and grounded evidence.
+- [x] Prioritized contradictory and low-confidence nodes ahead of confident assignments.
+- [x] Added warning and ready treatments without turning role rows into mutation controls.
+- [x] Derived warning state from semantic diagnostics and the shared confidence threshold.
+- [x] Preserved the existing Apply-only mutation boundary and read-only canvas preview.
+- [x] Added drawer coverage for confident role evidence and contradictory explicit-role review.
+
+Next slice:
+
+- [ ] Add explicit role correction controls that recompute Hexagonal geometry non-destructively.
+- [ ] Persist accepted role corrections only when the reviewed layout is applied.
+- [ ] Add native Hexagonal desktop and narrow-HUD visual baselines after correction UX stabilizes.

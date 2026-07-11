@@ -102,7 +102,13 @@ export function layoutHexagonal(input: LayoutInput): LayoutResult {
   }
 
   const positioned = positionByRole(topNodes, classification.assignments, options);
-  return buildResult([...positioned, ...childNodes], input.edges, input.nodes, diagnostics);
+  return buildResult(
+    [...positioned, ...childNodes],
+    input.edges,
+    input.nodes,
+    diagnostics,
+    classification.assignments,
+  );
 }
 
 function topLevelEdges(nodes: ReadonlyArray<Node>, edges: ReadonlyArray<Edge>): Edge[] {
@@ -215,6 +221,7 @@ function buildResult(
   edges: Edge[],
   previousNodes: Node[],
   diagnostics: LayoutDiagnostic[],
+  semanticRoles?: ReadonlyArray<ArchitectureRoleAssignment>,
 ): LayoutResult {
   return {
     nodes,
@@ -222,6 +229,7 @@ function buildResult(
     strategyId: hexagonalLayoutStrategy.id,
     engine: hexagonalLayoutStrategy.engine,
     diagnostics,
+    ...(semanticRoles && { semanticRoles }),
     quality: evaluateLayoutQuality(nodes, edges, previousNodes),
   };
 }
