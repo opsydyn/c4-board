@@ -1,5 +1,6 @@
 import {
   applyLayoutResultToEdges,
+  buildLayoutComparisonMetrics,
   createAsyncLayoutPreview,
   createLayoutPreview,
   evaluateLayoutRecommendation,
@@ -101,6 +102,40 @@ describe("createLayoutPreview", () => {
       recommendedResult: null,
     });
     expect(preview.result).not.toBe(recommendedResult);
+    expect(buildLayoutComparisonMetrics(preview, promoted!)).toEqual([
+      expect.objectContaining({ key: "overlaps", favored: "tie" }),
+      expect.objectContaining({ key: "canvasArea", favored: "tie" }),
+    ]);
+  });
+
+  it("keeps individual comparison outcomes instead of an aggregate score", () => {
+    const graph = fixture("system-context");
+    const original = createLayoutPreview({ ...graph, preset: "systemContext", scope: "graph" });
+    const recommended = {
+      ...original,
+      result: {
+        ...original.result,
+        quality: {
+          ...original.result.quality,
+          nodeOverlapCount: original.result.quality.nodeOverlapCount + 1,
+          occupiedArea: original.result.quality.occupiedArea - 1_000,
+        },
+      },
+      routedQuality: { edgeCrossingCount: 2, totalEdgeLength: 800 },
+    };
+    original.routedQuality = { edgeCrossingCount: 4, totalEdgeLength: 700 };
+
+    expect(
+      buildLayoutComparisonMetrics(original, recommended).map(({ key, favored }) => ({
+        key,
+        favored,
+      })),
+    ).toEqual([
+      { key: "overlaps", favored: "original" },
+      { key: "canvasArea", favored: "recommended" },
+      { key: "routedCrossings", favored: "recommended" },
+      { key: "routedLength", favored: "original" },
+    ]);
   });
 
   it("rejects cancelled and superseded asynchronous preview completions", () => {

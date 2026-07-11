@@ -221,4 +221,49 @@ describe("LayoutPreviewDrawer", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("Preview comparison: Original active.");
   });
+
+  it("keeps per-metric comparison deltas visible without an aggregate score", () => {
+    render(
+      <LayoutPreviewDrawer
+        preview={createPreview()}
+        onCenterChange={() => {}}
+        onApply={() => {}}
+        onCancel={() => {}}
+        comparisonMode="original"
+        onComparisonModeChange={() => {}}
+        comparisonMetrics={[
+          {
+            key: "overlaps",
+            label: "Overlaps",
+            original: 0,
+            recommended: 1,
+            favored: "original",
+            format: "count",
+          },
+          {
+            key: "canvasArea",
+            label: "Canvas area",
+            original: 200_000,
+            recommended: 180_000,
+            favored: "recommended",
+            format: "area",
+          },
+          {
+            key: "routedCrossings",
+            label: "Routed crossings",
+            original: 2,
+            recommended: 2,
+            favored: "tie",
+            format: "count",
+          },
+        ]}
+      />,
+    );
+
+    const strip = screen.getByRole("group", { name: "Comparison deltas" });
+    expect(strip).toHaveTextContent("OverlapsO 0R 1original lower");
+    expect(strip).toHaveTextContent("Canvas areaO 200KR 180Krecommended lower");
+    expect(strip).toHaveTextContent("Routed crossingsO 2R 2Tie");
+    expect(strip).not.toHaveTextContent(/score/i);
+  });
 });

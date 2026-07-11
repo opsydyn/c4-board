@@ -56,6 +56,15 @@ export interface EvaluatedLayoutRecommendation extends LayoutRecommendation {
   lengthDelta: number;
 }
 
+export interface LayoutComparisonMetric {
+  key: "overlaps" | "canvasArea" | "routedCrossings" | "routedLength";
+  label: string;
+  original: number;
+  recommended: number;
+  favored: "original" | "recommended" | "tie";
+  format: "count" | "area" | "length";
+}
+
 export interface LayoutPortSummary {
   assignedEdges: number;
   congestedSides: number;
@@ -201,6 +210,65 @@ export function promoteLayoutRecommendation(
     recommendation: null,
     recommendedResult: null,
   };
+}
+
+export function buildLayoutComparisonMetrics(
+  original: LayoutPreviewModel,
+  recommended: LayoutPreviewModel,
+): LayoutComparisonMetric[] {
+  const metrics: LayoutComparisonMetric[] = [
+    comparisonMetric(
+      "overlaps",
+      "Overlaps",
+      original.result.quality.nodeOverlapCount,
+      recommended.result.quality.nodeOverlapCount,
+      "count",
+    ),
+    comparisonMetric(
+      "canvasArea",
+      "Canvas area",
+      original.result.quality.occupiedArea,
+      recommended.result.quality.occupiedArea,
+      "area",
+    ),
+  ];
+
+  if (original.routedQuality && recommended.routedQuality) {
+    metrics.push(
+      comparisonMetric(
+        "routedCrossings",
+        "Routed crossings",
+        original.routedQuality.edgeCrossingCount,
+        recommended.routedQuality.edgeCrossingCount,
+        "count",
+      ),
+      comparisonMetric(
+        "routedLength",
+        "Routed length",
+        original.routedQuality.totalEdgeLength,
+        recommended.routedQuality.totalEdgeLength,
+        "length",
+      ),
+    );
+  }
+
+  return metrics;
+}
+
+function comparisonMetric(
+  key: LayoutComparisonMetric["key"],
+  label: string,
+  original: number,
+  recommended: number,
+  format: LayoutComparisonMetric["format"],
+): LayoutComparisonMetric {
+  const tolerance = format === "count" ? 0 : 0.5;
+  const favored = Math.abs(original - recommended) <= tolerance
+    ? "tie"
+    : original < recommended
+    ? "original"
+    : "recommended";
+  return { key, label, original, recommended, favored, format };
 }
 
 export function evaluateLayoutRecommendation(

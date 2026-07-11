@@ -1058,6 +1058,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Add a compact comparison delta strip that remains visible in both modes.
-- [ ] Identify which metrics favor the active mode without implying that one aggregate score decides acceptance.
+- [x] Add a compact comparison delta strip that remains visible in both modes.
+- [x] Identify which metrics favor the active mode without implying that one aggregate score decides acceptance.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 22 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added one stable comparison model derived from the cached Original and Recommended pair.
+- [x] Compared overlaps, canvas area, routed crossings, and routed length independently.
+- [x] Marked each metric as favoring Original, Recommended, or Tie using lower-is-better semantics.
+- [x] Omitted routed metrics when either preview lacks route geometry.
+- [x] Added a compact horizontally resilient delta strip outside the scrollable detail panels.
+- [x] Kept the same evidence visible while either comparison mode is active.
+- [x] Avoided aggregate scoring so mixed quality tradeoffs remain explicit.
+- [x] Added model and rendered-strip coverage for original, recommended, and tied outcomes.
+
+Next slice:
+
+- [ ] Add focus-safe Apply confirmation text that identifies whether Original or Recommended is active.
+- [ ] Preserve the comparison metric strip in the accepted layout audit metadata.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

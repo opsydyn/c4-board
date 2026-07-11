@@ -528,6 +528,61 @@ export const comparisonToggle = style({
   },
 });
 
+export const comparisonDeltaStrip = style({
+  "@layer": {
+    [componentsLayer]: {
+      display: "grid",
+      gridTemplateColumns: "repeat(4, minmax(8rem, 1fr))",
+      gap: theme.spacing["2"],
+      margin: 0,
+      borderBottom: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+      backgroundColor: theme.color.background.base,
+      padding: theme.spacing["2"],
+      overflowX: "auto",
+    },
+  },
+});
+
+globalStyle(`${comparisonDeltaStrip} > div`, {
+  display: "grid",
+  gap: theme.spacing["1"],
+  borderLeft: `3px solid ${theme.color.foreground.tertiary}`,
+  backgroundColor: theme.color.background.raised,
+  padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
+});
+
+globalStyle(`${comparisonDeltaStrip} > div[data-favored="original"]`, {
+  borderLeftColor: theme.color.status.selected,
+});
+
+globalStyle(`${comparisonDeltaStrip} > div[data-favored="recommended"]`, {
+  borderLeftColor: theme.color.status.ready,
+});
+
+globalStyle(`${comparisonDeltaStrip} dt`, {
+  textTransform: "uppercase",
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${comparisonDeltaStrip} dd`, {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: theme.spacing["2"],
+  margin: 0,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${comparisonDeltaStrip} strong`, {
+  marginLeft: "auto",
+  textTransform: "uppercase",
+  color: theme.color.foreground.primary,
+  fontWeight: theme.typography.weight.semibold,
+});
+
 globalStyle(`${comparisonToggle} button`, {
   border: 0,
   borderRight: `${theme.border.width.thin} solid ${theme.color.border.primary}`,

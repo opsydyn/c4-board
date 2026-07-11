@@ -7,7 +7,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import type { KeyboardEvent } from "react";
-import type { LayoutPreviewModel, LayoutQualityDelta } from "../../core/effects/layout-preview";
+import type { LayoutComparisonMetric, LayoutPreviewModel, LayoutQualityDelta } from "../../core/effects/layout-preview";
 import * as styles from "./LayoutPreviewDrawer.css";
 import { TacticalSelect } from "./TacticalSelect";
 
@@ -21,6 +21,7 @@ export interface LayoutPreviewDrawerProps {
   onTryRecommendation?: () => void;
   comparisonMode?: "original" | "recommended" | null;
   onComparisonModeChange?: (mode: "original" | "recommended") => void;
+  comparisonMetrics?: LayoutComparisonMetric[];
 }
 
 const formatMetric = (value: number, key: LayoutQualityDelta["key"]): string => {
@@ -50,6 +51,7 @@ export function LayoutPreviewDrawer({
   onTryRecommendation,
   comparisonMode = null,
   onComparisonModeChange,
+  comparisonMetrics = [],
 }: LayoutPreviewDrawerProps) {
   const warnings = preview.result.diagnostics.filter(
     (diagnostic) => diagnostic.severity === "warning" || diagnostic.severity === "error",
@@ -125,6 +127,21 @@ export function LayoutPreviewDrawer({
           </button>
         </div>
       </header>
+
+      {comparisonMetrics.length > 0 && (
+        <dl className={styles.comparisonDeltaStrip} role="group" aria-label="Comparison deltas">
+          {comparisonMetrics.map((metric) => (
+            <div key={metric.key} data-favored={metric.favored}>
+              <dt>{metric.label}</dt>
+              <dd>
+                <span>{`O ${formatComparisonMetric(metric.original, metric.format)}`}</span>
+                <span>{`R ${formatComparisonMetric(metric.recommended, metric.format)}`}</span>
+                <strong>{metric.favored === "tie" ? "Tie" : `${metric.favored} lower`}</strong>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {failure && (
         <div className={styles.fallbackNotice} role="alert">
@@ -270,4 +287,12 @@ export function LayoutPreviewDrawer({
       </div>
     </section>
   );
+}
+
+function formatComparisonMetric(
+  value: number,
+  format: LayoutComparisonMetric["format"],
+): string {
+  if (format === "area") return `${Math.round(value / 1_000).toLocaleString()}K`;
+  return Math.round(value).toLocaleString();
 }

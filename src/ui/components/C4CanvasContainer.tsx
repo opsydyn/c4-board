@@ -69,6 +69,7 @@ import { getRigAgentV1Flag, resolveEffectiveRigAgentV1Rollout } from "../../core
 import { autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetName } from "../../core/effects/layout";
 import {
   applyLayoutResultToEdges,
+  buildLayoutComparisonMetrics,
   createAsyncLayoutPreview,
   createLayoutPreview,
   isCurrentLayoutPreviewRequest,
@@ -360,6 +361,16 @@ export function C4CanvasContainer() {
       active: "original" | "recommended";
     } | null
   >(null);
+  const layoutComparisonMetrics = useMemo(
+    () =>
+      layoutPreviewComparison
+        ? buildLayoutComparisonMetrics(
+          layoutPreviewComparison.original,
+          layoutPreviewComparison.recommended,
+        )
+        : [],
+    [layoutPreviewComparison],
+  );
   const [layoutPreviewStatus, setLayoutPreviewStatus] = useState<
     {
       label: string;
@@ -3125,6 +3136,7 @@ export function C4CanvasContainer() {
           {...(!layoutPreviewComparison && { onTryRecommendation: handleTryLayoutRecommendation })}
           {...(layoutPreviewComparison && {
             comparisonMode: layoutPreviewComparison.active,
+            comparisonMetrics: layoutComparisonMetrics,
             onComparisonModeChange: handleLayoutComparisonModeChange,
           })}
         />
