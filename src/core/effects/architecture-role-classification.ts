@@ -107,6 +107,7 @@ export const ArchitectureRoleClassificationSchema = Schema.Struct({
 export type ArchitectureRoleClassification = Schema.Schema.Type<typeof ArchitectureRoleClassificationSchema>;
 
 const HEXAGONAL_ROLES = ROLES_BY_PATTERN.hexagonal;
+const EVENT_DRIVEN_ROLES = ROLES_BY_PATTERN["event-driven"];
 
 const ALL_ROLES = new Set<ArchitectureSemanticRole>(ArchitectureSemanticRoleSchema.literals);
 
@@ -293,6 +294,154 @@ const inferHexagonalRole = (
   };
 };
 
+const isEventBus = (node: Node): boolean => {
+  const explicit = explicitRole(node);
+  return (explicit !== null && EVENT_DRIVEN_ROLES.has(explicit) && explicit === "event-bus")
+    || /(event[-_\s]?bus|broker|queue|topic|stream)/.test(nodeLabel(node));
+};
+
+const inferEventDrivenRole = (
+  node: Node,
+  busIds: ReadonlySet<string>,
+  topology: Map<string, NodeTopology>,
+): InferredRole => {
+  const explicit = explicitRole(node);
+  if (explicit && EVENT_DRIVEN_ROLES.has(explicit)) {
+    return { role: explicit, confidence: 1, source: "explicit", evidence: [`Explicit role '${explicit}'.`] };
+  }
+
+  const mismatch = explicit && !EVENT_DRIVEN_ROLES.has(explicit) ? explicit : undefined;
+  const label = nodeLabel(node);
+  const type = nodeType(node);
+  const relation = topology.get(node.id);
+  const publishesToBus = [...(relation?.outbound ?? [])].some((id) => busIds.has(id));
+  const consumesFromBus = [...(relation?.inbound ?? [])].some((id) => busIds.has(id));
+  const hasOnwardOutput = (relation?.outbound.size ?? 0) > 0;
+
+  if (busIds.has(node.id)) {
+    return {
+      role: "event-bus",
+      confidence: 0.95,
+      source: "label",
+      evidence: ["Event bus, broker, queue, topic, or stream label."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (/(database|db|cache|telemetry|logging|metrics|monitoring)/.test(label)) {
+    return {
+      role: "infrastructure",
+      confidence: 0.85,
+      source: "label",
+      evidence: ["Infrastructure label."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (type === "externalSystem") {
+    return {
+      role: "external-dependency",
+      confidence: 0.8,
+      source: "node-type",
+      evidence: ["External system is an external dependency."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (/(publisher|producer|event[-_\s]?source)/.test(label) || publishesToBus) {
+    const hasPublisherLabel = /(publisher|producer|event[-_\s]?source)/.test(label);
+    return {
+      role: "publisher",
+      confidence: hasPublisherLabel ? 0.85 : 0.8,
+      source: hasPublisherLabel ? "label" : "topology",
+      evidence: [hasPublisherLabel ? "Publisher label." : "Node publishes to an event bus."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (/(processor|transformer|projector|workflow)/.test(label)) {
+    return {
+      role: "processor",
+      confidence: 0.8,
+      source: "label",
+      evidence: ["Processor label."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (consumesFromBus && hasOnwardOutput) {
+    return {
+      role: "processor",
+      confidence: 0.85,
+      source: "topology",
+      evidence: ["Consumes from an event bus and has onward output."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (consumesFromBus && !hasOnwardOutput) {
+    return {
+      role: "subscriber",
+      confidence: 0.85,
+      source: "topology",
+      evidence: ["Consumes from an event bus with no onward output."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (/(subscriber|consumer|listener|sink)/.test(label) && !hasOnwardOutput) {
+    return {
+      role: "subscriber",
+      confidence: 0.8,
+      source: "label",
+      evidence: ["Subscriber label with no onward output."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  return {
+    role: "unclassified",
+    confidence: 0.25,
+    source: "fallback",
+    evidence: ["No grounded Event-Driven role evidence was found."],
+    ...(mismatch && { patternMismatch: mismatch }),
+  };
+};
+
+const buildClassification = (
+  pattern: ArchitecturePattern,
+  inferred: ReadonlyArray<{ node: Node; result: InferredRole }>,
+  patternName: string,
+): ArchitectureRoleClassification => {
+  const sortedInferred = [...inferred].sort(({ node: left }, { node: right }) => left.id.localeCompare(right.id));
+  const assignments = sortedInferred.map(({ node, result }) => ({
+    nodeId: node.id,
+    pattern,
+    role: result.role,
+    confidence: result.confidence,
+    source: result.source,
+    evidence: result.evidence,
+  }));
+  const diagnostics = sortedInferred.flatMap(({ node, result }) => {
+    const entries: Array<Schema.Schema.Type<typeof ArchitectureRoleDiagnosticSchema>> = [];
+    if (result.patternMismatch) {
+      entries.push({
+        code: "semantic-role-pattern-mismatch",
+        severity: "warning",
+        message: `Explicit role '${result.patternMismatch}' is not valid for ${patternName} classification.`,
+        nodeIds: [node.id],
+      });
+    }
+    if (result.confidence < 0.65) {
+      entries.push({
+        code: "semantic-role-ambiguous",
+        severity: "warning",
+        message: `Node '${node.id}' has no confident ${patternName} role assignment.`,
+        nodeIds: [node.id],
+      });
+    }
+    return entries;
+  });
+
+  return Schema.decodeUnknownSync(ArchitectureRoleClassificationSchema)({
+    pattern,
+    assignments,
+    diagnostics,
+  });
+};
+
 export function inferHexagonalRoles(
   nodes: ReadonlyArray<Node>,
   edges: ReadonlyArray<Edge>,
@@ -301,38 +450,16 @@ export function inferHexagonalRoles(
   const topology = buildTopology(sortedNodes, edges);
   const coreId = inferCoreId(sortedNodes, topology);
   const inferred = sortedNodes.map((node) => ({ node, result: inferHexagonalRole(node, coreId, topology) }));
-  const assignments = inferred.map(({ node, result }) => ({
-    nodeId: node.id,
-    pattern: "hexagonal" as const,
-    role: result.role,
-    confidence: result.confidence,
-    source: result.source,
-    evidence: result.evidence,
-  }));
-  const diagnostics = inferred.flatMap(({ node, result }) => {
-    const entries: Array<Schema.Schema.Type<typeof ArchitectureRoleDiagnosticSchema>> = [];
-    if (result.patternMismatch) {
-      entries.push({
-        code: "semantic-role-pattern-mismatch",
-        severity: "warning",
-        message: `Explicit role '${result.patternMismatch}' is not valid for Hexagonal classification.`,
-        nodeIds: [node.id],
-      });
-    }
-    if (result.confidence < 0.65) {
-      entries.push({
-        code: "semantic-role-ambiguous",
-        severity: "warning",
-        message: `Node '${node.id}' has no confident Hexagonal role assignment.`,
-        nodeIds: [node.id],
-      });
-    }
-    return entries;
-  });
+  return buildClassification("hexagonal", inferred, "Hexagonal");
+}
 
-  return Schema.decodeUnknownSync(ArchitectureRoleClassificationSchema)({
-    pattern: "hexagonal",
-    assignments,
-    diagnostics,
-  });
+export function inferEventDrivenRoles(
+  nodes: ReadonlyArray<Node>,
+  edges: ReadonlyArray<Edge>,
+): ArchitectureRoleClassification {
+  const sortedNodes = [...nodes].sort((left, right) => left.id.localeCompare(right.id));
+  const topology = buildTopology(sortedNodes, edges);
+  const busIds = new Set(sortedNodes.filter(isEventBus).map(({ id }) => id));
+  const inferred = sortedNodes.map((node) => ({ node, result: inferEventDrivenRole(node, busIds, topology) }));
+  return buildClassification("event-driven", inferred, "Event-Driven");
 }

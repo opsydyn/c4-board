@@ -5,7 +5,7 @@ description: "Concrete roadmap for architecture-aware layout strategies using Da
 
 # Roadmap: Intelligent Architecture Layouts
 
-**Last Updated**: 2026-07-10
+**Last Updated**: 2026-07-11
 
 **Owner**: Product + Platform Engineering
 
@@ -48,7 +48,7 @@ The shipped implementation now provides an architecture-grade deterministic foun
 Known limitations:
 
 - Several legacy menu presets still differ only by Dagre spacing and direction.
-- Hexagonal now has shared semantic-role classification, review and correction UX, and dedicated geometry; Event-Driven and Client-Server still need pattern-specific inference and geometry.
+- Hexagonal now has shared semantic-role classification, review and correction UX, and dedicated geometry; Event-Driven has deterministic role inference but still needs lane geometry, while Client-Server still needs pattern-specific inference and geometry.
 - Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
 - ELK Radial has not justified replacing the product-specific radial strategies.
 - Native visual baselines cover dense ELK Event-Driven and Client-Server fixtures plus inferred and corrected Hexagonal previews; radial and full preset coverage remain open.
@@ -455,7 +455,8 @@ Exit criteria:
 
 - [x] Implement the shared Phase 4 role schema and initial ports-and-adapters inference.
 - [x] Add Hexagonal core, port, adapter, and infrastructure placement.
-- [ ] Add Event-Driven publisher, bus, processor, and subscriber lanes.
+- [x] Add Event-Driven publisher, bus, processor, and subscriber inference.
+- [ ] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
 - [ ] Add Client-Server client, service, domain, and persistence columns.
 - [x] Add role correction controls in the layout preview.
 - [ ] Add semantic violation diagnostics independent from layout quality.
@@ -1406,6 +1407,24 @@ Delivered:
 
 Next slice:
 
-- [ ] Implement Event-Driven publisher, bus, processor, and subscriber inference using the shared role contract.
-- [ ] Add deterministic Event-Driven lane geometry as the next semantic layout consumer.
+- [x] Implement Event-Driven publisher, bus, processor, and subscriber inference using the shared role contract.
+- [ ] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
+- [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
+
+### Slice 37 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added deterministic Event-Driven publisher, bus, processor, subscriber, infrastructure, and external-dependency inference through an ordered evidence cascade.
+- [x] Distinguished continuing bus consumers as processors from terminal consumers as subscribers using graph topology.
+- [x] Kept valid explicit Event-Driven roles authoritative and reported contradictory cross-pattern overrides while falling through to grounded evidence.
+- [x] Preserved deterministic input-order-independent assignments and diagnostics, then validated every result through the shared Effect Schema.
+- [x] Added focused representative, explicit precedence, mismatch fallback, ambiguity, and input-order stability coverage.
+
+Next slice:
+
+- [ ] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
+- [ ] Capture native Event-Driven visual baselines after lane geometry is available.
 - [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
