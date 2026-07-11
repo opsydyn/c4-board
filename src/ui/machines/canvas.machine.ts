@@ -23,6 +23,7 @@ import {
   autoLayout,
   autoLayoutSelected,
   getPreset,
+  LAYOUT_AUDIT_RETENTION_LIMIT,
   type LayoutApplicationAudit,
   type LayoutOptions,
   type LayoutPresetName,
@@ -782,6 +783,7 @@ const canvasMachineDefinition = setup({
       layoutAudits: ({ context, event }) =>
         event.type === "APPLY_LAYOUT_PREVIEW"
           ? [event.audit, ...context.layoutAudits.filter((audit) => audit.appliedAt !== event.audit.appliedAt)]
+            .slice(0, LAYOUT_AUDIT_RETENTION_LIMIT)
           : context.layoutAudits,
     }),
 
@@ -843,7 +845,9 @@ const canvasMachineDefinition = setup({
       },
       layoutAudits: ({ event }) => {
         if (event.type !== "LOAD_DIAGRAM_SUCCESS") return [];
-        if (event.diagram.layoutAudits) return event.diagram.layoutAudits;
+        if (event.diagram.layoutAudits) {
+          return event.diagram.layoutAudits.slice(0, LAYOUT_AUDIT_RETENTION_LIMIT);
+        }
         return event.diagram.layoutAudit ? [event.diagram.layoutAudit] : [];
       },
     }),

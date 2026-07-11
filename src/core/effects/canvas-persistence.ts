@@ -45,7 +45,8 @@ import {
   ValidationError,
 } from "./database";
 import type { EdgeData, EdgeMetadata } from "./edge-operations";
-import type { LayoutApplicationAudit } from "./layout.types";
+import { LAYOUT_AUDIT_RETENTION_LIMIT, type LayoutApplicationAudit } from "./layout.types";
+export { LAYOUT_AUDIT_RETENTION_LIMIT } from "./layout.types";
 import {
   type C4Type,
   type CouplingOverrides,
@@ -118,6 +119,18 @@ export const appendLayoutAudit = (
         audit.appliedAt,
         JSON.stringify(audit),
       ],
+    );
+    yield* service.execute(
+      `DELETE FROM layout_audits
+       WHERE diagram_id = ?
+         AND id NOT IN (
+           SELECT id
+           FROM layout_audits
+           WHERE diagram_id = ?
+           ORDER BY applied_at DESC, id DESC
+           LIMIT ?
+         )`,
+      [diagramId, diagramId, LAYOUT_AUDIT_RETENTION_LIMIT],
     );
   });
 

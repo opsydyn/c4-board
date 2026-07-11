@@ -1,4 +1,4 @@
-import { appendLayoutAudit, getLayoutAudits } from "@/core/effects/canvas-persistence";
+import { appendLayoutAudit, getLayoutAudits, LAYOUT_AUDIT_RETENTION_LIMIT } from "@/core/effects/canvas-persistence";
 import { DatabaseService } from "@/core/effects/database.base";
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
 import { Effect, Layer } from "effect";
@@ -34,6 +34,15 @@ describe("layout audit persistence", () => {
       expect.stringContaining("INSERT OR IGNORE INTO layout_audits"),
       ["diagram-empty:123", "diagram-empty", 1, 123, JSON.stringify(audit(123))],
     );
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM layout_audits"),
+      ["diagram-empty", "diagram-empty", LAYOUT_AUDIT_RETENTION_LIMIT],
+    );
+    expect(execute.mock.invocationCallOrder[0]).toBeLessThan(execute.mock.invocationCallOrder[1]!);
+  });
+
+  it("uses a bounded per-diagram retention policy", () => {
+    expect(LAYOUT_AUDIT_RETENTION_LIMIT).toBe(100);
   });
 
   it("loads newest-first history and ignores malformed rows", async () => {

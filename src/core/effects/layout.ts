@@ -16,6 +16,7 @@ import { evaluateLayoutQuality } from "./layout-metrics";
 import { getDefaultNodeHeight, getDefaultNodeWidth } from "./layout-node-size";
 import { resolveSynchronousLayoutStrategy } from "./layout-strategy-registry";
 import type { LayoutOptions, LayoutResult } from "./layout.types";
+export { LAYOUT_AUDIT_RETENTION_LIMIT } from "./layout.types";
 
 export type {
   LayoutAnalysis,

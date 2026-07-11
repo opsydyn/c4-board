@@ -107,6 +107,8 @@ export interface LayoutApplicationAudit {
   }>;
 }
 
+export const LAYOUT_AUDIT_RETENTION_LIMIT = 100;
+
 export interface LayoutEdgePortAssignment {
   edgeId: string;
   sourceHandle: LayoutHandle;

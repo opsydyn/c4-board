@@ -79,6 +79,44 @@ describe("Canvas Machine", () => {
     ]);
   });
 
+  test("bounds in-memory layout history to the retention limit", () => {
+    const actor = createActor(canvasMachine).start();
+    const audits = Array.from({ length: 100 }, (_, index) => ({
+      version: 1 as const,
+      appliedAt: 200 - index,
+      preset: "elkLayered",
+      strategyId: "elk-layered",
+      engine: "elk" as const,
+      selectedVariant: "single" as const,
+      comparisonMetrics: [],
+    }));
+    actor.send({
+      type: "LOAD_DIAGRAM_SUCCESS",
+      diagram: {
+        id: "diagram-retention",
+        name: "Retention",
+        nodes: [],
+        edges: [],
+        updatedAt: 200,
+        layoutAudit: audits[0],
+        layoutAudits: audits,
+      },
+    });
+    const acceptedAudit = { ...audits[0]!, appliedAt: 300 };
+
+    actor.send({
+      type: "APPLY_LAYOUT_PREVIEW",
+      preset: "elkLayered",
+      nodes: [],
+      edges: [],
+      audit: acceptedAudit,
+    });
+
+    expect(actor.getSnapshot().context.layoutAudits).toHaveLength(100);
+    expect(actor.getSnapshot().context.layoutAudits[0]).toEqual(acceptedAudit);
+    expect(actor.getSnapshot().context.layoutAudits).not.toContainEqual(audits.at(-1));
+  });
+
   test("loads a visual fixture without a persistent diagram identity", () => {
     const actor = createActor(canvasMachine).start();
     const nodes = [{ id: "fixture-node", position: { x: 0, y: 0 }, data: {} }];

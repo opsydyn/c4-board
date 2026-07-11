@@ -1146,6 +1146,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Add audit retention controls and a bounded history policy before long-lived diagrams accumulate unbounded records.
+- [x] Add a bounded history policy before long-lived diagrams accumulate unbounded records.
+- [ ] Add explicit audit deletion controls with confirmation.
 - [ ] Add layout history export for architecture review evidence.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 26 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Defined a shared retention limit of 100 accepted layout applications per diagram.
+- [x] Pruned older records immediately after append inside the existing diagram save transaction.
+- [x] Ordered retention by application time and audit identity for deterministic tie-breaking.
+- [x] Scoped pruning to the active diagram so no other board history can be affected.
+- [x] Applied the same bound to loaded and newly accepted in-memory history.
+- [x] Preserved newest-first inspection while dropping only the oldest entry when the limit is exceeded.
+- [x] Added focused persistence and canvas-machine coverage for the policy and operation order.
+
+Next slice:
+
+- [ ] Add clear-all and individual audit deletion behind explicit confirmation.
+- [ ] Add JSON or CSV history export for architecture review evidence.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
