@@ -1,6 +1,5 @@
 import {
   ArrowClockwiseIcon,
-  ArrowCounterClockwiseIcon,
   CheckIcon,
   CrosshairIcon,
   InfoIcon,
@@ -19,7 +18,8 @@ export interface LayoutPreviewDrawerProps {
   failure?: { message: string; attemptedLabel: string } | null;
   onRetry?: () => void;
   onTryRecommendation?: () => void;
-  onRestoreOriginal?: () => void;
+  comparisonMode?: "original" | "recommended" | null;
+  onComparisonModeChange?: (mode: "original" | "recommended") => void;
 }
 
 const formatMetric = (value: number, key: LayoutQualityDelta["key"]): string => {
@@ -47,7 +47,8 @@ export function LayoutPreviewDrawer({
   failure = null,
   onRetry,
   onTryRecommendation,
-  onRestoreOriginal,
+  comparisonMode = null,
+  onComparisonModeChange,
 }: LayoutPreviewDrawerProps) {
   const warnings = preview.result.diagnostics.filter(
     (diagnostic) => diagnostic.severity === "warning" || diagnostic.severity === "error",
@@ -68,11 +69,27 @@ export function LayoutPreviewDrawer({
           </div>
         </div>
         <div className={styles.actions}>
-          {onRestoreOriginal && (
-            <button type="button" className={styles.retryButton} onClick={onRestoreOriginal}>
-              <ArrowCounterClockwiseIcon size={16} weight="bold" aria-hidden="true" />
-              Compare original
-            </button>
+          {comparisonMode && onComparisonModeChange && (
+            <div className={styles.comparisonToggle} role="group" aria-label="Preview comparison">
+              <button
+                type="button"
+                data-active={comparisonMode === "original"}
+                aria-pressed={comparisonMode === "original"}
+                onClick={() =>
+                  onComparisonModeChange("original")}
+              >
+                Original
+              </button>
+              <button
+                type="button"
+                data-active={comparisonMode === "recommended"}
+                aria-pressed={comparisonMode === "recommended"}
+                onClick={() =>
+                  onComparisonModeChange("recommended")}
+              >
+                Recommended
+              </button>
+            </div>
           )}
           {failure && onRetry && (
             <button type="button" className={styles.retryButton} onClick={onRetry}>

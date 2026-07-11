@@ -505,6 +505,38 @@ export const recommendationEvidence = style({
   },
 });
 
+export const comparisonToggle = style({
+  "@layer": {
+    [componentsLayer]: {
+      display: "grid",
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+      minWidth: "14rem",
+    },
+  },
+});
+
+globalStyle(`${comparisonToggle} button`, {
+  border: 0,
+  borderRight: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  backgroundColor: "transparent",
+  cursor: "pointer",
+  padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  textTransform: "uppercase",
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${comparisonToggle} button:last-child`, {
+  borderRight: 0,
+});
+
+globalStyle(`${comparisonToggle} button[data-active="true"]`, {
+  backgroundColor: theme.color.interactive.primary,
+  color: theme.color.background.base,
+});
+
 globalStyle(`${recommendationEvidence} p`, {
   margin: 0,
   color: theme.color.foreground.secondary,

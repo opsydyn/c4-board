@@ -1017,6 +1017,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Add explicit Original and Recommended comparison labels so users always know which preview is active.
-- [ ] Allow toggling repeatedly between cached original and recommended previews.
+- [x] Add explicit Original and Recommended comparison labels so users always know which preview is active.
+- [x] Allow toggling repeatedly between cached original and recommended previews.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 20 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Replaced the one-way restore action with an Original / Recommended segmented comparison control.
+- [x] Added explicit pressed state so the active preview is always identifiable to sighted and assistive-technology users.
+- [x] Retained both cached preview models for repeated bidirectional switching.
+- [x] Swapped active nodes, routes, diagnostics, and metrics without worker execution.
+- [x] Hid the initial recommendation action after comparison begins, leaving one unambiguous mode control.
+- [x] Kept Apply bound to whichever comparison mode is currently active.
+- [x] Cleared the full comparison pair on new preview, Apply, and Cancel boundaries.
+- [x] Added repeated-toggle and active-state interaction coverage.
+
+Next slice:
+
+- [ ] Add keyboard shortcuts for Original / Recommended comparison while the drawer has focus.
+- [ ] Announce comparison-mode changes through a polite live region.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

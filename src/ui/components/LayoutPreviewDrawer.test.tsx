@@ -155,20 +155,32 @@ describe("LayoutPreviewDrawer", () => {
     expect(screen.getByText("CROSSINGS 9 → 4 · ROUTED LENGTH 3,544 → 3,800")).toBeInTheDocument();
   });
 
-  it("restores the original preview through an explicit comparison action", async () => {
+  it("switches repeatedly between explicitly labeled comparison modes", async () => {
     const user = userEvent.setup();
-    const onRestoreOriginal = vi.fn();
+    const onComparisonModeChange = vi.fn();
     render(
       <LayoutPreviewDrawer
         preview={createPreview()}
         onCenterChange={() => {}}
         onApply={() => {}}
         onCancel={() => {}}
-        onRestoreOriginal={onRestoreOriginal}
+        comparisonMode="recommended"
+        onComparisonModeChange={onComparisonModeChange}
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Compare original" }));
-    expect(onRestoreOriginal).toHaveBeenCalledOnce();
+    const original = screen.getByRole("button", { name: "Original" });
+    const recommended = screen.getByRole("button", { name: "Recommended" });
+    expect(original).toHaveAttribute("aria-pressed", "false");
+    expect(recommended).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(original);
+    await user.click(recommended);
+    await user.click(original);
+    expect(onComparisonModeChange.mock.calls).toEqual([
+      ["original"],
+      ["recommended"],
+      ["original"],
+    ]);
   });
 });

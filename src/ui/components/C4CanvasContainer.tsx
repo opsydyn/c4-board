@@ -353,7 +353,13 @@ export function C4CanvasContainer() {
   const [isCommandBarOpen, setCommandBarOpen] = useState(true);
   const [isDataBarOpen, setDataBarOpen] = useState(false);
   const [layoutPreview, setLayoutPreview] = useState<LayoutPreviewModel | null>(null);
-  const [layoutPreviewComparison, setLayoutPreviewComparison] = useState<LayoutPreviewModel | null>(null);
+  const [layoutPreviewComparison, setLayoutPreviewComparison] = useState<
+    {
+      original: LayoutPreviewModel;
+      recommended: LayoutPreviewModel;
+      active: "original" | "recommended";
+    } | null
+  >(null);
   const [layoutPreviewStatus, setLayoutPreviewStatus] = useState<
     {
       label: string;
@@ -2246,15 +2252,19 @@ export function C4CanvasContainer() {
     if (!layoutPreview?.recommendation) return;
     const promoted = promoteLayoutRecommendation(layoutPreview);
     if (!promoted) return;
-    setLayoutPreviewComparison(layoutPreview);
+    setLayoutPreviewComparison({
+      original: layoutPreview,
+      recommended: promoted,
+      active: "recommended",
+    });
     setLayoutPreview(promoted);
     requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
   }, [layoutPreview]);
 
-  const handleRestoreOriginalLayoutPreview = useCallback(() => {
+  const handleLayoutComparisonModeChange = useCallback((mode: "original" | "recommended") => {
     if (!layoutPreviewComparison) return;
-    setLayoutPreview(layoutPreviewComparison);
-    setLayoutPreviewComparison(null);
+    setLayoutPreview(layoutPreviewComparison[mode]);
+    setLayoutPreviewComparison((current) => current ? { ...current, active: mode } : null);
     requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
   }, [layoutPreviewComparison]);
 
@@ -3112,8 +3122,11 @@ export function C4CanvasContainer() {
           onCancel={handleCancelLayoutPreview}
           failure={layoutPreviewFailure}
           onRetry={handleRetryLayoutPreview}
-          onTryRecommendation={handleTryLayoutRecommendation}
-          {...(layoutPreviewComparison && { onRestoreOriginal: handleRestoreOriginalLayoutPreview })}
+          {...(!layoutPreviewComparison && { onTryRecommendation: handleTryLayoutRecommendation })}
+          {...(layoutPreviewComparison && {
+            comparisonMode: layoutPreviewComparison.active,
+            onComparisonModeChange: handleLayoutComparisonModeChange,
+          })}
         />
       )}
       {layoutPreviewStatus && (
