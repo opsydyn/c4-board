@@ -6,7 +6,7 @@ import {
 } from "./architecture-role-classification";
 import { buildHierarchyDiagnostics } from "./layout-hierarchy-diagnostics";
 import { evaluateLayoutQuality } from "./layout-metrics";
-import { getNodeDimensions } from "./layout-node-size";
+import { getDefaultNodeHeight, getDefaultNodeWidth, getNodeDimensions } from "./layout-node-size";
 import type {
   LayoutAnalysis,
   LayoutDiagnostic,
@@ -55,6 +55,13 @@ interface ProcessorTrackPlan {
   subscriberX: number;
 }
 
+interface GeometrySanitization {
+  nodes: Node[];
+  options: LayoutOptions;
+  recoveredNodeIds: string[];
+  recoveredOptions: string[];
+}
+
 export const eventDrivenLayoutStrategy: SynchronousLayoutStrategy = {
   id: EVENT_DRIVEN_STRATEGY_ID,
   engine: "custom",
@@ -69,7 +76,8 @@ export function analyseEventDriven(input: LayoutInput): LayoutAnalysis {
   }
 
   const classification = inferEventDrivenRoles(topLevelNodes, topLevelEdges(topLevelNodes, input.edges));
-  const confident = classification.assignments.filter(({ confidence }) => confidence >= 0.65).length;
+  const confident = classification.assignments
+    .filter(({ confidence, role }) => confidence >= 0.65 && role !== "unclassified").length;
   const busCount = classification.assignments.filter(({ role }) => role === "event-bus").length;
   return {
     applicable: true,
@@ -82,9 +90,10 @@ export function analyseEventDriven(input: LayoutInput): LayoutAnalysis {
 }
 
 export function layoutEventDriven(input: LayoutInput): LayoutResult {
-  const options = { ...DEFAULT_EVENT_DRIVEN_OPTIONS, ...input.options };
-  const topLevelNodes = sortedNodes(input.nodes.filter((node) => !node.parentId));
-  const childNodes = sortedNodes(input.nodes.filter((node) => node.parentId));
+  const sanitized = sanitizeGeometry(input);
+  const { nodes, options } = sanitized;
+  const topLevelNodes = sortedNodes(nodes.filter((node) => !node.parentId));
+  const childNodes = sortedNodes(nodes.filter((node) => node.parentId));
   const includedEdges = topLevelEdges(topLevelNodes, input.edges);
   const diagnostics = buildHierarchyDiagnostics({
     strategyId: EVENT_DRIVEN_STRATEGY_ID,
@@ -100,12 +109,27 @@ export function layoutEventDriven(input: LayoutInput): LayoutResult {
       severity: "error",
       message: "Event-Driven layout requires at least one top-level node.",
     });
-    return buildResult(input.nodes, input.edges, input.nodes, diagnostics);
+    return buildResult(nodes, input.edges, nodes, diagnostics);
   }
 
   const classification = inferEventDrivenRoles(topLevelNodes, includedEdges);
   diagnostics.push(...classification.diagnostics.map(toLayoutDiagnostic));
   diagnostics.push(roleSummary(classification.assignments));
+  if (sanitized.recoveredNodeIds.length > 0 || sanitized.recoveredOptions.length > 0) {
+    diagnostics.push({
+      code: "event-driven-invalid-geometry-input",
+      severity: "warning",
+      message: `Recovered invalid geometry input: ${
+        [
+          ...sanitized.recoveredOptions,
+          ...(sanitized.recoveredNodeIds.length > 0
+            ? [`fallback dimensions for ${sanitized.recoveredNodeIds.length} node(s)`]
+            : []),
+        ].join(", ")
+      }.`,
+      ...(sanitized.recoveredNodeIds.length > 0 && { nodeIds: sanitized.recoveredNodeIds }),
+    });
+  }
 
   const positionedTopLevelNodes = positionEventDriven(
     topLevelNodes,
@@ -117,10 +141,94 @@ export function layoutEventDriven(input: LayoutInput): LayoutResult {
   return buildResult(
     [...positionedTopLevelNodes, ...childNodes],
     input.edges,
-    input.nodes,
+    nodes,
     diagnostics,
     classification.assignments,
   );
+}
+
+function sanitizeGeometry(input: LayoutInput): GeometrySanitization {
+  const rawOptions = { ...DEFAULT_EVENT_DRIVEN_OPTIONS, ...input.options };
+  const recoveredOptions: string[] = [];
+  const nodeSpacing = finiteNonNegative(rawOptions.nodeSpacing)
+    ? rawOptions.nodeSpacing
+    : DEFAULT_EVENT_DRIVEN_OPTIONS.nodeSpacing;
+  if (nodeSpacing !== rawOptions.nodeSpacing) recoveredOptions.push("nodeSpacing");
+  const rankSpacing = finiteNonNegative(rawOptions.rankSpacing)
+    ? rawOptions.rankSpacing
+    : DEFAULT_EVENT_DRIVEN_OPTIONS.rankSpacing;
+  if (rankSpacing !== rawOptions.rankSpacing) recoveredOptions.push("rankSpacing");
+  const gridSize = finitePositive(rawOptions.gridSize) ? rawOptions.gridSize : undefined;
+  if (rawOptions.snapToGrid && gridSize === undefined) recoveredOptions.push("disabled grid snapping");
+  const { gridSize: _ignoredGridSize, snapToGrid: _ignoredSnapToGrid, ...baseOptions } = rawOptions;
+
+  const recoveredNodeIds: string[] = [];
+  const nodes = input.nodes.map((node) => {
+    const sanitized = sanitizeNodeDimensions(node);
+    if (sanitized.recovered) recoveredNodeIds.push(node.id);
+    return sanitized.node;
+  });
+
+  return {
+    nodes,
+    options: {
+      ...baseOptions,
+      nodeSpacing,
+      rankSpacing,
+      snapToGrid: rawOptions.snapToGrid === true && gridSize !== undefined,
+      ...(gridSize !== undefined && { gridSize }),
+    },
+    recoveredNodeIds: recoveredNodeIds.sort(),
+    recoveredOptions,
+  };
+}
+
+function sanitizeNodeDimensions(node: Node): { node: Node; recovered: boolean } {
+  const width = sanitizeDimension(
+    node.measured?.width,
+    node.style?.width,
+    getDefaultNodeWidth(node.type),
+  );
+  const height = sanitizeDimension(
+    node.measured?.height,
+    node.style?.height,
+    getDefaultNodeHeight(node.type),
+  );
+  const recovered = width.recovered || height.recovered;
+  if (!recovered) return { node, recovered };
+
+  return {
+    node: {
+      ...node,
+      measured: { ...node.measured, width: width.value, height: height.value },
+      style: { ...node.style, width: width.value, height: height.value },
+    },
+    recovered,
+  };
+}
+
+function sanitizeDimension(
+  measured: unknown,
+  styled: unknown,
+  fallback: number,
+): { value: number; recovered: boolean } {
+  const measuredInvalid = invalidDimension(measured);
+  const styledInvalid = invalidDimension(styled);
+  if (!measuredInvalid && finitePositive(measured)) return { value: measured, recovered: styledInvalid };
+  if (!styledInvalid && finitePositive(styled)) return { value: styled, recovered: measuredInvalid };
+  return { value: fallback, recovered: measuredInvalid || styledInvalid };
+}
+
+function invalidDimension(value: unknown): boolean {
+  return typeof value === "number" && !finitePositive(value);
+}
+
+function finitePositive(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function finiteNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function topLevelEdges(nodes: ReadonlyArray<Node>, edges: ReadonlyArray<Edge>): Edge[] {
@@ -138,7 +246,6 @@ function positionEventDriven(
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const roleByNodeId = new Map(assignments.map(({ nodeId, role }) => [nodeId, role]));
   const maxWidth = Math.max(...nodes.map((node) => getNodeDimensions(node).width));
-  const maxHeight = Math.max(...nodes.map((node) => getNodeDimensions(node).height));
   const columnStep = maxWidth + options.nodeSpacing + options.rankSpacing;
   const plan = buildPlacementPlan(assignments, edges);
   const bridgeGroups = buildBridgeGroups(plan);
@@ -167,8 +274,27 @@ function positionEventDriven(
   ) + maxBridgeGroupHeight(bridgeGroups, nodeById, options) + options.nodeSpacing * 2;
   const bandY = new Map(plan.bands.map((bandId, index) => [bandId, index * bandHeight]));
   const lastBandY = plan.bands.length > 0 ? bandY.get(plan.bands.at(-1)!)! : 0;
-  const supportY = lastBandY + bandHeight + options.rankSpacing;
-  const reviewY = supportY + maxHeight + options.nodeSpacing + options.rankSpacing;
+  const supportNodes = plan.supportNodeIds.map((nodeId) => nodeById.get(nodeId)!);
+  const reviewGroups = [
+    ...(["publisher", "processor", "subscriber"] as const).map((role) => ({
+      nodes: plan.reviewNodeIds
+        .filter((nodeId) => roleByNodeId.get(nodeId) === role)
+        .map((nodeId) => nodeById.get(nodeId)!),
+      x: columnX[role],
+    })),
+    {
+      nodes: plan.reviewNodeIds
+        .filter((nodeId) => !isFlowRole(roleByNodeId.get(nodeId)!))
+        .map((nodeId) => nodeById.get(nodeId)!),
+      x: columnX["event-bus"],
+    },
+  ];
+  const supportHeight = stackHeight(supportNodes, options);
+  const reviewHeight = Math.max(0, ...reviewGroups.map(({ nodes }) => stackHeight(nodes, options)));
+  const supportTop = lastBandY + bandHeight / 2 + options.rankSpacing;
+  const supportY = supportTop + supportHeight / 2;
+  const reviewTop = supportTop + supportHeight + options.rankSpacing;
+  const reviewY = reviewTop + reviewHeight / 2;
   const centers = new Map<string, XYPosition>();
   const nodesByBandAndRole = new Map<string, Map<"publisher" | "event-bus" | "processor" | "subscriber", Node[]>>();
 
@@ -205,29 +331,19 @@ function positionEventDriven(
     );
   }
   stackPeers(
-    plan.supportNodeIds.map((nodeId) => nodeById.get(nodeId)!),
+    supportNodes,
     { x: columnX["event-bus"], y: supportY },
     options,
     centers,
   );
-  for (const role of ["publisher", "processor", "subscriber"] as const) {
+  for (const reviewGroup of reviewGroups) {
     stackPeers(
-      plan.reviewNodeIds
-        .filter((nodeId) => roleByNodeId.get(nodeId) === role)
-        .map((nodeId) => nodeById.get(nodeId)!),
-      { x: columnX[role], y: reviewY },
+      reviewGroup.nodes,
+      { x: reviewGroup.x, y: reviewY },
       options,
       centers,
     );
   }
-  stackPeers(
-    plan.reviewNodeIds
-      .filter((nodeId) => !isFlowRole(roleByNodeId.get(nodeId)!))
-      .map((nodeId) => nodeById.get(nodeId)!),
-    { x: columnX["event-bus"], y: reviewY },
-    options,
-    centers,
-  );
 
   if (plan.bands.length > 1) {
     diagnostics.push({
@@ -246,7 +362,7 @@ function positionEventDriven(
     diagnostics.push({
       code: "event-driven-ambiguous-processor",
       severity: "warning",
-      message: "Ambiguous processor affinities were placed in their primary source bands.",
+      message: "Ambiguous processors were placed in their deterministic primary available bus band.",
       nodeIds: ambiguousProcessorIds,
     });
   }
@@ -527,7 +643,9 @@ function roleSummary(assignments: ReadonlyArray<ArchitectureRoleAssignment>): La
     severity: "info",
     message: `${count("publisher")} publisher, ${count("event-bus")} event bus, ${count("processor")} processor, ${
       count("subscriber")
-    } subscriber, ${count("infrastructure")} infrastructure, and ${count("unclassified")} unclassified node(s).`,
+    } subscriber, ${count("infrastructure")} infrastructure, ${count("external-dependency")} external dependency, and ${
+      count("unclassified")
+    } unclassified node(s).`,
   };
 }
 

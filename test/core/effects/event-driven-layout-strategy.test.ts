@@ -250,6 +250,148 @@ describe("Event-Driven layout strategy", () => {
     expect(reversed.diagnostics).toEqual(forward.diagnostics);
   });
 
+  it("places measured support and review stacks in separate lanes", () => {
+    const graph = {
+      nodes: [
+        node("orders-bus", "event-bus"),
+        { ...node("audit-log", "infrastructure"), style: { width: 160, height: 140 } },
+        { ...node("external-feed", "external-dependency"), style: { width: 180, height: 260 } },
+        { ...node("metrics", "infrastructure"), style: { width: 160, height: 180 } },
+        { ...node("review-a", "unclassified"), style: { width: 160, height: 150 } },
+        { ...node("review-b", "unclassified"), style: { width: 160, height: 240 } },
+        { ...node("review-c", "unclassified"), style: { width: 160, height: 170 } },
+      ],
+      edges: [],
+    };
+    const forward = eventDrivenLayoutStrategy.layout(graph);
+    const reversed = eventDrivenLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+    });
+    const byId = new Map(forward.nodes.map((value) => [value.id, value]));
+    const bus = byId.get("orders-bus")!;
+    const supportNodes = ["audit-log", "external-feed", "metrics"].map((id) => byId.get(id)!);
+    const reviewNodes = ["review-a", "review-b", "review-c"].map((id) => byId.get(id)!);
+    const supportTop = Math.min(...supportNodes.map((value) => value.position.y));
+    const supportBottom = Math.max(...supportNodes.map((value) => value.position.y + getNodeDimensions(value).height));
+    const reviewTop = Math.min(...reviewNodes.map((value) => value.position.y));
+
+    expect(supportTop).toBeGreaterThanOrEqual(bus.position.y + getNodeDimensions(bus).height + 200);
+    expect(reviewTop).toBeGreaterThanOrEqual(supportBottom + 200);
+    expect(forward.quality.nodeOverlapCount).toBe(0);
+    expect(positions(reversed.nodes)).toEqual(positions(forward.nodes));
+    expect(reversed.diagnostics).toEqual(forward.diagnostics);
+  });
+
+  it("recovers invalid geometry inputs before layout arithmetic", () => {
+    const result = eventDrivenLayoutStrategy.layout({
+      nodes: [
+        { ...node("publisher", "publisher"), style: { width: -160, height: Number.POSITIVE_INFINITY } },
+        { ...node("bus", "event-bus"), style: { width: Number.NEGATIVE_INFINITY, height: -100 } },
+        { ...node("subscriber", "subscriber"), style: { width: -180, height: Number.NEGATIVE_INFINITY } },
+      ],
+      edges: [
+        edge("publisher", "bus", "event"),
+        edge("bus", "subscriber", "event"),
+      ],
+      options: {
+        nodeSpacing: -1,
+        rankSpacing: Number.POSITIVE_INFINITY,
+        snapToGrid: true,
+        gridSize: 0,
+      },
+    });
+    const diagnostic = result.diagnostics.find(({ code }) => code === "event-driven-invalid-geometry-input");
+
+    expect(result.nodes.every(({ position }) =>
+      Number.isFinite(position.x) && Number.isFinite(position.y)
+      && position.x > 0 && position.y > 0
+    )).toBe(true);
+    expect(result.quality.nodeOverlapCount).toBe(0);
+    expect(diagnostic).toMatchObject({
+      severity: "warning",
+      nodeIds: ["bus", "publisher", "subscriber"],
+    });
+    expect(diagnostic?.message).toContain("nodeSpacing");
+    expect(diagnostic?.message).toContain("rankSpacing");
+    expect(diagnostic?.message).toContain("grid snapping");
+  });
+
+  it("does not count explicit unclassified nodes as confident event-driven roles", () => {
+    const graph = {
+      nodes: [
+        node("bus", "event-bus"),
+        ...Array.from({ length: 9 }, (_, index) => node(`unclassified-${index}`, "unclassified")),
+      ],
+      edges: [],
+    };
+    const analysis = eventDrivenLayoutStrategy.analyse(graph);
+
+    expect(analysis.score).toBeLessThan(0.2);
+    expect(analysis.reasons[0]).not.toContain("10 of 10");
+    expect(analysis.reasons[0]).toContain("1 of 10");
+  });
+
+  it("summarizes external dependencies and describes deterministic ambiguous placement", () => {
+    const graph = singleBusGraph();
+    graph.nodes.push(
+      node("secondary-bus", "event-bus"),
+      { ...node("external-feed", "external-dependency"), style: { width: 180, height: 140 } },
+    );
+    graph.edges.push(
+      edge("secondary-bus", "fraud", "secondary event"),
+      edge("fraud", "secondary-bus", "continued event"),
+    );
+    const result = eventDrivenLayoutStrategy.layout(graph);
+    const byId = new Map(result.nodes.map((value) => [value.id, center(value)]));
+    const summary = result.diagnostics.find(({ code }) => code === "event-driven-role-summary");
+    const ambiguous = result.diagnostics.find(({ code }) => code === "event-driven-ambiguous-processor");
+
+    expect(summary?.message).toContain("1 external dependency");
+    expect(byId.get("external-feed")!.y).toBeGreaterThan(byId.get("orders-bus")!.y);
+    expect(ambiguous?.message).toContain("deterministic primary available bus band");
+  });
+
+  it("emits the no-bus diagnostic while placing flow roles in review", () => {
+    const result = eventDrivenLayoutStrategy.layout({
+      nodes: [
+        node("publisher", "publisher"),
+        node("processor", "processor"),
+        node("subscriber", "subscriber"),
+      ],
+      edges: [],
+    });
+
+    expect(result.diagnostics.find(({ code }) => code === "event-driven-no-bus"))
+      .toMatchObject({ severity: "warning" });
+    expect(result.quality.nodeOverlapCount).toBe(0);
+  });
+
+  it("breaks equal bus-affinity ties by lexical bus ID", () => {
+    const graph = {
+      nodes: [
+        node("a-bus", "event-bus"),
+        node("b-bus", "event-bus"),
+        node("worker", "processor"),
+      ],
+      edges: [
+        edge("a-bus", "worker", "a event"),
+        edge("b-bus", "worker", "b event"),
+      ],
+    };
+    const forward = eventDrivenLayoutStrategy.layout(graph);
+    const reversed = eventDrivenLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+    });
+    const byId = new Map(forward.nodes.map((value) => [value.id, center(value)]));
+
+    expect(byId.get("worker")!.y).toBe(byId.get("a-bus")!.y);
+    expect(byId.get("worker")!.y).toBeLessThan(byId.get("b-bus")!.y);
+    expect(positions(reversed.nodes)).toEqual(positions(forward.nodes));
+    expect(reversed.diagnostics).toEqual(forward.diagnostics);
+  });
+
   it("is deterministic while preserving hierarchy and measured geometry", () => {
     const graph = singleBusGraph();
     const orders = graph.nodes.find(({ id }) => id === "orders")!;
