@@ -1,5 +1,5 @@
 import { createLayoutPreview } from "@/core/effects/layout-preview";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { cloneLayoutFixture, layoutGraphFixtures } from "../../../tests/fixtures/layoutGraphs";
@@ -182,5 +182,43 @@ describe("LayoutPreviewDrawer", () => {
       ["recommended"],
       ["original"],
     ]);
+  });
+
+  it("supports scoped comparison shortcuts and announces the active mode", () => {
+    const onComparisonModeChange = vi.fn();
+    const { rerender } = render(
+      <LayoutPreviewDrawer
+        preview={createPreview()}
+        onCenterChange={() => {}}
+        onApply={() => {}}
+        onCancel={() => {}}
+        comparisonMode="recommended"
+        onComparisonModeChange={onComparisonModeChange}
+      />,
+    );
+
+    const drawer = screen.getByRole("region", { name: "Layout preview" });
+    expect(screen.getByRole("status")).toHaveTextContent("Preview comparison: Recommended active.");
+    expect(screen.getByRole("button", { name: "Original" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Alt+ArrowLeft",
+    );
+
+    fireEvent.keyDown(drawer, { key: "ArrowLeft", altKey: true });
+    fireEvent.keyDown(drawer, { key: "ArrowRight", altKey: true });
+    fireEvent.keyDown(drawer, { key: "ArrowLeft", altKey: false });
+    expect(onComparisonModeChange.mock.calls).toEqual([["original"], ["recommended"]]);
+
+    rerender(
+      <LayoutPreviewDrawer
+        preview={createPreview()}
+        onCenterChange={() => {}}
+        onApply={() => {}}
+        onCancel={() => {}}
+        comparisonMode="original"
+        onComparisonModeChange={onComparisonModeChange}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Preview comparison: Original active.");
   });
 });

@@ -20,6 +20,18 @@ export const drawer = style({
   },
 });
 
+export const visuallyHidden = style({
+  position: "absolute",
+  margin: -1,
+  border: 0,
+  padding: 0,
+  width: 1,
+  height: 1,
+  overflow: "hidden",
+  whiteSpace: "nowrap",
+  clip: "rect(0, 0, 0, 0)",
+});
+
 export const header = style([
   {
     "@layer": {

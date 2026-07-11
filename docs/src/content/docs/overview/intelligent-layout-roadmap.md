@@ -1038,6 +1038,26 @@ Delivered:
 
 Next slice:
 
-- [ ] Add keyboard shortcuts for Original / Recommended comparison while the drawer has focus.
-- [ ] Announce comparison-mode changes through a polite live region.
+- [x] Add keyboard shortcuts for Original / Recommended comparison while the drawer has focus.
+- [x] Announce comparison-mode changes through a polite live region.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 21 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added drawer-scoped Alt+Left and Alt+Right controls for Original and Recommended modes.
+- [x] Prevented comparison shortcuts from affecting the rest of the workspace.
+- [x] Added `aria-keyshortcuts` metadata to both segmented-control buttons.
+- [x] Added a polite, atomic live-region announcement for active comparison mode changes.
+- [x] Kept shortcut guidance out of visible UI while preserving discoverability for assistive technology.
+- [x] Preserved the segmented control as the primary pointer and keyboard-tab interaction.
+- [x] Added shortcut scoping, inactive-modifier, metadata, and announcement coverage.
+
+Next slice:
+
+- [ ] Add a compact comparison delta strip that remains visible in both modes.
+- [ ] Identify which metrics favor the active mode without implying that one aggregate score decides acceptance.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

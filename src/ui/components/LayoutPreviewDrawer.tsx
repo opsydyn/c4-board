@@ -6,6 +6,7 @@ import {
   WarningCircleIcon,
   XIcon,
 } from "@phosphor-icons/react";
+import type { KeyboardEvent } from "react";
 import type { LayoutPreviewModel, LayoutQualityDelta } from "../../core/effects/layout-preview";
 import * as styles from "./LayoutPreviewDrawer.css";
 import { TacticalSelect } from "./TacticalSelect";
@@ -54,9 +55,24 @@ export function LayoutPreviewDrawer({
     (diagnostic) => diagnostic.severity === "warning" || diagnostic.severity === "error",
   ).length;
   const centerLabel = preview.centerControl?.kind === "hub" ? "Hub" : "System of interest";
+  const handleDrawerKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!comparisonMode || !onComparisonModeChange || !event.altKey) return;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      onComparisonModeChange("original");
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      onComparisonModeChange("recommended");
+    }
+  };
 
   return (
-    <section className={styles.drawer} aria-label="Layout preview">
+    <section className={styles.drawer} aria-label="Layout preview" onKeyDown={handleDrawerKeyDown}>
+      {comparisonMode && (
+        <span className={styles.visuallyHidden} role="status" aria-live="polite" aria-atomic="true">
+          {`Preview comparison: ${comparisonMode === "original" ? "Original" : "Recommended"} active.`}
+        </span>
+      )}
       <header className={styles.header}>
         <div className={styles.identity}>
           <span className={styles.eyebrow}>LAYOUT PREVIEW</span>
@@ -75,6 +91,7 @@ export function LayoutPreviewDrawer({
                 type="button"
                 data-active={comparisonMode === "original"}
                 aria-pressed={comparisonMode === "original"}
+                aria-keyshortcuts="Alt+ArrowLeft"
                 onClick={() =>
                   onComparisonModeChange("original")}
               >
@@ -84,6 +101,7 @@ export function LayoutPreviewDrawer({
                 type="button"
                 data-active={comparisonMode === "recommended"}
                 aria-pressed={comparisonMode === "recommended"}
+                aria-keyshortcuts="Alt+ArrowRight"
                 onClick={() =>
                   onComparisonModeChange("recommended")}
               >
