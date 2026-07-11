@@ -9,7 +9,7 @@
 
 import type { PosteeEnvironment, PosteeEnvironmentVariable } from "@/core/effects/database.postee";
 import { CaretDownIcon } from "@phosphor-icons/react";
-import { type FormEvent, useCallback, useState } from "react";
+import { type SubmitEvent, useCallback, useState } from "react";
 import { ToggleButton } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 
@@ -45,7 +45,7 @@ export function PosteeEnvironmentPanel({
   const [newEnvironmentName, setNewEnvironmentName] = useState("");
 
   const handleCreateEnvironment = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       const name = newEnvironmentName.trim() || "Development";
       onCreateEnvironment(name);

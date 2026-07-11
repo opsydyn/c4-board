@@ -5,7 +5,7 @@
  * between C4 Architecture and Domain-Driven Design modes.
  */
 
-import { ArrowsLeftRight } from "@phosphor-icons/react";
+import { ArrowsLeftRightIcon as ArrowsLeftRight } from "@phosphor-icons/react";
 import { domainToggle, domainToggleActive, domainToggleButton } from "./styles.css";
 
 export type DiagramDomain = "c4" | "ddd";

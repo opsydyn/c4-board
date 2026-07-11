@@ -261,32 +261,32 @@ const opyAgentMachineSetup = setup({
   },
 });
 
-const createGuardedLifecycleState = (
+const createGuardedLifecycleState = <const TTransitions extends object>(
   stage: OpyAgentLifecycleNonTerminalStage,
   input: {
-    readonly on: any;
+    readonly on: TTransitions;
   },
-): any => {
+) => {
   const timeoutMs = getOpyAgentLifecycleStageGuardrail(stage).timeoutMs;
   return {
     entry: {
-      type: "recordStageEntry",
+      type: "recordStageEntry" as const,
       params: {
         stage,
       },
     },
     always: {
-      target: "failed",
+      target: "failed" as const,
       guard: {
-        type: "stageEntryBudgetExceeded",
+        type: "stageEntryBudgetExceeded" as const,
         params: {
           stage,
         },
       },
       actions: {
-        type: "recordGuardrailFailure",
+        type: "recordGuardrailFailure" as const,
         params: {
-          kind: "budget",
+          kind: "budget" as const,
           stage,
         },
       },
@@ -296,9 +296,9 @@ const createGuardedLifecycleState = (
       : {
         after: {
           [timeoutMs]: {
-            target: "failed",
+            target: "failed" as const,
             actions: {
-              type: "recordGuardrailFailure",
+              type: "recordGuardrailFailure" as const,
               params: {
                 kind: "timeout" as const,
                 stage,

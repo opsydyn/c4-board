@@ -14,7 +14,7 @@ import {
   type OpyPersistedDiagramProposal,
 } from "../../../core/effects/opy-chat.persistence";
 import { useDatabase } from "../../../core/effects/useDatabase";
-import * as styles from "../../../pages/settings.css";
+import * as styles from "../../../styles/pages/settings.css";
 
 interface AgentAuditSnapshot {
   readonly artifacts: ReadonlyArray<OpyAgentArtifact>;

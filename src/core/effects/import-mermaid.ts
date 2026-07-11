@@ -6,7 +6,7 @@
  */
 
 import type { Edge, Node, Viewport } from "@xyflow/react";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import type {
   EdgeAnimationSpeed,
   EdgeCommunicationStyle,
@@ -44,6 +44,10 @@ export interface ImportResult {
   edges: Edge[];
   viewport?: Viewport;
 }
+
+export class MermaidImportError extends Data.TaggedError("MermaidImportError")<{
+  readonly message: string;
+}> {}
 
 /**
  * Extract label content from Mermaid node definition
@@ -346,7 +350,7 @@ export const importMermaid = (
     // Validate that we found at least some nodes
     if (parsedNodes.length === 0) {
       return yield* Effect.fail(
-        new Error("No valid nodes found in Mermaid file"),
+        new MermaidImportError({ message: "No valid nodes found in Mermaid file" }),
       );
     }
 

@@ -56,6 +56,10 @@ export const headerCheckbox = style({
   },
 });
 
+export const headerCheckboxField = style({
+  display: "contents",
+});
+
 export const headerInput = style({
   "@layer": {
     [componentsLayer]: {

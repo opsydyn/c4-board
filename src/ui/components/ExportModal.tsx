@@ -6,7 +6,7 @@
  * Uses React Aria Components for accessibility.
  */
 
-import { Check, Copy, Download, X } from "@phosphor-icons/react";
+import { CheckIcon as Check, CopyIcon as Copy, DownloadIcon as Download, XIcon as X } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import {

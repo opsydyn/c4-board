@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type EventCallback, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 
 const hasTauriInjection = (): boolean => {
   if (typeof window === "undefined") {
@@ -110,6 +110,17 @@ export interface LoadTestProgress {
 export type LoadTestEventCallback = EventCallback<LoadTestProgress>;
 export type LoadTestErrorCallback = EventCallback<string>;
 
+export class LoadTestRuntimeError extends Data.TaggedError("LoadTestRuntimeError")<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+const toLoadTestRuntimeError = (cause: unknown, fallbackMessage: string): LoadTestRuntimeError =>
+  new LoadTestRuntimeError({
+    message: cause instanceof Error ? cause.message : fallbackMessage,
+    cause,
+  });
+
 const toBackendConfig = (input: LoadTestConfigInput) => ({
   url: input.url,
   method: input.method ?? "GET",
@@ -124,7 +135,7 @@ const toBackendConfig = (input: LoadTestConfigInput) => ({
 
 export const startLoadTest = (
   config: LoadTestConfigInput,
-): Effect.Effect<void, Error> =>
+): Effect.Effect<void, LoadTestRuntimeError> =>
   Effect.tryPromise({
     try: async () => {
       await requireTauriRuntime();
@@ -133,61 +144,41 @@ export const startLoadTest = (
         config: toBackendConfig(config),
       });
     },
-    catch: (cause) =>
-      new Error(
-        cause instanceof Error
-          ? cause.message
-          : "Failed to start load test",
-      ),
+    catch: (cause) => toLoadTestRuntimeError(cause, "Failed to start load test"),
   });
 
 export const listenLoadTestProgress = (
   callback: LoadTestEventCallback,
-): Effect.Effect<UnlistenFn, Error> =>
+): Effect.Effect<UnlistenFn, LoadTestRuntimeError> =>
   Effect.tryPromise({
     try: async () => {
       await requireTauriRuntime();
 
       return await listen("load-test-progress", callback);
     },
-    catch: (cause) =>
-      new Error(
-        cause instanceof Error
-          ? cause.message
-          : "Failed to subscribe to load test progress",
-      ),
+    catch: (cause) => toLoadTestRuntimeError(cause, "Failed to subscribe to load test progress"),
   });
 
 export const listenLoadTestComplete = (
   callback: LoadTestEventCallback,
-): Effect.Effect<UnlistenFn, Error> =>
+): Effect.Effect<UnlistenFn, LoadTestRuntimeError> =>
   Effect.tryPromise({
     try: async () => {
       await requireTauriRuntime();
 
       return await listen("load-test-complete", callback);
     },
-    catch: (cause) =>
-      new Error(
-        cause instanceof Error
-          ? cause.message
-          : "Failed to subscribe to load test completion",
-      ),
+    catch: (cause) => toLoadTestRuntimeError(cause, "Failed to subscribe to load test completion"),
   });
 
 export const listenLoadTestError = (
   callback: LoadTestErrorCallback,
-): Effect.Effect<UnlistenFn, Error> =>
+): Effect.Effect<UnlistenFn, LoadTestRuntimeError> =>
   Effect.tryPromise({
     try: async () => {
       await requireTauriRuntime();
 
       return await listen("load-test-error", callback);
     },
-    catch: (cause) =>
-      new Error(
-        cause instanceof Error
-          ? cause.message
-          : "Failed to subscribe to load test errors",
-      ),
+    catch: (cause) => toLoadTestRuntimeError(cause, "Failed to subscribe to load test errors"),
   });

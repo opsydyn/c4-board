@@ -426,13 +426,9 @@ export const fromMegabytes = (mb: number): Bytes => Bytes(mb * 1024 * 1024);
 // Legacy Compatibility (for database)
 // =============================================================================
 
-/**
- * Unix timestamp in milliseconds (for database storage)
- * @deprecated Use UtcDateTime instead. This is kept for database compatibility.
- */
-export type Timestamp = number & Brand.Brand<"Timestamp">;
+type LegacyTimestamp = number & Brand.Brand<"Timestamp">;
 
-export const Timestamp = Brand.refined<Timestamp>(
+const LegacyTimestamp = Brand.refined<LegacyTimestamp>(
   (n): n is number & Brand.Brand<"Timestamp"> => {
     return Number.isInteger(n) && n >= 0;
   },
@@ -440,14 +436,23 @@ export const Timestamp = Brand.refined<Timestamp>(
 );
 
 /**
+ * Unix timestamp in milliseconds (for database storage)
+ * @deprecated Use UtcDateTime instead. This is kept for database compatibility.
+ */
+export type Timestamp = LegacyTimestamp;
+
+/** @deprecated Use UtcDateTime instead. */
+export const Timestamp = LegacyTimestamp;
+
+/**
  * Convert DateTime to Timestamp (for database)
  */
-export const dateTimeToTimestamp = (dt: UtcDateTime): Timestamp => Timestamp(DateTime.toEpochMillis(dt));
+export const dateTimeToTimestamp = (dt: UtcDateTime): LegacyTimestamp => LegacyTimestamp(DateTime.toEpochMillis(dt));
 
 /**
  * Convert Timestamp to DateTime (from database)
  */
-export const timestampToDateTime = (ts: Timestamp): UtcDateTime => DateTime.unsafeMake(ts as unknown as number);
+export const timestampToDateTime = (ts: LegacyTimestamp): UtcDateTime => DateTime.unsafeMake(ts as unknown as number);
 
 // =============================================================================
 // Exports
@@ -472,7 +477,7 @@ export const BrandedTypes = {
   HeaderName,
   StatusCode,
   Bytes,
-  Timestamp, // Legacy - use DateTime instead
+  Timestamp: LegacyTimestamp,
 } as const;
 
 // =============================================================================

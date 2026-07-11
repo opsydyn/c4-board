@@ -5,7 +5,7 @@
  * Uses Tauri's file picker and file system APIs.
  */
 
-import { Upload } from "@phosphor-icons/react";
+import { UploadIcon as Upload } from "@phosphor-icons/react";
 import { useState } from "react";
 import { toolbarButton } from "./styles.css";
 

@@ -600,7 +600,7 @@ export const updateEdgeLabel = (edgeId: string, label: string) =>
 
     if (rows.length === 0) {
       return yield* Effect.fail(
-        new Error(`Edge ${edgeId} not found after update`),
+        new NotFoundError({ entity: "edge", id: edgeId }),
       );
     }
 
@@ -638,7 +638,7 @@ export const updateEdge = (edgeId: string, input: UpdateEdgeInput) =>
         [edgeId],
       );
       if (rows.length === 0) {
-        return yield* Effect.fail(new Error(`Edge ${edgeId} not found`));
+        return yield* Effect.fail(new NotFoundError({ entity: "edge", id: edgeId }));
       }
       return rows[0];
     }
@@ -660,7 +660,7 @@ export const updateEdge = (edgeId: string, input: UpdateEdgeInput) =>
 
     if (rows.length === 0) {
       return yield* Effect.fail(
-        new Error(`Edge ${edgeId} not found after update`),
+        new NotFoundError({ entity: "edge", id: edgeId }),
       );
     }
 

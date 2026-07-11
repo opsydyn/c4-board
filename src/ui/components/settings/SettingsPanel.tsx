@@ -28,7 +28,7 @@ import type {
   TransitionIntensity,
 } from "../../../core/effects/settings.types";
 import { useDatabase } from "../../../core/effects/useDatabase";
-import * as styles from "../../../pages/settings.css";
+import * as styles from "../../../styles/pages/settings.css";
 import { useDatabaseRuntimeStatus } from "../../hooks/useDatabaseRuntimeStatus";
 import { createSettingsMachine } from "../../machines/settings.machine";
 import { TacticalSelect } from "../TacticalSelect";

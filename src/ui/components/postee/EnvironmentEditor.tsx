@@ -1,9 +1,10 @@
 import type { PosteeEnvironmentVariable } from "@/core/effects/database.postee";
-import { Eye, EyeSlash, Plus, Trash } from "@phosphor-icons/react";
+import { EyeIcon as Eye, EyeSlashIcon as EyeSlash, PlusIcon as Plus, TrashIcon as Trash } from "@phosphor-icons/react";
 import { useState } from "react";
 import {
   Button,
-  Checkbox,
+  CheckboxButton,
+  CheckboxField,
   Input,
   Label,
   ListBox,
@@ -15,6 +16,7 @@ import {
 } from "react-aria-components";
 import {
   addButton,
+  checkboxField,
   checkboxIndicator,
   deleteButton,
   editorContainer,
@@ -102,8 +104,8 @@ export function EnvironmentEditor({
     <div className={editorContainer}>
       <div className={editorHeader}>
         <Select
-          selectedKey={environmentId}
-          onSelectionChange={(key) => onEnvironmentChange(key as string)}
+          value={environmentId}
+          onChange={(value) => onEnvironmentChange(value as string)}
           className={environmentSelector}
         >
           <Label>Environment</Label>
@@ -140,16 +142,18 @@ export function EnvironmentEditor({
 
           return (
             <div key={variable.id} className={variableRow}>
-              <Checkbox
+              <CheckboxField
                 isSelected={variable.is_enabled === 1}
                 onChange={(isSelected) =>
                   handleUpdateVariable(variable.id, {
                     is_enabled: isSelected ? 1 : 0,
                   })}
-                className={variableCheckbox}
+                className={checkboxField}
               >
-                <div className={checkboxIndicator} />
-              </Checkbox>
+                <CheckboxButton className={variableCheckbox} aria-label="Enable variable">
+                  <div className={checkboxIndicator} />
+                </CheckboxButton>
+              </CheckboxField>
 
               <TextField
                 value={variable.key}

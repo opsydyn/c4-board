@@ -9,10 +9,10 @@ import tseslint from "typescript-eslint";
 export default defineConfig([
   {
     ignores: [
-      ".astro/**",
-      "coverage/**",
-      "dist/**",
-      "node_modules/**",
+      "**/.astro/**",
+      "**/coverage/**",
+      "**/dist/**",
+      "**/node_modules/**",
       "src-tauri/target/**",
       "target/**",
     ],

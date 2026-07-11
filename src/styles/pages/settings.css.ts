@@ -1,5 +1,5 @@
 import { globalStyle, style } from "@vanilla-extract/css";
-import { theme } from "../styles/theme.css";
+import { theme } from "../theme.css";
 
 export const pageShell = style({
   display: "grid",

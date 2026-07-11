@@ -14,6 +14,7 @@
 
 import type { Edge } from "@xyflow/react";
 import { Data, Effect, pipe } from "effect";
+import type { LayoutEdgeRoute } from "./layout.types";
 
 /**
  * Communication protocols supported by edges
@@ -102,6 +103,7 @@ export interface EdgeMetadata {
 export interface EdgeData extends Record<string, unknown> {
   createdAt: number;
   metadata?: EdgeMetadata | undefined;
+  layoutRoute?: LayoutEdgeRoute["sections"] | undefined;
 }
 
 /**

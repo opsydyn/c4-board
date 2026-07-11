@@ -92,7 +92,7 @@ describe("agent mutation tools", () => {
           },
         ],
       })
-    ).toThrowError(RigMutationToolContractError);
+    ).toThrow(RigMutationToolContractError);
   });
 
   it("rejects unknown layout presets", () => {
@@ -100,6 +100,6 @@ describe("agent mutation tools", () => {
       createRigValidatedMutationAction("apply_layout", {
         preset: "non-existent-layout",
       })
-    ).toThrowError(RigMutationToolContractError);
+    ).toThrow(RigMutationToolContractError);
   });
 });

@@ -21,7 +21,7 @@ import {
   TrashSimpleIcon,
 } from "@phosphor-icons/react";
 import type { Key, Selection } from "@react-types/shared";
-import { type FormEvent, useCallback, useMemo, useState } from "react";
+import { type SubmitEvent, useCallback, useMemo, useState } from "react";
 import { Button, ToggleButton, Tree, TreeItem, TreeItemContent } from "react-aria-components";
 import { flex } from "../../../styles/sprinkles.css";
 import { InlineEditor } from "../nodes/InlineEditor";
@@ -106,7 +106,7 @@ export function PosteeSidebar({
     : null;
 
   const handleCreateCollection = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       const trimmed = newCollectionName.trim();
       const name = trimmed.length > 0 ? trimmed : "Untitled Collection";

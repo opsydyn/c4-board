@@ -12,7 +12,11 @@
 import type { PosteeEnvironment, PosteeEnvironmentVariable, PosteeRequest } from "@/core/effects/database.postee";
 import type { HttpMethod } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
-import { CheckCircle, SpinnerGap, Warning } from "@phosphor-icons/react";
+import {
+  CheckCircleIcon as CheckCircle,
+  SpinnerGapIcon as SpinnerGap,
+  WarningIcon as Warning,
+} from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
@@ -182,7 +186,7 @@ export function PosteeRequestBuilder({
   }, [requestUrl, requestMethod, selectedRequest, activeCollectionId, onCreateRequest, onUpdateRequest]);
 
   // Handle environment creation
-  const handleCreateEnvironment = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateEnvironment = useCallback((event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = newEnvironmentName.trim() || "Development";
     onCreateEnvironment(name);

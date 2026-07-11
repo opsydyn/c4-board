@@ -1,12 +1,12 @@
 import {
-  CircleDashed,
-  Cube,
-  GitBranch,
-  Graph,
-  Hexagon,
-  Scales,
-  SquareHalf,
-  Warning,
+  CircleDashedIcon as CircleDashed,
+  CubeIcon as Cube,
+  GitBranchIcon as GitBranch,
+  GraphIcon as Graph,
+  HexagonIcon as Hexagon,
+  ScalesIcon as Scales,
+  SquareHalfIcon as SquareHalf,
+  WarningIcon as Warning,
   WarningOctagonIcon,
 } from "@phosphor-icons/react";
 import { RadialGradient } from "@visx/gradient";

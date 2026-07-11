@@ -6,7 +6,7 @@
  */
 
 import type { Edge, Node, Viewport } from "@xyflow/react";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import type {
   EdgeAnimationSpeed,
   EdgeCommunicationStyle,
@@ -57,6 +57,10 @@ export interface ImportResult {
   edges: Edge[];
   viewport?: Viewport;
 }
+
+export class PlantUmlImportError extends Data.TaggedError("PlantUmlImportError")<{
+  readonly message: string;
+}> {}
 
 /**
  * Parse a PlantUML element line
@@ -311,7 +315,7 @@ export const importPlantUMLC4 = (
     // Validate that we found at least some elements
     if (elements.length === 0) {
       return yield* Effect.fail(
-        new Error("No valid C4 elements found in PlantUML file"),
+        new PlantUmlImportError({ message: "No valid C4 elements found in PlantUML file" }),
       );
     }
 

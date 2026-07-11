@@ -1,4 +1,4 @@
-import { DatabaseService } from "@/core/effects/database.base";
+import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
 import { APP_SETTING_KEYS } from "@/core/effects/settings.types";
 import { Effect } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -154,7 +154,7 @@ describe("database.runtime phase 5", () => {
     const program = Effect.gen(function*() {
       const db = yield* DatabaseService;
       return yield* db.transaction(
-        Effect.fail(new Error("inner transaction failure")),
+        Effect.fail(new DatabaseError({ message: "inner transaction failure" })),
       );
     });
 

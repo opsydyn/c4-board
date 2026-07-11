@@ -1,8 +1,18 @@
-import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import { defineConfig } from "astro/config";
+import { env } from "node:process";
+
+const docsSite = env.DOCS_SITE_URL;
+const disabledSitemap = {
+  name: "@astrojs/sitemap",
+  hooks: {},
+};
 
 export default defineConfig({
+  ...(docsSite ? { site: docsSite } : {}),
   integrations: [
+    // Starlight skips its sitemap integration when no canonical deployment URL exists.
+    ...(docsSite ? [] : [disabledSitemap]),
     starlight({
       title: "c4-board Docs",
       sidebar: [

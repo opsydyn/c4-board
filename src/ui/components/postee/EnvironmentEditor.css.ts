@@ -163,6 +163,10 @@ export const variableCheckbox = style({
   },
 });
 
+export const checkboxField = style({
+  display: "contents",
+});
+
 export const checkboxIndicator = style({
   "@layer": {
     [componentsLayer]: {

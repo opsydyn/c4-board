@@ -18,7 +18,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { Duration, Effect, FiberRef, Layer, Schedule } from "effect";
+import { Data, Duration, Effect, FiberRef, Layer, Schedule } from "effect";
 import { DatabaseError, DatabaseService } from "./database.base";
 import {
   beginDatabaseRuntimeOperation,
@@ -47,7 +47,16 @@ const SQLITE_BUSY_RETRY_SCHEDULE = Schedule.intersect(
   Schedule.recurs(SQLITE_BUSY_MAX_ATTEMPTS - 1),
 ).pipe(Schedule.jittered);
 
-const toError = (error: unknown): Error => error instanceof Error ? error : new Error(String(error));
+class DatabaseRuntimeError extends Data.TaggedError("DatabaseRuntimeError")<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+const toDatabaseRuntimeError = (cause: unknown): DatabaseRuntimeError =>
+  new DatabaseRuntimeError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+  });
 
 // ============================================================================
 // Raw database operations (via custom Tauri commands)
@@ -56,13 +65,13 @@ const toError = (error: unknown): Error => error instanceof Error ? error : new 
 const executeRaw = (
   sql: string,
   bindValues?: unknown[],
-): Effect.Effect<void, Error> =>
+): Effect.Effect<void, DatabaseRuntimeError> =>
   Effect.gen(function*() {
     const operationId = yield* Effect.sync(() => beginDatabaseRuntimeOperation("execute"));
 
     return yield* Effect.tryPromise({
       try: () => invoke("sql_execute", { sql, values: bindValues ?? [] }),
-      catch: toError,
+      catch: toDatabaseRuntimeError,
     }).pipe(
       Effect.tapError((error) =>
         Effect.sync(() => {
@@ -96,13 +105,13 @@ const executeRaw = (
 const queryRaw = <T>(
   sql: string,
   bindValues?: unknown[],
-): Effect.Effect<T[], Error> =>
+): Effect.Effect<T[], DatabaseRuntimeError> =>
   Effect.gen(function*() {
     const operationId = yield* Effect.sync(() => beginDatabaseRuntimeOperation("query"));
 
     return yield* Effect.tryPromise({
       try: () => invoke<T[]>("sql_query", { sql, values: bindValues ?? [] }),
-      catch: toError,
+      catch: toDatabaseRuntimeError,
     }).pipe(
       Effect.tapError((error) =>
         Effect.sync(() => {
@@ -168,7 +177,7 @@ const withWritePermit = <A, E, R>(
 // ============================================================================
 
 const wrapExecuteError = (
-  effect: Effect.Effect<void, Error>,
+  effect: Effect.Effect<void, DatabaseRuntimeError>,
 ): Effect.Effect<void, DatabaseError> =>
   effect.pipe(
     Effect.mapError(
@@ -177,7 +186,7 @@ const wrapExecuteError = (
   );
 
 const wrapQueryError = <T>(
-  effect: Effect.Effect<T[], Error>,
+  effect: Effect.Effect<T[], DatabaseRuntimeError>,
 ): Effect.Effect<T[], DatabaseError> =>
   effect.pipe(
     Effect.mapError(

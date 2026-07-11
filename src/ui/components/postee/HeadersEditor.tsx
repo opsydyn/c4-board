@@ -10,10 +10,11 @@
 
 import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useCallback } from "react";
-import { Button, Checkbox, Input, TextField } from "react-aria-components";
+import { Button, CheckboxButton, CheckboxField, Input, TextField } from "react-aria-components";
 import {
   headerAddButton,
   headerCheckbox,
+  headerCheckboxField,
   headerDeleteButton,
   headerInput,
   headerRow,
@@ -63,14 +64,13 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
     <div className={headersContainer}>
       {headers.map((header) => (
         <div key={header.id} className={headerRow}>
-          <Checkbox
-            className={headerCheckbox}
+          <CheckboxField
+            className={headerCheckboxField}
             isSelected={header.enabled}
             onChange={(isSelected) => handleUpdateHeader(header.id, { enabled: isSelected })}
-            aria-label="Enable/disable header"
           >
-            {/* Checkbox visual indicator styled via CSS */}
-          </Checkbox>
+            <CheckboxButton className={headerCheckbox} aria-label="Enable or disable header" />
+          </CheckboxField>
 
           <TextField
             value={header.key}

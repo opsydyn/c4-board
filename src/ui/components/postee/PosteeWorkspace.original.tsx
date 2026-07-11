@@ -4,15 +4,15 @@ import {
   CaretLeftIcon,
   CaretRightIcon,
   CaretUpIcon,
-  File,
-  Folder,
-  PencilLine,
-  TrashSimple,
+  FileIcon as File,
+  FolderIcon as Folder,
+  PencilLineIcon as PencilLine,
+  TrashSimpleIcon as TrashSimple,
 } from "@phosphor-icons/react";
 import type { Key, Selection } from "@react-types/shared";
 import { useMachine } from "@xstate/react";
 import { nanoid } from "nanoid";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type SubmitEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Button, TabPanel, ToggleButton, Tree, TreeItem, TreeItemContent } from "react-aria-components";
 import {
   CollectionId as CollectionIdBrand,
@@ -109,7 +109,7 @@ export function PosteeWorkspace() {
     : null;
 
   const handleCreateCollection = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       const trimmed = newCollectionName.trim();
       const name = trimmed.length > 0 ? trimmed : "Untitled Collection";
@@ -304,7 +304,7 @@ export function PosteeWorkspace() {
   );
 
   const handleCreateRequest = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!activeCollectionKey) {
         return;
@@ -439,7 +439,7 @@ export function PosteeWorkspace() {
   }, [selectedRequest]);
 
   const handleUpdateRequest = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!selectedRequest) {
         return;
@@ -537,7 +537,7 @@ export function PosteeWorkspace() {
   }, []);
 
   const handleCreateEnvironment = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       const name = newEnvironmentName.trim() || "Development";
       const id = nanoid();

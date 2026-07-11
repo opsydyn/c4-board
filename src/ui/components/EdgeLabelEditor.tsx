@@ -75,7 +75,7 @@ export function EdgeLabelEditor({
   );
 
   const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
+    (e: React.SyntheticEvent<HTMLFormElement>) => {
       e.preventDefault();
       handleSave();
     },

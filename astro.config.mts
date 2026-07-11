@@ -19,9 +19,18 @@ const astroVitePlugins = [
   }),
 ] as unknown as AstroVitePlugins;
 
+const isDevCommand = process.argv.includes("dev");
+
 // https://astro.build/config
 export default defineConfig({
   vite: {
+    // Keep production/check optimization from invalidating a running dev server.
+    cacheDir: isDevCommand ? "node_modules/.vite/dev" : "node_modules/.vite/build",
+    build: {
+      // Large editor, syntax-language, grid, and OPY chunks are isolated behind
+      // route or activation boundaries. Keep a ceiling that still catches growth.
+      chunkSizeWarningLimit: 1300,
+    },
     define: {
       "process.env.DRAGGABLE_DEBUG": "false",
     },
@@ -35,6 +44,7 @@ export default defineConfig({
       // Prebundle Postee-only dependencies at startup so the first /postee visit
       // does not invalidate the optimizer and strand the island hydration request.
       include: [
+        "@copilotkit/react-core",
         "@effect/typeclass",
         "@monaco-editor/loader",
         "@monaco-editor/react",
@@ -51,7 +61,13 @@ export default defineConfig({
         "re-resizable",
         "react-draggable",
         "react-rnd",
+        "tone",
       ],
+    },
+    worker: {
+      // ELK runs as one Vite-managed module worker. Module output avoids ELK's
+      // nested worker path, which is unavailable in Tauri's WKWebView workers.
+      format: "es",
     },
     plugins: astroVitePlugins,
     resolve: {

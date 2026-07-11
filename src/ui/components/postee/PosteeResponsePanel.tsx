@@ -9,7 +9,7 @@
 
 import type { PosteeHistoryEntry, PosteeRequest } from "@/core/effects/database.postee";
 import type { PreparedResponse } from "@/core/effects/postee/http-client";
-import { CaretRightIcon, PlayIcon, SpinnerGap, WarningIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, PlayIcon, SpinnerGapIcon as SpinnerGap, WarningIcon } from "@phosphor-icons/react";
 import { useCallback, useMemo, useState } from "react";
 import { ToggleButton } from "react-aria-components";
 import { LoadTestPanel } from "./LoadTestPanel";

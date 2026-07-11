@@ -4,7 +4,7 @@ import { GlyphCircle } from "@visx/glyph";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import { AreaClosed, Bar, LinePath } from "@visx/shape";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type SubmitEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tone from "tone";
 import {
   chartHeader,
@@ -711,7 +711,7 @@ export function LoadTestPanel({
   }, [request]);
 
   const handleStart = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
+    async (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!targetUrl.trim()) {
         return;
