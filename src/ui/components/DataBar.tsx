@@ -25,6 +25,7 @@ interface DataBarProps {
   layoutAudits: ReadonlyArray<LayoutApplicationAudit>;
   onDeleteLayoutAudit: (appliedAt: number) => Promise<void>;
   onClearLayoutAudits: () => Promise<void>;
+  onExportLayoutAudits: () => void;
 }
 
 const TABS: Array<{ id: DataBarTab; label: string }> = [
@@ -65,6 +66,7 @@ export function DataBar({
   layoutAudits,
   onDeleteLayoutAudit,
   onClearLayoutAudits,
+  onExportLayoutAudits,
 }: DataBarProps) {
   const [activeTab, setActiveTab] = useState<DataBarTab>("diagrams");
 
@@ -85,6 +87,7 @@ export function DataBar({
             audits={layoutAudits}
             onDeleteAudit={onDeleteLayoutAudit}
             onClearAudits={onClearLayoutAudits}
+            onExportAudits={onExportLayoutAudits}
           />
         );
       case "docs":
@@ -92,7 +95,14 @@ export function DataBar({
       default:
         return null;
     }
-  }, [activeTab, handleDiagramLoad, layoutAudits, onClearLayoutAudits, onDeleteLayoutAudit]);
+  }, [
+    activeTab,
+    handleDiagramLoad,
+    layoutAudits,
+    onClearLayoutAudits,
+    onDeleteLayoutAudit,
+    onExportLayoutAudits,
+  ]);
 
   return (
     <section className={bottomPanel} aria-label="Data bar">

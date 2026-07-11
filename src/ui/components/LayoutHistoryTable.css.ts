@@ -149,6 +149,14 @@ const actionButton = style({
 
 export const iconButton = style([actionButton, { padding: 0, width: "2rem" }]);
 export const clearButton = style([actionButton]);
+export const exportButton = style([
+  actionButton,
+  {
+    marginRight: "auto",
+    borderColor: theme.color.status.selected,
+    color: theme.color.status.selected,
+  },
+]);
 export const cancelButton = style([actionButton, { padding: 0, width: "2rem" }]);
 export const dangerButton = style([
   actionButton,

@@ -70,6 +70,11 @@ import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import { getRigAgentV1Flag, resolveEffectiveRigAgentV1Rollout } from "../../core/effects/feature-flags";
 import { autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetName } from "../../core/effects/layout";
 import {
+  buildLayoutHistoryArtifact,
+  createLayoutHistoryFilename,
+  serializeLayoutHistoryArtifact,
+} from "../../core/effects/layout-history-export";
+import {
   applyLayoutResultToEdges,
   buildLayoutApplicationAudit,
   buildLayoutComparisonMetrics,
@@ -2335,6 +2340,24 @@ export function C4CanvasContainer() {
     send({ type: "CLEAR_LAYOUT_AUDITS_SUCCESS" });
   }, [send, state.context.currentDiagramId]);
 
+  const handleExportLayoutAudits = useCallback(() => {
+    const artifact = buildLayoutHistoryArtifact({
+      diagramId: state.context.currentDiagramId ?? "unsaved",
+      diagramName: state.context.diagramName,
+      exportedAt: Date.now(),
+      audits: state.context.layoutAudits,
+    });
+    const blob = new Blob([serializeLayoutHistoryArtifact(artifact)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = createLayoutHistoryFilename(state.context.diagramName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [state.context.currentDiagramId, state.context.diagramName, state.context.layoutAudits]);
+
   const handleLayoutPreviewCenterChange = useCallback((nodeId: string) => {
     setLayoutPreview((current) => {
       if (!current?.centerControl) return current;
@@ -3210,6 +3233,7 @@ export function C4CanvasContainer() {
           layoutAudits={state.context.layoutAudits}
           onDeleteLayoutAudit={handleDeleteLayoutAudit}
           onClearLayoutAudits={handleClearLayoutAudits}
+          onExportLayoutAudits={handleExportLayoutAudits}
         />
       )}
       {navigationTarget && (

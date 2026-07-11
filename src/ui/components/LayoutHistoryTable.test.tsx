@@ -73,4 +73,18 @@ describe("LayoutHistoryTable", () => {
     expect(onClearAudits).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Clear layout audit history" })).toBeInTheDocument();
   });
+
+  it("exports retained history through an explicit command", () => {
+    const onExportAudits = vi.fn();
+    render(
+      <LayoutHistoryTable
+        audits={[audit(200, "recommended")]}
+        onExportAudits={onExportAudits}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Export layout audit history" }));
+
+    expect(onExportAudits).toHaveBeenCalledOnce();
+  });
 });

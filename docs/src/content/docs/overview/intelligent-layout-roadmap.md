@@ -1189,6 +1189,29 @@ Delivered:
 
 Next slice:
 
-- [ ] Export layout history as a versioned JSON review artifact.
+- [x] Export layout history as a versioned JSON review artifact.
+- [ ] Add CSV only if architecture-review workflows demonstrate a tabular interoperability need.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 28 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added a pure versioned `opsydyn.layout-history` review-artifact contract.
+- [x] Included export time, diagram identity, retention policy, exported count, and complete audit evidence.
+- [x] Excluded board nodes, edge labels, credentials, and unrelated diagram content from the artifact.
+- [x] Enforced deterministic newest-first audit ordering regardless of runtime input order.
+- [x] Added stable pretty-printed JSON serialization with a trailing newline.
+- [x] Added filesystem-safe, diagram-derived filenames with a bounded fallback.
+- [x] Added an explicit Export JSON command to the layout history surface.
+- [x] Reused the existing browser Blob download boundary without expanding Tauri filesystem permissions.
+- [x] Added focused contract, serialization, filename, ordering, and command coverage.
+
+Next slice:
+
+- [ ] Validate the JSON artifact against an Effect Schema before download and future import.
+- [ ] Add artifact import only when a concrete review or migration workflow requires it.
 - [ ] Add CSV only if architecture-review workflows demonstrate a tabular interoperability need.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

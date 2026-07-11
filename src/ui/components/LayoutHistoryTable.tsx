@@ -1,5 +1,5 @@
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
-import { ClockCounterClockwiseIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
+import { ClockCounterClockwiseIcon, DownloadSimpleIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import * as styles from "./LayoutHistoryTable.css";
 
@@ -7,6 +7,7 @@ export interface LayoutHistoryTableProps {
   audits: ReadonlyArray<LayoutApplicationAudit>;
   onDeleteAudit?: (appliedAt: number) => Promise<void>;
   onClearAudits?: () => Promise<void>;
+  onExportAudits?: () => void;
 }
 
 const metricLabels: Record<LayoutApplicationAudit["comparisonMetrics"][number]["key"], string> = {
@@ -24,7 +25,12 @@ const formatMetric = (key: string, value: number) =>
     ? Math.round(value).toLocaleString()
     : value.toLocaleString();
 
-export function LayoutHistoryTable({ audits, onDeleteAudit, onClearAudits }: LayoutHistoryTableProps) {
+export function LayoutHistoryTable({
+  audits,
+  onDeleteAudit,
+  onClearAudits,
+  onExportAudits,
+}: LayoutHistoryTableProps) {
   const [selectedAt, setSelectedAt] = useState<number | null>(audits[0]?.appliedAt ?? null);
   const [confirmation, setConfirmation] = useState<"delete" | "clear" | null>(null);
   const [isDeleting, setDeleting] = useState(false);
@@ -94,9 +100,20 @@ export function LayoutHistoryTable({ audits, onDeleteAudit, onClearAudits }: Lay
             <span>Strategy::{selected.strategyId}</span>
             <span>Engine::{selected.engine}</span>
           </div>
-          {onDeleteAudit && onClearAudits && (
+          {(onExportAudits || (onDeleteAudit && onClearAudits)) && (
             <div className={styles.historyActions}>
-              {confirmation === "delete"
+              {onExportAudits && (
+                <button
+                  type="button"
+                  className={styles.exportButton}
+                  disabled={isDeleting}
+                  aria-label="Export layout audit history"
+                  onClick={onExportAudits}
+                >
+                  <DownloadSimpleIcon size={15} aria-hidden="true" /> Export JSON
+                </button>
+              )}
+              {onDeleteAudit && onClearAudits && (confirmation === "delete"
                 ? (
                   <>
                     <button
@@ -130,8 +147,8 @@ export function LayoutHistoryTable({ audits, onDeleteAudit, onClearAudits }: Lay
                   >
                     <TrashIcon size={15} aria-hidden="true" />
                   </button>
-                )}
-              {confirmation === "clear"
+                ))}
+              {onDeleteAudit && onClearAudits && (confirmation === "clear"
                 ? (
                   <>
                     <button
@@ -164,7 +181,7 @@ export function LayoutHistoryTable({ audits, onDeleteAudit, onClearAudits }: Lay
                   >
                     Clear history
                   </button>
-                )}
+                ))}
             </div>
           )}
         </header>
