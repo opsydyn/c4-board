@@ -7,11 +7,12 @@
  */
 
 import type { NodeProps } from "@xyflow/react";
-import { Handle, NodeResizer, Position } from "@xyflow/react";
+import { NodeResizer } from "@xyflow/react";
 import { useCallback, useState } from "react";
 import type { NodeIconId } from "../../../core/effects/node-operations";
 import { getNodeIconComponent } from "../../icons/nodeIcons";
 import { InlineEditor } from "./InlineEditor";
+import { NodeHandles } from "./NodeHandles";
 import {
   boundedContextNode,
   boundedContextNodeDescription,
@@ -98,8 +99,7 @@ export function BoundedContextNode({ data, selected }: NodeProps) {
 
       <div className={boundedContextNode} data-selected={selected}>
         {/* Input handles */}
-        <Handle type="target" position={Position.Top} id="top" />
-        <Handle type="target" position={Position.Left} id="left" />
+        <NodeHandles />
 
         {/* Header with icon, label, and technology */}
         <div className={boundedContextNodeHeader}>
@@ -176,8 +176,6 @@ export function BoundedContextNode({ data, selected }: NodeProps) {
           )}
 
         {/* Output handles */}
-        <Handle type="source" position={Position.Right} id="right" />
-        <Handle type="source" position={Position.Bottom} id="bottom" />
       </div>
     </>
   );

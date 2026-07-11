@@ -6,11 +6,11 @@
  */
 
 import type { NodeProps } from "@xyflow/react";
-import { Handle, Position } from "@xyflow/react";
 import { useCallback, useState } from "react";
 import type { NodeIconId } from "../../../core/effects/node-operations";
 import { getNodeIconComponent } from "../../icons/nodeIcons";
 import { InlineEditor } from "./InlineEditor";
+import { NodeHandles } from "./NodeHandles";
 import {
   applicationServiceNode,
   applicationServiceNodeDescription,
@@ -73,8 +73,7 @@ export function ApplicationServiceNode({ data, selected }: NodeProps) {
 
   return (
     <div className={applicationServiceNode} data-selected={selected}>
-      <Handle type="target" position={Position.Top} id="top" />
-      <Handle type="target" position={Position.Left} id="left" />
+      <NodeHandles />
 
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
         <div className={applicationServiceNodeIcon}>
@@ -126,9 +125,6 @@ export function ApplicationServiceNode({ data, selected }: NodeProps) {
             </div>
           )}
       </div>
-
-      <Handle type="source" position={Position.Right} id="right" />
-      <Handle type="source" position={Position.Bottom} id="bottom" />
     </div>
   );
 }

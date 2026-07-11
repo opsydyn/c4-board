@@ -407,12 +407,35 @@ export function reactFlowNodeToDb(
 /**
  * Convert database edge to ReactFlow edge format with metadata parsing
  */
-function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
+interface PersistedEdgePayloadV1 {
+  version: 1;
+  metadata?: EdgeMetadata;
+  layout?: {
+    route?: EdgeData["layoutRoute"];
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+  };
+}
+
+const isPersistedEdgePayloadV1 = (value: unknown): value is PersistedEdgePayloadV1 =>
+  typeof value === "object"
+  && value !== null
+  && "version" in value
+  && value.version === 1;
+
+export function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
   // Parse metadata JSON if present
   let metadata: EdgeMetadata | undefined;
+  let layout: PersistedEdgePayloadV1["layout"];
   if (dbEdge.metadata) {
     try {
-      metadata = JSON.parse(dbEdge.metadata) as EdgeMetadata;
+      const persisted = JSON.parse(dbEdge.metadata) as unknown;
+      if (isPersistedEdgePayloadV1(persisted)) {
+        metadata = persisted.metadata;
+        layout = persisted.layout;
+      } else {
+        metadata = persisted as EdgeMetadata;
+      }
     } catch (error) {
       console.warn(`Failed to parse edge metadata for edge ${dbEdge.id}:`, error);
     }
@@ -421,6 +444,7 @@ function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
   const edgeData: EdgeData = {
     createdAt: dbEdge.created_at,
     ...(metadata && { metadata }),
+    ...(layout?.route && { layoutRoute: layout.route }),
   };
 
   return {
@@ -430,13 +454,15 @@ function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
     label: dbEdge.label ?? undefined,
     type: "default",
     data: edgeData,
+    sourceHandle: layout?.sourceHandle ?? null,
+    targetHandle: layout?.targetHandle ?? null,
   };
 }
 
 /**
  * Convert ReactFlow edge to database edge format with metadata serialization
  */
-function reactFlowEdgeToDb(
+export function reactFlowEdgeToDb(
   edge: ReactFlowEdge,
   diagramId: string,
 ): CreateEdgeInput {
@@ -445,7 +471,24 @@ function reactFlowEdgeToDb(
   // Extract and serialize metadata from edge.data
   const edgeData = edge.data as EdgeData | undefined;
   const metadata = edgeData?.metadata;
-  const metadataJson = metadata ? JSON.stringify(metadata) : undefined;
+  const hasLayout = Boolean(
+    edgeData?.layoutRoute || edge.sourceHandle || edge.targetHandle,
+  );
+  const metadataJson = metadata || hasLayout
+    ? JSON.stringify(
+      {
+        version: 1,
+        ...(metadata && { metadata }),
+        ...(hasLayout && {
+          layout: {
+            ...(edgeData?.layoutRoute && { route: edgeData.layoutRoute }),
+            ...(edge.sourceHandle && { sourceHandle: edge.sourceHandle }),
+            ...(edge.targetHandle && { targetHandle: edge.targetHandle }),
+          },
+        }),
+      } satisfies PersistedEdgePayloadV1,
+    )
+    : undefined;
 
   return {
     id: edge.id,

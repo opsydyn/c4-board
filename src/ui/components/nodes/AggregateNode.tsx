@@ -7,11 +7,12 @@
  */
 
 import type { NodeProps } from "@xyflow/react";
-import { Handle, NodeResizer, Position } from "@xyflow/react";
+import { NodeResizer } from "@xyflow/react";
 import { useCallback, useState } from "react";
 import type { NodeIconId } from "../../../core/effects/node-operations";
 import { getNodeIconComponent } from "../../icons/nodeIcons";
 import { InlineEditor } from "./InlineEditor";
+import { NodeHandles } from "./NodeHandles";
 import {
   aggregateNode,
   aggregateNodeDescription,
@@ -97,8 +98,7 @@ export function AggregateNode({ data, selected }: NodeProps) {
       />
 
       <div className={aggregateNode} data-selected={selected}>
-        <Handle type="target" position={Position.Top} id="top" />
-        <Handle type="target" position={Position.Left} id="left" />
+        <NodeHandles />
 
         {/* Header with icon, label, and technology */}
         <div className={aggregateNodeHeader}>
@@ -173,9 +173,6 @@ export function AggregateNode({ data, selected }: NodeProps) {
               {nodeData.description ?? "Add description..."}
             </div>
           )}
-
-        <Handle type="source" position={Position.Right} id="right" />
-        <Handle type="source" position={Position.Bottom} id="bottom" />
       </div>
     </>
   );

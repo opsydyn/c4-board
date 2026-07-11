@@ -12,32 +12,26 @@
  */
 
 import type { Edge, Node } from "@xyflow/react";
-import dagre from "dagre";
+import { evaluateLayoutQuality } from "./layout-metrics";
+import { getDefaultNodeHeight, getDefaultNodeWidth } from "./layout-node-size";
+import { resolveSynchronousLayoutStrategy } from "./layout-strategy-registry";
+import type { LayoutOptions, LayoutResult } from "./layout.types";
+
+export type {
+  LayoutAnalysis,
+  LayoutDiagnostic,
+  LayoutEngine,
+  LayoutInput,
+  LayoutOptions,
+  LayoutQualityMetrics,
+  LayoutResult,
+  LayoutStrategy,
+  SynchronousLayoutStrategy,
+} from "./layout.types";
 
 /**
  * Layout configuration options
  */
-export interface LayoutOptions {
-  direction: "TB" | "LR" | "BT" | "RL"; // Top-Bottom, Left-Right, Bottom-Top, Right-Left
-  nodeSpacing: number; // Horizontal spacing between nodes
-  rankSpacing: number; // Vertical spacing between layers
-  edgeSpacing: number; // Spacing between edges
-  snapToGrid?: boolean; // Snap to tactical grid
-  gridSize?: number; // Grid size in pixels
-}
-
-/**
- * Default layout configuration - Tactical command chain style
- */
-const DEFAULT_OPTIONS: LayoutOptions = {
-  direction: "TB", // Top-to-bottom (command chain)
-  nodeSpacing: 80, // Horizontal spacing
-  rankSpacing: 120, // Vertical layer spacing
-  edgeSpacing: 20, // Edge separation
-  snapToGrid: true, // Snap to grid
-  gridSize: 20, // 20px tactical grid
-};
-
 /**
  * Auto-layout nodes using Dagre algorithm
  * Pure function - takes nodes and edges, returns new node positions
@@ -49,81 +43,20 @@ export function autoLayout(
   edges: Edge[],
   options: Partial<LayoutOptions> = {},
 ): Node[] {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
+  return calculateLayout(nodes, edges, options).nodes;
+}
 
-  // Separate top-level nodes from child nodes
-  const topLevelNodes = nodes.filter((node) => !node.parentId);
-  const childNodes = nodes.filter((node) => node.parentId);
-
-  // Create Dagre graph
-  const graph = new dagre.graphlib.Graph();
-  graph.setDefaultEdgeLabel(() => ({}));
-
-  // Configure layout algorithm
-  graph.setGraph({
-    rankdir: opts.direction,
-    nodesep: opts.nodeSpacing,
-    ranksep: opts.rankSpacing,
-    edgesep: opts.edgeSpacing,
-    marginx: 40,
-    marginy: 40,
-  });
-
-  // Only add top-level nodes to graph
-  topLevelNodes.forEach((node) => {
-    const styleWidth = typeof node.style?.width === "number" ? node.style.width : undefined;
-    const styleHeight = typeof node.style?.height === "number" ? node.style.height : undefined;
-
-    const width = node.measured?.width || styleWidth || getDefaultNodeWidth(node.type);
-    const height = node.measured?.height || styleHeight || getDefaultNodeHeight(node.type);
-
-    graph.setNode(node.id, {
-      width,
-      height,
-    });
-  });
-
-  // Only add edges between top-level nodes
-  edges.forEach((edge) => {
-    const sourceNode = nodes.find((n) => n.id === edge.source);
-    const targetNode = nodes.find((n) => n.id === edge.target);
-
-    // Only include edge if both nodes are top-level
-    if (sourceNode && targetNode && !sourceNode.parentId && !targetNode.parentId) {
-      graph.setEdge(edge.source, edge.target);
-    }
-  });
-
-  // Run Dagre layout algorithm
-  dagre.layout(graph);
-
-  // Apply calculated positions to top-level nodes
-  const layoutedTopLevelNodes = topLevelNodes.map((node) => {
-    const position = graph.node(node.id);
-    const styleWidth = typeof node.style?.width === "number" ? node.style.width : undefined;
-    const styleHeight = typeof node.style?.height === "number" ? node.style.height : undefined;
-
-    const width = node.measured?.width || styleWidth || getDefaultNodeWidth(node.type);
-    const height = node.measured?.height || styleHeight || getDefaultNodeHeight(node.type);
-
-    // Center the node at the calculated position
-    let x = position.x - width / 2;
-    let y = position.y - height / 2;
-
-    // Snap to grid if enabled
-    if (opts.snapToGrid && opts.gridSize) {
-      x = Math.round(x / opts.gridSize) * opts.gridSize;
-      y = Math.round(y / opts.gridSize) * opts.gridSize;
-    }
-
-    return {
-      ...node,
-      position: { x, y },
-    };
-  });
-
-  // Merge top-level nodes with child nodes (preserve child relative positions)
-  return [...layoutedTopLevelNodes, ...childNodes];
+export function calculateLayout(
+  nodes: Node[],
+  edges: Edge[],
+  options: Partial<LayoutOptions> = {},
+): LayoutResult {
+  const resolved = resolveSynchronousLayoutStrategy(options.strategyId);
+  const result = resolved.strategy.layout({ nodes, edges, options });
+  return {
+    ...result,
+    diagnostics: [...resolved.diagnostics, ...result.diagnostics],
+  };
 }
 
 /**
@@ -139,8 +72,21 @@ export function autoLayoutSelected(
   selectedNodeIds: string[],
   options: Partial<LayoutOptions> = {},
 ): Node[] {
+  return calculateSelectedLayout(allNodes, allEdges, selectedNodeIds, options).nodes;
+}
+
+export function calculateSelectedLayout(
+  allNodes: Node[],
+  allEdges: Edge[],
+  selectedNodeIds: string[],
+  options: Partial<LayoutOptions> = {},
+): LayoutResult {
   if (selectedNodeIds.length === 0) {
-    return allNodes; // No selection, return unchanged
+    return buildNoOpLayoutResult(allNodes, allEdges, options, {
+      code: "layout-selection-empty",
+      severity: "info",
+      message: "No nodes were selected; no positions were changed.",
+    });
   }
 
   const selectedSet = new Set(selectedNodeIds);
@@ -151,7 +97,11 @@ export function autoLayoutSelected(
   );
 
   if (selectedNodes.length === 0) {
-    return allNodes; // No top-level nodes selected, return unchanged
+    return buildNoOpLayoutResult(allNodes, allEdges, options, {
+      code: "layout-selection-no-top-level-nodes",
+      severity: "warning",
+      message: "The selection contains no top-level nodes; no positions were changed.",
+    });
   }
 
   // Find edges that connect selected nodes
@@ -160,7 +110,8 @@ export function autoLayoutSelected(
   );
 
   // Layout only the selected nodes
-  const layoutedSelectedNodes = autoLayout(selectedNodes, selectedEdges, options);
+  const selectedResult = calculateLayout(selectedNodes, selectedEdges, options);
+  const layoutedSelectedNodes = selectedResult.nodes;
 
   // Calculate the center of the original selected nodes
   const originalCenter = calculateCenter(selectedNodes);
@@ -180,10 +131,34 @@ export function autoLayoutSelected(
   }));
 
   // Merge back with unselected nodes (preserve original order)
-  return allNodes.map((node) => {
+  const mergedNodes = allNodes.map((node) => {
     const layoutedNode = offsetLayoutedNodes.find((n) => n.id === node.id);
     return layoutedNode || node;
   });
+
+  return {
+    ...selectedResult,
+    nodes: mergedNodes,
+    edges: allEdges,
+    quality: evaluateLayoutQuality(mergedNodes, allEdges, allNodes),
+  };
+}
+
+function buildNoOpLayoutResult(
+  nodes: Node[],
+  edges: Edge[],
+  options: Partial<LayoutOptions>,
+  diagnostic: LayoutResult["diagnostics"][number],
+): LayoutResult {
+  const resolved = resolveSynchronousLayoutStrategy(options.strategyId);
+  return {
+    nodes,
+    edges,
+    strategyId: resolved.strategy.id,
+    engine: resolved.strategy.engine,
+    diagnostics: [...resolved.diagnostics, diagnostic],
+    quality: evaluateLayoutQuality(nodes, edges, nodes),
+  };
 }
 
 /**
@@ -209,122 +184,6 @@ function calculateCenter(nodes: Node[]): { x: number; y: number } {
     x: sumX / nodes.length,
     y: sumY / nodes.length,
   };
-}
-
-/**
- * Get default node width based on type (C4 + DDD)
- */
-function getDefaultNodeWidth(nodeType: string | undefined): number {
-  switch (nodeType) {
-    // C4 types
-    case "person":
-      return 220;
-    case "system":
-      return 240;
-    case "externalSystem":
-      return 240;
-    case "container":
-      return 280;
-    case "component":
-      return 200;
-
-    // DDD Strategic types (larger)
-    case "boundedContext":
-      return 500;
-    case "aggregate":
-      return 320;
-    case "domainEvent":
-      return 180;
-
-    // DDD Tactical types (medium)
-    case "entity":
-      return 220;
-    case "valueObject":
-      return 180;
-    case "domainService":
-      return 200;
-    case "repository":
-      return 200;
-    case "factory":
-      return 200;
-
-    // DDD Application types (medium)
-    case "command":
-      return 180;
-    case "query":
-      return 180;
-    case "applicationService":
-      return 240;
-
-    // DDD Infrastructure types (medium to large)
-    case "integrationEvent":
-      return 200;
-    case "antiCorruptionLayer":
-      return 280;
-    case "saga":
-      return 300;
-
-    default:
-      return 220;
-  }
-}
-
-/**
- * Get default node height based on type (C4 + DDD)
- */
-function getDefaultNodeHeight(nodeType: string | undefined): number {
-  switch (nodeType) {
-    // C4 types
-    case "person":
-      return 160;
-    case "system":
-      return 140;
-    case "externalSystem":
-      return 140;
-    case "container":
-      return 200;
-    case "component":
-      return 120;
-
-    // DDD Strategic types (larger)
-    case "boundedContext":
-      return 400;
-    case "aggregate":
-      return 240;
-    case "domainEvent":
-      return 120;
-
-    // DDD Tactical types (medium)
-    case "entity":
-      return 160;
-    case "valueObject":
-      return 140;
-    case "domainService":
-      return 150;
-    case "repository":
-      return 150;
-    case "factory":
-      return 150;
-
-    // DDD Application types (medium)
-    case "command":
-      return 120;
-    case "query":
-      return 120;
-    case "applicationService":
-      return 170;
-
-    // DDD Infrastructure types (medium to large)
-    case "integrationEvent":
-      return 140;
-    case "antiCorruptionLayer":
-      return 200;
-    case "saga":
-      return 200;
-
-    default:
-      return 140;
-  }
 }
 
 /**
@@ -369,6 +228,18 @@ export const C4_LAYOUT_PRESETS = {
   },
 
   /**
+   * ELK Layered (Advanced)
+   * Compound-aware layered layout with orthogonal edge routes.
+   */
+  elkLayered: {
+    strategyId: "elk-layered",
+    direction: "TB" as const,
+    rankSpacing: 150,
+    nodeSpacing: 100,
+    edgeSpacing: 20,
+  },
+
+  /**
    * Microservices Mesh
    * Service-oriented architecture with gateway
    * Use for: Distributed systems, microservices, API gateway patterns
@@ -385,6 +256,7 @@ export const C4_LAYOUT_PRESETS = {
    * Use for: C4 Level 1 - System Context diagrams
    */
   systemContext: {
+    strategyId: "system-context",
     direction: "TB" as const,
     rankSpacing: 200,
     nodeSpacing: 120,
@@ -444,6 +316,7 @@ export const C4_LAYOUT_PRESETS = {
    * Use for: ESB, integration platforms, API aggregators
    */
   hubSpoke: {
+    strategyId: "hub-spoke",
     direction: "TB" as const,
     rankSpacing: 160,
     nodeSpacing: 100,
@@ -706,6 +579,12 @@ export function getAllC4Presets(): Array<{
       name: "hexagonal",
       label: "Hexagonal",
       description: "Ports & Adapters pattern",
+      category: "advanced",
+    },
+    {
+      name: "elkLayered",
+      label: "ELK Layered",
+      description: "Compound-aware orthogonal routing",
       category: "advanced",
     },
     {

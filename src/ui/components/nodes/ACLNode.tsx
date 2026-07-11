@@ -6,11 +6,11 @@
  */
 
 import type { NodeProps } from "@xyflow/react";
-import { Handle, Position } from "@xyflow/react";
 import { useCallback, useState } from "react";
 import type { NodeIconId } from "../../../core/effects/node-operations";
 import { getNodeIconComponent } from "../../icons/nodeIcons";
 import { InlineEditor } from "./InlineEditor";
+import { NodeHandles } from "./NodeHandles";
 import { aclNode, aclNodeDescription, aclNodeIcon, aclNodeLabel, editableField, nodeContent } from "./styles.css";
 
 interface ACLNodeData {
@@ -66,8 +66,7 @@ export function ACLNode({ data, selected }: NodeProps) {
 
   return (
     <div className={aclNode} data-selected={selected}>
-      <Handle type="target" position={Position.Top} id="top" />
-      <Handle type="target" position={Position.Left} id="left" />
+      <NodeHandles />
 
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
         <div className={aclNodeIcon}>
@@ -119,9 +118,6 @@ export function ACLNode({ data, selected }: NodeProps) {
             </div>
           )}
       </div>
-
-      <Handle type="source" position={Position.Right} id="right" />
-      <Handle type="source" position={Position.Bottom} id="bottom" />
     </div>
   );
 }

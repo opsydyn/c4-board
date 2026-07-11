@@ -1,0 +1,320 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Dagre layout strategy baseline > preserves the 'client-server' baseline 1`] = `
+{
+  "positions": {
+    "api-server": {
+      "x": 460,
+      "y": 320,
+    },
+    "audit-event": {
+      "x": 320,
+      "y": 600,
+    },
+    "command-handler": {
+      "x": 40,
+      "y": 600,
+    },
+    "customer-repository": {
+      "x": 600,
+      "y": 600,
+    },
+    "identity-provider": {
+      "x": 880,
+      "y": 600,
+    },
+    "mobile-client": {
+      "x": 600,
+      "y": 40,
+    },
+    "web-client": {
+      "x": 320,
+      "y": 40,
+    },
+  },
+  "quality": {
+    "aspectRatio": 1.5151515151515151,
+    "averageNodeDisplacement": 668.4459061608651,
+    "boundingBox": {
+      "height": 660,
+      "width": 1000,
+      "x": 40,
+      "y": 40,
+    },
+    "displacedNodeCount": 7,
+    "maximumEdgeLength": 504.7771785649585,
+    "maximumNodeDisplacement": 1065.0821564555479,
+    "nodeOverlapArea": 0,
+    "nodeOverlapCount": 0,
+    "occupiedArea": 660000,
+    "straightLineCrossingCount": 0,
+    "totalEdgeLength": 2261.752424529799,
+  },
+}
+`;
+
+exports[`Dagre layout strategy baseline > preserves the 'event-driven' baseline 1`] = `
+{
+  "positions": {
+    "analytics": {
+      "x": 760,
+      "y": 260,
+    },
+    "billing": {
+      "x": 40,
+      "y": 260,
+    },
+    "event-bus": {
+      "x": 400,
+      "y": 160,
+    },
+    "fulfilment": {
+      "x": 760,
+      "y": 40,
+    },
+    "orders": {
+      "x": 40,
+      "y": 40,
+    },
+  },
+  "quality": {
+    "aspectRatio": 2.75,
+    "averageNodeDisplacement": 462.94719691270967,
+    "boundingBox": {
+      "height": 320,
+      "width": 880,
+      "x": 40,
+      "y": 40,
+    },
+    "displacedNodeCount": 5,
+    "maximumEdgeLength": 379.47331922020555,
+    "maximumNodeDisplacement": 803.2434251209281,
+    "nodeOverlapArea": 0,
+    "nodeOverlapCount": 0,
+    "occupiedArea": 281600,
+    "straightLineCrossingCount": 0,
+    "totalEdgeLength": 1506.2083061311873,
+  },
+}
+`;
+
+exports[`Dagre layout strategy baseline > preserves the 'hexagonal' baseline 1`] = `
+{
+  "positions": {
+    "database-adapter": {
+      "x": 40,
+      "y": 760,
+    },
+    "domain-core": {
+      "x": 160,
+      "y": 280,
+    },
+    "email-adapter": {
+      "x": 300,
+      "y": 520,
+    },
+    "event-adapter": {
+      "x": 300,
+      "y": 40,
+    },
+    "repository-port": {
+      "x": 40,
+      "y": 520,
+    },
+    "rest-adapter": {
+      "x": 40,
+      "y": 40,
+    },
+  },
+  "quality": {
+    "aspectRatio": 0.5121951219512195,
+    "averageNodeDisplacement": 427.439184710212,
+    "boundingBox": {
+      "height": 820,
+      "width": 420,
+      "x": 40,
+      "y": 40,
+    },
+    "displacedNodeCount": 6,
+    "maximumEdgeLength": 277.8488797889961,
+    "maximumNodeDisplacement": 761.0519036176179,
+    "nodeOverlapArea": 0,
+    "nodeOverlapCount": 0,
+    "occupiedArea": 344400,
+    "straightLineCrossingCount": 0,
+    "totalEdgeLength": 1332.3540741779418,
+  },
+}
+`;
+
+exports[`Dagre layout strategy baseline > preserves the 'hierarchy' baseline 1`] = `
+{
+  "positions": {
+    "command": {
+      "x": 160,
+      "y": 40,
+    },
+    "delivery": {
+      "x": 280,
+      "y": 260,
+    },
+    "operations": {
+      "x": 40,
+      "y": 260,
+    },
+    "platform": {
+      "x": 160,
+      "y": 480,
+    },
+  },
+  "quality": {
+    "aspectRatio": 0.7407407407407407,
+    "averageNodeDisplacement": 329.0117607254553,
+    "boundingBox": {
+      "height": 540,
+      "width": 400,
+      "x": 40,
+      "y": 40,
+    },
+    "displacedNodeCount": 4,
+    "maximumEdgeLength": 250.59928172283335,
+    "maximumNodeDisplacement": 505.96442562694074,
+    "nodeOverlapArea": 0,
+    "nodeOverlapCount": 0,
+    "occupiedArea": 216000,
+    "straightLineCrossingCount": 0,
+    "totalEdgeLength": 1002.3971268913334,
+  },
+}
+`;
+
+exports[`Dagre layout strategy baseline > preserves the 'hub-spoke' baseline 1`] = `
+{
+  "positions": {
+    "billing": {
+      "x": 560,
+      "y": 300,
+    },
+    "crm": {
+      "x": 40,
+      "y": 300,
+    },
+    "erp": {
+      "x": 300,
+      "y": 300,
+    },
+    "integration-hub": {
+      "x": 440,
+      "y": 40,
+    },
+    "warehouse": {
+      "x": 820,
+      "y": 300,
+    },
+  },
+  "quality": {
+    "aspectRatio": 2.611111111111111,
+    "averageNodeDisplacement": 535.4367666992633,
+    "boundingBox": {
+      "height": 360,
+      "width": 940,
+      "x": 40,
+      "y": 40,
+    },
+    "displacedNodeCount": 5,
+    "maximumEdgeLength": 477.07441767506253,
+    "maximumNodeDisplacement": 873.1551981177229,
+    "nodeOverlapArea": 0,
+    "nodeOverlapCount": 0,
+    "occupiedArea": 338400,
+    "straightLineCrossingCount": 0,
+    "totalEdgeLength": 1519.1618774741112,
+  },
+}
+`;
+
+exports[`Dagre layout strategy baseline > preserves the 'pipeline' baseline 1`] = `
+{
+  "positions": {
+    "sink": {
+      "x": 1000,
+      "y": 40,
+    },
+    "source": {
+      "x": 40,
+      "y": 40,
+    },
+    "transform": {
+      "x": 360,
+      "y": 40,
+    },
+    "validate": {
+      "x": 680,
+      "y": 40,
+    },
+  },
+  "quality": {
+    "aspectRatio": 11.2,
+    "averageNodeDisplacement": 525.1897707283052,
+    "boundingBox": {
+      "height": 100,
+      "width": 1120,
+      "x": 40,
+      "y": 40,
+    },
+    "displacedNodeCount": 4,
+    "maximumEdgeLength": 320,
+    "maximumNodeDisplacement": 1000.7996802557444,
+    "nodeOverlapArea": 0,
+    "nodeOverlapCount": 0,
+    "occupiedArea": 112000,
+    "straightLineCrossingCount": 0,
+    "totalEdgeLength": 960,
+  },
+}
+`;
+
+exports[`Dagre layout strategy baseline > preserves the 'system-context' baseline 1`] = `
+{
+  "positions": {
+    "core-system": {
+      "x": 180,
+      "y": 340,
+    },
+    "customer": {
+      "x": 40,
+      "y": 40,
+    },
+    "identity": {
+      "x": 320,
+      "y": 640,
+    },
+    "operator": {
+      "x": 320,
+      "y": 40,
+    },
+    "payments": {
+      "x": 40,
+      "y": 640,
+    },
+  },
+  "quality": {
+    "aspectRatio": 0.6285714285714286,
+    "averageNodeDisplacement": 424.1114136270962,
+    "boundingBox": {
+      "height": 700,
+      "width": 440,
+      "x": 40,
+      "y": 40,
+    },
+    "displacedNodeCount": 5,
+    "maximumEdgeLength": 331.058907144937,
+    "maximumNodeDisplacement": 715.5417527999327,
+    "nodeOverlapArea": 0,
+    "nodeOverlapCount": 0,
+    "occupiedArea": 308000,
+    "straightLineCrossingCount": 0,
+    "totalEdgeLength": 1324.235628579748,
+  },
+}
+`;

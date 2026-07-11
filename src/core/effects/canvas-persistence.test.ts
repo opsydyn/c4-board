@@ -1,7 +1,7 @@
-import type { Node as ReactFlowNode } from "@xyflow/react";
+import type { Edge as ReactFlowEdge, Node as ReactFlowNode } from "@xyflow/react";
 import { describe, expect, it, vi } from "vitest";
-import { dbNodeToReactFlow, reactFlowNodeToDb } from "./canvas-persistence";
-import type { Node as DbNode } from "./database";
+import { dbEdgeToReactFlow, dbNodeToReactFlow, reactFlowEdgeToDb, reactFlowNodeToDb } from "./canvas-persistence";
+import type { Edge as DbEdge, Node as DbNode } from "./database";
 import { DEFAULT_ICON_BY_TYPE, type NodeIconId } from "./node-operations";
 
 describe("reactFlowNodeToDb", () => {
@@ -113,6 +113,60 @@ describe("reactFlowNodeToDb", () => {
     const result = reactFlowNodeToDb(reactNode, "diagram-1");
 
     expect(result.team_ownership).toBeUndefined();
+  });
+});
+
+describe("edge layout persistence", () => {
+  it("round-trips relationship metadata, routed geometry, and handles", () => {
+    const edge: ReactFlowEdge = {
+      id: "edge-1",
+      source: "source",
+      target: "target",
+      sourceHandle: "bottom",
+      targetHandle: "top",
+      label: "uses",
+      data: {
+        createdAt: 10,
+        metadata: { protocol: "https" },
+        layoutRoute: [{
+          start: { x: 10, y: 20 },
+          bends: [{ x: 10, y: 50 }],
+          end: { x: 80, y: 50 },
+        }],
+      },
+    };
+    const persisted = reactFlowEdgeToDb(edge, "diagram-1");
+    const hydrated = dbEdgeToReactFlow({
+      ...persisted,
+      label: persisted.label ?? null,
+      metadata: persisted.metadata ?? null,
+      created_at: 10,
+      updated_at: 11,
+    } as DbEdge);
+
+    expect(hydrated.sourceHandle).toBe("bottom");
+    expect(hydrated.targetHandle).toBe("top");
+    expect(hydrated.data).toMatchObject({
+      metadata: { protocol: "https" },
+      layoutRoute: edge.data?.layoutRoute,
+    });
+  });
+
+  it("continues to hydrate legacy flat edge metadata", () => {
+    const hydrated = dbEdgeToReactFlow({
+      id: "legacy",
+      diagram_id: "diagram-1",
+      source: "source",
+      target: "target",
+      label: null,
+      metadata: JSON.stringify({ protocol: "grpc" }),
+      created_at: 1,
+      updated_at: 2,
+    });
+
+    expect(hydrated.data).toMatchObject({ metadata: { protocol: "grpc" } });
+    expect(hydrated.sourceHandle).toBeNull();
+    expect(hydrated.targetHandle).toBeNull();
   });
 });
 
