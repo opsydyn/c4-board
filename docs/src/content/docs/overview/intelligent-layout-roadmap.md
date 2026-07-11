@@ -933,6 +933,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Add route-aware quality thresholds and diagnostics for unusually long or crossing-heavy ELK results.
-- [ ] Compare routed metrics against a broader set of dense compound fixtures before defining acceptance gates.
+- [x] Add route-aware quality thresholds and diagnostics for unusually long or crossing-heavy ELK results.
+- [x] Compare routed metrics against a broader set of dense compound fixtures before defining acceptance gates.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 16 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added two-boundary, dense three-boundary, and crossing-pressure mesh ELK fixtures.
+- [x] Recorded real-engine crossing evidence of 2/7, 4/11, and 9/12 crossings per edge respectively.
+- [x] Recorded normal average routed lengths between 205px and 295px per edge across those fixtures.
+- [x] Added a conservative crossing gate requiring at least five crossings and density above 0.5 per edge.
+- [x] Added a spacing-aware length gate above the greater of 500px or three configured rank spacings per edge.
+- [x] Added `elk-route-crossing-heavy` and `elk-route-length-high` diagnostics with explicit observed values and gates.
+- [x] Verified normal compound graphs remain warning-free while pressured and synthetic boundary cases trigger independently.
+- [x] Surfaced route warnings through the existing preview diagnostics panel without adding another alert surface.
+
+Next slice:
+
+- [ ] Add deterministic route-quality recommendations to diagnostics, such as direction or spacing adjustments.
+- [ ] Let preview Retry apply a recommended safe adjustment without mutating the board.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

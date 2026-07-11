@@ -1,7 +1,7 @@
 import type { ElkExtendedEdge, ElkNode, ElkPort } from "elkjs/lib/elk-api";
 
 import { DEFAULT_LAYOUT_OPTIONS } from "./dagre-layout-strategy";
-import { evaluateLayoutQuality, evaluateRoutedEdgeQuality } from "./layout-metrics";
+import { assessRoutedEdgeQuality, evaluateLayoutQuality, evaluateRoutedEdgeQuality } from "./layout-metrics";
 import { getNodeDimensions } from "./layout-node-size";
 import type {
   LayoutDiagnostic,
@@ -82,6 +82,7 @@ export function mapElkLayeredResult(
   strategyId = "elk-layered",
   portOrdering: ElkPortOrdering = "stable",
 ): LayoutResult {
+  const options = { ...DEFAULT_LAYOUT_OPTIONS, ...input.options };
   const resultNodes = flattenNodes(graph.children ?? []);
   const diagnostics: LayoutDiagnostic[] = [];
   const gridSize = input.options?.gridSize ?? DEFAULT_LAYOUT_OPTIONS.gridSize ?? 20;
@@ -105,6 +106,12 @@ export function mapElkLayeredResult(
   });
   const nodeBounds = mapNodeBounds(resultNodes);
   const edgeRoutes = mapEdgeRoutes(graph);
+  const routedQuality = evaluateRoutedEdgeQuality(edgeRoutes);
+  const routedAssessment = assessRoutedEdgeQuality(
+    routedQuality,
+    input.edges.length,
+    options.rankSpacing,
+  );
   const allocation = allocateElkPorts(
     input,
     getElkPortPolicy(input.options?.direction ?? DEFAULT_LAYOUT_OPTIONS.direction),
@@ -132,6 +139,27 @@ export function mapElkLayeredResult(
       message:
         `${congestedPorts.length} node side(s) exceed the estimated readable port capacity. Routes remain deterministic but may be visually dense.`,
       nodeIds: congestedPorts.map((entry) => entry.nodeId),
+    });
+  }
+
+  if (routedAssessment.crossingHeavy) {
+    diagnostics.push({
+      code: "elk-route-crossing-heavy",
+      severity: "warning",
+      message:
+        `ELK produced ${routedQuality.edgeCrossingCount} routed crossing(s) across ${input.edges.length} edge(s). This exceeds the evidence-based density gate of 0.5 crossings per edge and ${routedAssessment.crossingCountThreshold} total crossings.`,
+      edgeIds: input.edges.map((edge) => edge.id),
+    });
+  }
+
+  if (routedAssessment.unusuallyLong) {
+    diagnostics.push({
+      code: "elk-route-length-high",
+      severity: "warning",
+      message: `ELK average routed edge length is ${Math.round(routedAssessment.averageEdgeLength)}px, above the ${
+        Math.round(routedAssessment.averageEdgeLengthThreshold)
+      }px gate for the current rank spacing.`,
+      edgeIds: input.edges.map((edge) => edge.id),
     });
   }
 

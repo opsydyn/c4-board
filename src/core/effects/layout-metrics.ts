@@ -96,6 +96,36 @@ export function evaluateRoutedEdgeQuality(
   return { edgeCrossingCount, totalEdgeLength };
 }
 
+export interface RoutedQualityAssessment {
+  crossingDensity: number;
+  averageEdgeLength: number;
+  crossingCountThreshold: number;
+  averageEdgeLengthThreshold: number;
+  crossingHeavy: boolean;
+  unusuallyLong: boolean;
+}
+
+export function assessRoutedEdgeQuality(
+  quality: LayoutRoutedQualityMetrics,
+  edgeCount: number,
+  rankSpacing: number,
+): RoutedQualityAssessment {
+  const normalizedEdgeCount = Math.max(1, edgeCount);
+  const crossingDensity = quality.edgeCrossingCount / normalizedEdgeCount;
+  const averageEdgeLength = quality.totalEdgeLength / normalizedEdgeCount;
+  const crossingCountThreshold = Math.max(5, Math.ceil(edgeCount * 0.5));
+  const averageEdgeLengthThreshold = Math.max(500, rankSpacing * 3);
+
+  return {
+    crossingDensity,
+    averageEdgeLength,
+    crossingCountThreshold,
+    averageEdgeLengthThreshold,
+    crossingHeavy: quality.edgeCrossingCount >= crossingCountThreshold && crossingDensity > 0.5,
+    unusuallyLong: edgeCount > 0 && averageEdgeLength > averageEdgeLengthThreshold,
+  };
+}
+
 function buildNodeBoxes(nodes: Node[]): NodeBox[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const absolutePositionById = new Map<string, XYPosition>();

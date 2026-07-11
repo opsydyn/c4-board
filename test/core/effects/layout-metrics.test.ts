@@ -1,4 +1,8 @@
-import { evaluateLayoutQuality, evaluateRoutedEdgeQuality } from "@/core/effects/layout-metrics";
+import {
+  assessRoutedEdgeQuality,
+  evaluateLayoutQuality,
+  evaluateRoutedEdgeQuality,
+} from "@/core/effects/layout-metrics";
 import type { Edge, Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
@@ -96,5 +100,28 @@ describe("evaluateLayoutQuality", () => {
 
     expect(metrics.edgeCrossingCount).toBe(1);
     expect(metrics.totalEdgeLength).toBe(260);
+  });
+
+  it("uses density and spacing-aware routed quality gates", () => {
+    expect(assessRoutedEdgeQuality(
+      { edgeCrossingCount: 4, totalEdgeLength: 2_950 },
+      11,
+      150,
+    )).toMatchObject({
+      crossingCountThreshold: 6,
+      averageEdgeLengthThreshold: 500,
+      crossingHeavy: false,
+      unusuallyLong: false,
+    });
+    expect(assessRoutedEdgeQuality(
+      { edgeCrossingCount: 9, totalEdgeLength: 7_000 },
+      12,
+      200,
+    )).toMatchObject({
+      crossingCountThreshold: 6,
+      averageEdgeLengthThreshold: 600,
+      crossingHeavy: true,
+      unusuallyLong: false,
+    });
   });
 });
