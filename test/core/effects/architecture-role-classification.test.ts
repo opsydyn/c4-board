@@ -97,6 +97,89 @@ describe("architecture role classification", () => {
     expect(assignment).toMatchObject({ role: "processor", confidence: 1, source: "explicit" });
   });
 
+  it("keeps explicit non-bus roles out of Event-Driven bus discovery", () => {
+    const result = inferEventDrivenRoles([
+      {
+        id: "orders-queue",
+        type: "component",
+        position: { x: 0, y: 0 },
+        data: { label: "Orders Queue", layoutRole: "publisher" },
+      },
+      { id: "worker", type: "component", position: { x: 0, y: 0 }, data: { label: "Worker" } },
+    ], [
+      { id: "worker-to-orders", source: "worker", target: "orders-queue", label: "stores order" },
+    ]);
+
+    expect(Object.fromEntries(result.assignments.map(({ nodeId, role }) => [nodeId, role]))).toEqual({
+      "orders-queue": "publisher",
+      worker: "unclassified",
+    });
+  });
+
+  it("requires event-flow semantics to classify a bus consumer as a processor", () => {
+    const result = inferEventDrivenRoles([
+      { id: "bus", type: "system", position: { x: 0, y: 0 }, data: { label: "Event Bus" } },
+      { id: "database-writer", type: "component", position: { x: 0, y: 0 }, data: { label: "Writer" } },
+      { id: "event-processor", type: "component", position: { x: 0, y: 0 }, data: { label: "Event Relay" } },
+      { id: "orders-database", type: "component", position: { x: 0, y: 0 }, data: { label: "Orders Database" } },
+      { id: "audit", type: "component", position: { x: 0, y: 0 }, data: { label: "Audit" } },
+    ], [
+      { id: "bus-to-writer", source: "bus", target: "database-writer", label: "order event" },
+      { id: "writer-to-database", source: "database-writer", target: "orders-database", label: "writes orders" },
+      { id: "bus-to-processor", source: "bus", target: "event-processor", label: "order event" },
+      { id: "processor-to-audit", source: "event-processor", target: "audit", label: "publishes event" },
+    ]);
+
+    expect(Object.fromEntries(result.assignments.map(({ nodeId, role }) => [nodeId, role]))).toMatchObject({
+      "database-writer": "subscriber",
+      "event-processor": "processor",
+    });
+  });
+
+  it("uses external-dependency only for external systems outside the event flow", () => {
+    const result = inferEventDrivenRoles([
+      { id: "bus", type: "system", position: { x: 0, y: 0 }, data: { label: "Event Bus" } },
+      { id: "external-producer", type: "externalSystem", position: { x: 0, y: 0 }, data: { label: "Partner" } },
+      { id: "external-consumer", type: "externalSystem", position: { x: 0, y: 0 }, data: { label: "Data Warehouse" } },
+      { id: "external-dependency", type: "externalSystem", position: { x: 0, y: 0 }, data: { label: "Billing API" } },
+    ], [
+      { id: "external-publishes", source: "external-producer", target: "bus", label: "publishes event" },
+      { id: "external-consumes", source: "bus", target: "external-consumer", label: "order event" },
+    ]);
+
+    expect(Object.fromEntries(result.assignments.map(({ nodeId, role }) => [nodeId, role]))).toMatchObject({
+      "external-consumer": "subscriber",
+      "external-dependency": "external-dependency",
+      "external-producer": "publisher",
+    });
+  });
+
+  it("recognizes token-aware event bus labels without classifying stream processors as buses", () => {
+    const result = inferEventDrivenRoles([
+      { id: "upstream-api", type: "system", position: { x: 0, y: 0 }, data: { label: "Upstream API" } },
+      { id: "event-stream", type: "system", position: { x: 0, y: 0 }, data: { label: "Event Stream" } },
+      { id: "orders-topic", type: "system", position: { x: 0, y: 0 }, data: { label: "Orders Topic" } },
+      { id: "message-broker", type: "system", position: { x: 0, y: 0 }, data: { label: "Message Broker" } },
+      { id: "work-queue", type: "system", position: { x: 0, y: 0 }, data: { label: "Work Queue" } },
+      { id: "event-bus", type: "system", position: { x: 0, y: 0 }, data: { label: "Event Bus" } },
+      { id: "stream-processor", type: "component", position: { x: 0, y: 0 }, data: { label: "Stream Processor" } },
+      { id: "audit", type: "component", position: { x: 0, y: 0 }, data: { label: "Audit" } },
+    ], [
+      { id: "bus-to-processor", source: "event-bus", target: "stream-processor", label: "order event" },
+      { id: "processor-to-audit", source: "stream-processor", target: "audit", label: "emits event" },
+    ]);
+
+    expect(Object.fromEntries(result.assignments.map(({ nodeId, role }) => [nodeId, role]))).toMatchObject({
+      "event-bus": "event-bus",
+      "event-stream": "event-bus",
+      "message-broker": "event-bus",
+      "orders-topic": "event-bus",
+      "stream-processor": "processor",
+      "upstream-api": "unclassified",
+      "work-queue": "event-bus",
+    });
+  });
+
   it("falls through after contradictory explicit Event-Driven role evidence", () => {
     const fixture = eventDrivenFixture();
     const node = fixture.nodes.find(({ id }) => id === "orders-publisher")!;

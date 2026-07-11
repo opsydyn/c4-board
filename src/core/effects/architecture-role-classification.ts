@@ -294,16 +294,33 @@ const inferHexagonalRole = (
   };
 };
 
+const hasEventBusLabel = (label: string): boolean => {
+  const tokens = label.split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.some((token) => ["broker", "queue", "topic"].includes(token))
+    || tokens.some((token, index) => token === "event" && ["bus", "stream"].includes(tokens[index + 1] ?? ""));
+};
+
 const isEventBus = (node: Node): boolean => {
   const explicit = explicitRole(node);
-  return (explicit !== null && EVENT_DRIVEN_ROLES.has(explicit) && explicit === "event-bus")
-    || /(event[-_\s]?bus|broker|queue|topic|stream)/.test(nodeLabel(node));
+  if (explicit !== null && EVENT_DRIVEN_ROLES.has(explicit)) {
+    return explicit === "event-bus";
+  }
+  return hasEventBusLabel(nodeLabel(node));
 };
+
+const continuesEventFlow = (nodeId: string, edges: ReadonlyArray<Edge>): boolean =>
+  edges.some(
+    (edge) =>
+      edge.source === nodeId
+      && typeof edge.label === "string"
+      && /\b(event|command|message|publish(?:es|ed|ing)?|emit(?:s|ted|ting)?)\b/.test(edge.label.toLowerCase()),
+  );
 
 const inferEventDrivenRole = (
   node: Node,
   busIds: ReadonlySet<string>,
   topology: Map<string, NodeTopology>,
+  edges: ReadonlyArray<Edge>,
 ): InferredRole => {
   const explicit = explicitRole(node);
   if (explicit && EVENT_DRIVEN_ROLES.has(explicit)) {
@@ -316,7 +333,7 @@ const inferEventDrivenRole = (
   const relation = topology.get(node.id);
   const publishesToBus = [...(relation?.outbound ?? [])].some((id) => busIds.has(id));
   const consumesFromBus = [...(relation?.inbound ?? [])].some((id) => busIds.has(id));
-  const hasOnwardOutput = (relation?.outbound.size ?? 0) > 0;
+  const continuesFlow = continuesEventFlow(node.id, edges);
 
   if (busIds.has(node.id)) {
     return {
@@ -333,15 +350,6 @@ const inferEventDrivenRole = (
       confidence: 0.85,
       source: "label",
       evidence: ["Infrastructure label."],
-      ...(mismatch && { patternMismatch: mismatch }),
-    };
-  }
-  if (type === "externalSystem") {
-    return {
-      role: "external-dependency",
-      confidence: 0.8,
-      source: "node-type",
-      evidence: ["External system is an external dependency."],
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
@@ -364,30 +372,39 @@ const inferEventDrivenRole = (
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
-  if (consumesFromBus && hasOnwardOutput) {
+  if (consumesFromBus && continuesFlow) {
     return {
       role: "processor",
       confidence: 0.85,
       source: "topology",
-      evidence: ["Consumes from an event bus and has onward output."],
+      evidence: ["Consumes from an event bus and emits an event-flow continuation."],
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
-  if (consumesFromBus && !hasOnwardOutput) {
+  if (consumesFromBus && !continuesFlow) {
     return {
       role: "subscriber",
       confidence: 0.85,
       source: "topology",
-      evidence: ["Consumes from an event bus with no onward output."],
+      evidence: ["Consumes from an event bus without an event-flow continuation."],
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
-  if (/(subscriber|consumer|listener|sink)/.test(label) && !hasOnwardOutput) {
+  if (/(subscriber|consumer|listener|sink)/.test(label) && !continuesFlow) {
     return {
       role: "subscriber",
       confidence: 0.8,
       source: "label",
       evidence: ["Subscriber label with no onward output."],
+      ...(mismatch && { patternMismatch: mismatch }),
+    };
+  }
+  if (type === "externalSystem") {
+    return {
+      role: "external-dependency",
+      confidence: 0.8,
+      source: "node-type",
+      evidence: ["External system is an external dependency outside the event flow."],
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
@@ -460,6 +477,9 @@ export function inferEventDrivenRoles(
   const sortedNodes = [...nodes].sort((left, right) => left.id.localeCompare(right.id));
   const topology = buildTopology(sortedNodes, edges);
   const busIds = new Set(sortedNodes.filter(isEventBus).map(({ id }) => id));
-  const inferred = sortedNodes.map((node) => ({ node, result: inferEventDrivenRole(node, busIds, topology) }));
+  const inferred = sortedNodes.map((node) => ({
+    node,
+    result: inferEventDrivenRole(node, busIds, topology, edges),
+  }));
   return buildClassification("event-driven", inferred, "Event-Driven");
 }
