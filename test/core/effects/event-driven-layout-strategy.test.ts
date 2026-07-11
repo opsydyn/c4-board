@@ -200,6 +200,40 @@ describe("Event-Driven layout strategy", () => {
     expect(result.quality.nodeOverlapCount).toBe(0);
   });
 
+  it("separates a non-adjacent bridge from an intervening local processor", () => {
+    const graph = {
+      nodes: [
+        node("a-bus", "event-bus"),
+        node("b-bus", "event-bus"),
+        node("c-bus", "event-bus"),
+        { ...node("a-c-bridge", "processor"), style: { width: 220, height: 180 } },
+        { ...node("b-local", "processor"), style: { width: 200, height: 160 } },
+        { ...node("c-subscriber", "subscriber"), style: { width: 180, height: 160 } },
+      ],
+      edges: [
+        edge("a-bus", "a-c-bridge", "cross-band event"),
+        edge("a-c-bridge", "c-bus", "cross-band event"),
+        edge("b-bus", "b-local", "local event"),
+        edge("c-bus", "c-subscriber", "subscriber event"),
+      ],
+    };
+    const forward = eventDrivenLayoutStrategy.layout(graph);
+    const reversed = eventDrivenLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+    });
+    const byId = new Map(forward.nodes.map((value) => [value.id, center(value)]));
+    const forwardById = new Map(forward.nodes.map((value) => [value.id, value]));
+
+    expect(byId.get("a-bus")!.y).toBeLessThan(byId.get("a-c-bridge")!.y);
+    expect(byId.get("a-c-bridge")!.y).toBeLessThan(byId.get("c-bus")!.y);
+    expect(forwardById.get("a-c-bridge")!.position).not.toEqual(forwardById.get("b-local")!.position);
+    expect(byId.get("a-c-bridge")!.x).toBeLessThan(byId.get("c-subscriber")!.x);
+    expect(forward.quality.nodeOverlapCount).toBe(0);
+    expect(positions(reversed.nodes)).toEqual(positions(forward.nodes));
+    expect(reversed.diagnostics).toEqual(forward.diagnostics);
+  });
+
   it("is deterministic while preserving hierarchy and measured geometry", () => {
     const graph = singleBusGraph();
     const orders = graph.nodes.find(({ id }) => id === "orders")!;

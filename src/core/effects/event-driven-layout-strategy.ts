@@ -50,6 +50,11 @@ interface BridgeGroup {
   nodeIds: string[];
 }
 
+interface ProcessorTrackPlan {
+  bridgeXByKey: Map<string, number>;
+  subscriberX: number;
+}
+
 export const eventDrivenLayoutStrategy: SynchronousLayoutStrategy = {
   id: EVENT_DRIVEN_STRATEGY_ID,
   engine: "custom",
@@ -135,14 +140,24 @@ function positionEventDriven(
   const maxWidth = Math.max(...nodes.map((node) => getNodeDimensions(node).width));
   const maxHeight = Math.max(...nodes.map((node) => getNodeDimensions(node).height));
   const columnStep = maxWidth + options.nodeSpacing + options.rankSpacing;
+  const plan = buildPlacementPlan(assignments, edges);
+  const bridgeGroups = buildBridgeGroups(plan);
+  const processorX = columnStep * 2;
+  const processorTracks = buildProcessorTrackPlan(
+    bridgeGroups,
+    plan,
+    assignments,
+    nodeById,
+    processorX,
+    columnStep * 3,
+    options,
+  );
   const columnX: Record<"publisher" | "event-bus" | "processor" | "subscriber", number> = {
     publisher: 0,
     "event-bus": columnStep,
-    processor: columnStep * 2,
-    subscriber: columnStep * 3,
+    processor: processorX,
+    subscriber: processorTracks.subscriberX,
   };
-  const plan = buildPlacementPlan(assignments, edges);
-  const bridgeGroups = buildBridgeGroups(plan);
   const bandHeight = maxBandContentHeight(
     plan,
     assignments,
@@ -181,7 +196,10 @@ function positionEventDriven(
     const destinationY = bandY.get(group.destinationBusId)!;
     stackPeers(
       group.nodeIds.map((nodeId) => nodeById.get(nodeId)!),
-      { x: columnX.processor, y: (sourceY + destinationY) / 2 },
+      {
+        x: processorTracks.bridgeXByKey.get(bridgeGroupKey(group)) ?? columnX.processor,
+        y: (sourceY + destinationY) / 2,
+      },
       options,
       centers,
     );
@@ -363,7 +381,7 @@ function buildBridgeGroups(plan: PlacementPlan): BridgeGroup[] {
     const affinity = plan.affinityByNodeId.get(nodeId)!;
     const sourceBusId = affinity.primarySourceBusId!;
     const destinationBusId = affinity.primaryDestinationBusId!;
-    const key = `${sourceBusId}\u0000${destinationBusId}`;
+    const key = bridgeGroupKey({ sourceBusId, destinationBusId, nodeIds: [] });
     const group = groups.get(key) ?? { sourceBusId, destinationBusId, nodeIds: [] };
     group.nodeIds.push(nodeId);
     groups.set(key, group);
@@ -374,6 +392,61 @@ function buildBridgeGroups(plan: PlacementPlan): BridgeGroup[] {
       left.sourceBusId.localeCompare(right.sourceBusId)
       || left.destinationBusId.localeCompare(right.destinationBusId)
     );
+}
+
+function buildProcessorTrackPlan(
+  groups: ReadonlyArray<BridgeGroup>,
+  plan: PlacementPlan,
+  assignments: ReadonlyArray<ArchitectureRoleAssignment>,
+  nodeById: ReadonlyMap<string, Node>,
+  processorX: number,
+  subscriberX: number,
+  options: LayoutOptions,
+): ProcessorTrackPlan {
+  const bandIndexById = new Map(plan.bands.map((bandId, index) => [bandId, index]));
+  const crossingGroups = groups.filter((group) =>
+    Math.abs(
+      bandIndexById.get(group.destinationBusId)! - bandIndexById.get(group.sourceBusId)!,
+    ) > 1
+  );
+  if (crossingGroups.length === 0) return { bridgeXByKey: new Map(), subscriberX };
+
+  const crossingBridgeIds = new Set(crossingGroups.flatMap(({ nodeIds }) => nodeIds));
+  let previousWidth = Math.max(
+    0,
+    ...assignments
+      .filter(({ nodeId, role }) => role === "processor" && !crossingBridgeIds.has(nodeId))
+      .map(({ nodeId }) => getNodeDimensions(nodeById.get(nodeId)!).width),
+  );
+  let trackX = processorX;
+  const bridgeXByKey = new Map<string, number>();
+  for (const group of crossingGroups) {
+    const groupWidth = Math.max(...group.nodeIds.map((nodeId) => getNodeDimensions(nodeById.get(nodeId)!).width));
+    trackX += processorTrackStep(previousWidth, groupWidth, options);
+    bridgeXByKey.set(bridgeGroupKey(group), trackX);
+    previousWidth = groupWidth;
+  }
+
+  const widestSubscriber = Math.max(
+    0,
+    ...assignments
+      .filter(({ role }) => role === "subscriber")
+      .map(({ nodeId }) => getNodeDimensions(nodeById.get(nodeId)!).width),
+  );
+  return {
+    bridgeXByKey,
+    subscriberX: Math.max(subscriberX, trackX + processorTrackStep(previousWidth, widestSubscriber, options)),
+  };
+}
+
+function bridgeGroupKey(group: Pick<BridgeGroup, "sourceBusId" | "destinationBusId">): string {
+  return `${group.sourceBusId}\u0000${group.destinationBusId}`;
+}
+
+function processorTrackStep(leftWidth: number, rightWidth: number, options: LayoutOptions): number {
+  const required = leftWidth / 2 + rightWidth / 2 + options.nodeSpacing;
+  if (!options.snapToGrid || !options.gridSize) return required;
+  return Math.ceil((required + options.gridSize) / options.gridSize) * options.gridSize;
 }
 
 function maxBridgeGroupHeight(
