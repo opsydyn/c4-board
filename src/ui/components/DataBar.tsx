@@ -1,3 +1,4 @@
+import type { LayoutHistoryArtifact } from "@/core/effects/layout-history-export";
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { Effect } from "effect";
@@ -25,7 +26,8 @@ interface DataBarProps {
   layoutAudits: ReadonlyArray<LayoutApplicationAudit>;
   onDeleteLayoutAudit: (appliedAt: number) => Promise<void>;
   onClearLayoutAudits: () => Promise<void>;
-  onExportLayoutAudits: () => Promise<void> | void;
+  onPrepareLayoutAuditExport: () => Promise<LayoutHistoryArtifact>;
+  onDownloadLayoutAuditExport: (artifact: LayoutHistoryArtifact) => void;
 }
 
 const TABS: Array<{ id: DataBarTab; label: string }> = [
@@ -66,7 +68,8 @@ export function DataBar({
   layoutAudits,
   onDeleteLayoutAudit,
   onClearLayoutAudits,
-  onExportLayoutAudits,
+  onPrepareLayoutAuditExport,
+  onDownloadLayoutAuditExport,
 }: DataBarProps) {
   const [activeTab, setActiveTab] = useState<DataBarTab>("diagrams");
 
@@ -87,7 +90,8 @@ export function DataBar({
             audits={layoutAudits}
             onDeleteAudit={onDeleteLayoutAudit}
             onClearAudits={onClearLayoutAudits}
-            onExportAudits={onExportLayoutAudits}
+            onPrepareExport={onPrepareLayoutAuditExport}
+            onDownloadExport={onDownloadLayoutAuditExport}
           />
         );
       case "docs":
@@ -101,7 +105,8 @@ export function DataBar({
     layoutAudits,
     onClearLayoutAudits,
     onDeleteLayoutAudit,
-    onExportLayoutAudits,
+    onPrepareLayoutAuditExport,
+    onDownloadLayoutAuditExport,
   ]);
 
   return (

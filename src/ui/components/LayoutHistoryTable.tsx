@@ -1,3 +1,4 @@
+import type { LayoutHistoryArtifact } from "@/core/effects/layout-history-export";
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
 import { ClockCounterClockwiseIcon, DownloadSimpleIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
@@ -7,7 +8,8 @@ export interface LayoutHistoryTableProps {
   audits: ReadonlyArray<LayoutApplicationAudit>;
   onDeleteAudit?: (appliedAt: number) => Promise<void>;
   onClearAudits?: () => Promise<void>;
-  onExportAudits?: () => Promise<void> | void;
+  onPrepareExport?: () => Promise<LayoutHistoryArtifact>;
+  onDownloadExport?: (artifact: LayoutHistoryArtifact) => void;
 }
 
 const metricLabels: Record<LayoutApplicationAudit["comparisonMetrics"][number]["key"], string> = {
@@ -29,17 +31,23 @@ export function LayoutHistoryTable({
   audits,
   onDeleteAudit,
   onClearAudits,
-  onExportAudits,
+  onPrepareExport,
+  onDownloadExport,
 }: LayoutHistoryTableProps) {
   const [selectedAt, setSelectedAt] = useState<number | null>(audits[0]?.appliedAt ?? null);
   const [confirmation, setConfirmation] = useState<"delete" | "clear" | null>(null);
   const [isDeleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [preparedArtifact, setPreparedArtifact] = useState<LayoutHistoryArtifact | null>(null);
   const selected = audits.find((audit) => audit.appliedAt === selectedAt) ?? audits[0] ?? null;
 
   useEffect(() => {
     if (!selected && audits[0]) setSelectedAt(audits[0].appliedAt);
   }, [audits, selected]);
+
+  useEffect(() => {
+    setPreparedArtifact(null);
+  }, [audits]);
 
   const runDeletion = async (operation: () => Promise<void>) => {
     setDeleting(true);
@@ -49,6 +57,19 @@ export function LayoutHistoryTable({
       setConfirmation(null);
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : "Layout history operation failed");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const prepareExport = async () => {
+    if (!onPrepareExport) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      setPreparedArtifact(await onPrepareExport());
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Layout history export failed");
     } finally {
       setDeleting(false);
     }
@@ -100,17 +121,28 @@ export function LayoutHistoryTable({
             <span>Strategy::{selected.strategyId}</span>
             <span>Engine::{selected.engine}</span>
           </div>
-          {(onExportAudits || (onDeleteAudit && onClearAudits)) && (
+          {(onPrepareExport || (onDeleteAudit && onClearAudits)) && (
             <div className={styles.historyActions}>
-              {onExportAudits && (
+              {onPrepareExport && !preparedArtifact && (
                 <button
                   type="button"
                   className={styles.exportButton}
                   disabled={isDeleting}
-                  aria-label="Export layout audit history"
-                  onClick={() => void runDeletion(async () => onExportAudits())}
+                  aria-label="Prepare layout audit history export"
+                  onClick={() => void prepareExport()}
                 >
-                  <DownloadSimpleIcon size={15} aria-hidden="true" /> Export JSON
+                  <DownloadSimpleIcon size={15} aria-hidden="true" /> Prepare JSON
+                </button>
+              )}
+              {preparedArtifact && onDownloadExport && (
+                <button
+                  type="button"
+                  className={styles.exportButton}
+                  disabled={isDeleting}
+                  aria-label="Download layout audit history"
+                  onClick={() => onDownloadExport(preparedArtifact)}
+                >
+                  <DownloadSimpleIcon size={15} aria-hidden="true" /> Download JSON
                 </button>
               )}
               {onDeleteAudit && onClearAudits && (confirmation === "delete"
@@ -186,6 +218,45 @@ export function LayoutHistoryTable({
           )}
         </header>
         {deleteError && <p className={styles.error} role="alert">{deleteError}</p>}
+        {preparedArtifact && (
+          <section className={styles.exportReview} aria-label="Layout history export review">
+            <div className={styles.exportReviewHeader}>
+              <div>
+                <span className={styles.eyebrow}>Version {preparedArtifact.version} artifact</span>
+                <h4>Export review</h4>
+              </div>
+              <span>{preparedArtifact.summary.applicationCount} applications</span>
+            </div>
+            <dl className={styles.exportSummary}>
+              <div>
+                <dt>Range</dt>
+                <dd>
+                  {preparedArtifact.summary.firstAppliedAt === null
+                    ? "Empty"
+                    : `${new Date(preparedArtifact.summary.firstAppliedAt).toLocaleString()} to ${
+                      new Date(preparedArtifact.summary.lastAppliedAt!).toLocaleString()
+                    }`}
+                </dd>
+              </div>
+              <div>
+                <dt>Variants</dt>
+                <dd>
+                  {`Single ${preparedArtifact.summary.variants.single} / Original ${preparedArtifact.summary.variants.original} / Recommended ${preparedArtifact.summary.variants.recommended}`}
+                </dd>
+              </div>
+              <div>
+                <dt>Engines</dt>
+                <dd>
+                  {`Dagre ${preparedArtifact.summary.engines.dagre} / ELK ${preparedArtifact.summary.engines.elk} / Custom ${preparedArtifact.summary.engines.custom}`}
+                </dd>
+              </div>
+            </dl>
+            <div className={styles.fingerprint}>
+              <span>{preparedArtifact.fingerprint.algorithm}</span>
+              <code>{preparedArtifact.fingerprint.value}</code>
+            </div>
+          </section>
+        )}
         {selected.comparisonMetrics.length > 0
           ? (
             <table className={styles.metrics}>

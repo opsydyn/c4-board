@@ -1258,7 +1258,30 @@ The fingerprint provides integrity evidence, not signer identity or authenticity
 
 Next slice:
 
-- [ ] Surface the artifact summary and fingerprint in the History UX before download.
+- [x] Surface the artifact summary and fingerprint in the History UX before download.
+- [ ] Add signed artifacts only when an organization identity and trust model is defined.
+- [ ] Add artifact import only when a concrete review or migration workflow requires it.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 31 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Replaced one-click export with separate Prepare JSON and Download JSON commands.
+- [x] Kept download unavailable until schema validation, summary derivation, and SHA-256 generation complete.
+- [x] Displayed artifact version and application count before download.
+- [x] Displayed first and latest application times plus variant and engine distributions.
+- [x] Displayed the complete SHA-256 fingerprint with resilient wrapping for copying and review.
+- [x] Kept preparation failures in the existing visible operation-error surface.
+- [x] Disabled export and destructive controls while artifact preparation is active.
+- [x] Invalidated prepared evidence whenever the diagram's retained audit sequence changes.
+- [x] Added interaction coverage proving preparation precedes download and passes the reviewed artifact unchanged.
+
+Next slice:
+
+- [ ] Add a Copy fingerprint command with accessible completion feedback.
 - [ ] Add signed artifacts only when an organization identity and trust model is defined.
 - [ ] Add artifact import only when a concrete review or migration workflow requires it.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

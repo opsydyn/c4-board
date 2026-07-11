@@ -72,6 +72,7 @@ import { autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetNam
 import {
   buildLayoutHistoryArtifact,
   createLayoutHistoryFilename,
+  type LayoutHistoryArtifact,
   serializeLayoutHistoryArtifact,
 } from "../../core/effects/layout-history-export";
 import {
@@ -2340,13 +2341,15 @@ export function C4CanvasContainer() {
     send({ type: "CLEAR_LAYOUT_AUDITS_SUCCESS" });
   }, [send, state.context.currentDiagramId]);
 
-  const handleExportLayoutAudits = useCallback(async () => {
-    const artifact = await buildLayoutHistoryArtifact({
+  const handlePrepareLayoutAuditExport = useCallback(() =>
+    buildLayoutHistoryArtifact({
       diagramId: state.context.currentDiagramId ?? "unsaved",
       diagramName: state.context.diagramName,
       exportedAt: Date.now(),
       audits: state.context.layoutAudits,
-    });
+    }), [state.context.currentDiagramId, state.context.diagramName, state.context.layoutAudits]);
+
+  const handleDownloadLayoutAuditExport = useCallback((artifact: LayoutHistoryArtifact) => {
     const blob = new Blob([serializeLayoutHistoryArtifact(artifact)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2356,7 +2359,7 @@ export function C4CanvasContainer() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  }, [state.context.currentDiagramId, state.context.diagramName, state.context.layoutAudits]);
+  }, [state.context.diagramName]);
 
   const handleLayoutPreviewCenterChange = useCallback((nodeId: string) => {
     setLayoutPreview((current) => {
@@ -3233,7 +3236,8 @@ export function C4CanvasContainer() {
           layoutAudits={state.context.layoutAudits}
           onDeleteLayoutAudit={handleDeleteLayoutAudit}
           onClearLayoutAudits={handleClearLayoutAudits}
-          onExportLayoutAudits={handleExportLayoutAudits}
+          onPrepareLayoutAuditExport={handlePrepareLayoutAuditExport}
+          onDownloadLayoutAuditExport={handleDownloadLayoutAuditExport}
         />
       )}
       {navigationTarget && (

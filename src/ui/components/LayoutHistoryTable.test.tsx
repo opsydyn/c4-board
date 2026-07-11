@@ -1,3 +1,4 @@
+import type { LayoutHistoryArtifact } from "@/core/effects/layout-history-export";
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -74,17 +75,42 @@ describe("LayoutHistoryTable", () => {
     expect(screen.getByRole("button", { name: "Clear layout audit history" })).toBeInTheDocument();
   });
 
-  it("exports retained history through an explicit command", () => {
-    const onExportAudits = vi.fn();
+  it("previews review evidence before allowing download", async () => {
+    const preparedArtifact: LayoutHistoryArtifact = {
+      schema: "opsydyn.layout-history",
+      version: 2,
+      exportedAt: 500,
+      diagram: { id: "diagram-1", name: "Checkout" },
+      retention: { limit: 100, exportedCount: 1 },
+      summary: {
+        applicationCount: 1,
+        firstAppliedAt: 200,
+        lastAppliedAt: 200,
+        variants: { single: 0, original: 0, recommended: 1 },
+        engines: { dagre: 0, elk: 1, custom: 0 },
+      },
+      audits: [audit(200, "recommended")],
+      fingerprint: { algorithm: "SHA-256", value: "a".repeat(64) },
+    };
+    const onPrepareExport = vi.fn(async () => preparedArtifact);
+    const onDownloadExport = vi.fn();
     render(
       <LayoutHistoryTable
         audits={[audit(200, "recommended")]}
-        onExportAudits={onExportAudits}
+        onPrepareExport={onPrepareExport}
+        onDownloadExport={onDownloadExport}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Export layout audit history" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare layout audit history export" }));
 
-    expect(onExportAudits).toHaveBeenCalledOnce();
+    expect(onDownloadExport).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Export review" })).toBeInTheDocument();
+    expect(screen.getByText("a".repeat(64))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Download layout audit history" }));
+
+    expect(onPrepareExport).toHaveBeenCalledOnce();
+    expect(onDownloadExport).toHaveBeenCalledWith(preparedArtifact);
   });
 });

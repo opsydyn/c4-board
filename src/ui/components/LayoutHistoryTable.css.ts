@@ -172,3 +172,76 @@ export const error = style({
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
 });
+
+export const exportReview = style({
+  display: "grid",
+  gap: theme.spacing["4"],
+  marginBottom: theme.spacing["5"],
+  border: `${theme.border.width.thin} solid ${theme.color.status.selected}`,
+  backgroundColor: theme.color.background.raised,
+  padding: theme.spacing["4"],
+});
+
+export const exportReviewHeader = style({
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: theme.spacing["3"],
+  textTransform: "uppercase",
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+globalStyle(`${exportReviewHeader} h4`, {
+  margin: `${theme.spacing["1"]} 0 0`,
+  letterSpacing: 0,
+  color: theme.color.foreground.primary,
+  fontSize: theme.typography.size.md,
+});
+
+export const exportSummary = style({
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: theme.spacing["3"],
+  margin: 0,
+  "@media": {
+    "screen and (max-width: 760px)": {
+      gridTemplateColumns: "1fr",
+    },
+  },
+});
+
+globalStyle(`${exportSummary} > div`, {
+  borderLeft: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  paddingLeft: theme.spacing["3"],
+});
+globalStyle(`${exportSummary} dt`, {
+  marginBottom: theme.spacing["1"],
+  textTransform: "uppercase",
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+globalStyle(`${exportSummary} dd`, {
+  margin: 0,
+  overflowWrap: "anywhere",
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const fingerprint = style({
+  display: "grid",
+  gap: theme.spacing["1"],
+  borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  paddingTop: theme.spacing["3"],
+  color: theme.color.foreground.tertiary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+globalStyle(`${fingerprint} code`, {
+  overflowWrap: "anywhere",
+  color: theme.color.status.ready,
+  fontFamily: theme.typography.family.mono,
+});
