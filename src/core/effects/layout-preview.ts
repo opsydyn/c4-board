@@ -45,7 +45,14 @@ export interface LayoutPreviewModel {
   centerControl: LayoutCenterControl | null;
   portSummary: LayoutPortSummary | null;
   routedQuality: LayoutRoutedQualityMetrics | null;
-  recommendation: LayoutRecommendation | null;
+  recommendation: EvaluatedLayoutRecommendation | null;
+}
+
+export interface EvaluatedLayoutRecommendation extends LayoutRecommendation {
+  currentQuality: LayoutRoutedQualityMetrics;
+  recommendedQuality: LayoutRoutedQualityMetrics;
+  crossingDelta: number;
+  lengthDelta: number;
 }
 
 export interface LayoutPortSummary {
@@ -106,7 +113,29 @@ export async function createAsyncLayoutPreview(
     { nodes: input.nodes, edges: input.edges, options },
     executionOptions,
   );
-  return buildLayoutPreviewModel(input, options, "graph", result);
+  const recommendation = result.diagnostics.find((diagnostic) => diagnostic.recommendation)
+    ?.recommendation;
+  let evaluatedRecommendation: EvaluatedLayoutRecommendation | null = null;
+
+  if (recommendation && result.edgeRoutes?.length) {
+    const recommendedResult = await layoutWithElk(
+      {
+        nodes: input.nodes,
+        edges: input.edges,
+        options: { ...options, ...recommendation.options },
+      },
+      executionOptions,
+    );
+    evaluatedRecommendation = evaluateLayoutRecommendation(
+      recommendation,
+      evaluateRoutedEdgeQuality(result.edgeRoutes),
+      recommendedResult.edgeRoutes?.length
+        ? evaluateRoutedEdgeQuality(recommendedResult.edgeRoutes)
+        : null,
+    );
+  }
+
+  return buildLayoutPreviewModel(input, options, "graph", result, evaluatedRecommendation);
 }
 
 function buildLayoutPreviewModel(
@@ -114,6 +143,7 @@ function buildLayoutPreviewModel(
   options: Partial<LayoutOptions>,
   appliedScope: LayoutPreviewScope,
   result: LayoutResult,
+  evaluatedRecommendation?: EvaluatedLayoutRecommendation | null,
 ): LayoutPreviewModel {
   const currentQuality = evaluateLayoutQuality(input.nodes, input.edges);
 
@@ -139,8 +169,28 @@ function buildLayoutPreviewModel(
     routedQuality: result.edgeRoutes?.length
       ? evaluateRoutedEdgeQuality(result.edgeRoutes)
       : null,
-    recommendation: result.diagnostics.find((diagnostic) => diagnostic.recommendation)
-      ?.recommendation ?? null,
+    recommendation: evaluatedRecommendation ?? null,
+  };
+}
+
+export function evaluateLayoutRecommendation(
+  recommendation: LayoutRecommendation,
+  currentQuality: LayoutRoutedQualityMetrics,
+  recommendedQuality: LayoutRoutedQualityMetrics | null,
+): EvaluatedLayoutRecommendation | null {
+  if (!recommendedQuality) return null;
+  const crossingDelta = recommendedQuality.edgeCrossingCount - currentQuality.edgeCrossingCount;
+  const lengthDelta = recommendedQuality.totalEdgeLength - currentQuality.totalEdgeLength;
+  const meaningfullyShorter = lengthDelta < -Math.max(1, currentQuality.totalEdgeLength * 0.01);
+  const improves = crossingDelta < 0 || (crossingDelta === 0 && meaningfullyShorter);
+  if (!improves) return null;
+
+  return {
+    ...recommendation,
+    currentQuality,
+    recommendedQuality,
+    crossingDelta,
+    lengthDelta,
   };
 }
 

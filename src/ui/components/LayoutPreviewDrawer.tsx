@@ -197,10 +197,17 @@ export function LayoutPreviewDrawer({
           </div>
           <div className={styles.diagnosticsList}>
             {preview.recommendation && onTryRecommendation && (
-              <button type="button" className={styles.retryButton} onClick={onTryRecommendation}>
-                <ArrowClockwiseIcon size={16} weight="bold" aria-hidden="true" />
-                {preview.recommendation.label}
-              </button>
+              <div className={styles.recommendationEvidence}>
+                <button type="button" className={styles.retryButton} onClick={onTryRecommendation}>
+                  <ArrowClockwiseIcon size={16} weight="bold" aria-hidden="true" />
+                  {preview.recommendation.label}
+                </button>
+                <p>
+                  {`CROSSINGS ${preview.recommendation.currentQuality.edgeCrossingCount} → ${preview.recommendation.recommendedQuality.edgeCrossingCount} · ROUTED LENGTH ${
+                    Math.round(preview.recommendation.currentQuality.totalEdgeLength).toLocaleString()
+                  } → ${Math.round(preview.recommendation.recommendedQuality.totalEdgeLength).toLocaleString()}`}
+                </p>
+              </div>
             )}
             {preview.result.diagnostics.length === 0
               ? <p className={styles.emptyDiagnostics}>No layout warnings</p>

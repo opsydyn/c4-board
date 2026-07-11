@@ -2,9 +2,12 @@ import {
   applyLayoutResultToEdges,
   createAsyncLayoutPreview,
   createLayoutPreview,
+  evaluateLayoutRecommendation,
   isCurrentLayoutPreviewRequest,
 } from "@/core/effects/layout-preview";
+import ELK from "elkjs/lib/elk.bundled.js";
 import { describe, expect, it } from "vitest";
+import { elkRouteGraphFixtures } from "../../../tests/fixtures/elkRouteGraphs";
 import { cloneLayoutFixture, layoutGraphFixtures } from "../../../tests/fixtures/layoutGraphs";
 
 const fixture = (name: string) =>
@@ -13,6 +16,54 @@ const fixture = (name: string) =>
   );
 
 describe("createLayoutPreview", () => {
+  it("keeps only recommendations that improve routed quality", () => {
+    const recommendation = {
+      id: "change-direction" as const,
+      label: "Try top-to-bottom routing",
+      rationale: "Separate route channels.",
+      options: { direction: "TB" as const },
+    };
+    const current = { edgeCrossingCount: 9, totalEdgeLength: 3_500 };
+
+    expect(evaluateLayoutRecommendation(
+      recommendation,
+      current,
+      { edgeCrossingCount: 4, totalEdgeLength: 4_000 },
+    )).toMatchObject({ crossingDelta: -5, lengthDelta: 500 });
+    expect(evaluateLayoutRecommendation(
+      recommendation,
+      current,
+      { edgeCrossingCount: 9, totalEdgeLength: 3_480 },
+    )).toBeNull();
+    expect(evaluateLayoutRecommendation(
+      recommendation,
+      current,
+      { edgeCrossingCount: 10, totalEdgeLength: 2_000 },
+    )).toBeNull();
+  });
+
+  it("suppresses a real ELK recommendation when the alternative does not improve", async () => {
+    const fixture = elkRouteGraphFixtures.find(({ name }) => name === "crossing-pressure-mesh")!;
+    const elk = new ELK();
+    let executionCount = 0;
+    const preview = await createAsyncLayoutPreview({
+      nodes: fixture.nodes,
+      edges: fixture.edges,
+      ...(fixture.options && { options: fixture.options }),
+      preset: "elkLayered",
+      scope: "graph",
+    }, {
+      execute: async (graph) => {
+        executionCount += 1;
+        return elk.layout(graph);
+      },
+    });
+
+    expect(executionCount).toBe(2);
+    expect(preview.result.diagnostics.map(({ code }) => code)).toContain("elk-route-crossing-heavy");
+    expect(preview.recommendation).toBeNull();
+  });
+
   it("rejects cancelled and superseded asynchronous preview completions", () => {
     const current = new AbortController();
     const cancelled = new AbortController();

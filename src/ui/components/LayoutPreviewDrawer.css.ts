@@ -491,6 +491,27 @@ export const diagnosticsList = style({
   },
 });
 
+export const recommendationEvidence = style({
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "flex-start",
+      gap: theme.spacing["2"],
+      borderLeft: `3px solid ${theme.color.status.ready}`,
+      backgroundColor: theme.color.background.raised,
+      padding: theme.spacing["2"],
+    },
+  },
+});
+
+globalStyle(`${recommendationEvidence} p`, {
+  margin: 0,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
 export const diagnostic = style({
   "@layer": {
     [componentsLayer]: {

@@ -975,6 +975,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Evaluate the recommended alternative before presenting it and suppress recommendations that do not improve route quality.
-- [ ] Show before-versus-recommended routed metric deltas when an alternative is accepted for preview.
+- [x] Evaluate the recommended alternative before presenting it and suppress recommendations that do not improve route quality.
+- [x] Show before-versus-recommended routed metric deltas when an alternative is accepted for preview.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 18 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Evaluated each candidate recommendation with a second non-destructive ELK execution before exposing an action.
+- [x] Compared actual routed crossings first and routed length second.
+- [x] Accepted fewer crossings even when route length grows, because topology readability is the primary objective.
+- [x] Required more than 1% routed-length improvement when crossing count is unchanged.
+- [x] Suppressed alternatives that increase crossings, fail to return routes, or do not improve either measure.
+- [x] Displayed before-versus-recommended crossings and routed length beside accepted actions.
+- [x] Verified the real crossing-pressure mesh suppresses its axis recommendation: crossings remain 9 while length grows from 3,544px to 4,453px.
+- [x] Added pure acceptance-policy, real-engine suppression, and drawer evidence coverage.
+
+Next slice:
+
+- [ ] Cache evaluated alternatives so Try recommended promotes the validated result without running ELK a third time.
+- [ ] Preserve the original preview as an immediate comparison/revert target after trying a recommendation.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

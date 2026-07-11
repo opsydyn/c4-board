@@ -135,6 +135,10 @@ describe("LayoutPreviewDrawer", () => {
       label: "Try top-to-bottom routing",
       rationale: "Separate competing route channels.",
       options: { direction: "TB" },
+      currentQuality: { edgeCrossingCount: 9, totalEdgeLength: 3_544 },
+      recommendedQuality: { edgeCrossingCount: 4, totalEdgeLength: 3_800 },
+      crossingDelta: -5,
+      lengthDelta: 256,
     };
     render(
       <LayoutPreviewDrawer
@@ -148,5 +152,6 @@ describe("LayoutPreviewDrawer", () => {
 
     await user.click(screen.getByRole("button", { name: "Try top-to-bottom routing" }));
     expect(onTryRecommendation).toHaveBeenCalledOnce();
+    expect(screen.getByText("CROSSINGS 9 → 4 · ROUTED LENGTH 3,544 → 3,800")).toBeInTheDocument();
   });
 });
