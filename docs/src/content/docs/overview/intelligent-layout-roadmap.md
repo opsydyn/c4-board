@@ -1124,7 +1124,28 @@ Delivered:
 
 Next slice:
 
-- [ ] Add a dedicated layout history surface using diagram-owned audit records.
-- [ ] Surface the latest accepted layout audit without duplicating it per visible edge.
-- [ ] Support selecting an audit entry to inspect its chosen variant and metric evidence.
+- [x] Add a dedicated layout history surface using diagram-owned audit records.
+- [x] Surface the latest accepted layout audit without duplicating it per visible edge.
+- [x] Support selecting an audit entry to inspect its chosen variant and metric evidence.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 25 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Replaced the Data Bar History placeholder with a diagram-owned layout application history surface.
+- [x] Preserved newest-first audit history in canvas runtime state instead of retaining only the latest record.
+- [x] Prepended newly accepted layouts immediately without waiting for a diagram reload.
+- [x] Preserved audit history across Azure graph synchronization and OPY proposal application load transitions.
+- [x] Added a selectable application list with explicit Original, Recommended, and Single variant labels.
+- [x] Added read-only strategy, engine, timestamp, and per-metric comparison evidence for the selected application.
+- [x] Added a clear edge-free and never-laid-out empty state.
+- [x] Added focused component and canvas-machine coverage for selection, evidence, load ordering, and Apply updates.
+
+Next slice:
+
+- [ ] Add audit retention controls and a bounded history policy before long-lived diagrams accumulate unbounded records.
+- [ ] Add layout history export for architecture review evidence.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

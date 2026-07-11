@@ -1077,6 +1077,7 @@ export function C4CanvasContainer() {
               edges: diagram.edges,
               updatedAt: diagram.updatedAt,
               ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
+              layoutAudits: diagram.layoutAudits,
               ...(diagram.description ? { description: diagram.description } : {}),
             },
           };
@@ -1152,6 +1153,7 @@ export function C4CanvasContainer() {
               edges: diagram.edges,
               updatedAt: diagram.updatedAt,
               ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
+              layoutAudits: diagram.layoutAudits,
               ...(diagram.description ? { description: diagram.description } : {}),
             },
           };
@@ -1243,6 +1245,7 @@ export function C4CanvasContainer() {
           edges: diagram.edges,
           updatedAt: diagram.updatedAt,
           ...(diagram.layoutAudit && { layoutAudit: diagram.layoutAudit }),
+          layoutAudits: diagram.layoutAudits,
           ...(diagram.description ? { description: diagram.description } : {}),
         },
       });
@@ -1298,6 +1301,8 @@ export function C4CanvasContainer() {
           updatedAt: saveSnapshot.context.lastSavedAt
             ?? state.context.lastSaved
             ?? Date.now(),
+          layoutAudits: state.context.layoutAudits,
+          ...(state.context.lastLayoutAudit && { layoutAudit: state.context.lastLayoutAudit }),
           ...(state.context.diagramDescription
             ? { description: state.context.diagramDescription }
             : {}),
@@ -1511,6 +1516,8 @@ export function C4CanvasContainer() {
             updatedAt: saveSnapshot.context.lastSavedAt
               ?? state.context.lastSaved
               ?? Date.now(),
+            layoutAudits: state.context.layoutAudits,
+            ...(state.context.lastLayoutAudit && { layoutAudit: state.context.lastLayoutAudit }),
             ...(state.context.diagramDescription
               ? { description: state.context.diagramDescription }
               : {}),
@@ -3184,6 +3191,7 @@ export function C4CanvasContainer() {
           isOpen={isDataBarOpen}
           onToggle={setDataBarOpen}
           onLoadDiagram={handleLoadDiagram}
+          layoutAudits={state.context.layoutAudits}
         />
       )}
       {navigationTarget && (

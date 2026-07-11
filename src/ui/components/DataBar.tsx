@@ -1,8 +1,10 @@
+import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { Effect } from "effect";
 import { useCallback, useMemo, useState } from "react";
 import { ToggleButton } from "react-aria-components";
 import { DocumentationTable } from "./DocumentationTable";
+import { LayoutHistoryTable } from "./LayoutHistoryTable";
 import { SavedDiagramsTable } from "./SavedDiagramsTable";
 import {
   bottomPanel,
@@ -12,7 +14,6 @@ import {
   bottomTabButtonActive,
   bottomTabs,
   collapseToggle,
-  historyPlaceholder,
 } from "./styles.css";
 
 type DataBarTab = "diagrams" | "diagrams_alt" | "history" | "docs";
@@ -21,6 +22,7 @@ interface DataBarProps {
   isOpen: boolean;
   onToggle: (open: boolean) => void;
   onLoadDiagram: (diagramId: string) => Promise<void> | void;
+  layoutAudits: ReadonlyArray<LayoutApplicationAudit>;
 }
 
 const TABS: Array<{ id: DataBarTab; label: string }> = [
@@ -54,7 +56,7 @@ const loadDataEffect = Effect.try({
 
 Effect.runSync(loadDataEffect);
 
-export function DataBar({ isOpen, onToggle, onLoadDiagram }: DataBarProps) {
+export function DataBar({ isOpen, onToggle, onLoadDiagram, layoutAudits }: DataBarProps) {
   const [activeTab, setActiveTab] = useState<DataBarTab>("diagrams");
 
   const handleDiagramLoad = useCallback(
@@ -69,17 +71,13 @@ export function DataBar({ isOpen, onToggle, onLoadDiagram }: DataBarProps) {
       case "diagrams":
         return <SavedDiagramsTable onLoadDiagram={handleDiagramLoad} />;
       case "history":
-        return (
-          <div className={historyPlaceholder}>
-            History analytics coming soon
-          </div>
-        );
+        return <LayoutHistoryTable audits={layoutAudits} />;
       case "docs":
         return <DocumentationTable />;
       default:
         return null;
     }
-  }, [activeTab, handleDiagramLoad]);
+  }, [activeTab, handleDiagramLoad, layoutAudits]);
 
   return (
     <section className={bottomPanel} aria-label="Data bar">

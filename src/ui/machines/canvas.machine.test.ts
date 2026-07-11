@@ -35,6 +35,48 @@ describe("Canvas Machine", () => {
     expect(actor.getSnapshot().context.previousLayout).toEqual(previousNodes);
     expect(actor.getSnapshot().context.currentLayout).toBe("elkLayered");
     expect(actor.getSnapshot().context.lastLayoutAudit).toEqual(audit);
+    expect(actor.getSnapshot().context.layoutAudits).toEqual([audit]);
+  });
+
+  test("loads newest-first layout history and prepends a newly accepted audit", () => {
+    const actor = createActor(canvasMachine).start();
+    const olderAudit = {
+      version: 1 as const,
+      appliedAt: 100,
+      preset: "elkLayered",
+      strategyId: "elk-layered",
+      engine: "elk" as const,
+      selectedVariant: "original" as const,
+      comparisonMetrics: [],
+    };
+    const latestAudit = { ...olderAudit, appliedAt: 200, selectedVariant: "recommended" as const };
+
+    actor.send({
+      type: "LOAD_DIAGRAM_SUCCESS",
+      diagram: {
+        id: "diagram-1",
+        name: "Audit history",
+        nodes: [],
+        edges: [],
+        updatedAt: 200,
+        layoutAudit: latestAudit,
+        layoutAudits: [latestAudit, olderAudit],
+      },
+    });
+    const acceptedAudit = { ...latestAudit, appliedAt: 300 };
+    actor.send({
+      type: "APPLY_LAYOUT_PREVIEW",
+      preset: "elkLayered",
+      nodes: [],
+      edges: [],
+      audit: acceptedAudit,
+    });
+
+    expect(actor.getSnapshot().context.layoutAudits).toEqual([
+      acceptedAudit,
+      latestAudit,
+      olderAudit,
+    ]);
   });
 
   test("loads a visual fixture without a persistent diagram identity", () => {

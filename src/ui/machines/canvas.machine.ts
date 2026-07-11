@@ -108,6 +108,7 @@ export type CanvasEvent =
       edges: Edge[];
       updatedAt: number;
       layoutAudit?: LayoutApplicationAudit;
+      layoutAudits?: LayoutApplicationAudit[];
     };
   }
   | { type: "LOAD_VISUAL_FIXTURE"; name: string; nodes: Node[]; edges: Edge[] }
@@ -151,6 +152,7 @@ export interface CanvasContext {
   previousLayout: Node[] | null; // For undo functionality
   currentLayout: LayoutPresetName | null; // Track currently applied layout preset
   lastLayoutAudit: LayoutApplicationAudit | null;
+  layoutAudits: LayoutApplicationAudit[];
 
   // Export state
   exportModalOpen: boolean;
@@ -777,6 +779,10 @@ const canvasMachineDefinition = setup({
       edges: ({ context, event }) => event.type === "APPLY_LAYOUT_PREVIEW" ? event.edges : context.edges,
       lastLayoutAudit: ({ context, event }) =>
         event.type === "APPLY_LAYOUT_PREVIEW" ? event.audit : context.lastLayoutAudit,
+      layoutAudits: ({ context, event }) =>
+        event.type === "APPLY_LAYOUT_PREVIEW"
+          ? [event.audit, ...context.layoutAudits.filter((audit) => audit.appliedAt !== event.audit.appliedAt)]
+          : context.layoutAudits,
     }),
 
     setSaving: assign({
@@ -835,6 +841,11 @@ const canvasMachineDefinition = setup({
           .find((audit): audit is LayoutApplicationAudit => audit !== undefined)
           ?? null;
       },
+      layoutAudits: ({ event }) => {
+        if (event.type !== "LOAD_DIAGRAM_SUCCESS") return [];
+        if (event.diagram.layoutAudits) return event.diagram.layoutAudits;
+        return event.diagram.layoutAudit ? [event.diagram.layoutAudit] : [];
+      },
     }),
 
     loadVisualFixture: assign({
@@ -848,6 +859,7 @@ const canvasMachineDefinition = setup({
       previousLayout: null,
       currentLayout: null,
       lastLayoutAudit: null,
+      layoutAudits: [],
       lastSaved: null,
       saveError: null,
     }),
@@ -1196,6 +1208,7 @@ const canvasMachineDefinition = setup({
     previousLayout: null,
     currentLayout: null,
     lastLayoutAudit: null,
+    layoutAudits: [],
 
     // Export state
     exportModalOpen: false,
