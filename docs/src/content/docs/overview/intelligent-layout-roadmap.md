@@ -996,6 +996,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Cache evaluated alternatives so Try recommended promotes the validated result without running ELK a third time.
-- [ ] Preserve the original preview as an immediate comparison/revert target after trying a recommendation.
+- [x] Cache evaluated alternatives so Try recommended promotes the validated result without running ELK a third time.
+- [x] Preserve the original preview as an immediate comparison/revert target after trying a recommendation.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 19 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Stored the validated recommended `LayoutResult` alongside its acceptance evidence.
+- [x] Promoted cached nodes, routes, ports, diagnostics, and quality summaries without a third ELK execution.
+- [x] Recomputed preview deltas and routed summaries from the promoted result.
+- [x] Preserved the original preview model as an immediate comparison target.
+- [x] Added Compare original to restore the first preview without worker activity or board mutation.
+- [x] Cleared comparison state on new preview requests, Apply, and Cancel.
+- [x] Kept both original and promoted states non-destructive until explicit Apply.
+- [x] Added cached-promotion and comparison-control coverage.
+
+Next slice:
+
+- [ ] Add explicit Original and Recommended comparison labels so users always know which preview is active.
+- [ ] Allow toggling repeatedly between cached original and recommended previews.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

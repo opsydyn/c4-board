@@ -1,5 +1,6 @@
 import {
   ArrowClockwiseIcon,
+  ArrowCounterClockwiseIcon,
   CheckIcon,
   CrosshairIcon,
   InfoIcon,
@@ -18,6 +19,7 @@ export interface LayoutPreviewDrawerProps {
   failure?: { message: string; attemptedLabel: string } | null;
   onRetry?: () => void;
   onTryRecommendation?: () => void;
+  onRestoreOriginal?: () => void;
 }
 
 const formatMetric = (value: number, key: LayoutQualityDelta["key"]): string => {
@@ -45,6 +47,7 @@ export function LayoutPreviewDrawer({
   failure = null,
   onRetry,
   onTryRecommendation,
+  onRestoreOriginal,
 }: LayoutPreviewDrawerProps) {
   const warnings = preview.result.diagnostics.filter(
     (diagnostic) => diagnostic.severity === "warning" || diagnostic.severity === "error",
@@ -65,6 +68,12 @@ export function LayoutPreviewDrawer({
           </div>
         </div>
         <div className={styles.actions}>
+          {onRestoreOriginal && (
+            <button type="button" className={styles.retryButton} onClick={onRestoreOriginal}>
+              <ArrowCounterClockwiseIcon size={16} weight="bold" aria-hidden="true" />
+              Compare original
+            </button>
+          )}
           {failure && onRetry && (
             <button type="button" className={styles.retryButton} onClick={onRetry}>
               <ArrowClockwiseIcon size={16} weight="bold" aria-hidden="true" />

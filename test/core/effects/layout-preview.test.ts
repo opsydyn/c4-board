@@ -4,6 +4,7 @@ import {
   createLayoutPreview,
   evaluateLayoutRecommendation,
   isCurrentLayoutPreviewRequest,
+  promoteLayoutRecommendation,
 } from "@/core/effects/layout-preview";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { describe, expect, it } from "vitest";
@@ -62,6 +63,44 @@ describe("createLayoutPreview", () => {
     expect(executionCount).toBe(2);
     expect(preview.result.diagnostics.map(({ code }) => code)).toContain("elk-route-crossing-heavy");
     expect(preview.recommendation).toBeNull();
+  });
+
+  it("promotes a cached recommendation without recalculating layout", () => {
+    const graph = fixture("system-context");
+    const preview = createLayoutPreview({
+      ...graph,
+      preset: "systemContext",
+      scope: "graph",
+    });
+    const recommendedResult = {
+      ...preview.result,
+      nodes: preview.result.nodes.map((node) => ({
+        ...node,
+        position: { x: node.position.x + 50, y: node.position.y + 20 },
+      })),
+      quality: { ...preview.result.quality, totalEdgeLength: 900 },
+    };
+    preview.recommendation = {
+      id: "change-direction",
+      label: "Try top-to-bottom routing",
+      rationale: "Separate route channels.",
+      options: { direction: "TB" },
+      currentQuality: { edgeCrossingCount: 8, totalEdgeLength: 1_200 },
+      recommendedQuality: { edgeCrossingCount: 3, totalEdgeLength: 900 },
+      crossingDelta: -5,
+      lengthDelta: -300,
+    };
+    preview.recommendedResult = recommendedResult;
+
+    const promoted = promoteLayoutRecommendation(preview);
+
+    expect(promoted).toMatchObject({
+      options: { direction: "TB" },
+      result: recommendedResult,
+      recommendation: null,
+      recommendedResult: null,
+    });
+    expect(preview.result).not.toBe(recommendedResult);
   });
 
   it("rejects cancelled and superseded asynchronous preview completions", () => {

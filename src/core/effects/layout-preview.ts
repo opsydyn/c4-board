@@ -46,6 +46,7 @@ export interface LayoutPreviewModel {
   portSummary: LayoutPortSummary | null;
   routedQuality: LayoutRoutedQualityMetrics | null;
   recommendation: EvaluatedLayoutRecommendation | null;
+  recommendedResult: LayoutResult | null;
 }
 
 export interface EvaluatedLayoutRecommendation extends LayoutRecommendation {
@@ -116,9 +117,10 @@ export async function createAsyncLayoutPreview(
   const recommendation = result.diagnostics.find((diagnostic) => diagnostic.recommendation)
     ?.recommendation;
   let evaluatedRecommendation: EvaluatedLayoutRecommendation | null = null;
+  let recommendedResult: LayoutResult | null = null;
 
   if (recommendation && result.edgeRoutes?.length) {
-    const recommendedResult = await layoutWithElk(
+    recommendedResult = await layoutWithElk(
       {
         nodes: input.nodes,
         edges: input.edges,
@@ -135,7 +137,14 @@ export async function createAsyncLayoutPreview(
     );
   }
 
-  return buildLayoutPreviewModel(input, options, "graph", result, evaluatedRecommendation);
+  return buildLayoutPreviewModel(
+    input,
+    options,
+    "graph",
+    result,
+    evaluatedRecommendation,
+    evaluatedRecommendation ? recommendedResult : null,
+  );
 }
 
 function buildLayoutPreviewModel(
@@ -144,6 +153,7 @@ function buildLayoutPreviewModel(
   appliedScope: LayoutPreviewScope,
   result: LayoutResult,
   evaluatedRecommendation?: EvaluatedLayoutRecommendation | null,
+  recommendedResult?: LayoutResult | null,
 ): LayoutPreviewModel {
   const currentQuality = evaluateLayoutQuality(input.nodes, input.edges);
 
@@ -170,6 +180,26 @@ function buildLayoutPreviewModel(
       ? evaluateRoutedEdgeQuality(result.edgeRoutes)
       : null,
     recommendation: evaluatedRecommendation ?? null,
+    recommendedResult: recommendedResult ?? null,
+  };
+}
+
+export function promoteLayoutRecommendation(
+  preview: LayoutPreviewModel,
+): LayoutPreviewModel | null {
+  if (!preview.recommendation || !preview.recommendedResult) return null;
+  const result = preview.recommendedResult;
+  return {
+    ...preview,
+    options: { ...preview.options, ...preview.recommendation.options },
+    result,
+    qualityDeltas: buildQualityDeltas(preview.currentQuality, result.quality),
+    portSummary: buildPortSummary(result),
+    routedQuality: result.edgeRoutes?.length
+      ? evaluateRoutedEdgeQuality(result.edgeRoutes)
+      : null,
+    recommendation: null,
+    recommendedResult: null,
   };
 }
 

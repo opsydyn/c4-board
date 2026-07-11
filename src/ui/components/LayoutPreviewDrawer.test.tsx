@@ -154,4 +154,21 @@ describe("LayoutPreviewDrawer", () => {
     expect(onTryRecommendation).toHaveBeenCalledOnce();
     expect(screen.getByText("CROSSINGS 9 → 4 · ROUTED LENGTH 3,544 → 3,800")).toBeInTheDocument();
   });
+
+  it("restores the original preview through an explicit comparison action", async () => {
+    const user = userEvent.setup();
+    const onRestoreOriginal = vi.fn();
+    render(
+      <LayoutPreviewDrawer
+        preview={createPreview()}
+        onCenterChange={() => {}}
+        onApply={() => {}}
+        onCancel={() => {}}
+        onRestoreOriginal={onRestoreOriginal}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Compare original" }));
+    expect(onRestoreOriginal).toHaveBeenCalledOnce();
+  });
 });

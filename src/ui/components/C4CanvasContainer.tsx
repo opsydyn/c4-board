@@ -74,6 +74,7 @@ import {
   isCurrentLayoutPreviewRequest,
   type LayoutPreviewModel,
   type LayoutPreviewScope,
+  promoteLayoutRecommendation,
 } from "../../core/effects/layout-preview";
 import { getLayoutVisualFixture, isLayoutVisualFixtureName } from "../../core/effects/layout-visual-fixtures";
 import * as NodeOps from "../../core/effects/node-operations";
@@ -352,6 +353,7 @@ export function C4CanvasContainer() {
   const [isCommandBarOpen, setCommandBarOpen] = useState(true);
   const [isDataBarOpen, setDataBarOpen] = useState(false);
   const [layoutPreview, setLayoutPreview] = useState<LayoutPreviewModel | null>(null);
+  const [layoutPreviewComparison, setLayoutPreviewComparison] = useState<LayoutPreviewModel | null>(null);
   const [layoutPreviewStatus, setLayoutPreviewStatus] = useState<
     {
       label: string;
@@ -2156,6 +2158,7 @@ export function C4CanvasContainer() {
     options?: Partial<LayoutOptions>,
   ) => {
     setDataBarOpen(false);
+    setLayoutPreviewComparison(null);
     layoutPreviewAbortRef.current?.abort();
     const requestId = ++layoutPreviewRequestIdRef.current;
     lastLayoutPreviewRequestRef.current = { preset, scope, ...(options && { options }) };
@@ -2241,12 +2244,19 @@ export function C4CanvasContainer() {
 
   const handleTryLayoutRecommendation = useCallback(() => {
     if (!layoutPreview?.recommendation) return;
-    openLayoutPreview(
-      layoutPreview.preset,
-      layoutPreview.requestedScope,
-      { ...layoutPreview.options, ...layoutPreview.recommendation.options },
-    );
-  }, [layoutPreview, openLayoutPreview]);
+    const promoted = promoteLayoutRecommendation(layoutPreview);
+    if (!promoted) return;
+    setLayoutPreviewComparison(layoutPreview);
+    setLayoutPreview(promoted);
+    requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
+  }, [layoutPreview]);
+
+  const handleRestoreOriginalLayoutPreview = useCallback(() => {
+    if (!layoutPreviewComparison) return;
+    setLayoutPreview(layoutPreviewComparison);
+    setLayoutPreviewComparison(null);
+    requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
+  }, [layoutPreviewComparison]);
 
   // Handle auto-layout action
   const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
@@ -2299,6 +2309,7 @@ export function C4CanvasContainer() {
       edges,
     });
     setLayoutPreview(null);
+    setLayoutPreviewComparison(null);
     requestAnimationFrame(() => {
       canvasRef.current?.fitViewToGraph();
     });
@@ -2309,6 +2320,7 @@ export function C4CanvasContainer() {
     layoutPreviewAbortRef.current?.abort();
     layoutPreviewAbortRef.current = null;
     setLayoutPreview(null);
+    setLayoutPreviewComparison(null);
     setLayoutPreviewStatus(null);
     setLayoutPreviewFailure(null);
     requestAnimationFrame(() => {
@@ -3101,6 +3113,7 @@ export function C4CanvasContainer() {
           failure={layoutPreviewFailure}
           onRetry={handleRetryLayoutPreview}
           onTryRecommendation={handleTryLayoutRecommendation}
+          {...(layoutPreviewComparison && { onRestoreOriginal: handleRestoreOriginalLayoutPreview })}
         />
       )}
       {layoutPreviewStatus && (
