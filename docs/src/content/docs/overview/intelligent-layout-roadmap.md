@@ -48,10 +48,10 @@ The shipped implementation now provides an architecture-grade deterministic foun
 Known limitations:
 
 - Several legacy menu presets still differ only by Dagre spacing and direction.
-- Hexagonal, Event-Driven, and Client-Server do not yet have semantic role schemas or dedicated geometry.
+- Hexagonal now has shared semantic-role classification, review and correction UX, and dedicated geometry; Event-Driven and Client-Server still need pattern-specific inference and geometry.
 - Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
 - ELK Radial has not justified replacing the product-specific radial strategies.
-- Native visual baselines cover dense ELK Event-Driven and Client-Server fixtures, but radial and full preset coverage remain open.
+- Native visual baselines cover dense ELK Event-Driven and Client-Server fixtures plus inferred and corrected Hexagonal previews; radial and full preset coverage remain open.
 - Browser-worker startup and enforced large-board interaction budgets remain incomplete.
 - OPY can apply known layouts, but cannot yet classify architecture patterns, correct semantic roles, or author reusable `LayoutSpec` definitions.
 
@@ -1387,6 +1387,25 @@ Delivered:
 
 Next slice:
 
-- [ ] Add native Hexagonal desktop and narrow-HUD visual baselines for inference and corrected-role states.
+- [x] Add native Hexagonal desktop and narrow-HUD visual baselines for inference and corrected-role states.
 - [ ] Implement Event-Driven publisher, bus, processor, and subscriber inference using the shared role contract.
+- [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
+
+### Slice 36 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added deterministic inferred and corrected Hexagonal fixtures to the native visual harness.
+- [x] Opened each fixture's intended preview preset automatically without touching persisted diagram data.
+- [x] Captured and visually reviewed inferred Hexagonal desktop and narrow-HUD baselines.
+- [x] Captured and visually reviewed corrected-role Hexagonal desktop and narrow-HUD baselines.
+- [x] Preserved explicit outbound-adapter and infrastructure corrections in the corrected fixture so geometry and diagnostics differ from inference.
+- [x] Documented the expanded native capture workflow and scenario set.
+
+Next slice:
+
+- [ ] Implement Event-Driven publisher, bus, processor, and subscriber inference using the shared role contract.
+- [ ] Add deterministic Event-Driven lane geometry as the next semantic layout consumer.
 - [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.

@@ -397,6 +397,7 @@ export function C4CanvasContainer() {
   const layoutPreviewAbortRef = useRef<AbortController | null>(null);
   const layoutPreviewRequestIdRef = useRef(0);
   const visualHarnessPreviewOpenedRef = useRef(false);
+  const visualHarnessPresetRef = useRef<LayoutPresetName>("elkLayered");
   const lastLayoutPreviewRequestRef = useRef<
     {
       preset: LayoutPresetName;
@@ -1064,6 +1065,7 @@ export function C4CanvasContainer() {
 
         if (import.meta.env.DEV && isLayoutVisualFixtureName(nativeFixture)) {
           const fixture = getLayoutVisualFixture(nativeFixture);
+          visualHarnessPresetRef.current = fixture.preset;
           send({
             type: "LOAD_VISUAL_FIXTURE",
             name: fixture.title,
@@ -2321,7 +2323,7 @@ export function C4CanvasContainer() {
     ) return;
 
     visualHarnessPreviewOpenedRef.current = true;
-    openLayoutPreview("elkLayered", "graph");
+    openLayoutPreview(visualHarnessPresetRef.current, "graph");
   }, [openLayoutPreview, state.context.diagramName, state.context.nodes.length]);
 
   // Handle auto-layout selected nodes

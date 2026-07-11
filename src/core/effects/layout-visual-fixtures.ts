@@ -1,20 +1,26 @@
 import type { Edge, Node } from "@xyflow/react";
+import type { LayoutPresetName } from "./layout";
 
-export type LayoutVisualFixtureName = "event-driven" | "client-server";
+export type LayoutVisualFixtureName =
+  | "event-driven"
+  | "client-server"
+  | "hexagonal-inferred"
+  | "hexagonal-corrected";
 
 export interface LayoutVisualFixture {
   name: LayoutVisualFixtureName;
   title: string;
+  preset: LayoutPresetName;
   nodes: Node[];
   edges: Edge[];
 }
 
-const node = (id: string, type: string): Node => ({
+const node = (id: string, type: string, data: Record<string, unknown> = {}): Node => ({
   id,
   type,
   position: { x: 0, y: 0 },
   style: { width: 160, height: 100 },
-  data: { label: id },
+  data: { label: id, ...data },
 });
 
 const edge = (source: string, target: string, label: string): Edge => ({
@@ -28,6 +34,7 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
   "event-driven": {
     name: "event-driven",
     title: "VISUAL::EVENT DRIVEN",
+    preset: "elkLayered",
     nodes: [
       node("orders", "container"),
       node("billing", "container"),
@@ -45,6 +52,7 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
   "client-server": {
     name: "client-server",
     title: "VISUAL::CLIENT SERVER",
+    preset: "elkLayered",
     nodes: [
       node("web-client", "person"),
       node("mobile-client", "person"),
@@ -63,10 +71,55 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
       edge("api-server", "identity-provider", "token request"),
     ],
   },
+  "hexagonal-inferred": {
+    name: "hexagonal-inferred",
+    title: "VISUAL::HEXAGONAL INFERRED",
+    preset: "hexagonal",
+    nodes: [
+      node("rest-adapter", "component"),
+      node("event-adapter", "component"),
+      node("domain-core", "component"),
+      node("repository-port", "component"),
+      node("database-adapter", "container"),
+      node("email-adapter", "externalSystem"),
+    ],
+    edges: [
+      edge("rest-adapter", "domain-core", "request"),
+      edge("event-adapter", "domain-core", "event"),
+      edge("domain-core", "repository-port", "data"),
+      edge("repository-port", "database-adapter", "database"),
+      edge("domain-core", "email-adapter", "notification"),
+    ],
+  },
+  "hexagonal-corrected": {
+    name: "hexagonal-corrected",
+    title: "VISUAL::HEXAGONAL CORRECTED",
+    preset: "hexagonal",
+    nodes: [
+      node("rest-adapter", "component"),
+      node("event-adapter", "component", { layoutRole: "outbound-adapter" }),
+      node("domain-core", "component"),
+      node("repository-port", "component"),
+      node("database-adapter", "container"),
+      node("email-adapter", "externalSystem"),
+      node("telemetry", "component", { layoutRole: "infrastructure" }),
+    ],
+    edges: [
+      edge("rest-adapter", "domain-core", "request"),
+      edge("domain-core", "event-adapter", "published event"),
+      edge("domain-core", "repository-port", "data"),
+      edge("repository-port", "database-adapter", "database"),
+      edge("domain-core", "email-adapter", "notification"),
+      edge("domain-core", "telemetry", "metrics"),
+    ],
+  },
 };
 
 export function isLayoutVisualFixtureName(value: unknown): value is LayoutVisualFixtureName {
-  return value === "event-driven" || value === "client-server";
+  return value === "event-driven"
+    || value === "client-server"
+    || value === "hexagonal-inferred"
+    || value === "hexagonal-corrected";
 }
 
 export function getLayoutVisualFixture(name: LayoutVisualFixtureName): LayoutVisualFixture {

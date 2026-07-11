@@ -9,7 +9,7 @@ React Flow renderer, and layout preview drawer together.
 C4_VISUAL_FIXTURE=event-driven bun tauri dev
 ```
 
-2. Open **ELK Layered** in the layout preview drawer. The harness leaves the
+2. The harness opens the fixture's intended layout preview automatically. It leaves the
    diagram ID empty, so save and autosave cannot alter the fixture or user data.
 3. Capture both viewport profiles:
 
@@ -25,5 +25,5 @@ promoting intentional output to a tracked baseline:
 bun run visual:tauri:capture -- --scenario event-driven --viewport desktop --update-baseline
 ```
 
-Repeat for `client-server`. The command refuses unknown scenarios and validates
+Repeat for `client-server`, `hexagonal-inferred`, and `hexagonal-corrected`. The command refuses unknown scenarios and validates
 the native window dimensions before writing a file, preventing mislabeled baselines.
