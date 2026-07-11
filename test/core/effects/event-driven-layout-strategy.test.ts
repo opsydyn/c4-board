@@ -283,6 +283,33 @@ describe("Event-Driven layout strategy", () => {
     expect(reversed.diagnostics).toEqual(forward.diagnostics);
   });
 
+  it("keeps snapped bus and support lane boundaries non-overlapping", () => {
+    const graph = {
+      nodes: [
+        { ...node("a-bus", "event-bus"), style: { width: 160, height: 101 } },
+        { ...node("b-bus", "event-bus"), style: { width: 160, height: 101 } },
+        { ...node("telemetry", "infrastructure"), style: { width: 160, height: 101 } },
+      ],
+      edges: [],
+      options: { nodeSpacing: 0, rankSpacing: 0, snapToGrid: true, gridSize: 20 },
+    };
+    const forward = eventDrivenLayoutStrategy.layout(graph);
+    const reversed = eventDrivenLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+      options: graph.options,
+    });
+
+    expect(forward.quality.nodeOverlapCount).toBe(0);
+    expect(forward.quality.nodeOverlapArea).toBe(0);
+    expect(forward.nodes.every(({ position }) =>
+      Number.isFinite(position.x) && Number.isFinite(position.y)
+      && position.x % 20 === 0 && position.y % 20 === 0
+    )).toBe(true);
+    expect(positions(reversed.nodes)).toEqual(positions(forward.nodes));
+    expect(reversed.diagnostics).toEqual(forward.diagnostics);
+  });
+
   it("recovers invalid geometry inputs before layout arithmetic", () => {
     const result = eventDrivenLayoutStrategy.layout({
       nodes: [
@@ -315,6 +342,36 @@ describe("Event-Driven layout strategy", () => {
     expect(diagnostic?.message).toContain("nodeSpacing");
     expect(diagnostic?.message).toContain("rankSpacing");
     expect(diagnostic?.message).toContain("grid snapping");
+  });
+
+  it("reports invalid geometry for child-only graphs before the no-top-level return", () => {
+    const graph = {
+      nodes: [{
+        ...node("child", "unclassified"),
+        parentId: "missing-parent",
+        position: { x: 25, y: 35 },
+        style: { width: -160, height: Number.POSITIVE_INFINITY },
+      }],
+      edges: [edge("child", "missing-target", "hierarchy event")],
+      options: { nodeSpacing: -1, rankSpacing: Number.POSITIVE_INFINITY, snapToGrid: true, gridSize: 0 },
+    };
+    const forward = eventDrivenLayoutStrategy.layout(graph);
+    const reversed = eventDrivenLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+      options: graph.options,
+    });
+
+    expect(forward.diagnostics.find(({ code }) => code === "event-driven-invalid-geometry-input"))
+      .toMatchObject({ severity: "warning", nodeIds: ["child"] });
+    expect(forward.diagnostics.map(({ code }) => code)).toEqual([
+      "event-driven-child-positions-preserved",
+      "event-driven-hierarchy-edges-excluded",
+      "event-driven-no-top-level-nodes",
+      "event-driven-invalid-geometry-input",
+    ]);
+    expect(forward.nodes[0]!.position).toEqual({ x: 25, y: 35 });
+    expect(forward.diagnostics).toEqual(reversed.diagnostics);
   });
 
   it("does not count explicit unclassified nodes as confident event-driven roles", () => {

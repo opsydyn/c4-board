@@ -92,6 +92,7 @@ export function analyseEventDriven(input: LayoutInput): LayoutAnalysis {
 export function layoutEventDriven(input: LayoutInput): LayoutResult {
   const sanitized = sanitizeGeometry(input);
   const { nodes, options } = sanitized;
+  const invalidGeometryDiagnostic = geometryDiagnostic(sanitized);
   const topLevelNodes = sortedNodes(nodes.filter((node) => !node.parentId));
   const childNodes = sortedNodes(nodes.filter((node) => node.parentId));
   const includedEdges = topLevelEdges(topLevelNodes, input.edges);
@@ -109,27 +110,14 @@ export function layoutEventDriven(input: LayoutInput): LayoutResult {
       severity: "error",
       message: "Event-Driven layout requires at least one top-level node.",
     });
+    if (invalidGeometryDiagnostic) diagnostics.push(invalidGeometryDiagnostic);
     return buildResult(nodes, input.edges, nodes, diagnostics);
   }
 
   const classification = inferEventDrivenRoles(topLevelNodes, includedEdges);
   diagnostics.push(...classification.diagnostics.map(toLayoutDiagnostic));
   diagnostics.push(roleSummary(classification.assignments));
-  if (sanitized.recoveredNodeIds.length > 0 || sanitized.recoveredOptions.length > 0) {
-    diagnostics.push({
-      code: "event-driven-invalid-geometry-input",
-      severity: "warning",
-      message: `Recovered invalid geometry input: ${
-        [
-          ...sanitized.recoveredOptions,
-          ...(sanitized.recoveredNodeIds.length > 0
-            ? [`fallback dimensions for ${sanitized.recoveredNodeIds.length} node(s)`]
-            : []),
-        ].join(", ")
-      }.`,
-      ...(sanitized.recoveredNodeIds.length > 0 && { nodeIds: sanitized.recoveredNodeIds }),
-    });
-  }
+  if (invalidGeometryDiagnostic) diagnostics.push(invalidGeometryDiagnostic);
 
   const positionedTopLevelNodes = positionEventDriven(
     topLevelNodes,
@@ -145,6 +133,23 @@ export function layoutEventDriven(input: LayoutInput): LayoutResult {
     diagnostics,
     classification.assignments,
   );
+}
+
+function geometryDiagnostic(sanitized: GeometrySanitization): LayoutDiagnostic | null {
+  if (sanitized.recoveredNodeIds.length === 0 && sanitized.recoveredOptions.length === 0) return null;
+  return {
+    code: "event-driven-invalid-geometry-input",
+    severity: "warning",
+    message: `Recovered invalid geometry input: ${
+      [
+        ...sanitized.recoveredOptions,
+        ...(sanitized.recoveredNodeIds.length > 0
+          ? [`fallback dimensions for ${sanitized.recoveredNodeIds.length} node(s)`]
+          : []),
+      ].join(", ")
+    }.`,
+    ...(sanitized.recoveredNodeIds.length > 0 && { nodeIds: sanitized.recoveredNodeIds }),
+  };
 }
 
 function sanitizeGeometry(input: LayoutInput): GeometrySanitization {
@@ -265,13 +270,16 @@ function positionEventDriven(
     processor: processorX,
     subscriber: processorTracks.subscriberX,
   };
-  const bandHeight = maxBandContentHeight(
-    plan,
-    assignments,
-    nodeById,
-    roleByNodeId,
+  const bandHeight = gridSafeVerticalBoundary(
+    maxBandContentHeight(
+      plan,
+      assignments,
+      nodeById,
+      roleByNodeId,
+      options,
+    ) + maxBridgeGroupHeight(bridgeGroups, nodeById, options) + options.nodeSpacing * 2,
     options,
-  ) + maxBridgeGroupHeight(bridgeGroups, nodeById, options) + options.nodeSpacing * 2;
+  );
   const bandY = new Map(plan.bands.map((bandId, index) => [bandId, index * bandHeight]));
   const lastBandY = plan.bands.length > 0 ? bandY.get(plan.bands.at(-1)!)! : 0;
   const supportNodes = plan.supportNodeIds.map((nodeId) => nodeById.get(nodeId)!);
@@ -291,9 +299,9 @@ function positionEventDriven(
   ];
   const supportHeight = stackHeight(supportNodes, options);
   const reviewHeight = Math.max(0, ...reviewGroups.map(({ nodes }) => stackHeight(nodes, options)));
-  const supportTop = lastBandY + bandHeight / 2 + options.rankSpacing;
+  const supportTop = gridSafeVerticalBoundary(lastBandY + bandHeight / 2 + options.rankSpacing, options);
   const supportY = supportTop + supportHeight / 2;
-  const reviewTop = supportTop + supportHeight + options.rankSpacing;
+  const reviewTop = gridSafeVerticalBoundary(supportTop + supportHeight + options.rankSpacing, options);
   const reviewY = reviewTop + reviewHeight / 2;
   const centers = new Map<string, XYPosition>();
   const nodesByBandAndRole = new Map<string, Map<"publisher" | "event-bus" | "processor" | "subscriber", Node[]>>();
@@ -634,6 +642,11 @@ function peerStep(node: Node, options: LayoutOptions): number {
   const height = getNodeDimensions(node).height;
   if (!options.snapToGrid || !options.gridSize) return height + options.nodeSpacing;
   return Math.ceil((height + options.nodeSpacing) / options.gridSize) * options.gridSize;
+}
+
+function gridSafeVerticalBoundary(value: number, options: LayoutOptions): number {
+  if (!options.snapToGrid || !options.gridSize) return value;
+  return Math.ceil(value / options.gridSize) * options.gridSize;
 }
 
 function roleSummary(assignments: ReadonlyArray<ArchitectureRoleAssignment>): LayoutDiagnostic {
