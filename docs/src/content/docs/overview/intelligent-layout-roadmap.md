@@ -454,7 +454,7 @@ Exit criteria:
 **Goal**: make architecture pattern semantics visible in geometry.
 
 - [x] Implement the shared Phase 4 role schema and initial ports-and-adapters inference.
-- [ ] Add Hexagonal core, port, adapter, and infrastructure placement.
+- [x] Add Hexagonal core, port, adapter, and infrastructure placement.
 - [ ] Add Event-Driven publisher, bus, processor, and subscriber lanes.
 - [ ] Add Client-Server client, service, domain, and persistence columns.
 - [ ] Add role correction controls in the layout preview.
@@ -1319,7 +1319,30 @@ Delivered:
 
 Next slice:
 
-- [ ] Implement deterministic Hexagonal core, port, adapter, and infrastructure geometry from the classified roles.
+- [x] Implement deterministic Hexagonal core, port, adapter, and infrastructure geometry from the classified roles.
 - [ ] Surface role evidence, confidence, and ambiguity in the layout preview.
 - [ ] Add explicit role correction controls only after the inferred geometry is visible for review.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 33 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added a dedicated synchronous Hexagonal strategy and routed the existing preset through it instead of Dagre.
+- [x] Positioned domain cores centrally, inbound and outbound ports on inner sectors, and adapters on outer sectors.
+- [x] Positioned infrastructure in a separate lower sector and isolated unclassified nodes in a review sector.
+- [x] Used measured node dimensions and role-local lane spacing to prevent overlaps.
+- [x] Preserved tactical grid snapping and normalized all top-level geometry into positive canvas coordinates.
+- [x] Preserved child-relative coordinates and diagnosed hierarchy-crossing edges excluded from placement.
+- [x] Propagated semantic mismatch and ambiguity warnings into standard layout diagnostics.
+- [x] Added role-count, missing-core, and multiple-core diagnostics.
+- [x] Verified distinct geometry, expected sector ordering, zero overlaps, infrastructure placement, and input-order determinism.
+
+Next slice:
+
+- [ ] Surface role, inference source, confidence, and evidence in the layout preview drawer.
+- [ ] Highlight ambiguous and contradictory nodes without mutating the board.
+- [ ] Add explicit role correction controls after role evidence is reviewable.
+- [ ] Add native Hexagonal desktop and narrow-HUD visual baselines.

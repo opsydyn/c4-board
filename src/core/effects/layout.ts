@@ -276,6 +276,7 @@ export const C4_LAYOUT_PRESETS = {
    * Use for: Clean architecture, DDD, hexagonal patterns
    */
   hexagonal: {
+    strategyId: "hexagonal",
     direction: "TB" as const,
     rankSpacing: 140,
     nodeSpacing: 90,

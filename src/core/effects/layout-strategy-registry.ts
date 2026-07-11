@@ -1,5 +1,6 @@
 import { dagreLayoutStrategy } from "./dagre-layout-strategy";
 import { elkLayeredLayoutStrategy } from "./elk-layered-layout-strategy";
+import { hexagonalLayoutStrategy } from "./hexagonal-layout-strategy";
 import { hubSpokeLayoutStrategy } from "./hub-spoke-layout-strategy";
 import type { LayoutDiagnostic, LayoutStrategy, SynchronousLayoutStrategy } from "./layout.types";
 import { systemContextLayoutStrategy } from "./system-context-layout-strategy";
@@ -8,6 +9,7 @@ const synchronousStrategies = new Map<string, SynchronousLayoutStrategy>([
   [dagreLayoutStrategy.id, dagreLayoutStrategy],
   [hubSpokeLayoutStrategy.id, hubSpokeLayoutStrategy],
   [systemContextLayoutStrategy.id, systemContextLayoutStrategy],
+  [hexagonalLayoutStrategy.id, hexagonalLayoutStrategy],
 ]);
 
 const strategies = new Map<string, LayoutStrategy>([
