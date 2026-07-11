@@ -128,6 +128,20 @@ describe("edge layout persistence", () => {
       data: {
         createdAt: 10,
         metadata: { protocol: "https" },
+        layoutAudit: {
+          version: 1,
+          appliedAt: 100,
+          preset: "elkLayered",
+          strategyId: "elk-layered",
+          engine: "elk",
+          selectedVariant: "recommended",
+          comparisonMetrics: [{
+            key: "routedCrossings",
+            original: 5,
+            recommended: 2,
+            favored: "recommended",
+          }],
+        },
         layoutRoute: [{
           start: { x: 10, y: 20 },
           bends: [{ x: 10, y: 50 }],
@@ -148,6 +162,7 @@ describe("edge layout persistence", () => {
     expect(hydrated.targetHandle).toBe("top");
     expect(hydrated.data).toMatchObject({
       metadata: { protocol: "https" },
+      layoutAudit: edge.data?.layoutAudit,
       layoutRoute: edge.data?.layoutRoute,
     });
   });

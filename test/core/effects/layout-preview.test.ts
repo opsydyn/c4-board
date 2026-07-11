@@ -1,5 +1,6 @@
 import {
   applyLayoutResultToEdges,
+  buildLayoutApplicationAudit,
   buildLayoutComparisonMetrics,
   createAsyncLayoutPreview,
   createLayoutPreview,
@@ -136,6 +137,25 @@ describe("createLayoutPreview", () => {
       { key: "routedCrossings", favored: "recommended" },
       { key: "routedLength", favored: "original" },
     ]);
+  });
+
+  it("builds deterministic application audit metadata from the active comparison", () => {
+    const graph = fixture("system-context");
+    const preview = createLayoutPreview({ ...graph, preset: "systemContext", scope: "graph" });
+    const metrics = buildLayoutComparisonMetrics(preview, preview);
+    const audit = buildLayoutApplicationAudit(preview, "original", metrics, 123);
+    const edges = applyLayoutResultToEdges(preview.result, audit);
+
+    expect(audit).toMatchObject({
+      version: 1,
+      appliedAt: 123,
+      preset: "systemContext",
+      strategyId: "system-context",
+      engine: "custom",
+      selectedVariant: "original",
+    });
+    expect(audit.comparisonMetrics).toHaveLength(2);
+    expect(edges.every((edge) => edge.data?.layoutAudit === audit)).toBe(true);
   });
 
   it("rejects cancelled and superseded asynchronous preview completions", () => {

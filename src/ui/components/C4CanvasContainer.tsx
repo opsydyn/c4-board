@@ -69,6 +69,7 @@ import { getRigAgentV1Flag, resolveEffectiveRigAgentV1Rollout } from "../../core
 import { autoLayoutSelected, getPreset, type LayoutOptions, type LayoutPresetName } from "../../core/effects/layout";
 import {
   applyLayoutResultToEdges,
+  buildLayoutApplicationAudit,
   buildLayoutComparisonMetrics,
   createAsyncLayoutPreview,
   createLayoutPreview,
@@ -2322,19 +2323,25 @@ export function C4CanvasContainer() {
 
   const handleApplyLayoutPreview = useCallback(() => {
     if (!layoutPreview) return;
-    const edges = applyLayoutResultToEdges(layoutPreview.result);
+    const audit = buildLayoutApplicationAudit(
+      layoutPreview,
+      layoutPreviewComparison?.active ?? "single",
+      layoutComparisonMetrics,
+    );
+    const edges = applyLayoutResultToEdges(layoutPreview.result, audit);
     send({
       type: "APPLY_LAYOUT_PREVIEW",
       preset: layoutPreview.preset,
       nodes: layoutPreview.result.nodes,
       edges,
+      audit,
     });
     setLayoutPreview(null);
     setLayoutPreviewComparison(null);
     requestAnimationFrame(() => {
       canvasRef.current?.fitViewToGraph();
     });
-  }, [layoutPreview, send]);
+  }, [layoutComparisonMetrics, layoutPreview, layoutPreviewComparison?.active, send]);
 
   const handleCancelLayoutPreview = useCallback(() => {
     layoutPreviewRequestIdRef.current += 1;

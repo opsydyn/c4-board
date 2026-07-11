@@ -411,6 +411,7 @@ interface PersistedEdgePayloadV1 {
   version: 1;
   metadata?: EdgeMetadata;
   layout?: {
+    audit?: EdgeData["layoutAudit"];
     route?: EdgeData["layoutRoute"];
     sourceHandle?: string | null;
     targetHandle?: string | null;
@@ -444,6 +445,7 @@ export function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
   const edgeData: EdgeData = {
     createdAt: dbEdge.created_at,
     ...(metadata && { metadata }),
+    ...(layout?.audit && { layoutAudit: layout.audit }),
     ...(layout?.route && { layoutRoute: layout.route }),
   };
 
@@ -472,7 +474,7 @@ export function reactFlowEdgeToDb(
   const edgeData = edge.data as EdgeData | undefined;
   const metadata = edgeData?.metadata;
   const hasLayout = Boolean(
-    edgeData?.layoutRoute || edge.sourceHandle || edge.targetHandle,
+    edgeData?.layoutAudit || edgeData?.layoutRoute || edge.sourceHandle || edge.targetHandle,
   );
   const metadataJson = metadata || hasLayout
     ? JSON.stringify(
@@ -481,6 +483,7 @@ export function reactFlowEdgeToDb(
         ...(metadata && { metadata }),
         ...(hasLayout && {
           layout: {
+            ...(edgeData?.layoutAudit && { audit: edgeData.layoutAudit }),
             ...(edgeData?.layoutRoute && { route: edgeData.layoutRoute }),
             ...(edge.sourceHandle && { sourceHandle: edge.sourceHandle }),
             ...(edge.targetHandle && { targetHandle: edge.targetHandle }),

@@ -1079,6 +1079,28 @@ Delivered:
 
 Next slice:
 
-- [ ] Add focus-safe Apply confirmation text that identifies whether Original or Recommended is active.
-- [ ] Preserve the comparison metric strip in the accepted layout audit metadata.
+- [x] Add focus-safe Apply confirmation text that identifies whether Original or Recommended is active.
+- [x] Preserve the comparison metric strip in the accepted layout audit metadata.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 23 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Changed the focused command label to Apply original or Apply recommended in comparison mode.
+- [x] Added a versioned `LayoutApplicationAudit` contract with preset, strategy, engine, timestamp, and selected variant.
+- [x] Preserved every comparison metric's original value, recommended value, and favored outcome without an aggregate score.
+- [x] Created the audit only at explicit Apply, not during preview or comparison switching.
+- [x] Stored the latest audit in canvas machine state for immediate runtime inspection.
+- [x] Attached the same audit record to applied edge layout metadata.
+- [x] Extended the existing versioned edge payload to round-trip audit metadata without a database migration.
+- [x] Restored the latest persisted audit when loading a diagram with audited edges.
+- [x] Added Apply labeling, audit construction, machine transition, and persistence round-trip coverage.
+
+Next slice:
+
+- [ ] Surface the latest layout audit in the preview or history UX without duplicating it per visible edge.
+- [ ] Define diagram-level audit persistence for edge-free boards and future multi-step layout history.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

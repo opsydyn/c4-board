@@ -18,13 +18,23 @@ describe("Canvas Machine", () => {
     const previousNodes = actor.getSnapshot().context.nodes as Node[];
     const nodes = previousNodes.map((node) => ({ ...node, position: { x: 420, y: 240 } }));
     const edges = [{ id: "preview-edge", source: nodes[0]!.id, target: nodes[0]!.id }];
+    const audit = {
+      version: 1 as const,
+      appliedAt: 100,
+      preset: "elkLayered",
+      strategyId: "elk-layered",
+      engine: "elk" as const,
+      selectedVariant: "recommended" as const,
+      comparisonMetrics: [],
+    };
 
-    actor.send({ type: "APPLY_LAYOUT_PREVIEW", preset: "elkLayered", nodes, edges });
+    actor.send({ type: "APPLY_LAYOUT_PREVIEW", preset: "elkLayered", nodes, edges, audit });
 
     expect(actor.getSnapshot().context.nodes).toEqual(nodes);
     expect(actor.getSnapshot().context.edges).toEqual(edges);
     expect(actor.getSnapshot().context.previousLayout).toEqual(previousNodes);
     expect(actor.getSnapshot().context.currentLayout).toBe("elkLayered");
+    expect(actor.getSnapshot().context.lastLayoutAudit).toEqual(audit);
   });
 
   test("loads a visual fixture without a persistent diagram identity", () => {

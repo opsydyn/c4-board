@@ -6,6 +6,7 @@ import {
   getAllC4Presets,
   getAllDDDPresets,
   getPreset,
+  type LayoutApplicationAudit,
   type LayoutOptions,
   type LayoutPresetName,
   type LayoutQualityMetrics,
@@ -292,7 +293,32 @@ export function evaluateLayoutRecommendation(
   };
 }
 
-export function applyLayoutResultToEdges(result: LayoutResult): Edge[] {
+export function buildLayoutApplicationAudit(
+  preview: LayoutPreviewModel,
+  selectedVariant: LayoutApplicationAudit["selectedVariant"],
+  comparisonMetrics: LayoutComparisonMetric[],
+  appliedAt = Date.now(),
+): LayoutApplicationAudit {
+  return {
+    version: 1,
+    appliedAt,
+    preset: preview.preset,
+    strategyId: preview.result.strategyId,
+    engine: preview.result.engine,
+    selectedVariant,
+    comparisonMetrics: comparisonMetrics.map(({ key, original, recommended, favored }) => ({
+      key,
+      original,
+      recommended,
+      favored,
+    })),
+  };
+}
+
+export function applyLayoutResultToEdges(
+  result: LayoutResult,
+  audit?: LayoutApplicationAudit,
+): Edge[] {
   const routeByEdgeId = new Map(
     result.edgeRoutes?.map((route) => [route.edgeId, route.sections]) ?? [],
   );
@@ -301,14 +327,22 @@ export function applyLayoutResultToEdges(result: LayoutResult): Edge[] {
   );
 
   return result.edges.map((edge) => {
-    const { layoutRoute: _previousRoute, ...data } = edge.data ?? {};
+    const {
+      layoutAudit: _previousAudit,
+      layoutRoute: _previousRoute,
+      ...data
+    } = edge.data ?? {};
     const layoutRoute = routeByEdgeId.get(edge.id);
     const ports = portsByEdgeId.get(edge.id);
     return {
       ...edge,
       sourceHandle: ports?.sourceHandle ?? null,
       targetHandle: ports?.targetHandle ?? null,
-      data: { ...data, ...(layoutRoute && { layoutRoute }) },
+      data: {
+        ...data,
+        ...(layoutRoute && { layoutRoute }),
+        ...(audit && { layoutAudit: audit }),
+      },
     };
   });
 }

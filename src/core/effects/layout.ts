@@ -19,6 +19,7 @@ import type { LayoutOptions, LayoutResult } from "./layout.types";
 
 export type {
   LayoutAnalysis,
+  LayoutApplicationAudit,
   LayoutDiagnostic,
   LayoutEngine,
   LayoutInput,

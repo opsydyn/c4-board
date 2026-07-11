@@ -14,7 +14,7 @@ import { Effect } from "effect";
 import { type AnyStateMachine, assign, setup } from "xstate";
 import * as DiagramOps from "../../core/effects/diagram-operations";
 import * as EdgeOps from "../../core/effects/edge-operations";
-import type { EdgeMetadata } from "../../core/effects/edge-operations";
+import type { EdgeData, EdgeMetadata } from "../../core/effects/edge-operations";
 import * as MermaidExport from "../../core/effects/export-mermaid";
 import * as PlantUMLExport from "../../core/effects/export-plantuml-c4";
 import * as MermaidImport from "../../core/effects/import-mermaid";
@@ -23,6 +23,7 @@ import {
   autoLayout,
   autoLayoutSelected,
   getPreset,
+  type LayoutApplicationAudit,
   type LayoutOptions,
   type LayoutPresetName,
 } from "../../core/effects/layout";
@@ -63,7 +64,13 @@ export type CanvasEvent =
   | { type: "TOGGLE_ANIMATIONS" }
   | { type: "AUTO_LAYOUT"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
   | { type: "AUTO_LAYOUT_SELECTED"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
-  | { type: "APPLY_LAYOUT_PREVIEW"; preset: LayoutPresetName; nodes: Node[]; edges: Edge[] }
+  | {
+    type: "APPLY_LAYOUT_PREVIEW";
+    preset: LayoutPresetName;
+    nodes: Node[];
+    edges: Edge[];
+    audit: LayoutApplicationAudit;
+  }
   | {
     type: "UPDATE_NODE";
     nodeId: string;
@@ -142,6 +149,7 @@ export interface CanvasContext {
   // Layout state
   previousLayout: Node[] | null; // For undo functionality
   currentLayout: LayoutPresetName | null; // Track currently applied layout preset
+  lastLayoutAudit: LayoutApplicationAudit | null;
 
   // Export state
   exportModalOpen: boolean;
@@ -766,6 +774,8 @@ const canvasMachineDefinition = setup({
       currentLayout: ({ event }) => event.type === "APPLY_LAYOUT_PREVIEW" ? event.preset : null,
       nodes: ({ context, event }) => event.type === "APPLY_LAYOUT_PREVIEW" ? event.nodes : context.nodes,
       edges: ({ context, event }) => event.type === "APPLY_LAYOUT_PREVIEW" ? event.edges : context.edges,
+      lastLayoutAudit: ({ context, event }) =>
+        event.type === "APPLY_LAYOUT_PREVIEW" ? event.audit : context.lastLayoutAudit,
     }),
 
     setSaving: assign({
@@ -817,6 +827,12 @@ const canvasMachineDefinition = setup({
         if (event.type !== "LOAD_DIAGRAM_SUCCESS") return null;
         return event.diagram.updatedAt;
       },
+      lastLayoutAudit: ({ event }) => {
+        if (event.type !== "LOAD_DIAGRAM_SUCCESS") return null;
+        return event.diagram.edges
+          .map((edge) => (edge.data as EdgeData | undefined)?.layoutAudit)
+          .find((audit): audit is LayoutApplicationAudit => audit !== undefined) ?? null;
+      },
     }),
 
     loadVisualFixture: assign({
@@ -829,6 +845,7 @@ const canvasMachineDefinition = setup({
       nodeCounter: ({ event }) => event.type === "LOAD_VISUAL_FIXTURE" ? event.nodes.length : 0,
       previousLayout: null,
       currentLayout: null,
+      lastLayoutAudit: null,
       lastSaved: null,
       saveError: null,
     }),
@@ -1176,6 +1193,7 @@ const canvasMachineDefinition = setup({
     // Layout state
     previousLayout: null,
     currentLayout: null,
+    lastLayoutAudit: null,
 
     // Export state
     exportModalOpen: false,

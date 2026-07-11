@@ -123,7 +123,11 @@ export function LayoutPreviewDrawer({
           </button>
           <button type="button" className={styles.applyButton} onClick={onApply}>
             <CheckIcon size={16} weight="bold" aria-hidden="true" />
-            Apply layout
+            {comparisonMode === "original"
+              ? "Apply original"
+              : comparisonMode === "recommended"
+              ? "Apply recommended"
+              : "Apply layout"}
           </button>
         </div>
       </header>

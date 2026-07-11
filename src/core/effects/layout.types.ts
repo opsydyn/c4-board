@@ -92,6 +92,21 @@ export interface LayoutRoutedQualityMetrics {
   totalEdgeLength: number;
 }
 
+export interface LayoutApplicationAudit {
+  version: 1;
+  appliedAt: number;
+  preset: string;
+  strategyId: string;
+  engine: LayoutEngine;
+  selectedVariant: "single" | "original" | "recommended";
+  comparisonMetrics: Array<{
+    key: "overlaps" | "canvasArea" | "routedCrossings" | "routedLength";
+    original: number;
+    recommended: number;
+    favored: "original" | "recommended" | "tie";
+  }>;
+}
+
 export interface LayoutEdgePortAssignment {
   edgeId: string;
   sourceHandle: LayoutHandle;

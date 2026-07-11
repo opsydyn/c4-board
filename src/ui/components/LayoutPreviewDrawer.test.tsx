@@ -173,6 +173,7 @@ describe("LayoutPreviewDrawer", () => {
     const recommended = screen.getByRole("button", { name: "Recommended" });
     expect(original).toHaveAttribute("aria-pressed", "false");
     expect(recommended).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Apply recommended" })).toBeInTheDocument();
 
     await user.click(original);
     await user.click(recommended);
