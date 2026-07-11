@@ -381,7 +381,7 @@ function buildBridgeGroups(plan: PlacementPlan): BridgeGroup[] {
     const affinity = plan.affinityByNodeId.get(nodeId)!;
     const sourceBusId = affinity.primarySourceBusId!;
     const destinationBusId = affinity.primaryDestinationBusId!;
-    const key = bridgeGroupKey({ sourceBusId, destinationBusId, nodeIds: [] });
+    const key = bridgeGroupKey({ sourceBusId, destinationBusId });
     const group = groups.get(key) ?? { sourceBusId, destinationBusId, nodeIds: [] };
     group.nodeIds.push(nodeId);
     groups.set(key, group);
@@ -532,7 +532,7 @@ function roleSummary(assignments: ReadonlyArray<ArchitectureRoleAssignment>): La
 }
 
 function toLayoutDiagnostic(
-  diagnostic: { code: string; severity: "warning"; message: string; nodeIds: string[] },
+  diagnostic: { code: string; severity: "warning"; message: string; nodeIds: readonly string[] },
 ): LayoutDiagnostic {
   return { ...diagnostic, nodeIds: [...diagnostic.nodeIds] };
 }
