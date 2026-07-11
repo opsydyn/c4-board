@@ -8,3 +8,10 @@ description: Canonical documentation for the c4-board desktop architecture works
 This site is the canonical documentation home for c4-board.
 
 Use it for product context, operating guides, architecture records, OPY/Rig agent notes, release notes, and incident postmortems.
+
+## Current Roadmaps
+
+- [Architecture Change Intelligence](./overview/architecture-change-intelligence-roadmap/): forward roadmap for OPY as an agentic architecture workbench.
+- [Intelligent Architecture Layouts](./overview/intelligent-layout-roadmap/): dedicated roadmap for Dagre, ELK, OPY/Rig classification, and governed custom layouts.
+- [Azure Sync](./overview/azure-sync-roadmap/): dedicated roadmap for safe Azure import, guided UX, cloud drift, and OPY reconciliation.
+- [Team Topologies + Azure Sync](./overview/product-roadmap-team-topology-azure-sync/): earlier roadmap for topology, Azure sync, and AI foundation milestones.

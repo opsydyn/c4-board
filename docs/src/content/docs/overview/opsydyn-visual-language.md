@@ -319,7 +319,7 @@ Seamlessly mix C4 (system structure) and DDD (domain logic) modeling in the same
 
 ### PlantUML C4 Export
 
-```plantuml
+```text
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 

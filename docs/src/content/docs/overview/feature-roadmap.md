@@ -453,6 +453,97 @@ Transform the C4 board from a static diagram tool into a **living, breathing blu
 
 ---
 
+### 13. Workspace Tabs & Multi-Diagram Sessions
+
+#### 13.1 Product Direction
+**Goal**: turn the current route-based application into a persistent professional workspace where diagrams and utility surfaces can remain open, switch instantly, and close independently.
+
+The primary UX will be an application-level Opsydyn workspace tab strip implemented in React. Tauri does not provide a cross-platform native document-tab component, and the product must behave consistently on macOS, Windows, and Linux.
+
+Workspace tab types:
+
+- **Diagram tabs**: multiple C4 or DDD boards open concurrently.
+- **Singleton utility tabs**: Global Settings, Saved Diagrams, and Postee.
+- **Future artifact tabs**: OPY plans, comparisons, reports, and architecture review artifacts.
+
+Expected interactions:
+
+- Open, activate, close, pin, reorder, and reopen tabs.
+- Show dirty, saving, saved, warning, and failure state per diagram.
+- Preserve selection, viewport, undo history, active layout preview, and OPY context per diagram.
+- Support keyboard navigation and accessible focus behavior through React Aria.
+- Restore the previous workspace session after restart under an explicit preference.
+- Confirm or safely persist unsaved work before closing a diagram or the application.
+
+#### 13.2 Required Architecture
+
+The current canvas machine owns one `currentDiagramId`, one graph, and one save/undo context. Multi-diagram tabs require a workspace-level session registry rather than repeatedly replacing that single context.
+
+Target boundaries:
+
+```text
+WorkspaceShell
+  -> WorkspaceTabs actor
+  -> DiagramSession actor keyed by diagram ID
+       -> graph and selection
+       -> viewport and panel state
+       -> undo/checkpoint state
+       -> save/autosave state
+       -> OPY board context
+       -> layout preview state
+  -> singleton utility surfaces
+```
+
+Inactive diagram sessions should retain serializable actor state without keeping every React Flow canvas mounted. Only the active diagram renders its canvas unless a comparison workflow explicitly needs more than one.
+
+#### 13.3 Sequenced Delivery
+
+**Phase A: Workspace Shell**
+
+- [ ] Define `WorkspaceTab`, `WorkspaceTabKind`, and stable tab identity schemas.
+- [ ] Add an accessible HUD tab strip with active, close, pin, and overflow behavior.
+- [ ] Open Global Settings and Saved Diagrams as closable singleton utility tabs.
+- [ ] Preserve direct URLs as deep links while avoiding full workspace unmounts during normal navigation.
+- [ ] Add tab keyboard navigation and narrow-window overflow behavior.
+
+**Phase B: Diagram Session Registry**
+
+- [ ] Introduce a workspace-level actor that owns open-tab order and active tab identity.
+- [ ] Create one diagram-session actor per open diagram.
+- [ ] Scope graph, selection, viewport, undo, save, layout preview, and OPY context to the diagram session.
+- [ ] Define actor disposal, cache limits, and safe close behavior.
+- [ ] Prevent stale saves or agent actions from crossing diagram-session boundaries.
+
+**Phase C: Multi-Diagram UX**
+
+- [ ] Open diagrams from Saved Diagrams into new or existing tabs.
+- [ ] Add dirty/save/error indicators and close confirmation policy.
+- [ ] Add reopen-closed-tab and workspace-session restoration.
+- [ ] Add tab reordering, pinning, duplicate-tab prevention, and context menus.
+- [ ] Add cross-tab diagram links and optional side-by-side comparison.
+
+**Phase D: Detached Native Windows**
+
+- [ ] Add an explicit "Open in New Window" command using a separate Tauri `WebviewWindow`.
+- [ ] Synchronize global settings, diagram persistence, and lifecycle events across windows.
+- [ ] Restore window position and size through Tauri window-state support.
+- [ ] Evaluate macOS `tabbing_identifier` for grouping detached document windows into native macOS tabs.
+- [ ] Keep native window tabs optional and platform-specific; never make them the primary workspace contract.
+
+#### 13.4 Acceptance Criteria
+
+1. Switching tabs never reloads or discards another diagram's unsaved state.
+2. Save, undo, OPY, selection, viewport, and layout preview state cannot leak between diagrams.
+3. Settings and other utility tabs remain singleton surfaces and close without closing diagram sessions.
+4. The tab strip remains keyboard accessible and usable under constrained widths.
+5. Closing or quitting cannot silently discard pending work.
+6. Windows and Linux receive the same core workspace UX as macOS.
+7. Detached windows are an additive power-user capability, not a prerequisite for multi-diagram work.
+
+**Priority**: P1 (high product value, high architectural effort)
+
+---
+
 ## Quick Wins (Immediate Value)
 
 ### Phase 1: Foundation (Weeks 1-2)
@@ -532,6 +623,7 @@ Transform the C4 board from a static diagram tool into a **living, breathing blu
 | Team Ownership | High | Low | **P1 - Soon** |
 | Code → Diagram Sync | High | High | **P1 - Soon** |
 | Live Health Status | High | Medium | **P1 - Soon** |
+| Workspace Tabs | High | High | **P1 - Soon** |
 | Git Integration | Medium | Low | **P2 - Later** |
 | Metrics Integration | Medium | Medium | **P2 - Later** |
 | Cost Tracking | Medium | High | **P3 - Future** |
@@ -554,7 +646,7 @@ How do we know this is working?
 
 ## Open Questions
 
-1. **Multi-diagram support**: How to handle large systems? (Layers, zooming, linked diagrams?)
+1. **Multi-diagram support**: What session retention and memory budget should apply to inactive diagram tabs?
 2. **Collaboration**: Real-time multi-user editing? Conflict resolution?
 3. **Access control**: Who can edit architecture? Role-based permissions?
 4. **Plugin system**: Allow community extensions/integrations?
@@ -592,6 +684,6 @@ How do we know this is working?
 
 ---
 
-**Last Updated**: 2025-11-15
+**Last Updated**: 2026-07-11
 **Contributors**: Claude + Alan
 **Status**: Living Document (update as we build!)
