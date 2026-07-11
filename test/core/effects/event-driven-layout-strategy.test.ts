@@ -109,6 +109,97 @@ describe("Event-Driven layout strategy", () => {
     expect(result.quality.nodeOverlapCount).toBe(0);
   });
 
+  it("stacks bridge processors sharing the same bus pair", () => {
+    const nodes = [
+      node("orders", "publisher"),
+      node("orders-bus", "event-bus"),
+      { ...node("alpha-bridge", "processor"), style: { width: 160, height: 140 } },
+      { ...node("zeta-bridge", "processor"), style: { width: 180, height: 220 } },
+      node("risk-bus", "event-bus"),
+      node("review", "subscriber"),
+    ];
+    const edges = [
+      edge("orders", "orders-bus", "order event"),
+      edge("orders-bus", "alpha-bridge", "order event"),
+      edge("alpha-bridge", "risk-bus", "risk event"),
+      edge("orders-bus", "zeta-bridge", "order event"),
+      edge("zeta-bridge", "risk-bus", "risk event"),
+      edge("risk-bus", "review", "risk event"),
+    ];
+    const result = eventDrivenLayoutStrategy.layout({ nodes, edges });
+    const byId = new Map(result.nodes.map((value) => [value.id, center(value)]));
+
+    expect(byId.get("alpha-bridge")!.y).toBeLessThan(byId.get("zeta-bridge")!.y);
+    expect(byId.get("alpha-bridge")!.y).not.toBe(byId.get("zeta-bridge")!.y);
+    expect(result.quality.nodeOverlapCount).toBe(0);
+  });
+
+  it("separates a local processor from an adjacent bridge corridor", () => {
+    const nodes = [
+      node("orders", "publisher"),
+      node("orders-bus", "event-bus"),
+      { ...node("local-processor", "processor"), style: { width: 180, height: 400 } },
+      { ...node("bridge-processor", "processor"), style: { width: 160, height: 400 } },
+      node("risk-bus", "event-bus"),
+      node("review", "subscriber"),
+    ];
+    const edges = [
+      edge("orders", "orders-bus", "order event"),
+      edge("orders-bus", "local-processor", "local event"),
+      edge("orders-bus", "bridge-processor", "order event"),
+      edge("bridge-processor", "risk-bus", "risk event"),
+      edge("risk-bus", "review", "risk event"),
+    ];
+    const result = eventDrivenLayoutStrategy.layout({ nodes, edges });
+    const byId = new Map(result.nodes.map((value) => [value.id, center(value)]));
+
+    expect(byId.get("orders-bus")!.y).toBeLessThan(byId.get("bridge-processor")!.y);
+    expect(byId.get("bridge-processor")!.y).toBeLessThan(byId.get("risk-bus")!.y);
+    expect(result.quality.nodeOverlapCount).toBe(0);
+  });
+
+  it("places single-band flow orphans in the review lane", () => {
+    const graph = singleBusGraph();
+    graph.nodes.push(
+      node("orphan-publisher", "publisher"),
+      node("orphan-processor", "processor"),
+      node("orphan-subscriber", "subscriber"),
+    );
+    const result = eventDrivenLayoutStrategy.layout(graph);
+    const byId = new Map(result.nodes.map((value) => [value.id, center(value)]));
+    const telemetryY = byId.get("telemetry")!.y;
+
+    expect(byId.get("orphan-publisher")!.y).toBeGreaterThan(telemetryY);
+    expect(byId.get("orphan-processor")!.y).toBeGreaterThan(telemetryY);
+    expect(byId.get("orphan-subscriber")!.y).toBeGreaterThan(telemetryY);
+    expect(result.diagnostics.find(({ code }) => code === "event-driven-orphan-role"))
+      .toMatchObject({
+        severity: "warning",
+        nodeIds: ["audit", "orphan-processor", "orphan-publisher", "orphan-subscriber"],
+      });
+    expect(result.quality.nodeOverlapCount).toBe(0);
+  });
+
+  it("keeps measured publisher peers separate after grid snapping", () => {
+    const nodes = [
+      { ...node("alpha-publisher", "publisher"), style: { width: 160, height: 101 } },
+      { ...node("beta-publisher", "publisher"), style: { width: 160, height: 101 } },
+      node("orders-bus", "event-bus"),
+    ];
+    const edges = [
+      edge("alpha-publisher", "orders-bus", "order event"),
+      edge("beta-publisher", "orders-bus", "order event"),
+    ];
+    const result = eventDrivenLayoutStrategy.layout({
+      nodes,
+      edges,
+      options: { nodeSpacing: 1, snapToGrid: true, gridSize: 20 },
+    });
+
+    expect(result.nodes.every(({ position }) => position.x % 20 === 0 && position.y % 20 === 0)).toBe(true);
+    expect(result.quality.nodeOverlapCount).toBe(0);
+  });
+
   it("is deterministic while preserving hierarchy and measured geometry", () => {
     const graph = singleBusGraph();
     const orders = graph.nodes.find(({ id }) => id === "orders")!;

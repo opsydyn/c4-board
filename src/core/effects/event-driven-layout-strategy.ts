@@ -44,6 +44,12 @@ interface PlacementPlan {
   bridgeNodeIds: string[];
 }
 
+interface BridgeGroup {
+  sourceBusId: string;
+  destinationBusId: string;
+  nodeIds: string[];
+}
+
 export const eventDrivenLayoutStrategy: SynchronousLayoutStrategy = {
   id: EVENT_DRIVEN_STRATEGY_ID,
   engine: "custom",
@@ -136,10 +142,14 @@ function positionEventDriven(
     subscriber: columnStep * 3,
   };
   const plan = buildPlacementPlan(assignments, edges);
-  const bandHeight = Math.max(
-    maxBandContentHeight(plan, assignments, nodeById, roleByNodeId, options.nodeSpacing),
-    maxProcessorHeight(assignments, nodeById),
-  ) + options.nodeSpacing * 2;
+  const bridgeGroups = buildBridgeGroups(plan);
+  const bandHeight = maxBandContentHeight(
+    plan,
+    assignments,
+    nodeById,
+    roleByNodeId,
+    options,
+  ) + maxBridgeGroupHeight(bridgeGroups, nodeById, options) + options.nodeSpacing * 2;
   const bandY = new Map(plan.bands.map((bandId, index) => [bandId, index * bandHeight]));
   const lastBandY = plan.bands.length > 0 ? bandY.get(plan.bands.at(-1)!)! : 0;
   const supportY = lastBandY + bandHeight + options.rankSpacing;
@@ -163,25 +173,41 @@ function positionEventDriven(
   for (const bandId of plan.bands) {
     const groups = nodesByBandAndRole.get(bandId);
     for (const role of ["publisher", "event-bus", "processor", "subscriber"] as const) {
-      stackPeers(groups?.get(role) ?? [], { x: columnX[role], y: bandY.get(bandId)! }, options.nodeSpacing, centers);
+      stackPeers(groups?.get(role) ?? [], { x: columnX[role], y: bandY.get(bandId)! }, options, centers);
     }
   }
-  for (const nodeId of plan.bridgeNodeIds) {
-    const affinity = plan.affinityByNodeId.get(nodeId)!;
-    const sourceY = bandY.get(affinity.primarySourceBusId!)!;
-    const destinationY = bandY.get(affinity.primaryDestinationBusId!)!;
-    centers.set(nodeId, { x: columnX.processor, y: (sourceY + destinationY) / 2 });
+  for (const group of bridgeGroups) {
+    const sourceY = bandY.get(group.sourceBusId)!;
+    const destinationY = bandY.get(group.destinationBusId)!;
+    stackPeers(
+      group.nodeIds.map((nodeId) => nodeById.get(nodeId)!),
+      { x: columnX.processor, y: (sourceY + destinationY) / 2 },
+      options,
+      centers,
+    );
   }
   stackPeers(
     plan.supportNodeIds.map((nodeId) => nodeById.get(nodeId)!),
     { x: columnX["event-bus"], y: supportY },
-    options.nodeSpacing,
+    options,
     centers,
   );
+  for (const role of ["publisher", "processor", "subscriber"] as const) {
+    stackPeers(
+      plan.reviewNodeIds
+        .filter((nodeId) => roleByNodeId.get(nodeId) === role)
+        .map((nodeId) => nodeById.get(nodeId)!),
+      { x: columnX[role], y: reviewY },
+      options,
+      centers,
+    );
+  }
   stackPeers(
-    plan.reviewNodeIds.map((nodeId) => nodeById.get(nodeId)!),
+    plan.reviewNodeIds
+      .filter((nodeId) => !isFlowRole(roleByNodeId.get(nodeId)!))
+      .map((nodeId) => nodeById.get(nodeId)!),
     { x: columnX["event-bus"], y: reviewY },
-    options.nodeSpacing,
+    options,
     centers,
   );
 
@@ -276,7 +302,7 @@ function buildPlacementPlan(
   const reviewNodeIds = assignments
     .filter(({ nodeId, role }) => {
       if (role === "unclassified") return true;
-      if (!isFlowRole(role) || bands.length === 1) return false;
+      if (!isFlowRole(role)) return false;
       return !assignedBand({ nodeId, role }, {
         bands,
         affinityByNodeId,
@@ -296,7 +322,6 @@ function assignedBand(
   plan: PlacementPlan,
 ): string | null {
   if (assignment.role === "event-bus") return assignment.nodeId;
-  if (plan.bands.length === 1 && isFlowRole(assignment.role)) return plan.bands[0]!;
   const affinity = plan.affinityByNodeId.get(assignment.nodeId);
   if (!affinity) return null;
   if (assignment.role === "publisher") return affinity.primaryDestinationBusId;
@@ -310,7 +335,7 @@ function maxBandContentHeight(
   assignments: ReadonlyArray<ArchitectureRoleAssignment>,
   nodeById: ReadonlyMap<string, Node>,
   roleByNodeId: ReadonlyMap<string, ArchitectureSemanticRole>,
-  nodeSpacing: number,
+  options: LayoutOptions,
 ): number {
   return Math.max(
     0,
@@ -324,7 +349,7 @@ function maxBandContentHeight(
                 && roleByNodeId.get(nodeId) === role && !plan.bridgeNodeIds.includes(nodeId)
               )
               .map(({ nodeId }) => nodeById.get(nodeId)!),
-            nodeSpacing,
+            options,
           )
         ),
       )
@@ -332,20 +357,50 @@ function maxBandContentHeight(
   );
 }
 
-function maxProcessorHeight(
-  assignments: ReadonlyArray<ArchitectureRoleAssignment>,
+function buildBridgeGroups(plan: PlacementPlan): BridgeGroup[] {
+  const groups = new Map<string, BridgeGroup>();
+  for (const nodeId of plan.bridgeNodeIds) {
+    const affinity = plan.affinityByNodeId.get(nodeId)!;
+    const sourceBusId = affinity.primarySourceBusId!;
+    const destinationBusId = affinity.primaryDestinationBusId!;
+    const key = `${sourceBusId}\u0000${destinationBusId}`;
+    const group = groups.get(key) ?? { sourceBusId, destinationBusId, nodeIds: [] };
+    group.nodeIds.push(nodeId);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .map((group) => ({ ...group, nodeIds: group.nodeIds.sort() }))
+    .sort((left, right) =>
+      left.sourceBusId.localeCompare(right.sourceBusId)
+      || left.destinationBusId.localeCompare(right.destinationBusId)
+    );
+}
+
+function maxBridgeGroupHeight(
+  groups: ReadonlyArray<BridgeGroup>,
   nodeById: ReadonlyMap<string, Node>,
+  options: LayoutOptions,
 ): number {
   return Math.max(
     0,
-    ...assignments.filter(({ role }) => role === "processor")
-      .map(({ nodeId }) => getNodeDimensions(nodeById.get(nodeId)!).height),
+    ...groups.map((group) =>
+      stackHeight(
+        group.nodeIds.map((nodeId) => nodeById.get(nodeId)!),
+        options,
+      )
+    ),
   );
 }
 
-function stackHeight(nodes: ReadonlyArray<Node>, nodeSpacing: number): number {
-  return nodes.reduce((total, node) => total + getNodeDimensions(node).height, 0)
-    + Math.max(0, nodes.length - 1) * nodeSpacing;
+function stackHeight(nodes: ReadonlyArray<Node>, options: LayoutOptions): number {
+  const orderedNodes = sortedNodes(nodes);
+  return orderedNodes.reduce(
+    (total, node, index) =>
+      total + (index === orderedNodes.length - 1
+        ? getNodeDimensions(node).height
+        : peerStep(node, options)),
+    0,
+  );
 }
 
 function rankedBusIds(counts: ReadonlyMap<string, number>): string[] {
@@ -373,17 +428,23 @@ function isAmbiguousProcessor(affinity: BusAffinity): boolean {
 function stackPeers(
   nodes: ReadonlyArray<Node>,
   anchor: XYPosition,
-  nodeSpacing: number,
+  options: LayoutOptions,
   centers: Map<string, XYPosition>,
 ): void {
-  const totalHeight = nodes.reduce((total, node) => total + getNodeDimensions(node).height, 0)
-    + Math.max(0, nodes.length - 1) * nodeSpacing;
+  const orderedNodes = sortedNodes(nodes);
+  const totalHeight = stackHeight(orderedNodes, options);
   let y = anchor.y - totalHeight / 2;
-  for (const node of sortedNodes(nodes)) {
+  for (const [index, node] of orderedNodes.entries()) {
     const { height } = getNodeDimensions(node);
     centers.set(node.id, { x: anchor.x, y: y + height / 2 });
-    y += height + nodeSpacing;
+    y += index === orderedNodes.length - 1 ? height : peerStep(node, options);
   }
+}
+
+function peerStep(node: Node, options: LayoutOptions): number {
+  const height = getNodeDimensions(node).height;
+  if (!options.snapToGrid || !options.gridSize) return height + options.nodeSpacing;
+  return Math.ceil((height + options.nodeSpacing) / options.gridSize) * options.gridSize;
 }
 
 function roleSummary(assignments: ReadonlyArray<ArchitectureRoleAssignment>): LayoutDiagnostic {
@@ -414,8 +475,8 @@ function sortedEdges(edges: ReadonlyArray<Edge>): Edge[] {
 function snapPosition(position: XYPosition, options: LayoutOptions): XYPosition {
   if (!options.snapToGrid || !options.gridSize) return position;
   return {
-    x: Math.round(position.x / options.gridSize) * options.gridSize,
-    y: Math.round(position.y / options.gridSize) * options.gridSize,
+    x: Math.ceil(position.x / options.gridSize) * options.gridSize,
+    y: Math.ceil(position.y / options.gridSize) * options.gridSize,
   };
 }
 
