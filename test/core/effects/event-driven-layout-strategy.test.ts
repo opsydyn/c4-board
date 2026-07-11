@@ -1,4 +1,6 @@
+import { dagreLayoutStrategy } from "@/core/effects/dagre-layout-strategy";
 import { eventDrivenLayoutStrategy } from "@/core/effects/event-driven-layout-strategy";
+import { calculateLayout, getPreset } from "@/core/effects/layout";
 import { getNodeDimensions } from "@/core/effects/layout-node-size";
 import type { Edge, Node, XYPosition } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
@@ -49,6 +51,20 @@ const singleBusGraph = () => ({
 });
 
 describe("Event-Driven layout strategy", () => {
+  it("routes the Event-Driven preset to custom semantic geometry", () => {
+    const graph = singleBusGraph();
+    const options = getPreset("eventDriven");
+    const result = calculateLayout(graph.nodes, graph.edges, options);
+    const baseline = dagreLayoutStrategy.layout({ ...graph, options });
+
+    expect(options.strategyId).toBe("event-driven");
+    expect(result).toMatchObject({ strategyId: "event-driven", engine: "custom" });
+    expect(result.nodes.map(({ position }) => position)).not.toEqual(
+      baseline.nodes.map(({ position }) => position),
+    );
+    expect(result.diagnostics.map(({ code }) => code)).not.toContain("layout-strategy-fallback");
+  });
+
   it("places one event flow in semantic columns and support lanes", () => {
     const graph = singleBusGraph();
     const result = eventDrivenLayoutStrategy.layout(graph);

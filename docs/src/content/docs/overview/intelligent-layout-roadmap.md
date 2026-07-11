@@ -48,7 +48,7 @@ The shipped implementation now provides an architecture-grade deterministic foun
 Known limitations:
 
 - Several legacy menu presets still differ only by Dagre spacing and direction.
-- Hexagonal now has shared semantic-role classification, review and correction UX, and dedicated geometry; Event-Driven has deterministic role inference but still needs lane geometry, while Client-Server still needs pattern-specific inference and geometry.
+- Hexagonal and Event-Driven now have shared semantic-role classification, review and correction UX, and dedicated geometry; Client-Server still needs pattern-specific inference and geometry.
 - Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
 - ELK Radial has not justified replacing the product-specific radial strategies.
 - Native visual baselines cover dense ELK Event-Driven and Client-Server fixtures plus inferred and corrected Hexagonal previews; radial and full preset coverage remain open.
@@ -456,7 +456,7 @@ Exit criteria:
 - [x] Implement the shared Phase 4 role schema and initial ports-and-adapters inference.
 - [x] Add Hexagonal core, port, adapter, and infrastructure placement.
 - [x] Add Event-Driven publisher, bus, processor, and subscriber inference.
-- [ ] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
+- [x] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
 - [ ] Add Client-Server client, service, domain, and persistence columns.
 - [x] Add role correction controls in the layout preview.
 - [ ] Add semantic violation diagnostics independent from layout quality.
@@ -531,7 +531,7 @@ Exit criteria:
 | P0 | Metrics, fixtures, and strategy contract | Foundation shipped; full preset coverage open | Makes future layout work safe and measurable | None |
 | P0 | True Hub-Spoke and System Context | Shipped | Immediate visible differentiation | Strategy contract |
 | P0 | ELK worker and compound graph support | Shipped; browser budgets open | Unlocks architecture-grade constraints and routing | Strategy contract |
-| P1 | Hexagonal and Event-Driven | Next | Strong semantic differentiation | Shared semantic role schema |
+| P1 | Hexagonal and Event-Driven | In progress; Event-Driven shipped | Strong semantic differentiation | Shared semantic role schema |
 | P1 | OPY/Rig classifier | Queued | Natural-language strategy and role selection | Stable role and strategy schemas |
 | P1 | Client-Server and improved hierarchical family | Queued | Completes common architecture patterns | Shared semantic role schema |
 | P2 | Microservices and mixed strategies | Future | Handles dense enterprise boards | ELK and classification |
@@ -1425,6 +1425,26 @@ Delivered:
 
 Next slice:
 
-- [ ] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
-- [ ] Capture native Event-Driven visual baselines after lane geometry is available.
+- [x] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
+- [ ] Capture native Event-Driven desktop and narrow visual baselines for the custom semantic layout.
+- [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
+
+### Slice 38 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added the custom Event-Driven layout strategy with publisher, bus, processor, and subscriber lanes arranged around deterministic bus-centred bands.
+- [x] Placed explicit cross-band processor bridges and selected deterministic primary bus affinity for ambiguous processors.
+- [x] Added support and review lanes for infrastructure, external dependencies, unclassified, and unaffiliated flow nodes.
+- [x] Emitted hierarchy, multiple-band, ambiguous-affinity, orphan-role, and no-bus diagnostics while preserving semantic role assignments in the layout result.
+- [x] Preserved child-node hierarchy positions and excluded hierarchy-crossing edges from lane placement.
+- [x] Added zero-overlap and input-order determinism coverage, including measured node geometry and bridge-corridor separation.
+- [x] Registered the strategy and routed the Event-Driven preset through the custom semantic geometry without fallback.
+
+Next slice:
+
+- [ ] Capture native Event-Driven desktop and narrow visual baselines for the custom semantic layout.
+- [ ] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
 - [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.

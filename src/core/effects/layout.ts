@@ -288,6 +288,7 @@ export const C4_LAYOUT_PRESETS = {
    * Use for: Event sourcing, message queues, pub/sub systems
    */
   eventDriven: {
+    strategyId: "event-driven",
     direction: "LR" as const,
     rankSpacing: 200,
     nodeSpacing: 120,
