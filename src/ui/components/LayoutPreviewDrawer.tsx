@@ -154,6 +154,18 @@ export function LayoutPreviewDrawer({
               </tbody>
             </table>
           </div>
+          {preview.routedQuality && (
+            <dl className={styles.portSummary} role="group" aria-label="Routed geometry quality">
+              <div data-tone={preview.routedQuality.edgeCrossingCount > 0 ? "warning" : "ready"}>
+                <dt>Routed crossings</dt>
+                <dd>{preview.routedQuality.edgeCrossingCount.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>Routed length</dt>
+                <dd>{Math.round(preview.routedQuality.totalEdgeLength).toLocaleString()}</dd>
+              </div>
+            </dl>
+          )}
           {preview.portSummary && (
             <dl className={styles.portSummary} role="group" aria-label="Port routing summary">
               <div>

@@ -10,8 +10,9 @@ import {
   type LayoutPresetName,
   type LayoutQualityMetrics,
   type LayoutResult,
+  type LayoutRoutedQualityMetrics,
 } from "./layout";
-import { evaluateLayoutQuality } from "./layout-metrics";
+import { evaluateLayoutQuality, evaluateRoutedEdgeQuality } from "./layout-metrics";
 
 export type LayoutPreviewScope = "graph" | "selection";
 export type LayoutCenterKind = "hub" | "system-of-interest";
@@ -42,6 +43,7 @@ export interface LayoutPreviewModel {
   qualityDeltas: LayoutQualityDelta[];
   centerControl: LayoutCenterControl | null;
   portSummary: LayoutPortSummary | null;
+  routedQuality: LayoutRoutedQualityMetrics | null;
 }
 
 export interface LayoutPortSummary {
@@ -132,6 +134,9 @@ function buildLayoutPreviewModel(
     qualityDeltas: buildQualityDeltas(currentQuality, result.quality),
     centerControl: buildCenterControl(input.nodes, options, result, appliedScope),
     portSummary: buildPortSummary(result),
+    routedQuality: result.edgeRoutes?.length
+      ? evaluateRoutedEdgeQuality(result.edgeRoutes)
+      : null,
   };
 }
 
@@ -184,8 +189,14 @@ function buildQualityDeltas(
 ): LayoutQualityDelta[] {
   return [
     delta("overlaps", "Overlaps", current.nodeOverlapCount, proposed.nodeOverlapCount, "lower"),
-    delta("crossings", "Crossings", current.straightLineCrossingCount, proposed.straightLineCrossingCount, "lower"),
-    delta("edgeLength", "Edge length", current.totalEdgeLength, proposed.totalEdgeLength, "lower"),
+    delta(
+      "crossings",
+      "Straight crossings",
+      current.straightLineCrossingCount,
+      proposed.straightLineCrossingCount,
+      "lower",
+    ),
+    delta("edgeLength", "Straight length", current.totalEdgeLength, proposed.totalEdgeLength, "lower"),
     delta("occupiedArea", "Canvas area", current.occupiedArea, proposed.occupiedArea, "lower"),
     delta("displacement", "Movement", 0, proposed.averageNodeDisplacement, "neutral"),
   ];

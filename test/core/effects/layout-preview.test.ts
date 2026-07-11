@@ -53,6 +53,10 @@ describe("createLayoutPreview", () => {
     expect(preview.result.edgeRoutes?.length).toBeGreaterThan(0);
     expect(preview.appliedScope).toBe("graph");
     expect(preview.portSummary).toMatchObject({ assignedEdges: preview.result.edges.length });
+    expect(preview.routedQuality).toEqual({
+      edgeCrossingCount: 0,
+      totalEdgeLength: 900,
+    });
     const projectedEdges = applyLayoutResultToEdges(preview.result);
     expect(projectedEdges[0]).toMatchObject({
       sourceHandle: "bottom",
@@ -82,6 +86,7 @@ describe("createLayoutPreview", () => {
       "occupiedArea",
       "displacement",
     ]);
+    expect(preview.routedQuality).toBeNull();
     expect(graph.nodes.map((node) => node.position)).toEqual(originalPositions);
   });
 

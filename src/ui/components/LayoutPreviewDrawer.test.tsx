@@ -106,4 +106,23 @@ describe("LayoutPreviewDrawer", () => {
     expect(summary).toHaveTextContent("Congested sides1");
     expect(summary).toHaveTextContent("Busiest side12/9 BOTTOM");
   });
+
+  it("labels straight baselines and surfaces routed geometry only when available", () => {
+    const preview = createPreview();
+    preview.routedQuality = { edgeCrossingCount: 2, totalEdgeLength: 1_245.4 };
+    render(
+      <LayoutPreviewDrawer
+        preview={preview}
+        onCenterChange={() => {}}
+        onApply={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("row", { name: /Straight crossings/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Straight length/ })).toBeInTheDocument();
+    const routed = screen.getByRole("group", { name: "Routed geometry quality" });
+    expect(routed).toHaveTextContent("Routed crossings2");
+    expect(routed).toHaveTextContent("Routed length1,245");
+  });
 });

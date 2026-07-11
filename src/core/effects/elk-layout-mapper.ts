@@ -1,7 +1,7 @@
 import type { ElkExtendedEdge, ElkNode, ElkPort } from "elkjs/lib/elk-api";
 
 import { DEFAULT_LAYOUT_OPTIONS } from "./dagre-layout-strategy";
-import { evaluateLayoutQuality } from "./layout-metrics";
+import { evaluateLayoutQuality, evaluateRoutedEdgeQuality } from "./layout-metrics";
 import { getNodeDimensions } from "./layout-node-size";
 import type {
   LayoutDiagnostic,
@@ -369,51 +369,13 @@ function mapEdgeRoutes(graph: ElkNode): LayoutEdgeRoute[] {
 }
 
 export function evaluateElkRouteQuality(result: LayoutResult): ElkRouteQuality {
-  const segments = (result.edgeRoutes ?? []).flatMap((route) =>
-    route.sections.flatMap((section) => {
-      const points = [section.start, ...section.bends, section.end];
-      return points.slice(1).map((end, index) => ({
-        edgeId: route.edgeId,
-        start: points[index]!,
-        end,
-      }));
-    })
-  );
-  let crossingCount = 0;
-  let totalRouteLength = 0;
-
-  for (const segment of segments) {
-    totalRouteLength += Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y);
-  }
-  for (let leftIndex = 0; leftIndex < segments.length; leftIndex += 1) {
-    const left = segments[leftIndex]!;
-    for (let rightIndex = leftIndex + 1; rightIndex < segments.length; rightIndex += 1) {
-      const right = segments[rightIndex]!;
-      if (left.edgeId === right.edgeId) continue;
-      if (segmentsCross(left.start, left.end, right.start, right.end)) crossingCount += 1;
-    }
-  }
+  const routed = evaluateRoutedEdgeQuality(result.edgeRoutes ?? []);
 
   return {
-    crossingCount,
-    totalRouteLength,
+    crossingCount: routed.edgeCrossingCount,
+    totalRouteLength: routed.totalEdgeLength,
     congestedSideCount: (result.portCongestion ?? []).filter(({ congested }) => congested).length,
   };
-}
-
-function segmentsCross(
-  firstStart: { x: number; y: number },
-  firstEnd: { x: number; y: number },
-  secondStart: { x: number; y: number },
-  secondEnd: { x: number; y: number },
-): boolean {
-  const orientation = (
-    start: { x: number; y: number },
-    end: { x: number; y: number },
-    point: { x: number; y: number },
-  ) => (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x);
-  return orientation(firstStart, firstEnd, secondStart) * orientation(firstStart, firstEnd, secondEnd) < 0
-    && orientation(secondStart, secondEnd, firstStart) * orientation(secondStart, secondEnd, firstEnd) < 0;
 }
 
 function snapPosition(x: number, y: number, enabled: boolean | undefined, gridSize: number) {

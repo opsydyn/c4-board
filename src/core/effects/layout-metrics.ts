@@ -1,6 +1,6 @@
 import type { Edge, Node, XYPosition } from "@xyflow/react";
 import { getNodeDimensions } from "./layout-node-size";
-import type { LayoutQualityMetrics } from "./layout.types";
+import type { LayoutEdgeRoute, LayoutQualityMetrics, LayoutRoutedQualityMetrics } from "./layout.types";
 
 interface NodeBox {
   id: string;
@@ -61,6 +61,39 @@ export function evaluateLayoutQuality(
     averageNodeDisplacement: displacement.average,
     maximumNodeDisplacement: displacement.maximum,
   };
+}
+
+export function evaluateRoutedEdgeQuality(
+  routes: LayoutEdgeRoute[],
+): LayoutRoutedQualityMetrics {
+  const segments = routes.flatMap((route) =>
+    route.sections.flatMap((section) => {
+      const points = [section.start, ...section.bends, section.end];
+      return points.slice(1).map((end, index) => ({
+        edgeId: route.edgeId,
+        start: points[index]!,
+        end,
+      }));
+    })
+  );
+  let edgeCrossingCount = 0;
+  let totalEdgeLength = 0;
+
+  for (const segment of segments) {
+    totalEdgeLength += Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y);
+  }
+  for (let leftIndex = 0; leftIndex < segments.length; leftIndex += 1) {
+    const left = segments[leftIndex]!;
+    for (let rightIndex = leftIndex + 1; rightIndex < segments.length; rightIndex += 1) {
+      const right = segments[rightIndex]!;
+      if (left.edgeId === right.edgeId) continue;
+      if (segmentsProperlyIntersect(left.start, left.end, right.start, right.end)) {
+        edgeCrossingCount += 1;
+      }
+    }
+  }
+
+  return { edgeCrossingCount, totalEdgeLength };
 }
 
 function buildNodeBoxes(nodes: Node[]): NodeBox[] {

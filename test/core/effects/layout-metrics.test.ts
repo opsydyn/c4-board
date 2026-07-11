@@ -1,4 +1,4 @@
-import { evaluateLayoutQuality } from "@/core/effects/layout-metrics";
+import { evaluateLayoutQuality, evaluateRoutedEdgeQuality } from "@/core/effects/layout-metrics";
 import type { Edge, Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
@@ -72,5 +72,29 @@ describe("evaluateLayoutQuality", () => {
 
     expect(metrics.boundingBox).toEqual({ x: 200, y: 100, width: 120, height: 130 });
     expect(metrics.nodeOverlapCount).toBe(0);
+  });
+
+  it("measures actual routed segments and excludes bends on the same edge", () => {
+    const metrics = evaluateRoutedEdgeQuality([
+      {
+        edgeId: "horizontal",
+        sections: [{ start: { x: 0, y: 50 }, bends: [], end: { x: 100, y: 50 } }],
+      },
+      {
+        edgeId: "vertical",
+        sections: [{ start: { x: 50, y: 0 }, bends: [], end: { x: 50, y: 100 } }],
+      },
+      {
+        edgeId: "bent",
+        sections: [{
+          start: { x: 0, y: 0 },
+          bends: [{ x: 0, y: 20 }, { x: 20, y: 20 }],
+          end: { x: 20, y: 40 },
+        }],
+      },
+    ]);
+
+    expect(metrics.edgeCrossingCount).toBe(1);
+    expect(metrics.totalEdgeLength).toBe(260);
   });
 });

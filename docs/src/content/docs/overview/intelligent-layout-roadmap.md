@@ -913,6 +913,26 @@ Delivered:
 
 Next slice:
 
-- [ ] Promote routed crossing and routed edge length into the preview quality model.
-- [ ] Display routed metrics only for strategies that return route geometry.
-- [ ] Keep straight-line metrics as the cross-engine baseline and label both measures unambiguously.
+- [x] Promote routed crossing and routed edge length into the preview quality model.
+- [x] Display routed metrics only for strategies that return route geometry.
+- [x] Keep straight-line metrics as the cross-engine baseline and label both measures unambiguously.
+
+### Slice 15 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added one shared routed-geometry evaluator over actual route sections and bend points.
+- [x] Counted proper crossings only between segments owned by different edges.
+- [x] Measured routed Manhattan segment length independently from node-center estimates.
+- [x] Reused the evaluator in both ELK policy evidence and preview quality modeling.
+- [x] Renamed cross-engine rows to Straight crossings and Straight length.
+- [x] Added Routed crossings and Routed length only when the strategy returns route geometry.
+- [x] Added focused model, geometry, and drawer coverage for routed metrics and conditional visibility.
+
+Next slice:
+
+- [ ] Add route-aware quality thresholds and diagnostics for unusually long or crossing-heavy ELK results.
+- [ ] Compare routed metrics against a broader set of dense compound fixtures before defining acceptance gates.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

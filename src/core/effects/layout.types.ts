@@ -79,6 +79,11 @@ export interface LayoutEdgeRoute {
   }>;
 }
 
+export interface LayoutRoutedQualityMetrics {
+  edgeCrossingCount: number;
+  totalEdgeLength: number;
+}
+
 export interface LayoutEdgePortAssignment {
   edgeId: string;
   sourceHandle: LayoutHandle;

@@ -25,6 +25,7 @@ export type {
   LayoutOptions,
   LayoutQualityMetrics,
   LayoutResult,
+  LayoutRoutedQualityMetrics,
   LayoutStrategy,
   SynchronousLayoutStrategy,
 } from "./layout.types";
