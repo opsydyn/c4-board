@@ -42,4 +42,21 @@ describe("layout history export", () => {
     );
     expect(createLayoutHistoryFilename("***")).toBe("diagram-layout-history.json");
   });
+
+  it("rejects unsupported versions and inconsistent export counts", () => {
+    const artifact = buildLayoutHistoryArtifact({
+      diagramId: "diagram-1",
+      diagramName: "Checkout Platform",
+      exportedAt: 500,
+      audits: [audit(100)],
+    });
+
+    expect(() => serializeLayoutHistoryArtifact({ ...artifact, version: 2 } as never)).toThrow();
+    expect(() =>
+      serializeLayoutHistoryArtifact({
+        ...artifact,
+        retention: { ...artifact.retention, exportedCount: 99 },
+      })
+    ).toThrow();
+  });
 });

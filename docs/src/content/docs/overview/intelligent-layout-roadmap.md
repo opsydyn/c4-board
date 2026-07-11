@@ -1211,7 +1211,29 @@ Delivered:
 
 Next slice:
 
-- [ ] Validate the JSON artifact against an Effect Schema before download and future import.
+- [x] Validate the JSON artifact against an Effect Schema before download and future import.
 - [ ] Add artifact import only when a concrete review or migration workflow requires it.
 - [ ] Add CSV only if architecture-review workflows demonstrate a tabular interoperability need.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 29 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added Effect Schemas for comparison metrics, layout application audits, and the outer review artifact.
+- [x] Restricted schema identifiers, artifact versions, engines, variants, metric keys, and favored outcomes to known literals.
+- [x] Required timestamps and counts to be non-negative integers.
+- [x] Required metric values to be finite numbers.
+- [x] Required the declared export count to equal the encoded audit array length.
+- [x] Rejected artifacts exceeding the shared per-diagram retention limit.
+- [x] Validated artifacts during construction and again immediately before JSON serialization.
+- [x] Exported a reusable unknown-input decoder for any future import or review tooling.
+- [x] Added rejection coverage for unsupported versions and inconsistent counts.
+
+Next slice:
+
+- [ ] Add a review-artifact summary and integrity fingerprint for evidence exchange.
+- [ ] Add artifact import only when a concrete review or migration workflow requires it.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
