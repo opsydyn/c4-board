@@ -1167,6 +1167,28 @@ Delivered:
 
 Next slice:
 
-- [ ] Add clear-all and individual audit deletion behind explicit confirmation.
+- [x] Add clear-all and individual audit deletion behind explicit confirmation.
 - [ ] Add JSON or CSV history export for architecture review evidence.
+- [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.
+
+### Slice 27 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added diagram-scoped persistence operations for deleting one audit or clearing all audit history.
+- [x] Required an inline second confirmation action before either destructive operation executes.
+- [x] Added explicit cancellation controls that leave persistence and runtime state unchanged.
+- [x] Disabled destructive controls while a request is in flight so repeated activation is inert.
+- [x] Updated canvas runtime history only after SQLite reports success.
+- [x] Repaired the latest-audit reference to the next newest record after individual deletion.
+- [x] Cleared both history and latest-audit state after a successful clear-all operation.
+- [x] Kept persistence failures visible in the history surface without presenting false success.
+- [x] Added focused persistence, machine, and component coverage for scoping and confirmation behavior.
+
+Next slice:
+
+- [ ] Export layout history as a versioned JSON review artifact.
+- [ ] Add CSV only if architecture-review workflows demonstrate a tabular interoperability need.
 - [ ] Refresh native visual baselines once the debug Tauri window is visible to macOS capture again.

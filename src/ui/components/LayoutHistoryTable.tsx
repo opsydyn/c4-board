@@ -1,10 +1,12 @@
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
-import { ClockCounterClockwiseIcon } from "@phosphor-icons/react";
+import { ClockCounterClockwiseIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import * as styles from "./LayoutHistoryTable.css";
 
 export interface LayoutHistoryTableProps {
   audits: ReadonlyArray<LayoutApplicationAudit>;
+  onDeleteAudit?: (appliedAt: number) => Promise<void>;
+  onClearAudits?: () => Promise<void>;
 }
 
 const metricLabels: Record<LayoutApplicationAudit["comparisonMetrics"][number]["key"], string> = {
@@ -22,13 +24,29 @@ const formatMetric = (key: string, value: number) =>
     ? Math.round(value).toLocaleString()
     : value.toLocaleString();
 
-export function LayoutHistoryTable({ audits }: LayoutHistoryTableProps) {
+export function LayoutHistoryTable({ audits, onDeleteAudit, onClearAudits }: LayoutHistoryTableProps) {
   const [selectedAt, setSelectedAt] = useState<number | null>(audits[0]?.appliedAt ?? null);
+  const [confirmation, setConfirmation] = useState<"delete" | "clear" | null>(null);
+  const [isDeleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const selected = audits.find((audit) => audit.appliedAt === selectedAt) ?? audits[0] ?? null;
 
   useEffect(() => {
     if (!selected && audits[0]) setSelectedAt(audits[0].appliedAt);
   }, [audits, selected]);
+
+  const runDeletion = async (operation: () => Promise<void>) => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await operation();
+      setConfirmation(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Layout history deletion failed");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (!selected) {
     return (
@@ -76,7 +94,81 @@ export function LayoutHistoryTable({ audits }: LayoutHistoryTableProps) {
             <span>Strategy::{selected.strategyId}</span>
             <span>Engine::{selected.engine}</span>
           </div>
+          {onDeleteAudit && onClearAudits && (
+            <div className={styles.historyActions}>
+              {confirmation === "delete"
+                ? (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.dangerButton}
+                      disabled={isDeleting}
+                      aria-label="Confirm delete selected layout audit"
+                      onClick={() => void runDeletion(() => onDeleteAudit(selected.appliedAt))}
+                    >
+                      <TrashIcon size={14} aria-hidden="true" /> Confirm delete
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.cancelButton}
+                      disabled={isDeleting}
+                      aria-label="Cancel delete selected layout audit"
+                      onClick={() => setConfirmation(null)}
+                    >
+                      <XIcon size={14} aria-hidden="true" />
+                    </button>
+                  </>
+                )
+                : (
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    disabled={isDeleting}
+                    aria-label="Delete selected layout audit"
+                    title="Delete selected audit"
+                    onClick={() => setConfirmation("delete")}
+                  >
+                    <TrashIcon size={15} aria-hidden="true" />
+                  </button>
+                )}
+              {confirmation === "clear"
+                ? (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.dangerButton}
+                      disabled={isDeleting}
+                      aria-label="Confirm clear layout audit history"
+                      onClick={() => void runDeletion(onClearAudits)}
+                    >
+                      Clear all
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.cancelButton}
+                      disabled={isDeleting}
+                      aria-label="Cancel clear layout audit history"
+                      onClick={() => setConfirmation(null)}
+                    >
+                      <XIcon size={14} aria-hidden="true" />
+                    </button>
+                  </>
+                )
+                : (
+                  <button
+                    type="button"
+                    className={styles.clearButton}
+                    disabled={isDeleting}
+                    aria-label="Clear layout audit history"
+                    onClick={() => setConfirmation("clear")}
+                  >
+                    Clear history
+                  </button>
+                )}
+            </div>
+          )}
         </header>
+        {deleteError && <p className={styles.error} role="alert">{deleteError}</p>}
         {selected.comparisonMetrics.length > 0
           ? (
             <table className={styles.metrics}>

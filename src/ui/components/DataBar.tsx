@@ -23,6 +23,8 @@ interface DataBarProps {
   onToggle: (open: boolean) => void;
   onLoadDiagram: (diagramId: string) => Promise<void> | void;
   layoutAudits: ReadonlyArray<LayoutApplicationAudit>;
+  onDeleteLayoutAudit: (appliedAt: number) => Promise<void>;
+  onClearLayoutAudits: () => Promise<void>;
 }
 
 const TABS: Array<{ id: DataBarTab; label: string }> = [
@@ -56,7 +58,14 @@ const loadDataEffect = Effect.try({
 
 Effect.runSync(loadDataEffect);
 
-export function DataBar({ isOpen, onToggle, onLoadDiagram, layoutAudits }: DataBarProps) {
+export function DataBar({
+  isOpen,
+  onToggle,
+  onLoadDiagram,
+  layoutAudits,
+  onDeleteLayoutAudit,
+  onClearLayoutAudits,
+}: DataBarProps) {
   const [activeTab, setActiveTab] = useState<DataBarTab>("diagrams");
 
   const handleDiagramLoad = useCallback(
@@ -71,13 +80,19 @@ export function DataBar({ isOpen, onToggle, onLoadDiagram, layoutAudits }: DataB
       case "diagrams":
         return <SavedDiagramsTable onLoadDiagram={handleDiagramLoad} />;
       case "history":
-        return <LayoutHistoryTable audits={layoutAudits} />;
+        return (
+          <LayoutHistoryTable
+            audits={layoutAudits}
+            onDeleteAudit={onDeleteLayoutAudit}
+            onClearAudits={onClearLayoutAudits}
+          />
+        );
       case "docs":
         return <DocumentationTable />;
       default:
         return null;
     }
-  }, [activeTab, handleDiagramLoad, layoutAudits]);
+  }, [activeTab, handleDiagramLoad, layoutAudits, onClearLayoutAudits, onDeleteLayoutAudit]);
 
   return (
     <section className={bottomPanel} aria-label="Data bar">

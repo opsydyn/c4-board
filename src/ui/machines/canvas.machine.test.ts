@@ -117,6 +117,40 @@ describe("Canvas Machine", () => {
     expect(actor.getSnapshot().context.layoutAudits).not.toContainEqual(audits.at(-1));
   });
 
+  test("removes layout audits and repairs the latest audit reference", () => {
+    const actor = createActor(canvasMachine).start();
+    const olderAudit = {
+      version: 1 as const,
+      appliedAt: 100,
+      preset: "elkLayered",
+      strategyId: "elk-layered",
+      engine: "elk" as const,
+      selectedVariant: "original" as const,
+      comparisonMetrics: [],
+    };
+    const latestAudit = { ...olderAudit, appliedAt: 200, selectedVariant: "recommended" as const };
+    actor.send({
+      type: "LOAD_DIAGRAM_SUCCESS",
+      diagram: {
+        id: "diagram-delete",
+        name: "Delete history",
+        nodes: [],
+        edges: [],
+        updatedAt: 200,
+        layoutAudit: latestAudit,
+        layoutAudits: [latestAudit, olderAudit],
+      },
+    });
+
+    actor.send({ type: "DELETE_LAYOUT_AUDIT_SUCCESS", appliedAt: 200 });
+    expect(actor.getSnapshot().context.layoutAudits).toEqual([olderAudit]);
+    expect(actor.getSnapshot().context.lastLayoutAudit).toEqual(olderAudit);
+
+    actor.send({ type: "CLEAR_LAYOUT_AUDITS_SUCCESS" });
+    expect(actor.getSnapshot().context.layoutAudits).toEqual([]);
+    expect(actor.getSnapshot().context.lastLayoutAudit).toBeNull();
+  });
+
   test("loads a visual fixture without a persistent diagram identity", () => {
     const actor = createActor(canvasMachine).start();
     const nodes = [{ id: "fixture-node", position: { x: 0, y: 0 }, data: {} }];

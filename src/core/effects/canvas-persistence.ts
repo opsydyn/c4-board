@@ -154,6 +154,25 @@ export const getLayoutAudits = (diagramId: string) =>
     });
   });
 
+export const deleteLayoutAudit = (diagramId: string, appliedAt: number) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(
+      `DELETE FROM layout_audits
+       WHERE diagram_id = ? AND applied_at = ?`,
+      [diagramId, appliedAt],
+    );
+  });
+
+export const clearLayoutAudits = (diagramId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(
+      "DELETE FROM layout_audits WHERE diagram_id = ?",
+      [diagramId],
+    );
+  });
+
 // ============================================================================
 // Conversion Utilities (Pure Functions)
 // ============================================================================

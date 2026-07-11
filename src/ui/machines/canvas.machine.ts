@@ -65,6 +65,8 @@ export type CanvasEvent =
   | { type: "TOGGLE_ANIMATIONS" }
   | { type: "AUTO_LAYOUT"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
   | { type: "AUTO_LAYOUT_SELECTED"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
+  | { type: "DELETE_LAYOUT_AUDIT_SUCCESS"; appliedAt: number }
+  | { type: "CLEAR_LAYOUT_AUDITS_SUCCESS" }
   | {
     type: "APPLY_LAYOUT_PREVIEW";
     preset: LayoutPresetName;
@@ -787,6 +789,20 @@ const canvasMachineDefinition = setup({
           : context.layoutAudits,
     }),
 
+    removeLayoutAudit: assign(({ context, event }) => {
+      if (event.type !== "DELETE_LAYOUT_AUDIT_SUCCESS") return {};
+      const layoutAudits = context.layoutAudits.filter((audit) => audit.appliedAt !== event.appliedAt);
+      return {
+        layoutAudits,
+        lastLayoutAudit: layoutAudits[0] ?? null,
+      };
+    }),
+
+    clearLayoutAuditHistory: assign({
+      layoutAudits: [],
+      lastLayoutAudit: null,
+    }),
+
     setSaving: assign({
       isSaving: true,
       saveError: null,
@@ -1357,6 +1373,12 @@ const canvasMachineDefinition = setup({
         },
         APPLY_LAYOUT_PREVIEW: {
           actions: "applyLayoutPreview",
+        },
+        DELETE_LAYOUT_AUDIT_SUCCESS: {
+          actions: "removeLayoutAudit",
+        },
+        CLEAR_LAYOUT_AUDITS_SUCCESS: {
+          actions: "clearLayoutAuditHistory",
         },
         EXPORT_PLANTUML: {
           actions: "exportPlantUML",

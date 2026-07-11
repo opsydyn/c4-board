@@ -56,7 +56,9 @@ import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../.
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import {
+  clearLayoutAudits,
   createNewDiagram,
+  deleteLayoutAudit,
   listAllDiagrams,
   loadDiagram,
   reactFlowNodeToDb,
@@ -2319,6 +2321,20 @@ export function C4CanvasContainer() {
     openLayoutPreview(preset, "selection");
   }, [openLayoutPreview]);
 
+  const handleDeleteLayoutAudit = useCallback(async (appliedAt: number) => {
+    const diagramId = state.context.currentDiagramId;
+    if (!diagramId) throw new Error("Save the diagram before editing layout history");
+    await runEffect(deleteLayoutAudit(diagramId, appliedAt));
+    send({ type: "DELETE_LAYOUT_AUDIT_SUCCESS", appliedAt });
+  }, [send, state.context.currentDiagramId]);
+
+  const handleClearLayoutAudits = useCallback(async () => {
+    const diagramId = state.context.currentDiagramId;
+    if (!diagramId) throw new Error("Save the diagram before editing layout history");
+    await runEffect(clearLayoutAudits(diagramId));
+    send({ type: "CLEAR_LAYOUT_AUDITS_SUCCESS" });
+  }, [send, state.context.currentDiagramId]);
+
   const handleLayoutPreviewCenterChange = useCallback((nodeId: string) => {
     setLayoutPreview((current) => {
       if (!current?.centerControl) return current;
@@ -3192,6 +3208,8 @@ export function C4CanvasContainer() {
           onToggle={setDataBarOpen}
           onLoadDiagram={handleLoadDiagram}
           layoutAudits={state.context.layoutAudits}
+          onDeleteLayoutAudit={handleDeleteLayoutAudit}
+          onClearLayoutAudits={handleClearLayoutAudits}
         />
       )}
       {navigationTarget && (

@@ -1,6 +1,6 @@
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LayoutHistoryTable } from "./LayoutHistoryTable";
 
 const audit = (
@@ -38,5 +38,39 @@ describe("LayoutHistoryTable", () => {
     render(<LayoutHistoryTable audits={[]} />);
 
     expect(screen.getByText("No accepted layouts yet")).toBeInTheDocument();
+  });
+
+  it("requires confirmation before deleting the selected audit", () => {
+    const onDeleteAudit = vi.fn(async () => {});
+    render(
+      <LayoutHistoryTable
+        audits={[audit(200, "recommended"), audit(100, "original")]}
+        onDeleteAudit={onDeleteAudit}
+        onClearAudits={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected layout audit" }));
+    expect(onDeleteAudit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete selected layout audit" }));
+    expect(onDeleteAudit).toHaveBeenCalledWith(200);
+  });
+
+  it("allows clear-all confirmation to be cancelled", () => {
+    const onClearAudits = vi.fn(async () => {});
+    render(
+      <LayoutHistoryTable
+        audits={[audit(200, "recommended")]}
+        onDeleteAudit={vi.fn()}
+        onClearAudits={onClearAudits}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear layout audit history" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel clear layout audit history" }));
+
+    expect(onClearAudits).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Clear layout audit history" })).toBeInTheDocument();
   });
 });

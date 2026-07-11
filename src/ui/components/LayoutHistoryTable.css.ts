@@ -114,3 +114,53 @@ export const singleState = style({
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
 });
+
+export const historyActions = style({
+  display: "flex",
+  flex: "1 1 100%",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: theme.spacing["2"],
+  borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  paddingTop: theme.spacing["3"],
+});
+
+const actionButton = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: theme.spacing["1"],
+  border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  backgroundColor: theme.color.background.surface,
+  cursor: "pointer",
+  padding: `${theme.spacing["1"]} ${theme.spacing["3"]}`,
+  minHeight: "2rem",
+  textTransform: "uppercase",
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  selectors: {
+    "&:disabled": {
+      opacity: 0.5,
+      cursor: "not-allowed",
+    },
+  },
+});
+
+export const iconButton = style([actionButton, { padding: 0, width: "2rem" }]);
+export const clearButton = style([actionButton]);
+export const cancelButton = style([actionButton, { padding: 0, width: "2rem" }]);
+export const dangerButton = style([
+  actionButton,
+  {
+    borderColor: theme.color.status.critical,
+    color: theme.color.status.critical,
+  },
+]);
+export const error = style({
+  border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
+  padding: theme.spacing["3"],
+  color: theme.color.status.critical,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});

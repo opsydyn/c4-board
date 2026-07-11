@@ -1,4 +1,10 @@
-import { appendLayoutAudit, getLayoutAudits, LAYOUT_AUDIT_RETENTION_LIMIT } from "@/core/effects/canvas-persistence";
+import {
+  appendLayoutAudit,
+  clearLayoutAudits,
+  deleteLayoutAudit,
+  getLayoutAudits,
+  LAYOUT_AUDIT_RETENTION_LIMIT,
+} from "@/core/effects/canvas-persistence";
 import { DatabaseService } from "@/core/effects/database.base";
 import type { LayoutApplicationAudit } from "@/core/effects/layout.types";
 import { Effect, Layer } from "effect";
@@ -43,6 +49,38 @@ describe("layout audit persistence", () => {
 
   it("uses a bounded per-diagram retention policy", () => {
     expect(LAYOUT_AUDIT_RETENTION_LIMIT).toBe(100);
+  });
+
+  it("deletes one audit only within its diagram", async () => {
+    const execute = vi.fn(() => Effect.void);
+    const service: typeof DatabaseService.Service = {
+      execute,
+      query: () => Effect.succeed([]),
+      transaction: (effect) => effect,
+    };
+
+    await run(deleteLayoutAudit("diagram-a", 123), service);
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM layout_audits"),
+      ["diagram-a", 123],
+    );
+  });
+
+  it("clears audit history only within its diagram", async () => {
+    const execute = vi.fn(() => Effect.void);
+    const service: typeof DatabaseService.Service = {
+      execute,
+      query: () => Effect.succeed([]),
+      transaction: (effect) => effect,
+    };
+
+    await run(clearLayoutAudits("diagram-a"), service);
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining("DELETE FROM layout_audits WHERE diagram_id = ?"),
+      ["diagram-a"],
+    );
   });
 
   it("loads newest-first history and ignores malformed rows", async () => {
