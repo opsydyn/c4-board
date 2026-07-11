@@ -7,7 +7,7 @@
 
 import { CaretDownIcon, GridFourIcon } from "@phosphor-icons/react";
 import { Button, Header, Menu, MenuItem, MenuSection, MenuTrigger, Popover, Separator } from "react-aria-components";
-import { getAllPresets, type LayoutPresetName } from "../../core/effects/layout";
+import { getAllC4Presets, type LayoutPresetName } from "../../core/effects/layout";
 import {
   menuButton,
   menuContent,
@@ -30,11 +30,13 @@ export function LayoutMenu({
   currentLayout,
   variant = "all",
 }: LayoutMenuProps) {
-  const presets = getAllPresets();
+  const presets = getAllC4Presets();
 
   // Group presets by category
   const essentialPresets = presets.filter((p) => p.category === "essential");
-  const advancedPresets = presets.filter((p) => p.category === "advanced");
+  const advancedPresets = presets.filter((p) =>
+    p.category === "advanced" && (variant === "all" || p.name !== "elkLayered")
+  );
   const utilityPresets = presets.filter((p) => p.category === "utility");
 
   const handleAction = (key: React.Key) => {

@@ -71,6 +71,7 @@ import { ImportButton } from "./ImportButton";
 import { ACLNode } from "./nodes/ACLNode";
 import { IntegrationEventNode } from "./nodes/IntegrationEventNode";
 import { SagaNode } from "./nodes/SagaNode";
+import { RoutedEdge } from "./RoutedEdge";
 import { SearchBox } from "./SearchBox";
 import * as styles from "./styles.css";
 
@@ -95,6 +96,7 @@ interface C4CanvasProps {
   onContextMenuAction?: (action: ContextMenuAction, nodeId?: string, edgeId?: string) => void;
   animationsEnabled?: boolean;
   ambientTone?: CanvasAmbientTone;
+  readOnly?: boolean;
 }
 
 export interface C4CanvasRef {
@@ -122,6 +124,7 @@ function C4CanvasInner(
     onContextMenuAction,
     animationsEnabled = true,
     ambientTone = "c4",
+    readOnly = false,
   }: C4CanvasProps,
   ref: React.Ref<C4CanvasRef>,
 ) {
@@ -197,6 +200,7 @@ function C4CanvasInner(
   const edgeTypes = useMemo(
     () => ({
       animated: CustomAnimatedEdge,
+      routed: RoutedEdge,
     }),
     [],
   );
@@ -219,7 +223,7 @@ function C4CanvasInner(
       return {
         ...edge,
         // Use custom edge type when animation is enabled for advanced effects
-        type: shouldAnimate ? "animated" : "smoothstep",
+        type: edgeData?.layoutRoute ? "routed" : shouldAnimate ? "animated" : "smoothstep",
         animated: shouldAnimate,
         style: {
           ...edge.style,
@@ -286,7 +290,7 @@ function C4CanvasInner(
 
   const handleNodeDoubleClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      if (onNodeClick) {
+      if (!readOnly && onNodeClick) {
         onNodeClick(event, node);
       }
       if (node?.position) {
@@ -297,7 +301,7 @@ function C4CanvasInner(
         );
       }
     },
-    [onNodeClick, setCenter],
+    [onNodeClick, readOnly, setCenter],
   );
 
   // Handle edge click to open label editor
@@ -458,19 +462,19 @@ function C4CanvasInner(
           {...(onConnect && { onConnect })}
           {...(onNodeClick && { onNodeClick })}
           onNodeDoubleClick={handleNodeDoubleClick}
-          onNodeContextMenu={handleNodeContextMenu}
-          onEdgeClick={handleEdgeClick}
-          onEdgeContextMenu={handleEdgeContextMenu}
-          onPaneContextMenu={handlePaneContextMenu}
+          {...(!readOnly && { onNodeContextMenu: handleNodeContextMenu })}
+          {...(!readOnly && { onEdgeClick: handleEdgeClick })}
+          {...(!readOnly && { onEdgeContextMenu: handleEdgeContextMenu })}
+          {...(!readOnly && { onPaneContextMenu: handlePaneContextMenu })}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           fitView
           snapToGrid
           snapGrid={[20, 20]}
-          nodesDraggable
-          nodesConnectable
-          elementsSelectable
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          elementsSelectable={!readOnly}
           connectionMode={ConnectionMode.Loose}
         >
           <Background color={theme.color.border.primary} />

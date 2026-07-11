@@ -5,11 +5,28 @@
  * Verifies that the Functional Core / Imperative Shell pattern is working correctly.
  */
 
+import type { Node } from "@xyflow/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createActor } from "xstate";
 import { canvasMachine } from "./canvas.machine";
 
 describe("Canvas Machine", () => {
+  test("commits the exact accepted layout preview", () => {
+    const actor = createActor(canvasMachine);
+    actor.start();
+    actor.send({ type: "ADD_SYSTEM" });
+    const previousNodes = actor.getSnapshot().context.nodes as Node[];
+    const nodes = previousNodes.map((node) => ({ ...node, position: { x: 420, y: 240 } }));
+    const edges = [{ id: "preview-edge", source: nodes[0]!.id, target: nodes[0]!.id }];
+
+    actor.send({ type: "APPLY_LAYOUT_PREVIEW", preset: "elkLayered", nodes, edges });
+
+    expect(actor.getSnapshot().context.nodes).toEqual(nodes);
+    expect(actor.getSnapshot().context.edges).toEqual(edges);
+    expect(actor.getSnapshot().context.previousLayout).toEqual(previousNodes);
+    expect(actor.getSnapshot().context.currentLayout).toBe("elkLayered");
+  });
+
   beforeEach(() => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });

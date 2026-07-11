@@ -26,3 +26,6 @@ pnpm-debug.log*
 
 target/
 target-review-check/
+
+# local visual-regression captures
+.artifacts/

@@ -63,6 +63,7 @@ export type CanvasEvent =
   | { type: "TOGGLE_ANIMATIONS" }
   | { type: "AUTO_LAYOUT"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
   | { type: "AUTO_LAYOUT_SELECTED"; preset?: LayoutPresetName; options?: Partial<LayoutOptions> }
+  | { type: "APPLY_LAYOUT_PREVIEW"; preset: LayoutPresetName; nodes: Node[]; edges: Edge[] }
   | {
     type: "UPDATE_NODE";
     nodeId: string;
@@ -759,6 +760,13 @@ const canvasMachineDefinition = setup({
       },
     }),
 
+    applyLayoutPreview: assign({
+      previousLayout: ({ context }) => context.nodes,
+      currentLayout: ({ event }) => event.type === "APPLY_LAYOUT_PREVIEW" ? event.preset : null,
+      nodes: ({ context, event }) => event.type === "APPLY_LAYOUT_PREVIEW" ? event.nodes : context.nodes,
+      edges: ({ context, event }) => event.type === "APPLY_LAYOUT_PREVIEW" ? event.edges : context.edges,
+    }),
+
     setSaving: assign({
       isSaving: true,
       saveError: null,
@@ -1294,6 +1302,9 @@ const canvasMachineDefinition = setup({
         },
         AUTO_LAYOUT_SELECTED: {
           actions: "applyLayoutSelected",
+        },
+        APPLY_LAYOUT_PREVIEW: {
+          actions: "applyLayoutPreview",
         },
         EXPORT_PLANTUML: {
           actions: "exportPlantUML",

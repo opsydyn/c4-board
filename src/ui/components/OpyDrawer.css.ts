@@ -37,20 +37,29 @@ export const drawerRoot = style({
   },
 });
 
-export const drawerHeader = style({
-  "@layer": {
-    [componentsLayer]: {
-      display: "flex",
-      flexWrap: "wrap",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: theme.spacing["3"],
-      borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-      background: "linear-gradient(180deg, rgba(10, 18, 14, 0.98) 0%, rgba(7, 13, 10, 0.94) 100%)",
-      padding: `${theme.spacing["3"]} ${theme.spacing["5"]}`,
+export const drawerHeader = style([
+  {
+    "@layer": {
+      [componentsLayer]: {
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: theme.spacing["5"],
+        borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+        background: "linear-gradient(180deg, rgba(10, 18, 14, 0.98) 0%, rgba(7, 13, 10, 0.94) 100%)",
+      },
     },
   },
-});
+  {
+    padding: `${theme.spacing["4"]} ${theme.spacing["6"]}`,
+    "@media": {
+      "screen and (max-width: 760px)": {
+        padding: `${theme.spacing["3"]} ${theme.spacing["4"]}`,
+      },
+    },
+  },
+]);
 
 export const drawerIdentity = style({
   "@layer": {
@@ -100,7 +109,7 @@ export const drawerActions = style({
     [componentsLayer]: {
       display: "inline-flex",
       alignItems: "center",
-      gap: theme.spacing["2"],
+      gap: theme.spacing["3"],
     },
   },
 });
@@ -130,12 +139,21 @@ export const drawerActionButton = style({
   },
 });
 
-export const drawerContent = style({
-  "@layer": {
-    [componentsLayer]: {
-      padding: theme.spacing["5"],
-      minHeight: 0,
-      overflow: "auto",
+export const drawerContent = style([
+  {
+    "@layer": {
+      [componentsLayer]: {
+        minHeight: 0,
+        overflow: "auto",
+      },
     },
   },
-});
+  {
+    padding: theme.spacing["5"],
+    "@media": {
+      "screen and (max-width: 760px)": {
+        padding: theme.spacing["4"],
+      },
+    },
+  },
+]);

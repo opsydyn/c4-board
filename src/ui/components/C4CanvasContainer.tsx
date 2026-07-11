@@ -24,10 +24,19 @@ import { emit } from "@tauri-apps/api/event";
 import { useMachine } from "@xstate/react";
 import { type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from "@xyflow/react";
 import { Duration, Effect } from "effect";
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ToggleButton } from "react-aria-components";
 import { createPortal } from "react-dom";
-import * as Tone from "tone";
 import type { Actor, AnyStateMachine, StateFrom } from "xstate";
 import { waitFor } from "xstate";
 import type { ModuleCouplingSnapshot } from "../../core/balancedCoupling";
@@ -57,6 +66,14 @@ import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
 import { getRigAgentV1Flag, resolveEffectiveRigAgentV1Rollout } from "../../core/effects/feature-flags";
 import { autoLayoutSelected, getPreset, type LayoutPresetName } from "../../core/effects/layout";
+import {
+  applyLayoutResultToEdges,
+  createAsyncLayoutPreview,
+  createLayoutPreview,
+  isCurrentLayoutPreviewRequest,
+  type LayoutPreviewModel,
+  type LayoutPreviewScope,
+} from "../../core/effects/layout-preview";
 import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
 import type { OpyBoardAction } from "../../core/effects/opy-action.runtime";
@@ -88,13 +105,14 @@ import { DDDToolbar } from "./DDDToolbar";
 import { DiagramEvolutionChart } from "./DiagramEvolutionChart";
 import { DomainToggle } from "./DomainToggle";
 import { ExportModal } from "./ExportModal";
+import { LayoutPreviewDrawer } from "./LayoutPreviewDrawer";
+import { LayoutPreviewStatusDrawer } from "./LayoutPreviewStatusDrawer";
 import {
   areOpyWidgetChromeStatusesEqual,
   type OpyWidgetChromeFocusRequest,
   type OpyWidgetChromeStatus,
   type OpyWidgetChromeTone,
 } from "./opyChromeStatus";
-import { OpyCopilotPanel } from "./OpyCopilotPanel";
 import { OpyDrawer } from "./OpyDrawer";
 import { OpyFloatingWidget } from "./OpyFloatingWidget";
 import { getNextOpySurfaceMode, resolveOpyHostMode } from "./opySurfaceMode";
@@ -109,6 +127,20 @@ const sidebarBrandMetaClass = flex({
   align: "start",
   gap: "1",
 });
+
+const OpyCopilotPanel = lazy(() =>
+  import("./OpyCopilotPanel").then(({ OpyCopilotPanel }) => ({ default: OpyCopilotPanel }))
+);
+
+type ToneModule = typeof import("tone");
+type SaveSynth = import("tone").PolySynth<import("tone").Synth>;
+
+let toneModulePromise: Promise<ToneModule> | null = null;
+
+const loadToneModule = (): Promise<ToneModule> => {
+  toneModulePromise ??= import("tone");
+  return toneModulePromise;
+};
 
 type UseMachineParam = Parameters<typeof useMachine>[0];
 
@@ -301,7 +333,7 @@ export function C4CanvasContainer() {
   const lastDiagramIdRef = useRef<string | null>(null);
   const lastPersistedFingerprintRef = useRef<string | null>(null);
   const seededDiagramIdRef = useRef<string | null>(null);
-  const saveSynthRef = useRef<Tone.PolySynth<Tone.Synth> | null>(null);
+  const saveSynthRef = useRef<SaveSynth | null>(null);
   const audioReadyRef = useRef(false);
   const lastSaveSoundAtRef = useRef(0);
   const lastSaveVolSkipReasonRef = useRef<string | null>(null);
@@ -317,6 +349,34 @@ export function C4CanvasContainer() {
   const [isCompactLayout, setCompactLayout] = useState(false);
   const [isCommandBarOpen, setCommandBarOpen] = useState(true);
   const [isDataBarOpen, setDataBarOpen] = useState(false);
+  const [layoutPreview, setLayoutPreview] = useState<LayoutPreviewModel | null>(null);
+  const [layoutPreviewStatus, setLayoutPreviewStatus] = useState<
+    {
+      label: string;
+      error: string | null;
+    } | null
+  >(null);
+  const [layoutPreviewFailure, setLayoutPreviewFailure] = useState<
+    {
+      message: string;
+      attemptedLabel: string;
+    } | null
+  >(null);
+  const layoutPreviewAbortRef = useRef<AbortController | null>(null);
+  const layoutPreviewRequestIdRef = useRef(0);
+  const lastLayoutPreviewRequestRef = useRef<
+    {
+      preset: LayoutPresetName;
+      scope: LayoutPreviewScope;
+    } | null
+  >(null);
+  const lastValidLayoutPreviewRef = useRef<
+    {
+      diagramId: string | null;
+      sourceKey: string;
+      preview: LayoutPreviewModel;
+    } | null
+  >(null);
   const [opyChromeStatus, setOpyChromeStatus] = useState<OpyWidgetChromeStatus | null>(null);
   const [opyChromeSectionRequest, setOpyChromeSectionRequest] = useState<OpyWidgetChromeFocusRequest | null>(null);
   const [opyAzureSyncSnapshot, setOpyAzureSyncSnapshot] = useState<RigAgentAzureSyncRetrievalSnapshot | null>(null);
@@ -482,22 +542,23 @@ export function C4CanvasContainer() {
     setOpyAzureSyncSnapshot(null);
   }, [state.context.currentDiagramId, state.context.currentDomain]);
 
-  const primeSaveAudio = useCallback(async (): Promise<boolean> => {
+  const primeSaveAudio = useCallback(async (): Promise<ToneModule | null> => {
     if (!appSettings.masterAudioEnabled || !appSettings.saveVolEnabled) {
       audioReadyRef.current = false;
-      return false;
+      return null;
     }
 
     try {
+      const Tone = await loadToneModule();
       const context = Tone.getContext();
       if (context.state !== "running") {
         await Tone.start();
       }
       audioReadyRef.current = Tone.getContext().state === "running";
-      return audioReadyRef.current;
+      return audioReadyRef.current ? Tone : null;
     } catch {
       audioReadyRef.current = false;
-      return false;
+      return null;
     }
   }, [appSettings.masterAudioEnabled, appSettings.saveVolEnabled]);
 
@@ -523,7 +584,7 @@ export function C4CanvasContainer() {
     };
   }, [primeSaveAudio]);
 
-  const getSaveSynth = useCallback((): Tone.PolySynth<Tone.Synth> => {
+  const getSaveSynth = useCallback((Tone: ToneModule): SaveSynth => {
     if (!saveSynthRef.current) {
       saveSynthRef.current = new Tone.PolySynth(Tone.Synth, {
         volume: toSaveSynthVolumeDb(appSettings.masterVolume),
@@ -580,8 +641,8 @@ export function C4CanvasContainer() {
           return;
         }
 
-        const ready = await primeSaveAudio();
-        if (!ready) {
+        const Tone = await primeSaveAudio();
+        if (!Tone) {
           if (lastSaveVolSkipReasonRef.current !== "audio-not-ready") {
             console.info("🔇 Save vol skipped: audio-not-ready");
             lastSaveVolSkipReasonRef.current = "audio-not-ready";
@@ -589,7 +650,7 @@ export function C4CanvasContainer() {
           return;
         }
 
-        const synth = getSaveSynth();
+        const synth = getSaveSynth(Tone);
         const now = Tone.now();
         synth.triggerAttackRelease("C4", "16n", now);
         synth.triggerAttackRelease("E4", "16n", now + 0.08);
@@ -1162,7 +1223,7 @@ export function C4CanvasContainer() {
 
       const merged = mergeAzureMappedGraphIntoCanvas({
         nodes: state.context.nodes,
-        edges: state.context.edges,
+        edges: canvasEdges,
         mapped: dryRun.mapped,
         syncedAt: dryRun.snapshot.collectedAt,
       });
@@ -1657,16 +1718,31 @@ export function C4CanvasContainer() {
 
   // Enrich nodes with onUpdate callback for inline editing
   const enrichedNodes = useMemo(() => {
-    return state.context.nodes.map((node: Node<NodeData>) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onUpdate: (updates: Partial<NodeData>) => {
-          send({ type: "UPDATE_NODE", nodeId: node.id, updates });
-        },
-      },
-    }));
-  }, [state.context.nodes, send]);
+    const previewNodeById = new Map(
+      layoutPreview?.result.nodes.map((node) => [node.id, node]) ?? [],
+    );
+
+    return state.context.nodes.map((node: Node<NodeData>) => {
+      const previewNode = previewNodeById.get(node.id);
+      return {
+        ...node,
+        ...(previewNode && { position: previewNode.position }),
+        data: layoutPreview
+          ? { ...node.data }
+          : {
+            ...node.data,
+            onUpdate: (updates: Partial<NodeData>) => {
+              send({ type: "UPDATE_NODE", nodeId: node.id, updates });
+            },
+          },
+      };
+    });
+  }, [layoutPreview, state.context.nodes, send]);
+
+  const canvasEdges = useMemo(
+    () => layoutPreview ? applyLayoutResultToEdges(layoutPreview.result) : state.context.edges,
+    [layoutPreview, state.context.edges],
+  );
 
   const normalizedTeamByNodeId = useMemo(() => {
     const teamByNodeId = new Map<string, string | null>();
@@ -1819,7 +1895,7 @@ export function C4CanvasContainer() {
     };
 
     if (showCrossTeamOnly) {
-      let candidateEdges = state.context.edges.filter(
+      let candidateEdges = canvasEdges.filter(
         (edge: Edge) => isCrossTeamEdge(edge) && edgeMatchesSelectedTeam(edge),
       );
 
@@ -1855,7 +1931,7 @@ export function C4CanvasContainer() {
     });
 
     const visibleNodeIds = new Set(candidateNodes.map((node: Node<NodeData>) => node.id));
-    const candidateEdges = state.context.edges.filter(
+    const candidateEdges = canvasEdges.filter(
       (edge: Edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target),
     );
 
@@ -1870,7 +1946,7 @@ export function C4CanvasContainer() {
     showCrossTeamOnly,
     showUnknownOwnershipOnly,
     isOwnershipLensOpen,
-    state.context.edges,
+    canvasEdges,
   ]);
 
   const isOwnershipLensAtDefault = ownershipTeamFilter === OWNERSHIP_FILTER_ALL
@@ -2055,23 +2131,164 @@ export function C4CanvasContainer() {
     appSettings.saveVolEnabled,
   ]);
 
+  const openLayoutPreview = useCallback((
+    preset: LayoutPresetName,
+    scope: LayoutPreviewScope,
+  ) => {
+    setDataBarOpen(false);
+    layoutPreviewAbortRef.current?.abort();
+    const requestId = ++layoutPreviewRequestIdRef.current;
+    lastLayoutPreviewRequestRef.current = { preset, scope };
+    const input = { nodes: state.context.nodes, edges: state.context.edges, preset, scope };
+    const sourceKey = JSON.stringify({ nodes: input.nodes, edges: input.edges });
+    const lastValidPreview = lastValidLayoutPreviewRef.current;
+    const cachedPreview = lastValidPreview
+        && lastValidPreview.diagramId === state.context.currentDiagramId
+        && lastValidPreview.sourceKey === sourceKey
+      ? lastValidPreview.preview
+      : null;
+    const fallbackPreview = layoutPreview ?? cachedPreview;
+    setLayoutPreviewFailure(null);
+
+    if (getPreset(preset).strategyId !== "elk-layered") {
+      setLayoutPreviewStatus(null);
+      const preview = createLayoutPreview(input);
+      lastValidLayoutPreviewRef.current = {
+        diagramId: state.context.currentDiagramId,
+        sourceKey,
+        preview,
+      };
+      setLayoutPreview(preview);
+      requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
+      return;
+    }
+
+    const controller = new AbortController();
+    layoutPreviewAbortRef.current = controller;
+    setLayoutPreview(null);
+    setLayoutPreviewStatus({ label: "ELK Layered", error: null });
+    void createAsyncLayoutPreview(input, { signal: controller.signal })
+      .then((preview) => {
+        if (
+          !isCurrentLayoutPreviewRequest(
+            layoutPreviewRequestIdRef.current,
+            requestId,
+            controller.signal,
+          )
+        ) return;
+        lastValidLayoutPreviewRef.current = {
+          diagramId: state.context.currentDiagramId,
+          sourceKey,
+          preview,
+        };
+        setLayoutPreview(preview);
+        setLayoutPreviewStatus(null);
+        requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
+      })
+      .catch((error: unknown) => {
+        if (
+          !isCurrentLayoutPreviewRequest(
+            layoutPreviewRequestIdRef.current,
+            requestId,
+            controller.signal,
+          )
+        ) return;
+        const message = error instanceof Error ? error.message : "ELK layout failed.";
+        if (fallbackPreview) {
+          setLayoutPreview(fallbackPreview);
+          setLayoutPreviewStatus(null);
+          setLayoutPreviewFailure({ message, attemptedLabel: "ELK Layered" });
+        } else {
+          setLayoutPreviewStatus({ label: "ELK Layered", error: message });
+        }
+      })
+      .finally(() => {
+        if (layoutPreviewAbortRef.current === controller) layoutPreviewAbortRef.current = null;
+      });
+  }, [layoutPreview, state.context.currentDiagramId, state.context.edges, state.context.nodes]);
+
+  const handleRetryLayoutPreview = useCallback(() => {
+    const request = lastLayoutPreviewRequestRef.current;
+    if (!request) return;
+    openLayoutPreview(request.preset, request.scope);
+  }, [openLayoutPreview]);
+
   // Handle auto-layout action
   const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
-    send({ type: "AUTO_LAYOUT", preset });
-    requestAnimationFrame(() => {
-      canvasRef.current?.fitViewToGraph();
-    });
-    console.log(`🎯 Auto-layout applied: ${preset}`);
-  }, [send]);
+    openLayoutPreview(preset, "graph");
+  }, [openLayoutPreview]);
 
   // Handle auto-layout selected nodes
   const handleAutoLayoutSelected = useCallback((preset: LayoutPresetName) => {
-    send({ type: "AUTO_LAYOUT_SELECTED", preset });
+    openLayoutPreview(preset, "selection");
+  }, [openLayoutPreview]);
+
+  const handleLayoutPreviewCenterChange = useCallback((nodeId: string) => {
+    setLayoutPreview((current) => {
+      if (!current?.centerControl) return current;
+      const centerOptions = current.centerControl.kind === "hub"
+        ? { hubNodeId: nodeId }
+        : { systemOfInterestNodeId: nodeId };
+      return createLayoutPreview({
+        nodes: state.context.nodes,
+        edges: state.context.edges,
+        preset: current.preset,
+        scope: current.requestedScope,
+        options: { ...current.options, ...centerOptions },
+      });
+    });
     requestAnimationFrame(() => {
       canvasRef.current?.fitViewToGraph();
     });
-    console.log(`🎯 Auto-layout (selected) applied: ${preset}`);
-  }, [send]);
+  }, [state.context.edges, state.context.nodes]);
+
+  const handleApplyLayoutPreview = useCallback(() => {
+    if (!layoutPreview) return;
+    const edges = applyLayoutResultToEdges(layoutPreview.result);
+    send({
+      type: "APPLY_LAYOUT_PREVIEW",
+      preset: layoutPreview.preset,
+      nodes: layoutPreview.result.nodes,
+      edges,
+    });
+    setLayoutPreview(null);
+    requestAnimationFrame(() => {
+      canvasRef.current?.fitViewToGraph();
+    });
+  }, [layoutPreview, send]);
+
+  const handleCancelLayoutPreview = useCallback(() => {
+    layoutPreviewRequestIdRef.current += 1;
+    layoutPreviewAbortRef.current?.abort();
+    layoutPreviewAbortRef.current = null;
+    setLayoutPreview(null);
+    setLayoutPreviewStatus(null);
+    setLayoutPreviewFailure(null);
+    requestAnimationFrame(() => {
+      canvasRef.current?.fitViewToGraph();
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!layoutPreview && !layoutPreviewStatus) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      handleCancelLayoutPreview();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleCancelLayoutPreview, layoutPreview, layoutPreviewStatus]);
+
+  useEffect(() => {
+    layoutPreviewAbortRef.current?.abort();
+    layoutPreviewRequestIdRef.current += 1;
+    layoutPreviewAbortRef.current = null;
+    setLayoutPreview(null);
+    setLayoutPreviewStatus(null);
+    setLayoutPreviewFailure(null);
+    lastValidLayoutPreviewRef.current = null;
+  }, [state.context.currentDiagramId]);
 
   const handleCommandAddPerson = useCallback(() => {
     send({ type: "ADD_PERSON" });
@@ -2238,7 +2455,8 @@ export function C4CanvasContainer() {
     isOpen: isOpy9000Open,
     surfaceMode: appSettings.opySurfaceMode,
   });
-  const rowTrack = isDataBarOpen || opyHostMode === "drawer" ? "1fr auto" : "1fr";
+  const isLayoutPreviewOpen = layoutPreview !== null || layoutPreviewStatus !== null;
+  const rowTrack = isLayoutPreviewOpen || isDataBarOpen || opyHostMode === "drawer" ? "1fr auto" : "1fr";
   const opyDrawerChromeTone: OpyWidgetChromeTone = opyChromeStatus?.frameTone ?? "neutral";
   useIsomorphicLayoutEffect(() => {
     if (!opyPanelPortalElement || !hasOpyPanelActivated) {
@@ -2399,41 +2617,43 @@ export function C4CanvasContainer() {
       });
   }, [appSettings.opySurfaceMode, reloadAppSettings, runEffect]);
   const opyPanel = (
-    <OpyCopilotPanel
-      domain={state.context.currentDomain}
-      diagramId={state.context.currentDiagramId}
-      diagramName={state.context.diagramName}
-      nodeCount={state.context.nodes.length}
-      edgeCount={state.context.edges.length}
-      boardSummary={opyBoardSummary}
-      boardContext={opyBoardContext}
-      aiSettings={appSettings.aiSettings}
-      actionMode={opyActionMode}
-      redactionMode={appSettings.redactionMode}
-      agentPolicy={appSettings.agentPolicy}
-      rigExecutionPolicy={appSettings.rigExecutionPolicy}
-      rigAgentRollout={rigAgentRollout}
-      settingsSnapshot={opySettingsSnapshot}
-      azureSyncSnapshot={opyAzureSyncSnapshot}
-      explainabilitySnapshot={opyExplainabilitySnapshot}
-      viewportSections={appSettings.opyViewportSections}
-      onViewportSectionsChange={(nextSections) => {
-        void persistOpyViewportSections(nextSections);
-      }}
-      taskHistoryFiltersBySession={appSettings.opyTaskHistoryFiltersBySession}
-      onTaskHistoryFiltersBySessionChange={(nextFiltersBySession) => {
-        void persistOpyTaskHistoryFiltersBySession(nextFiltersBySession);
-      }}
-      onApplyBoardAction={handleApplyOpyBoardAction}
-      onOpenAiSettings={() => {
-        void navigateWithSave("/settings");
-      }}
-      onHide={toggleOpyCopilot}
-      onChromeStatusChange={(nextStatus) => {
-        setOpyChromeStatus((current) => areOpyWidgetChromeStatusesEqual(current, nextStatus) ? current : nextStatus);
-      }}
-      chromeSectionRequest={opyChromeSectionRequest}
-    />
+    <Suspense fallback={<div role="status">OPY INITIALIZING</div>}>
+      <OpyCopilotPanel
+        domain={state.context.currentDomain}
+        diagramId={state.context.currentDiagramId}
+        diagramName={state.context.diagramName}
+        nodeCount={state.context.nodes.length}
+        edgeCount={state.context.edges.length}
+        boardSummary={opyBoardSummary}
+        boardContext={opyBoardContext}
+        aiSettings={appSettings.aiSettings}
+        actionMode={opyActionMode}
+        redactionMode={appSettings.redactionMode}
+        agentPolicy={appSettings.agentPolicy}
+        rigExecutionPolicy={appSettings.rigExecutionPolicy}
+        rigAgentRollout={rigAgentRollout}
+        settingsSnapshot={opySettingsSnapshot}
+        azureSyncSnapshot={opyAzureSyncSnapshot}
+        explainabilitySnapshot={opyExplainabilitySnapshot}
+        viewportSections={appSettings.opyViewportSections}
+        onViewportSectionsChange={(nextSections) => {
+          void persistOpyViewportSections(nextSections);
+        }}
+        taskHistoryFiltersBySession={appSettings.opyTaskHistoryFiltersBySession}
+        onTaskHistoryFiltersBySessionChange={(nextFiltersBySession) => {
+          void persistOpyTaskHistoryFiltersBySession(nextFiltersBySession);
+        }}
+        onApplyBoardAction={handleApplyOpyBoardAction}
+        onOpenAiSettings={() => {
+          void navigateWithSave("/settings");
+        }}
+        onHide={toggleOpyCopilot}
+        onChromeStatusChange={(nextStatus) => {
+          setOpyChromeStatus((current) => areOpyWidgetChromeStatusesEqual(current, nextStatus) ? current : nextStatus);
+        }}
+        chromeSectionRequest={opyChromeSectionRequest}
+      />
+    </Suspense>
   );
   const opyPanelPortal = opyPanelPortalElement && hasOpyPanelActivated
     ? createPortal(opyPanel, opyPanelPortalElement)
@@ -2714,6 +2934,7 @@ export function C4CanvasContainer() {
           onContextMenuAction={onContextMenuAction}
           animationsEnabled={state.context.animationsEnabled}
           ambientTone={canvasAmbientTone}
+          readOnly={isLayoutPreviewOpen}
         />
         {opyHostMode === "floating" && (
           <OpyFloatingWidget
@@ -2781,7 +3002,7 @@ export function C4CanvasContainer() {
             <CaretLeftIcon size={16} weight="bold" />
           </ToggleButton>
         )}
-        {!isDataBarOpen && opyHostMode !== "drawer" && (
+        {!isLayoutPreviewOpen && !isDataBarOpen && opyHostMode !== "drawer" && (
           <ToggleButton
             isSelected={isDataBarOpen}
             onChange={(selected) => setDataBarOpen(selected)}
@@ -2824,7 +3045,25 @@ export function C4CanvasContainer() {
         </aside>
       )}
 
-      {opyHostMode === "drawer" && (
+      {layoutPreview && (
+        <LayoutPreviewDrawer
+          preview={layoutPreview}
+          onCenterChange={handleLayoutPreviewCenterChange}
+          onApply={handleApplyLayoutPreview}
+          onCancel={handleCancelLayoutPreview}
+          failure={layoutPreviewFailure}
+          onRetry={handleRetryLayoutPreview}
+        />
+      )}
+      {layoutPreviewStatus && (
+        <LayoutPreviewStatusDrawer
+          label={layoutPreviewStatus.label}
+          error={layoutPreviewStatus.error}
+          onCancel={handleCancelLayoutPreview}
+          onRetry={handleRetryLayoutPreview}
+        />
+      )}
+      {!isLayoutPreviewOpen && opyHostMode === "drawer" && (
         <OpyDrawer
           diagramName={state.context.diagramName}
           nodeCount={state.context.nodes.length}
@@ -2837,7 +3076,7 @@ export function C4CanvasContainer() {
         </OpyDrawer>
       )}
       {opyPanelPortal}
-      {isDataBarOpen && opyHostMode !== "drawer" && (
+      {!isLayoutPreviewOpen && isDataBarOpen && opyHostMode !== "drawer" && (
         <DataBar
           isOpen={isDataBarOpen}
           onToggle={setDataBarOpen}
