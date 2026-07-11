@@ -102,6 +102,7 @@ export type CanvasEvent =
       updatedAt: number;
     };
   }
+  | { type: "LOAD_VISUAL_FIXTURE"; name: string; nodes: Node[]; edges: Edge[] }
   | { type: "SAVE_DIAGRAM" }
   | { type: "SAVE_SUCCESS" }
   | { type: "SAVE_ERROR"; error: string }
@@ -818,6 +819,20 @@ const canvasMachineDefinition = setup({
       },
     }),
 
+    loadVisualFixture: assign({
+      currentDiagramId: null,
+      diagramName: ({ event }) => event.type === "LOAD_VISUAL_FIXTURE" ? event.name : "VISUAL::FIXTURE",
+      diagramDescription: null,
+      nodes: ({ event }) => event.type === "LOAD_VISUAL_FIXTURE" ? event.nodes : [],
+      edges: ({ event }) => event.type === "LOAD_VISUAL_FIXTURE" ? event.edges : [],
+      selectedNodeId: null,
+      nodeCounter: ({ event }) => event.type === "LOAD_VISUAL_FIXTURE" ? event.nodes.length : 0,
+      previousLayout: null,
+      currentLayout: null,
+      lastSaved: null,
+      saveError: null,
+    }),
+
     // === Export Actions ===
 
     exportPlantUML: assign({
@@ -1333,6 +1348,9 @@ const canvasMachineDefinition = setup({
         },
         LOAD_DIAGRAM_SUCCESS: {
           actions: "loadDiagramSuccess",
+        },
+        LOAD_VISUAL_FIXTURE: {
+          actions: "loadVisualFixture",
         },
         SAVE_DIAGRAM: {
           target: "saving",

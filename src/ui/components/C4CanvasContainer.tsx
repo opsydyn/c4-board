@@ -20,6 +20,7 @@ import {
   RobotIcon,
   UsersFourIcon,
 } from "@phosphor-icons/react";
+import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { useMachine } from "@xstate/react";
 import { type Connection, type Edge, type EdgeChange, type Node, type NodeChange } from "@xyflow/react";
@@ -74,6 +75,7 @@ import {
   type LayoutPreviewModel,
   type LayoutPreviewScope,
 } from "../../core/effects/layout-preview";
+import { getLayoutVisualFixture, isLayoutVisualFixtureName } from "../../core/effects/layout-visual-fixtures";
 import * as NodeOps from "../../core/effects/node-operations";
 import type { NodeData } from "../../core/effects/node-operations";
 import type { OpyBoardAction } from "../../core/effects/opy-action.runtime";
@@ -364,6 +366,7 @@ export function C4CanvasContainer() {
   >(null);
   const layoutPreviewAbortRef = useRef<AbortController | null>(null);
   const layoutPreviewRequestIdRef = useRef(0);
+  const visualHarnessPreviewOpenedRef = useRef(false);
   const lastLayoutPreviewRequestRef = useRef<
     {
       preset: LayoutPresetName;
@@ -1020,6 +1023,21 @@ export function C4CanvasContainer() {
       try {
         // Check for load query parameter
         const urlParams = new URLSearchParams(window.location.search);
+        const queryFixture = urlParams.get("visualFixture");
+        const nativeFixture = queryFixture ?? await invoke<string | null>("get_layout_visual_fixture")
+          .catch(() => null);
+
+        if (import.meta.env.DEV && isLayoutVisualFixtureName(nativeFixture)) {
+          const fixture = getLayoutVisualFixture(nativeFixture);
+          send({
+            type: "LOAD_VISUAL_FIXTURE",
+            name: fixture.title,
+            nodes: fixture.nodes,
+            edges: fixture.edges,
+          });
+          return;
+        }
+
         const loadDiagramId = urlParams.get("load");
 
         if (loadDiagramId) {
@@ -2217,6 +2235,18 @@ export function C4CanvasContainer() {
   const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
     openLayoutPreview(preset, "graph");
   }, [openLayoutPreview]);
+
+  useEffect(() => {
+    if (
+      !import.meta.env.DEV
+      || visualHarnessPreviewOpenedRef.current
+      || !state.context.diagramName.startsWith("VISUAL::")
+      || state.context.nodes.length === 0
+    ) return;
+
+    visualHarnessPreviewOpenedRef.current = true;
+    openLayoutPreview("elkLayered", "graph");
+  }, [openLayoutPreview, state.context.diagramName, state.context.nodes.length]);
 
   // Handle auto-layout selected nodes
   const handleAutoLayoutSelected = useCallback((preset: LayoutPresetName) => {

@@ -892,6 +892,27 @@ Delivered:
 
 Next slice:
 
-- [ ] Add deterministic in-app loading for the Event-Driven and Client-Server visual fixtures.
-- [ ] Capture and review all four Tauri baselines without depending on persisted user board state.
+- [x] Add deterministic in-app loading for the Event-Driven and Client-Server visual fixtures.
+- [x] Capture and review all four Tauri baselines without depending on persisted user board state.
 - [ ] Add route-aware quality metrics to the preview drawer if broader fixture evidence remains stable.
+
+### Slice 14 Delivery Record
+
+**Completed**: 2026-07-11
+
+Delivered:
+
+- [x] Added production-owned Event-Driven and Client-Server visual fixtures with clone-on-load isolation.
+- [x] Added a debug-only `C4_VISUAL_FIXTURE` bridge from the native Tauri process to the canvas.
+- [x] Added a dedicated machine transition that clears persistent diagram identity, save state, and layout history.
+- [x] Automatically opened ELK Layered once fixture state arrived, making native startup capture-ready.
+- [x] Kept normal production startup and persisted-board selection unchanged outside development mode.
+- [x] Captured and visually reviewed Event-Driven desktop and narrow native baselines.
+- [x] Captured and visually reviewed Client-Server desktop and narrow native baselines.
+- [x] Stored all four reviewed PNGs under `tests/__snapshots__/visual/tauri-layout/`.
+
+Next slice:
+
+- [ ] Promote routed crossing and routed edge length into the preview quality model.
+- [ ] Display routed metrics only for strategies that return route geometry.
+- [ ] Keep straight-line metrics as the cross-engine baseline and label both measures unambiguously.

@@ -27,6 +27,26 @@ describe("Canvas Machine", () => {
     expect(actor.getSnapshot().context.currentLayout).toBe("elkLayered");
   });
 
+  test("loads a visual fixture without a persistent diagram identity", () => {
+    const actor = createActor(canvasMachine).start();
+    const nodes = [{ id: "fixture-node", position: { x: 0, y: 0 }, data: {} }];
+
+    actor.send({
+      type: "LOAD_VISUAL_FIXTURE",
+      name: "VISUAL::EVENT DRIVEN",
+      nodes,
+      edges: [],
+    });
+
+    expect(actor.getSnapshot().context).toMatchObject({
+      currentDiagramId: null,
+      diagramName: "VISUAL::EVENT DRIVEN",
+      nodes,
+      edges: [],
+      lastSaved: null,
+    });
+  });
+
   beforeEach(() => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });

@@ -169,6 +169,14 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
+fn get_layout_visual_fixture() -> Option<String> {
+    if cfg!(debug_assertions) {
+        return std::env::var("C4_VISUAL_FIXTURE").ok();
+    }
+    None
+}
+
+#[tauri::command]
 fn save_custom_icon(
     app: tauri::AppHandle,
     payload: SaveIconInput,
@@ -413,6 +421,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            get_layout_visual_fixture,
             save_custom_icon,
             start_load_test,
             sql_execute,
