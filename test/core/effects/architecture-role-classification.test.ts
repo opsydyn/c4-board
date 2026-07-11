@@ -200,6 +200,31 @@ describe("architecture role classification", () => {
     });
   });
 
+  it("keeps stream transformer flow roles out of bus discovery", () => {
+    const result = inferEventDrivenRoles([
+      { id: "orders-bus", type: "system", position: { x: 0, y: 0 }, data: { label: "Orders Bus" } },
+      { id: "stream-transformer", type: "component", position: { x: 0, y: 0 }, data: { label: "Stream Transformer" } },
+      { id: "stream-listener", type: "component", position: { x: 0, y: 0 }, data: { label: "Stream Listener" } },
+      { id: "downstream-worker", type: "component", position: { x: 0, y: 0 }, data: { label: "Downstream Worker" } },
+    ], [
+      { id: "bus-to-transformer", source: "orders-bus", target: "stream-transformer", label: "order event" },
+      { id: "transformer-to-listener", source: "stream-transformer", target: "stream-listener", label: "emits event" },
+      {
+        id: "transformer-to-worker",
+        source: "stream-transformer",
+        target: "downstream-worker",
+        label: "writes report",
+      },
+    ]);
+
+    expect(Object.fromEntries(result.assignments.map(({ nodeId, role }) => [nodeId, role]))).toMatchObject({
+      "downstream-worker": "unclassified",
+      "orders-bus": "event-bus",
+      "stream-listener": "subscriber",
+      "stream-transformer": "processor",
+    });
+  });
+
   it("describes subscriber fallback evidence in terms of event-flow continuation", () => {
     const result = inferEventDrivenRoles([
       { id: "audit-subscriber", type: "component", position: { x: 0, y: 0 }, data: { label: "Audit Subscriber" } },

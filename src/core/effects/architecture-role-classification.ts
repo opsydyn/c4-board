@@ -294,13 +294,23 @@ const inferHexagonalRole = (
   };
 };
 
+const PUBLISHER_LABEL_PATTERN = /\b(?:publisher|producer|event[-_\s]?source)\b/;
+const PROCESSOR_LABEL_PATTERN = /\b(?:processor|transformer|projector|workflow)\b/;
+const SUBSCRIBER_LABEL_PATTERN = /\b(?:subscriber|consumer|listener|sink)\b/;
+
+const hasPublisherLabel = (label: string): boolean => PUBLISHER_LABEL_PATTERN.test(label);
+
+const hasProcessorLabel = (label: string): boolean => PROCESSOR_LABEL_PATTERN.test(label);
+
+const hasSubscriberLabel = (label: string): boolean => SUBSCRIBER_LABEL_PATTERN.test(label);
+
+const hasEventDrivenFlowRoleLabel = (label: string): boolean =>
+  hasPublisherLabel(label) || hasProcessorLabel(label) || hasSubscriberLabel(label);
+
 const hasEventBusLabel = (label: string): boolean => {
   const tokens = label.split(/[^a-z0-9]+/).filter(Boolean);
-  const hasStreamFlowRole = tokens.some((token) =>
-    ["processor", "subscriber", "consumer", "publisher", "producer"].includes(token)
-  );
   return tokens.some((token) => ["broker", "queue", "topic", "bus"].includes(token))
-    || (tokens.includes("stream") && !hasStreamFlowRole);
+    || (tokens.includes("stream") && !hasEventDrivenFlowRoleLabel(label));
 };
 
 const isEventBus = (node: Node): boolean => {
@@ -356,17 +366,17 @@ const inferEventDrivenRole = (
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
-  if (/(publisher|producer|event[-_\s]?source)/.test(label) || publishesToBus) {
-    const hasPublisherLabel = /(publisher|producer|event[-_\s]?source)/.test(label);
+  if (hasPublisherLabel(label) || publishesToBus) {
+    const hasPublisher = hasPublisherLabel(label);
     return {
       role: "publisher",
-      confidence: hasPublisherLabel ? 0.85 : 0.8,
-      source: hasPublisherLabel ? "label" : "topology",
-      evidence: [hasPublisherLabel ? "Publisher label." : "Node publishes to an event bus."],
+      confidence: hasPublisher ? 0.85 : 0.8,
+      source: hasPublisher ? "label" : "topology",
+      evidence: [hasPublisher ? "Publisher label." : "Node publishes to an event bus."],
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
-  if (/(processor|transformer|projector|workflow)/.test(label)) {
+  if (hasProcessorLabel(label)) {
     return {
       role: "processor",
       confidence: 0.8,
@@ -393,7 +403,7 @@ const inferEventDrivenRole = (
       ...(mismatch && { patternMismatch: mismatch }),
     };
   }
-  if (/(subscriber|consumer|listener|sink)/.test(label) && !continuesFlow) {
+  if (hasSubscriberLabel(label) && !continuesFlow) {
     return {
       role: "subscriber",
       confidence: 0.8,
