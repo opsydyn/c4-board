@@ -1445,6 +1445,24 @@ Delivered:
 
 Next slice:
 
-- [ ] Capture native Event-Driven desktop and narrow visual baselines for the custom semantic layout.
+- [x] Capture native Event-Driven desktop and narrow visual baselines for the custom semantic layout.
 - [ ] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
+- [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
+
+### Slice 39 Delivery Record
+
+**Completed**: 2026-07-12
+
+Delivered:
+
+- [x] Replaced the stale ELK Event-Driven images with native Tauri baselines for the custom semantic layout.
+- [x] Added deterministic representative and three-bus bridge fixtures that open the Event-Driven preset without persistence.
+- [x] Captured and visually reviewed representative and bridge previews at exactly `1600x900` and `960x720`.
+- [x] Protected publisher, bus, processor, subscriber, support, review, and explicit cross-band bridge geometry in the native visual suite.
+- [x] Hardened native capture with direct macOS Accessibility sizing, CoreGraphics dimension validation, and a WKWebView repaint delay.
+
+Next slice:
+
+- [ ] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
+- [ ] Add custom Client-Server native desktop and narrow visual baselines after semantic geometry ships.
 - [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
