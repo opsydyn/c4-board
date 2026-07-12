@@ -262,7 +262,6 @@ function positionEventDriven(
   const processorX = columnStep * 2;
   const processorTracks = buildProcessorTrackPlan(
     bridgeGroups,
-    plan,
     assignments,
     nodeById,
     processorX,
@@ -522,31 +521,24 @@ function buildBridgeGroups(plan: PlacementPlan): BridgeGroup[] {
 
 function buildProcessorTrackPlan(
   groups: ReadonlyArray<BridgeGroup>,
-  plan: PlacementPlan,
   assignments: ReadonlyArray<ArchitectureRoleAssignment>,
   nodeById: ReadonlyMap<string, Node>,
   processorX: number,
   subscriberX: number,
   options: LayoutOptions,
 ): ProcessorTrackPlan {
-  const bandIndexById = new Map(plan.bands.map((bandId, index) => [bandId, index]));
-  const crossingGroups = groups.filter((group) =>
-    Math.abs(
-      bandIndexById.get(group.destinationBusId)! - bandIndexById.get(group.sourceBusId)!,
-    ) > 1
-  );
-  if (crossingGroups.length === 0) return { bridgeXByKey: new Map(), subscriberX };
+  if (groups.length === 0) return { bridgeXByKey: new Map(), subscriberX };
 
-  const crossingBridgeIds = new Set(crossingGroups.flatMap(({ nodeIds }) => nodeIds));
+  const bridgeNodeIds = new Set(groups.flatMap(({ nodeIds }) => nodeIds));
   let previousWidth = Math.max(
     0,
     ...assignments
-      .filter(({ nodeId, role }) => role === "processor" && !crossingBridgeIds.has(nodeId))
+      .filter(({ nodeId, role }) => role === "processor" && !bridgeNodeIds.has(nodeId))
       .map(({ nodeId }) => reservedDimensions(nodeById.get(nodeId)!, options).width),
   );
   let trackX = processorX;
   const bridgeXByKey = new Map<string, number>();
-  for (const group of crossingGroups) {
+  for (const group of groups) {
     const groupWidth = Math.max(
       ...group.nodeIds.map((nodeId) => reservedDimensions(nodeById.get(nodeId)!, options).width),
     );

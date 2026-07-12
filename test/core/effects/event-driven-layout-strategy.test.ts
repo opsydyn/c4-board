@@ -285,6 +285,43 @@ describe("Event-Driven layout strategy", () => {
     expect(Math.min(...result.nodes.map(({ position }) => position.y))).toBeGreaterThanOrEqual(40);
   });
 
+  it("separates adjacent bridge groups sharing a source band into reserved processor tracks", () => {
+    const graph = {
+      nodes: [
+        node("a-bus", "event-bus"),
+        node("b-bus", "event-bus"),
+        node("c-bus", "event-bus"),
+        node("b-to-a", "processor"),
+        node("b-to-c", "processor"),
+        node("c-subscriber", "subscriber"),
+      ],
+      edges: [
+        edge("b-bus", "b-to-a", "event"),
+        edge("b-to-a", "a-bus", "event"),
+        edge("b-bus", "b-to-c", "event"),
+        edge("b-to-c", "c-bus", "event"),
+        edge("c-bus", "c-subscriber", "event"),
+      ],
+      options: { nodeSpacing: 0, rankSpacing: 0, snapToGrid: true, gridSize: 20 },
+    };
+    const forward = eventDrivenLayoutStrategy.layout(graph);
+    const reversed = eventDrivenLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+      options: graph.options,
+    });
+    const byId = new Map(forward.nodes.map((value) => [value.id, value]));
+
+    expect(byId.get("b-to-a")!.position).not.toEqual(byId.get("b-to-c")!.position);
+    expect(byId.get("c-subscriber")!.position.x).toBeGreaterThan(byId.get("b-to-a")!.position.x);
+    expect(byId.get("c-subscriber")!.position.x).toBeGreaterThan(byId.get("b-to-c")!.position.x);
+    expect(forward.quality.nodeOverlapCount).toBe(0);
+    expect(forward.quality.nodeOverlapArea).toBe(0);
+    expect(forward.nodes.every(({ position }) => position.x % 20 === 0 && position.y % 20 === 0)).toBe(true);
+    expect(positions(reversed.nodes)).toEqual(positions(forward.nodes));
+    expect(reversed.diagnostics).toEqual(forward.diagnostics);
+  });
+
   it("separates a non-adjacent bridge from an intervening local processor", () => {
     const graph = {
       nodes: [
