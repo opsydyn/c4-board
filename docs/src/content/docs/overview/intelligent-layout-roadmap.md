@@ -1457,8 +1457,8 @@ Delivered:
 
 - [x] Replaced the stale ELK Event-Driven images with native Tauri baselines for the custom semantic layout.
 - [x] Added deterministic representative and three-bus bridge fixtures that open the Event-Driven preset without persistence.
-- [x] Captured and visually reviewed representative and bridge previews at exactly `1600x900` and `960x720`.
-- [x] Protected publisher, bus, processor, subscriber, support, review, and explicit cross-band bridge geometry in the native visual suite.
+- [x] Captured and visually reviewed representative plus complementary full and detail bridge previews at exactly `1600x900` and `960x720`.
+- [x] Protected publisher, bus, processor, subscriber, support, review, and explicit cross-band bridge geometry with a complete-graph baseline, plus bridge-track and subscriber-clearance readability with the detail viewport fit.
 - [x] Hardened native capture with direct macOS Accessibility sizing, CoreGraphics dimension validation, and a WKWebView repaint delay.
 
 Next slice:

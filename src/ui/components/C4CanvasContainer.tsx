@@ -324,6 +324,7 @@ export function C4CanvasContainer() {
     reload: reloadAppSettings,
   } = useAppSettings();
   const rigAgentRolloutFlag = getRigAgentV1Flag();
+  const [visualHarnessViewportFitNodeIds, setVisualHarnessViewportFitNodeIds] = useState<string[]>();
   const canvasRegionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<C4CanvasRef>(null);
   const opyFloatingPanelSlotRef = useRef<HTMLDivElement>(null);
@@ -1073,6 +1074,7 @@ export function C4CanvasContainer() {
         if (import.meta.env.DEV && isLayoutVisualFixtureName(nativeFixture)) {
           const fixture = getLayoutVisualFixture(nativeFixture);
           visualHarnessPresetRef.current = fixture.preset;
+          setVisualHarnessViewportFitNodeIds(fixture.viewportFitNodeIds);
           setSidebarOpen(false);
           setDetailsOpen(false);
           setCommandBarOpen(false);
@@ -3103,6 +3105,7 @@ export function C4CanvasContainer() {
           animationsEnabled={state.context.animationsEnabled}
           ambientTone={canvasAmbientTone}
           readOnly={isLayoutPreviewOpen}
+          viewportFitNodeIds={visualHarnessViewportFitNodeIds}
         />
         {opyHostMode === "floating" && (
           <OpyFloatingWidget

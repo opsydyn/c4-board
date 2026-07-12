@@ -9,6 +9,7 @@ const VIEWPORTS = {
 const SCENARIOS = [
   "event-driven",
   "event-driven-bridges",
+  "event-driven-bridges-detail",
   "client-server",
   "hexagonal-inferred",
   "hexagonal-corrected",
@@ -158,7 +159,7 @@ async function main(args: string[]): Promise<void> {
   ) {
     throw new Error(
       "Usage: bun run visual:tauri:capture -- --scenario "
-        + "<event-driven|event-driven-bridges|client-server|hexagonal-inferred|hexagonal-corrected> "
+        + "<event-driven|event-driven-bridges|event-driven-bridges-detail|client-server|hexagonal-inferred|hexagonal-corrected> "
         + "--viewport <desktop|narrow> [--pid <c4-board-pid>] [--skip-resize] "
         + "[--update-baseline] [--output <path>]",
     );

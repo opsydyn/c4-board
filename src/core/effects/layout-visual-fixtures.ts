@@ -4,6 +4,7 @@ import type { LayoutPresetName } from "./layout";
 export type LayoutVisualFixtureName =
   | "event-driven"
   | "event-driven-bridges"
+  | "event-driven-bridges-detail"
   | "client-server"
   | "hexagonal-inferred"
   | "hexagonal-corrected";
@@ -14,6 +15,7 @@ export interface LayoutVisualFixture {
   preset: LayoutPresetName;
   nodes: Node[];
   edges: Edge[];
+  viewportFitNodeIds?: string[];
 }
 
 const node = (id: string, type: string, data: Record<string, unknown> = {}): Node => ({
@@ -30,6 +32,42 @@ const edge = (source: string, target: string, label: string): Edge => ({
   target,
   label,
 });
+
+const EVENT_DRIVEN_BRIDGES_GRAPH: Pick<LayoutVisualFixture, "nodes" | "edges"> = {
+  nodes: [
+    node("orders-publisher", "container", { layoutRole: "publisher" }),
+    node("a-bus", "system", { layoutRole: "event-bus" }),
+    node("b-bus", "system", { layoutRole: "event-bus" }),
+    node("c-bus", "system", { layoutRole: "event-bus" }),
+    node("a-local", "component", { layoutRole: "processor" }),
+    node("a-to-b", "component", { layoutRole: "processor" }),
+    node("a-to-c", "component", { layoutRole: "processor" }),
+    node("b-to-c", "component", { layoutRole: "processor" }),
+    node("a-subscriber", "component", { layoutRole: "subscriber" }),
+    node("b-subscriber", "component", { layoutRole: "subscriber" }),
+    node("c-subscriber", "component", { layoutRole: "subscriber" }),
+    node("telemetry", "component", { layoutRole: "infrastructure" }),
+    node("external-monitor", "externalSystem", { layoutRole: "external-dependency" }),
+    node("review-node", "component", { layoutRole: "unclassified" }),
+  ],
+  edges: [
+    edge("orders-publisher", "a-bus", "order accepted"),
+    edge("a-bus", "a-local", "local event"),
+    edge("a-local", "a-subscriber", "local result"),
+    edge("a-bus", "a-to-b", "bridge event"),
+    edge("a-to-b", "b-bus", "forwarded event"),
+    edge("a-bus", "a-to-c", "bridge event"),
+    edge("a-to-c", "c-bus", "forwarded event"),
+    edge("b-bus", "b-to-c", "bridge event"),
+    edge("b-to-c", "c-bus", "forwarded event"),
+    edge("a-bus", "a-subscriber", "subscriber event"),
+    edge("b-bus", "b-subscriber", "subscriber event"),
+    edge("c-bus", "c-subscriber", "subscriber event"),
+    edge("a-bus", "telemetry", "metrics event"),
+    edge("c-bus", "external-monitor", "monitoring event"),
+    edge("b-bus", "review-node", "review event"),
+  ],
+};
 
 const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
   "event-driven": {
@@ -59,38 +97,25 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
     name: "event-driven-bridges",
     title: "VISUAL::EVENT DRIVEN BRIDGES",
     preset: "eventDriven",
-    nodes: [
-      node("orders-publisher", "container", { layoutRole: "publisher" }),
-      node("a-bus", "system", { layoutRole: "event-bus" }),
-      node("b-bus", "system", { layoutRole: "event-bus" }),
-      node("c-bus", "system", { layoutRole: "event-bus" }),
-      node("a-local", "component", { layoutRole: "processor" }),
-      node("a-to-b", "component", { layoutRole: "processor" }),
-      node("a-to-c", "component", { layoutRole: "processor" }),
-      node("b-to-c", "component", { layoutRole: "processor" }),
-      node("a-subscriber", "component", { layoutRole: "subscriber" }),
-      node("b-subscriber", "component", { layoutRole: "subscriber" }),
-      node("c-subscriber", "component", { layoutRole: "subscriber" }),
-      node("telemetry", "component", { layoutRole: "infrastructure" }),
-      node("external-monitor", "externalSystem", { layoutRole: "external-dependency" }),
-      node("review-node", "component", { layoutRole: "unclassified" }),
-    ],
-    edges: [
-      edge("orders-publisher", "a-bus", "order accepted"),
-      edge("a-bus", "a-local", "local event"),
-      edge("a-local", "a-subscriber", "local result"),
-      edge("a-bus", "a-to-b", "bridge event"),
-      edge("a-to-b", "b-bus", "forwarded event"),
-      edge("a-bus", "a-to-c", "bridge event"),
-      edge("a-to-c", "c-bus", "forwarded event"),
-      edge("b-bus", "b-to-c", "bridge event"),
-      edge("b-to-c", "c-bus", "forwarded event"),
-      edge("a-bus", "a-subscriber", "subscriber event"),
-      edge("b-bus", "b-subscriber", "subscriber event"),
-      edge("c-bus", "c-subscriber", "subscriber event"),
-      edge("a-bus", "telemetry", "metrics event"),
-      edge("c-bus", "external-monitor", "monitoring event"),
-      edge("b-bus", "review-node", "review event"),
+    ...EVENT_DRIVEN_BRIDGES_GRAPH,
+  },
+  "event-driven-bridges-detail": {
+    name: "event-driven-bridges-detail",
+    title: "VISUAL::EVENT DRIVEN BRIDGES DETAIL",
+    preset: "eventDriven",
+    ...EVENT_DRIVEN_BRIDGES_GRAPH,
+    viewportFitNodeIds: [
+      "orders-publisher",
+      "a-bus",
+      "b-bus",
+      "c-bus",
+      "a-local",
+      "a-to-b",
+      "a-to-c",
+      "b-to-c",
+      "a-subscriber",
+      "b-subscriber",
+      "c-subscriber",
     ],
   },
   "client-server": {
@@ -162,6 +187,7 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
 export function isLayoutVisualFixtureName(value: unknown): value is LayoutVisualFixtureName {
   return value === "event-driven"
     || value === "event-driven-bridges"
+    || value === "event-driven-bridges-detail"
     || value === "client-server"
     || value === "hexagonal-inferred"
     || value === "hexagonal-corrected";
@@ -171,6 +197,7 @@ export function getLayoutVisualFixture(name: LayoutVisualFixtureName): LayoutVis
   const fixture = FIXTURES[name];
   return {
     ...fixture,
+    ...(fixture.viewportFitNodeIds && { viewportFitNodeIds: [...fixture.viewportFitNodeIds] }),
     nodes: fixture.nodes.map((fixtureNode) => ({
       ...fixtureNode,
       position: { ...fixtureNode.position },

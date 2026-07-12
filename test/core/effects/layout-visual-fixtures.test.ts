@@ -7,6 +7,7 @@ describe("layout visual fixtures", () => {
     [
       "event-driven",
       "event-driven-bridges",
+      "event-driven-bridges-detail",
       "client-server",
       "hexagonal-inferred",
       "hexagonal-corrected",
@@ -29,6 +30,7 @@ describe("layout visual fixtures", () => {
   it("accepts only supported fixture names", () => {
     expect(isLayoutVisualFixtureName("event-driven")).toBe(true);
     expect(isLayoutVisualFixtureName("event-driven-bridges")).toBe(true);
+    expect(isLayoutVisualFixtureName("event-driven-bridges-detail")).toBe(true);
     expect(isLayoutVisualFixtureName("client-server")).toBe(true);
     expect(isLayoutVisualFixtureName("hexagonal-inferred")).toBe(true);
     expect(isLayoutVisualFixtureName("hexagonal-corrected")).toBe(true);
@@ -81,5 +83,24 @@ describe("layout visual fixtures", () => {
     expect(representativeEdges.has("event-bus->fulfilment-processor")).toBe(true);
     expect(representativeEdges.has("event-bus->analytics-subscriber")).toBe(true);
     expect(representativeEdges.has("event-bus->notifications-subscriber")).toBe(true);
+  });
+
+  it("keeps the bridge detail fixture clone-isolated while preserving the complete graph", () => {
+    const complete = getLayoutVisualFixture("event-driven-bridges");
+    const detail = getLayoutVisualFixture("event-driven-bridges-detail");
+
+    expect(detail.preset).toBe("eventDriven");
+    expect(detail.nodes).toHaveLength(14);
+    expect(detail.edges).toHaveLength(15);
+    expect(detail.nodes).toEqual(complete.nodes);
+    expect(detail.edges).toEqual(complete.edges);
+    expect(detail.nodes).not.toBe(complete.nodes);
+    expect(detail.edges).not.toBe(complete.edges);
+
+    detail.nodes[0]!.data.label = "detail-only";
+    detail.edges[0]!.label = "detail-only";
+
+    expect(complete.nodes[0]!.data.label).toBe("orders-publisher");
+    expect(complete.edges[0]!.label).toBe("order accepted");
   });
 });

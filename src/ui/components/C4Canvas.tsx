@@ -97,11 +97,24 @@ interface C4CanvasProps {
   animationsEnabled?: boolean;
   ambientTone?: CanvasAmbientTone;
   readOnly?: boolean;
+  viewportFitNodeIds?: readonly string[];
 }
 
 export interface C4CanvasRef {
   fitViewToNode: (nodeId: string) => void;
   fitViewToGraph: (options?: { animated?: boolean }) => void;
+}
+
+export function resolveCanvasFitNodeIds(
+  nodes: readonly Node[],
+  viewportFitNodeIds?: readonly string[],
+): string[] {
+  const graphNodeIds = nodes.map(({ id }) => id);
+  if (!viewportFitNodeIds) return graphNodeIds;
+
+  const graphNodeIdSet = new Set(graphNodeIds);
+  const selectedNodeIds = viewportFitNodeIds.filter(nodeId => graphNodeIdSet.has(nodeId));
+  return selectedNodeIds.length > 0 ? selectedNodeIds : graphNodeIds;
 }
 
 function C4CanvasInner(
@@ -125,18 +138,26 @@ function C4CanvasInner(
     animationsEnabled = true,
     ambientTone = "c4",
     readOnly = false,
+    viewportFitNodeIds,
   }: C4CanvasProps,
   ref: React.Ref<C4CanvasRef>,
 ) {
   const { setCenter, getNode, fitView, getViewport, setViewport } = useReactFlow();
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const fitNodeIds = useMemo(
+    () => resolveCanvasFitNodeIds(nodes, viewportFitNodeIds),
+    [nodes, viewportFitNodeIds],
+  );
+  const fitViewOptions = useMemo(() => ({
+    nodes: fitNodeIds.map((id) => ({ id })),
+    padding: 0.2,
+  }), [fitNodeIds]);
   const fitGraph = useCallback((duration: number) => {
     void fitView({
-      nodes: nodes.map(({ id }) => ({ id })),
-      padding: 0.2,
+      ...fitViewOptions,
       duration,
     });
-  }, [fitView, nodes]);
+  }, [fitView, fitViewOptions]);
 
   // Edge label editor state
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -491,6 +512,7 @@ function C4CanvasInner(
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           fitView
+          fitViewOptions={fitViewOptions}
           minZoom={0.1}
           snapToGrid
           snapGrid={[20, 20]}
