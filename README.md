@@ -4,6 +4,16 @@
 
 The app is built with Astro, React, Tauri 2, SQLite, Effect, XState, React Flow, Rig, and Bun. It runs as a local-first desktop application with durable board state, OPY sessions, proposal artifacts, checkpoints, and audit/replay telemetry.
 
+## Product Showcase
+
+![The c4-board Event-Driven workspace showing semantic architecture lanes and the layout preview drawer](tests/__snapshots__/visual/tauri-layout/event-driven-desktop.png)
+
+_Review architecture changes in the native workspace with semantic roles, diagnostics, and non-destructive layout previews._
+
+![A detailed multi-bus Event-Driven layout showing deterministic bridge routing](tests/__snapshots__/visual/tauri-layout/event-driven-bridges-detail-desktop.png)
+
+_Model complex event topologies with deterministic bus bands, explicit processor bridges, and readable subscriber paths._
+
 ## Current Status
 
 The current OPY/Rig C4 agentic loop is concluded for this phase. OPY can inspect a board, produce grounded reviews, generate typed C4 mutation proposals, require operator approval, apply safe changes, checkpoint before mutation, roll back, persist resumable task state, and expose audit/eval diagnostics.
