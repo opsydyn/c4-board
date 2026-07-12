@@ -62,6 +62,11 @@ interface GeometrySanitization {
   recoveredOptions: string[];
 }
 
+interface ReservedDimensions {
+  width: number;
+  height: number;
+}
+
 export const eventDrivenLayoutStrategy: SynchronousLayoutStrategy = {
   id: EVENT_DRIVEN_STRATEGY_ID,
   engine: "custom",
@@ -250,8 +255,8 @@ function positionEventDriven(
 ): Node[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const roleByNodeId = new Map(assignments.map(({ nodeId, role }) => [nodeId, role]));
-  const maxWidth = Math.max(...nodes.map((node) => getNodeDimensions(node).width));
-  const columnStep = maxWidth + options.nodeSpacing + options.rankSpacing;
+  const maxWidth = Math.max(...nodes.map((node) => reservedDimensions(node, options).width));
+  const columnStep = gridSafeBoundary(maxWidth + options.nodeSpacing + options.rankSpacing, options);
   const plan = buildPlacementPlan(assignments, edges);
   const bridgeGroups = buildBridgeGroups(plan);
   const processorX = columnStep * 2;
@@ -270,14 +275,15 @@ function positionEventDriven(
     processor: processorX,
     subscriber: processorTracks.subscriberX,
   };
-  const bandHeight = gridSafeVerticalBoundary(
-    maxBandContentHeight(
-      plan,
-      assignments,
-      nodeById,
-      roleByNodeId,
-      options,
-    ) + maxBridgeGroupHeight(bridgeGroups, nodeById, options) + options.nodeSpacing * 2,
+  const bandContentHeight = maxBandContentHeight(
+    plan,
+    assignments,
+    nodeById,
+    roleByNodeId,
+    options,
+  );
+  const bandHeight = gridSafeBoundary(
+    bandContentHeight + maxBridgeGroupHeight(bridgeGroups, nodeById, options) + options.nodeSpacing * 2,
     options,
   );
   const bandY = new Map(plan.bands.map((bandId, index) => [bandId, index * bandHeight]));
@@ -298,12 +304,9 @@ function positionEventDriven(
     },
   ];
   const supportHeight = stackHeight(supportNodes, options);
-  const reviewHeight = Math.max(0, ...reviewGroups.map(({ nodes }) => stackHeight(nodes, options)));
-  const supportTop = gridSafeVerticalBoundary(lastBandY + bandHeight / 2 + options.rankSpacing, options);
-  const supportY = supportTop + supportHeight / 2;
-  const reviewTop = gridSafeVerticalBoundary(supportTop + supportHeight + options.rankSpacing, options);
-  const reviewY = reviewTop + reviewHeight / 2;
-  const centers = new Map<string, XYPosition>();
+  const supportTop = gridSafeBoundary(lastBandY + bandHeight + options.rankSpacing, options);
+  const reviewTop = gridSafeBoundary(supportTop + supportHeight + options.rankSpacing, options);
+  const cells = new Map<string, XYPosition>();
   const nodesByBandAndRole = new Map<string, Map<"publisher" | "event-bus" | "processor" | "subscriber", Node[]>>();
 
   for (const assignment of assignments) {
@@ -322,34 +325,33 @@ function positionEventDriven(
   for (const bandId of plan.bands) {
     const groups = nodesByBandAndRole.get(bandId);
     for (const role of ["publisher", "event-bus", "processor", "subscriber"] as const) {
-      stackPeers(groups?.get(role) ?? [], { x: columnX[role], y: bandY.get(bandId)! }, options, centers);
+      stackPeers(groups?.get(role) ?? [], { x: columnX[role], y: bandY.get(bandId)! }, options, cells);
     }
   }
   for (const group of bridgeGroups) {
     const sourceY = bandY.get(group.sourceBusId)!;
-    const destinationY = bandY.get(group.destinationBusId)!;
     stackPeers(
       group.nodeIds.map((nodeId) => nodeById.get(nodeId)!),
       {
         x: processorTracks.bridgeXByKey.get(bridgeGroupKey(group)) ?? columnX.processor,
-        y: (sourceY + destinationY) / 2,
+        y: gridSafeBoundary(sourceY + bandContentHeight + options.nodeSpacing, options),
       },
       options,
-      centers,
+      cells,
     );
   }
   stackPeers(
     supportNodes,
-    { x: columnX["event-bus"], y: supportY },
+    { x: columnX["event-bus"], y: supportTop },
     options,
-    centers,
+    cells,
   );
   for (const reviewGroup of reviewGroups) {
     stackPeers(
       reviewGroup.nodes,
-      { x: reviewGroup.x, y: reviewY },
+      { x: reviewGroup.x, y: reviewTop },
       options,
-      centers,
+      cells,
     );
   }
 
@@ -393,19 +395,19 @@ function positionEventDriven(
   }
 
   const raw = sortedNodes(nodes).map((node) => {
-    const dimensions = getNodeDimensions(node);
-    const center = centers.get(node.id) ?? { x: columnX["event-bus"], y: reviewY };
+    const cell = cells.get(node.id) ?? { x: columnX["event-bus"], y: reviewTop };
     return {
       node,
-      position: { x: center.x - dimensions.width / 2, y: center.y - dimensions.height / 2 },
+      position: cell,
     };
   });
   const minX = Math.min(...raw.map(({ position }) => position.x));
   const minY = Math.min(...raw.map(({ position }) => position.y));
+  const margin = gridSafeBoundary(MARGIN, options);
 
   return raw.map(({ node, position }) => ({
     ...node,
-    position: snapPosition({ x: position.x - minX + MARGIN, y: position.y - minY + MARGIN }, options),
+    position: { x: position.x - minX + margin, y: position.y - minY + margin },
   }));
 }
 
@@ -540,26 +542,22 @@ function buildProcessorTrackPlan(
     0,
     ...assignments
       .filter(({ nodeId, role }) => role === "processor" && !crossingBridgeIds.has(nodeId))
-      .map(({ nodeId }) => getNodeDimensions(nodeById.get(nodeId)!).width),
+      .map(({ nodeId }) => reservedDimensions(nodeById.get(nodeId)!, options).width),
   );
   let trackX = processorX;
   const bridgeXByKey = new Map<string, number>();
   for (const group of crossingGroups) {
-    const groupWidth = Math.max(...group.nodeIds.map((nodeId) => getNodeDimensions(nodeById.get(nodeId)!).width));
-    trackX += processorTrackStep(previousWidth, groupWidth, options);
+    const groupWidth = Math.max(
+      ...group.nodeIds.map((nodeId) => reservedDimensions(nodeById.get(nodeId)!, options).width),
+    );
+    trackX += processorTrackStep(previousWidth, options);
     bridgeXByKey.set(bridgeGroupKey(group), trackX);
     previousWidth = groupWidth;
   }
 
-  const widestSubscriber = Math.max(
-    0,
-    ...assignments
-      .filter(({ role }) => role === "subscriber")
-      .map(({ nodeId }) => getNodeDimensions(nodeById.get(nodeId)!).width),
-  );
   return {
     bridgeXByKey,
-    subscriberX: Math.max(subscriberX, trackX + processorTrackStep(previousWidth, widestSubscriber, options)),
+    subscriberX: Math.max(subscriberX, trackX + processorTrackStep(previousWidth, options)),
   };
 }
 
@@ -567,10 +565,8 @@ function bridgeGroupKey(group: Pick<BridgeGroup, "sourceBusId" | "destinationBus
   return `${group.sourceBusId}\u0000${group.destinationBusId}`;
 }
 
-function processorTrackStep(leftWidth: number, rightWidth: number, options: LayoutOptions): number {
-  const required = leftWidth / 2 + rightWidth / 2 + options.nodeSpacing;
-  if (!options.snapToGrid || !options.gridSize) return required;
-  return Math.ceil((required + options.gridSize) / options.gridSize) * options.gridSize;
+function processorTrackStep(leftWidth: number, options: LayoutOptions): number {
+  return gridSafeBoundary(leftWidth + options.nodeSpacing, options);
 }
 
 function maxBridgeGroupHeight(
@@ -594,7 +590,7 @@ function stackHeight(nodes: ReadonlyArray<Node>, options: LayoutOptions): number
   return orderedNodes.reduce(
     (total, node, index) =>
       total + (index === orderedNodes.length - 1
-        ? getNodeDimensions(node).height
+        ? reservedDimensions(node, options).height
         : peerStep(node, options)),
     0,
   );
@@ -624,27 +620,31 @@ function isAmbiguousProcessor(affinity: BusAffinity): boolean {
 
 function stackPeers(
   nodes: ReadonlyArray<Node>,
-  anchor: XYPosition,
+  topLeft: XYPosition,
   options: LayoutOptions,
-  centers: Map<string, XYPosition>,
+  cells: Map<string, XYPosition>,
 ): void {
   const orderedNodes = sortedNodes(nodes);
-  const totalHeight = stackHeight(orderedNodes, options);
-  let y = anchor.y - totalHeight / 2;
+  let y = topLeft.y;
   for (const [index, node] of orderedNodes.entries()) {
-    const { height } = getNodeDimensions(node);
-    centers.set(node.id, { x: anchor.x, y: y + height / 2 });
-    y += index === orderedNodes.length - 1 ? height : peerStep(node, options);
+    cells.set(node.id, { x: topLeft.x, y });
+    y += index === orderedNodes.length - 1 ? reservedDimensions(node, options).height : peerStep(node, options);
   }
 }
 
 function peerStep(node: Node, options: LayoutOptions): number {
-  const height = getNodeDimensions(node).height;
-  if (!options.snapToGrid || !options.gridSize) return height + options.nodeSpacing;
-  return Math.ceil((height + options.nodeSpacing) / options.gridSize) * options.gridSize;
+  return gridSafeBoundary(reservedDimensions(node, options).height + options.nodeSpacing, options);
 }
 
-function gridSafeVerticalBoundary(value: number, options: LayoutOptions): number {
+function reservedDimensions(node: Node, options: LayoutOptions): ReservedDimensions {
+  const dimensions = getNodeDimensions(node);
+  return {
+    width: gridSafeBoundary(dimensions.width, options),
+    height: gridSafeBoundary(dimensions.height, options),
+  };
+}
+
+function gridSafeBoundary(value: number, options: LayoutOptions): number {
   if (!options.snapToGrid || !options.gridSize) return value;
   return Math.ceil(value / options.gridSize) * options.gridSize;
 }
@@ -674,14 +674,6 @@ function sortedNodes(nodes: ReadonlyArray<Node>): Node[] {
 
 function sortedEdges(edges: ReadonlyArray<Edge>): Edge[] {
   return [...edges].sort((left, right) => left.id.localeCompare(right.id));
-}
-
-function snapPosition(position: XYPosition, options: LayoutOptions): XYPosition {
-  if (!options.snapToGrid || !options.gridSize) return position;
-  return {
-    x: Math.ceil(position.x / options.gridSize) * options.gridSize,
-    y: Math.ceil(position.y / options.gridSize) * options.gridSize,
-  };
 }
 
 function buildResult(

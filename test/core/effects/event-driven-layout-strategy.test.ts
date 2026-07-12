@@ -216,6 +216,75 @@ describe("Event-Driven layout strategy", () => {
     expect(result.quality.nodeOverlapCount).toBe(0);
   });
 
+  it("reserves grid cells for mixed-height bands, support, and review lanes", () => {
+    const graph = {
+      nodes: [
+        { ...node("a-bus", "event-bus"), style: { width: 160, height: 39 } },
+        { ...node("b-bus", "event-bus"), style: { width: 160, height: 21 } },
+        { ...node("support", "infrastructure"), style: { width: 1, height: 1 } },
+        { ...node("review", "unclassified"), style: { width: 1, height: 1 } },
+      ],
+      edges: [],
+      options: { nodeSpacing: 0, rankSpacing: 0, snapToGrid: true, gridSize: 20 },
+    };
+    const forward = eventDrivenLayoutStrategy.layout(graph);
+    const reversed = eventDrivenLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+      options: graph.options,
+    });
+
+    expect(forward.quality.nodeOverlapCount).toBe(0);
+    expect(forward.quality.nodeOverlapArea).toBe(0);
+    expect(forward.nodes.every(({ position }) => position.x % 20 === 0 && position.y % 20 === 0)).toBe(true);
+    expect(positions(reversed.nodes)).toEqual(positions(forward.nodes));
+  });
+
+  it("places a tiny local processor and adjacent bridge processor in distinct grid cells", () => {
+    const graph = {
+      nodes: [
+        { ...node("publisher", "publisher"), style: { width: 1, height: 1 } },
+        { ...node("orders-bus", "event-bus"), style: { width: 1, height: 1 } },
+        { ...node("local-processor", "processor"), style: { width: 1, height: 1 } },
+        { ...node("bridge-processor", "processor"), style: { width: 1, height: 1 } },
+        { ...node("risk-bus", "event-bus"), style: { width: 1, height: 1 } },
+        { ...node("subscriber", "subscriber"), style: { width: 1, height: 1 } },
+      ],
+      edges: [
+        edge("publisher", "orders-bus", "event"),
+        edge("orders-bus", "local-processor", "event"),
+        edge("orders-bus", "bridge-processor", "event"),
+        edge("bridge-processor", "risk-bus", "event"),
+        edge("risk-bus", "subscriber", "event"),
+      ],
+      options: { nodeSpacing: 0, rankSpacing: 0, snapToGrid: true, gridSize: 20 },
+    };
+    const result = eventDrivenLayoutStrategy.layout(graph);
+    const byId = new Map(result.nodes.map((value) => [value.id, value]));
+
+    expect(byId.get("local-processor")!.position).not.toEqual(byId.get("bridge-processor")!.position);
+    expect(result.quality.nodeOverlapCount).toBe(0);
+    expect(result.nodes.every(({ position }) => position.x % 20 === 0 && position.y % 20 === 0)).toBe(true);
+  });
+
+  it("normalizes reserved cells with a non-default grid size", () => {
+    const result = eventDrivenLayoutStrategy.layout({
+      nodes: [
+        { ...node("a-bus", "event-bus"), style: { width: 31, height: 31 } },
+        { ...node("b-bus", "event-bus"), style: { width: 16, height: 16 } },
+        { ...node("support", "infrastructure"), style: { width: 1, height: 1 } },
+        { ...node("review", "unclassified"), style: { width: 1, height: 1 } },
+      ],
+      edges: [],
+      options: { nodeSpacing: 0, rankSpacing: 0, snapToGrid: true, gridSize: 15 },
+    });
+
+    expect(result.quality.nodeOverlapCount).toBe(0);
+    expect(result.nodes.every(({ position }) => position.x % 15 === 0 && position.y % 15 === 0)).toBe(true);
+    expect(Math.min(...result.nodes.map(({ position }) => position.x))).toBeGreaterThanOrEqual(40);
+    expect(Math.min(...result.nodes.map(({ position }) => position.y))).toBeGreaterThanOrEqual(40);
+  });
+
   it("separates a non-adjacent bridge from an intervening local processor", () => {
     const graph = {
       nodes: [
