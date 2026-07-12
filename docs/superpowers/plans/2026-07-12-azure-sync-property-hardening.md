@@ -192,7 +192,7 @@ Only stage the two existing files in that command if a real counterexample requi
 
 **Files:**
 - Modify: `src-tauri/Cargo.toml`
-- Modify: `src-tauri/Cargo.lock`
+- Modify: `Cargo.lock`
 - Modify: `src-tauri/src/azure_sync.rs`
 
 **Interfaces:**
@@ -214,7 +214,7 @@ Run:
 cargo fetch --manifest-path src-tauri/Cargo.toml
 ```
 
-Expected: exit `0`; `src-tauri/Cargo.lock` records `proptest` and its transitive test-only dependencies.
+Expected: exit `0`; `Cargo.lock` records `proptest` and its transitive test-only dependencies.
 
 - [ ] **Step 2: Add an intentionally inverted normalization property**
 
@@ -309,7 +309,7 @@ Run:
 
 ```bash
 cargo fmt --manifest-path src-tauri/Cargo.toml --all
-git add src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/src/azure_sync.rs
+git add src-tauri/Cargo.toml Cargo.lock src-tauri/src/azure_sync.rs
 git commit -m "test: harden azure scope normalization"
 ```
 
