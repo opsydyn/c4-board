@@ -22,6 +22,7 @@ describe("layout visual fixtures", () => {
       expect(first.edges.length).toBeGreaterThan(0);
       expect(first.nodes).not.toBe(second.nodes);
       expect(first.nodes[0]).not.toBe(second.nodes[0]);
+      expect(first.nodes[0]?.data).not.toBe(second.nodes[0]?.data);
     },
   );
 
@@ -71,5 +72,14 @@ describe("layout visual fixtures", () => {
     expect(edges.has("a-to-c->c-bus")).toBe(true);
     expect(edges.has("b-bus->b-to-c")).toBe(true);
     expect(edges.has("b-to-c->c-bus")).toBe(true);
+
+    const representativeEdges = new Set(
+      representative.edges.map(({ source, target }) => `${source}->${target}`),
+    );
+    expect(representativeEdges.has("orders-publisher->event-bus")).toBe(true);
+    expect(representativeEdges.has("billing-publisher->event-bus")).toBe(true);
+    expect(representativeEdges.has("event-bus->fulfilment-processor")).toBe(true);
+    expect(representativeEdges.has("event-bus->analytics-subscriber")).toBe(true);
+    expect(representativeEdges.has("event-bus->notifications-subscriber")).toBe(true);
   });
 });

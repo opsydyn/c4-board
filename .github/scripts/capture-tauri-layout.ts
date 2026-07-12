@@ -25,11 +25,12 @@ const valueAfter = (name: string) => {
 const viewport = valueAfter("--viewport") as Viewport | undefined;
 const scenario = valueAfter("--scenario") as Scenario | undefined;
 const updateBaseline = args.includes("--update-baseline");
+const skipResize = args.includes("--skip-resize");
 
 if (!viewport || !(viewport in VIEWPORTS) || !scenario || !SCENARIOS.includes(scenario)) {
   console.error(
     "Usage: bun run visual:tauri:capture -- --scenario <event-driven|event-driven-bridges|client-server|hexagonal-inferred|hexagonal-corrected> "
-      + "--viewport <desktop|narrow> [--update-baseline] [--output <path>]",
+      + "--viewport <desktop|narrow> [--skip-resize] [--update-baseline] [--output <path>]",
   );
   process.exit(1);
 }
@@ -49,18 +50,37 @@ const run = (command: string, commandArgs: string[]) => {
 
 const viewportSize = VIEWPORTS[viewport];
 const resizeScript = `
-tell application "System Events"
-  tell first application process whose name is "c4-board"
-    set frontmost to true
-    set position of front window to {40, 40}
-    set size of front window to {${viewportSize.width}, ${viewportSize.height}}
-  end tell
-end tell
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+  as? [[String: Any]] ?? []
+guard let owner = windows.first(where: {
+  $0[kCGWindowOwnerName as String] as? String == "c4-board"
+}), let pid = owner[kCGWindowOwnerPID as String] as? Int else {
+  fatalError("c4-board process not found")
+}
+let app = AXUIElementCreateApplication(pid_t(pid))
+var value: CFTypeRef?
+guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+      let axWindows = value as? [AXUIElement],
+      let window = axWindows.first else {
+  fatalError("c4-board AX window not found")
+}
+var position = CGPoint(x: 40, y: 40)
+var size = CGSize(width: ${viewportSize.width}, height: ${viewportSize.height})
+guard let positionValue = AXValueCreate(.cgPoint, &position),
+      let sizeValue = AXValueCreate(.cgSize, &size),
+      AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, positionValue) == .success,
+      AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue) == .success else {
+  fatalError("c4-board window resize failed")
+}
 `;
 
 try {
-  run("osascript", ["-e", resizeScript]);
-  await Bun.sleep(500);
+  if (!skipResize) run("swift", ["-e", resizeScript]);
+  await Bun.sleep(3_000);
 
   const windowLookup = `
 import CoreGraphics

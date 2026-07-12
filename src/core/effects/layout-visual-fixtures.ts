@@ -50,6 +50,7 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
       edge("billing-publisher", "event-bus", "payment received"),
       edge("event-bus", "fulfilment-processor", "fulfilment event"),
       edge("event-bus", "analytics-subscriber", "event data"),
+      edge("event-bus", "notifications-subscriber", "notification requested"),
       edge("fulfilment-processor", "notifications-subscriber", "notification event"),
       edge("event-bus", "telemetry", "metrics event"),
     ],

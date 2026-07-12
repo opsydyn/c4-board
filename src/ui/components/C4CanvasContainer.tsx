@@ -1066,6 +1066,7 @@ export function C4CanvasContainer() {
         if (import.meta.env.DEV && isLayoutVisualFixtureName(nativeFixture)) {
           const fixture = getLayoutVisualFixture(nativeFixture);
           visualHarnessPresetRef.current = fixture.preset;
+          setCommandBarOpen(false);
           send({
             type: "LOAD_VISUAL_FIXTURE",
             name: fixture.title,
@@ -2235,7 +2236,6 @@ export function C4CanvasContainer() {
         preview,
       };
       setLayoutPreview(preview);
-      requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
       return;
     }
 
@@ -2259,7 +2259,6 @@ export function C4CanvasContainer() {
         };
         setLayoutPreview(preview);
         setLayoutPreviewStatus(null);
-        requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
       })
       .catch((error: unknown) => {
         if (
@@ -2299,14 +2298,12 @@ export function C4CanvasContainer() {
       active: "recommended",
     });
     setLayoutPreview(promoted);
-    requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
   }, [layoutPreview]);
 
   const handleLayoutComparisonModeChange = useCallback((mode: "original" | "recommended") => {
     if (!layoutPreviewComparison) return;
     setLayoutPreview(layoutPreviewComparison[mode]);
     setLayoutPreviewComparison((current) => current ? { ...current, active: mode } : null);
-    requestAnimationFrame(() => canvasRef.current?.fitViewToGraph());
   }, [layoutPreviewComparison]);
 
   // Handle auto-layout action

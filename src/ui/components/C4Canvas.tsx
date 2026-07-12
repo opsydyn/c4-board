@@ -23,7 +23,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useReactFlow } from "@xyflow/react";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ComponentNode } from "./nodes/ComponentNode";
 import { ContainerNode } from "./nodes/ContainerNode";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
@@ -129,6 +129,7 @@ function C4CanvasInner(
   ref: React.Ref<C4CanvasRef>,
 ) {
   const { setCenter, getNode, fitView, getViewport, setViewport } = useReactFlow();
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
 
   // Edge label editor state
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -143,6 +144,22 @@ function C4CanvasInner(
       }, 100);
     }
   }, [viewportToApply, setViewport]);
+
+  useEffect(() => {
+    if (!readOnly || !canvasContainerRef.current) return;
+    let frame: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        fitView({ padding: 0.2, duration: 0 });
+      });
+    });
+    observer.observe(canvasContainerRef.current);
+    return () => {
+      observer.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [fitView, readOnly]);
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
@@ -452,7 +469,7 @@ function C4CanvasInner(
             <CaretDownIcon size={16} weight="bold" />
           </ToggleButton>
         )}
-      <div className={`${styles.canvasContainer} ${canvasToneClassName}`}>
+      <div ref={canvasContainerRef} className={`${styles.canvasContainer} ${canvasToneClassName}`}>
         <ReactFlow
           proOptions={{ hideAttribution: true }}
           nodes={nodes}
@@ -470,6 +487,7 @@ function C4CanvasInner(
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           fitView
+          minZoom={0.1}
           snapToGrid
           snapGrid={[20, 20]}
           nodesDraggable={!readOnly}

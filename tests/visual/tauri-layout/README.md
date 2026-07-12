@@ -40,6 +40,12 @@ promoting intentional output to a tracked baseline:
 bun run visual:tauri:capture -- --scenario event-driven --viewport desktop --update-baseline
 ```
 
+The capture command uses macOS Accessibility APIs to set an exact native window
+size, waits for WKWebView to repaint, and verifies the CoreGraphics dimensions
+before capture. Grant Accessibility and Screen Recording access to the terminal
+host running the command. When reviewing another frame without resizing an
+already-correct window, pass `--skip-resize` to avoid another compositor cycle.
+
 The Event-Driven scenarios are `event-driven` and `event-driven-bridges`. Repeat for
 `client-server`, `hexagonal-inferred`, and `hexagonal-corrected`. The command refuses
 unknown scenarios and validates the native window dimensions before writing a file,
