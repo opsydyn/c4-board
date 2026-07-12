@@ -227,7 +227,6 @@ function buildExternalAffinities(
         ...new Set(
           edges.flatMap((edge) => {
             if (edge.target === nodeId) return [edge.source];
-            if (edge.source === nodeId) return [edge.target];
             return [];
           }).filter((id) => {
             const role = roleByNodeId.get(id);
@@ -387,23 +386,27 @@ function missingTierDiagnostics(assignments: ReadonlyArray<ArchitectureRoleAssig
   const assignedRoles = new Set(assignments.map(({ role }) => role));
   return PRIMARY_ROLES.filter((role) => !assignedRoles.has(role)).map((role) => ({
     code: `client-server-${role}-missing`,
-    severity: "warning",
+    severity: role === "persistence" ? "info" : "warning",
     message: `No ${role} tier was identified; review role assignments before applying this layout.`,
   }));
 }
 
 function affinityDiagnostics(affinities: ReadonlyArray<ExternalAffinity>): LayoutDiagnostic[] {
-  const ambiguous = affinities.filter(({ callerIds }) => callerIds.length > 1).map(({ nodeId }) => nodeId);
+  const ambiguous = affinities.filter(({ callerIds }) => callerIds.length > 1);
   const orphaned = affinities.filter(({ primaryCallerId }) => primaryCallerId === null).map(({ nodeId }) => nodeId);
   return [
-    ...(ambiguous.length > 0
-      ? [{
+    ...ambiguous.map(({ nodeId, primaryCallerId, callerIds }) => {
+      const selectedCallerId = primaryCallerId ?? callerIds[0] ?? "unknown";
+      const alternatives = callerIds.filter((callerId) => callerId !== selectedCallerId);
+      return {
         code: "client-server-external-affinity-ambiguous",
         severity: "warning" as const,
-        message: "External dependencies with multiple callers use the service-first, lexical caller affinity.",
-        nodeIds: ambiguous,
-      }]
-      : []),
+        message: `External dependency '${nodeId}' selected caller '${selectedCallerId}'; alternatives: ${
+          alternatives.join(", ")
+        }.`,
+        nodeIds: [nodeId],
+      };
+    }),
     ...(orphaned.length > 0
       ? [{
         code: "client-server-external-orphan",

@@ -163,6 +163,37 @@ describe("Client-Server layout strategy", () => {
     expect(positionRecord(reversed.nodes)).toEqual(positionRecord(forward.nodes));
   });
 
+  it("treats reverse external links as orphaned support dependencies", () => {
+    const graph = clientServerGraph();
+    graph.edges = graph.edges
+      .filter(({ id }) => id !== "api-server-identity-provider")
+      .concat(edge("identity-provider", "api-server"));
+
+    const result = clientServerLayoutStrategy.layout(graph);
+
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "client-server-external-orphan",
+      nodeIds: ["identity-provider"],
+    }));
+  });
+
+  it("keeps dense primary columns and support lanes overlap-free", () => {
+    const graph = clientServerGraph();
+    graph.nodes.push(
+      node("mobile-client", "client", "person", { width: 220, height: 140 }),
+      node("billing-api", "service", "container", { width: 280, height: 180 }),
+      node("fulfilment-api", "service", "component", { width: 240, height: 120 }),
+      node("billing-domain", "domain", "aggregate", { width: 260, height: 160 }),
+      node("audit-store", "persistence", "repository", { width: 200, height: 140 }),
+      node("payment-provider", "external-dependency", "externalSystem", { width: 220, height: 120 }),
+    );
+    graph.edges.push(edge("billing-api", "payment-provider"));
+
+    const result = clientServerLayoutStrategy.layout(graph);
+
+    expect(result.quality.nodeOverlapCount).toBe(0);
+  });
+
   it("leaves a missing domain tier empty and reports it", () => {
     const graph = clientServerGraphWithoutDomain();
     const result = clientServerLayoutStrategy.layout(graph);
@@ -174,6 +205,19 @@ describe("Client-Server layout strategy", () => {
     }));
   });
 
+  it("reports a missing persistence tier as informational", () => {
+    const graph = clientServerGraph();
+    graph.nodes = graph.nodes.filter(({ id }) => id !== "customer-repository");
+    graph.edges = graph.edges.filter(({ target }) => target !== "customer-repository");
+
+    const result = clientServerLayoutStrategy.layout(graph);
+
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "client-server-persistence-missing",
+      severity: "info",
+    }));
+  });
+
   it("diagnoses multiple and orphan external affinities deterministically", () => {
     const result = clientServerLayoutStrategy.layout(multiCallerAndOrphanGraph());
 
@@ -181,6 +225,13 @@ describe("Client-Server layout strategy", () => {
       "client-server-external-affinity-ambiguous",
       "client-server-external-orphan",
     ]));
+    expect(result.diagnostics).toContainEqual({
+      code: "client-server-external-affinity-ambiguous",
+      severity: "warning",
+      message:
+        "External dependency 'ambiguous-external' selected caller 'api-a'; alternatives: api-b, customer-domain.",
+      nodeIds: ["ambiguous-external"],
+    });
   });
 
   it("preserves children, recovers invalid dimensions, and remains deterministic", () => {

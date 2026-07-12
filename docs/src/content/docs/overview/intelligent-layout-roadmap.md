@@ -1474,9 +1474,12 @@ Next slice:
 Delivered:
 
 - [x] Added schema-validated deterministic Client-Server role inference with explicit, type, label, topology, and fallback evidence.
+- [x] Added low-confidence topology inference for generic C4 container, component, and system coordinators with grounded outbound calls into identified domain or persistence nodes.
 - [x] Preserved missing tiers without invented role assignments and surfaced semantic mismatch and ambiguity diagnostics.
-- [x] Added custom client, service/API, domain, and persistence columns with caller-affined external support and a separate review lane.
-- [x] Preserved child coordinates, hierarchy diagnostics, grid-safe spacing, zero-overlap fixtures, and input-order determinism.
+- [x] Added custom client, service/API, domain, and persistence columns with directional caller-affined external support, exact visual horizontal centering, and a separate review lane.
+- [x] Preserved child coordinates, hierarchy diagnostics, grid-safe spacing, dense-column zero-overlap fixtures, and input-order determinism.
+- [x] Reported missing persistence as informational while retaining warnings for missing client, service, and domain tiers.
+- [x] Made multiple-caller diagnostics identify each external dependency's selected caller and deterministic alternatives.
 - [x] Routed the Client-Server preset through the custom strategy and reused the existing correction, preview, Apply, persistence, and audit boundaries.
 
 Next slice:

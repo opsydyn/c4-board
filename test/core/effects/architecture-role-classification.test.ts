@@ -112,6 +112,29 @@ describe("architecture role classification", () => {
     expect(result.assignments.some(({ role }) => role === "domain")).toBe(false);
   });
 
+  it.each(["container", "component", "system"])(
+    "infers a generic C4 %s coordinator as a service from grounded outbound calls",
+    (type) => {
+      const result = inferClientServerRoles([
+        { id: "checkout-coordinator", type, position: { x: 0, y: 0 }, data: { label: "Checkout Coordinator" } },
+        { id: "checkout-domain", type: "aggregate", position: { x: 0, y: 0 }, data: { label: "Checkout" } },
+        { id: "checkout-store", type: "repository", position: { x: 0, y: 0 }, data: { label: "Checkout Store" } },
+      ], [
+        { id: "coordinator-domain", source: "checkout-coordinator", target: "checkout-domain", label: "calls" },
+        { id: "coordinator-store", source: "checkout-coordinator", target: "checkout-store", label: "loads" },
+      ]);
+
+      expect(result.assignments.find(({ nodeId }) => nodeId === "checkout-coordinator")).toEqual({
+        nodeId: "checkout-coordinator",
+        pattern: "client-server",
+        role: "service",
+        confidence: 0.65,
+        source: "topology",
+        evidence: ["Coordinates grounded outbound calls into an identified domain or persistence node."],
+      });
+    },
+  );
+
   it("classifies an external browser as a client before the external fallback", () => {
     const result = inferClientServerRoles([{
       id: "partner-browser",
