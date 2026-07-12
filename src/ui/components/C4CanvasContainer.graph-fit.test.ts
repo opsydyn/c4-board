@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  scheduleCanvasGraphFit,
-  shouldRevealNodeDetails,
-} from "./C4CanvasContainer";
+import { scheduleCanvasGraphFit, shouldRevealNodeDetails } from "./C4CanvasContainer";
 
 describe("layout preview graph fitting", () => {
   it("fits after the graph transition has reached the next animation frame", () => {

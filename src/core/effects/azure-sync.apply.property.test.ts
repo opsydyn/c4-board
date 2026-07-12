@@ -80,12 +80,14 @@ const existingCanvas = (
     nodes: [manual, ...(includeStale ? [stale] : []), ...existingMapped],
     edges: [
       { id: "manual-edge", source: manual.id, target: manual.id, label: "manual" },
-      ...(includeStale ? [{
-        id: "azure-edge:stale",
-        source: stale.id,
-        target: mapped.nodes[0]!.id,
-        label: "depends_on",
-      }] : []),
+      ...(includeStale
+        ? [{
+          id: "azure-edge:stale",
+          source: stale.id,
+          target: mapped.nodes[0]!.id,
+          label: "depends_on",
+        }]
+        : []),
     ],
   };
 };

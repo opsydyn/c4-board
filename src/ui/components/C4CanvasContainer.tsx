@@ -154,8 +154,7 @@ export const shouldRevealNodeDetails = ({
   isCompactLayout,
   hasLayoutPreview,
   hasLayoutPreviewStatus,
-}: NodeDetailsRevealInput): boolean =>
-  !isCompactLayout && !hasLayoutPreview && !hasLayoutPreviewStatus;
+}: NodeDetailsRevealInput): boolean => !isCompactLayout && !hasLayoutPreview && !hasLayoutPreviewStatus;
 
 const sidebarBrandMetaClass = flex({
   direction: "column",
@@ -1703,11 +1702,13 @@ export function C4CanvasContainer() {
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       send({ type: "SELECT_NODE", nodeId: node.id });
-      if (shouldRevealNodeDetails({
-        isCompactLayout,
-        hasLayoutPreview: layoutPreview !== null,
-        hasLayoutPreviewStatus: layoutPreviewStatus !== null,
-      })) {
+      if (
+        shouldRevealNodeDetails({
+          isCompactLayout,
+          hasLayoutPreview: layoutPreview !== null,
+          hasLayoutPreviewStatus: layoutPreviewStatus !== null,
+        })
+      ) {
         setDetailsOpen(true);
       }
     },

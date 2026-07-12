@@ -222,7 +222,7 @@ function buildExternalAffinities(
   const roleByNodeId = new Map(assignments.map(({ nodeId, role }) => [nodeId, role]));
   return assignments
     .filter(({ role }) => role === "external-dependency")
-    .map(({ nodeId }) => {
+    .map(({ nodeId }): ExternalAffinity => {
       const callerIds = [
         ...new Set(
           edges.flatMap((edge) => {
