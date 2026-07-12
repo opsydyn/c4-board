@@ -306,7 +306,7 @@ function positionClientServer(
     node,
     position: cells.get(node.id) ?? { x: columnX.get("service")!, y: reviewStart },
   }));
-  return normalizePositions(raw, options);
+  return centerSupportNodes(normalizePositions(raw, options), affinities, assignments);
 }
 
 function columnWidth(nodes: ReadonlyArray<Node>, options: LayoutOptions): number {
@@ -348,6 +348,39 @@ function normalizePositions(
       y: gridBoundary(position.y - minY + margin, options),
     },
   }));
+}
+
+function centerSupportNodes(
+  nodes: ReadonlyArray<Node>,
+  affinities: ReadonlyArray<ExternalAffinity>,
+  assignments: ReadonlyArray<ArchitectureRoleAssignment>,
+): Node[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const fallbackAnchorByRole = new Map(
+    (["service", "domain"] as const).map((role) => [
+      role,
+      assignments.find((assignment) => assignment.role === role)?.nodeId ?? null,
+    ]),
+  );
+
+  return nodes.map((node) => {
+    const affinity = affinities.find((entry) => entry.nodeId === node.id);
+    if (!affinity) return node;
+
+    const anchorId = affinity.primaryCallerId ?? fallbackAnchorByRole.get(affinity.anchorRole);
+    const anchor = anchorId ? nodeById.get(anchorId) : undefined;
+    if (!anchor) return node;
+
+    const anchorDimensions = getNodeDimensions(anchor);
+    const dimensions = getNodeDimensions(node);
+    return {
+      ...node,
+      position: {
+        ...node.position,
+        x: anchor.position.x + anchorDimensions.width / 2 - dimensions.width / 2,
+      },
+    };
+  });
 }
 
 function missingTierDiagnostics(assignments: ReadonlyArray<ArchitectureRoleAssignment>): LayoutDiagnostic[] {

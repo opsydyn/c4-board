@@ -126,16 +126,25 @@ describe("Client-Server layout strategy", () => {
     expect(byId.get("unknown")!.y).toBeGreaterThan(byId.get("identity-provider")!.y);
   });
 
-  it("centers mixed-width external support beneath its service tier", () => {
+  it.each([
+    [280, 240],
+    [281, 240],
+    [279, 237],
+  ])("centers a %ipx service tier with %ipx external support", (serviceWidth, externalWidth) => {
     const graph = clientServerGraph();
-    graph.nodes.find(({ id }) => id === "api-server")!.style = { width: 280, height: 100 };
-    graph.nodes.find(({ id }) => id === "identity-provider")!.style = { width: 240, height: 100 };
+    graph.nodes.find(({ id }) => id === "api-server")!.style = { width: serviceWidth, height: 100 };
+    graph.nodes.find(({ id }) => id === "identity-provider")!.style = { width: externalWidth, height: 100 };
 
-    const result = clientServerLayoutStrategy.layout(graph);
-    const byId = new Map(result.nodes.map((value) => [value.id, center(value)]));
+    const forward = clientServerLayoutStrategy.layout(graph);
+    const reversed = clientServerLayoutStrategy.layout({
+      nodes: [...graph.nodes].reverse(),
+      edges: [...graph.edges].reverse(),
+    });
+    const byId = new Map(forward.nodes.map((value) => [value.id, center(value)]));
 
     expect(byId.get("identity-provider")!.x).toBe(byId.get("api-server")!.x);
-    expect(result.quality.nodeOverlapCount).toBe(0);
+    expect(forward.quality.nodeOverlapCount).toBe(0);
+    expect(positionRecord(reversed.nodes)).toEqual(positionRecord(forward.nodes));
   });
 
   it("leaves a missing domain tier empty and reports it", () => {
