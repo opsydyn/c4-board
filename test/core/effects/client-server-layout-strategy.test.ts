@@ -126,6 +126,18 @@ describe("Client-Server layout strategy", () => {
     expect(byId.get("unknown")!.y).toBeGreaterThan(byId.get("identity-provider")!.y);
   });
 
+  it("centers mixed-width external support beneath its service tier", () => {
+    const graph = clientServerGraph();
+    graph.nodes.find(({ id }) => id === "api-server")!.style = { width: 280, height: 100 };
+    graph.nodes.find(({ id }) => id === "identity-provider")!.style = { width: 240, height: 100 };
+
+    const result = clientServerLayoutStrategy.layout(graph);
+    const byId = new Map(result.nodes.map((value) => [value.id, center(value)]));
+
+    expect(byId.get("identity-provider")!.x).toBe(byId.get("api-server")!.x);
+    expect(result.quality.nodeOverlapCount).toBe(0);
+  });
+
   it("leaves a missing domain tier empty and reports it", () => {
     const graph = clientServerGraphWithoutDomain();
     const result = clientServerLayoutStrategy.layout(graph);
@@ -148,6 +160,9 @@ describe("Client-Server layout strategy", () => {
 
   it("preserves children, recovers invalid dimensions, and remains deterministic", () => {
     const graph = clientServerGraphWithChildAndInvalidDimensions();
+    const child = graph.nodes.find(({ id }) => id === "domain-child")!;
+    child.style = { width: -80, height: Number.POSITIVE_INFINITY };
+    child.data = { ...child.data, metadata: { preserved: true } };
     const before = structuredClone(graph);
     const forward = clientServerLayoutStrategy.layout(graph);
     const reversed = clientServerLayoutStrategy.layout({
@@ -157,6 +172,7 @@ describe("Client-Server layout strategy", () => {
     });
 
     expect(graph).toEqual(before);
+    expect(forward.nodes.find(({ id }) => id === "domain-child")).toEqual(child);
     expect(forward.nodes.find(({ id }) => id === "domain-child")?.position).toEqual({ x: 20, y: 30 });
     expect(forward.diagnostics.map(({ code }) => code)).toEqual(expect.arrayContaining([
       "client-server-child-positions-preserved",
@@ -166,5 +182,63 @@ describe("Client-Server layout strategy", () => {
     expect(positionRecord(reversed.nodes)).toEqual(positionRecord(forward.nodes));
     expect(reversed.diagnostics).toEqual(forward.diagnostics);
     expect(forward.quality.nodeOverlapCount).toBe(0);
+  });
+
+  it("returns child-only nodes without geometry recovery changes", () => {
+    const child = {
+      ...node("orphan-child", "unclassified"),
+      parentId: "missing-parent",
+      position: { x: 25, y: 35 },
+      style: { width: -80, height: Number.POSITIVE_INFINITY },
+      data: { label: "orphan-child", layoutRole: "unclassified", metadata: { preserved: true } },
+    };
+
+    const result = clientServerLayoutStrategy.layout({
+      nodes: [child],
+      edges: [edge("orphan-child", "missing-target")],
+    });
+
+    expect(result.nodes).toEqual([child]);
+    expect(result.diagnostics.map(({ code }) => code)).toEqual([
+      "client-server-child-positions-preserved",
+      "client-server-hierarchy-edges-excluded",
+      "client-server-no-top-level-nodes",
+    ]);
+  });
+
+  it("recovers extreme finite geometry before overflow reaches the result", () => {
+    const result = clientServerLayoutStrategy.layout({
+      nodes: [node("web-client", "client"), node("api-server", "service")],
+      edges: [edge("web-client", "api-server")],
+      options: {
+        nodeSpacing: Number.MAX_VALUE,
+        rankSpacing: Number.MAX_VALUE,
+        snapToGrid: true,
+        gridSize: Number.MIN_VALUE,
+      },
+    });
+    const qualityValues = [
+      result.quality.nodeOverlapCount,
+      result.quality.nodeOverlapArea,
+      result.quality.straightLineCrossingCount,
+      result.quality.totalEdgeLength,
+      result.quality.maximumEdgeLength,
+      result.quality.boundingBox.x,
+      result.quality.boundingBox.y,
+      result.quality.boundingBox.width,
+      result.quality.boundingBox.height,
+      result.quality.aspectRatio,
+      result.quality.occupiedArea,
+      result.quality.displacedNodeCount,
+      result.quality.averageNodeDisplacement,
+      result.quality.maximumNodeDisplacement,
+    ];
+
+    expect(result.nodes.every(({ position }) => Number.isFinite(position.x) && Number.isFinite(position.y))).toBe(true);
+    expect(qualityValues.every(Number.isFinite)).toBe(true);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "client-server-invalid-geometry-input",
+      severity: "warning",
+    }));
   });
 });

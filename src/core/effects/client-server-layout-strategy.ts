@@ -18,6 +18,10 @@ import type {
 
 const CLIENT_SERVER_STRATEGY_ID = "client-server";
 const MARGIN = 40;
+const MAX_LAYOUT_DIMENSION = 1_000_000;
+const MAX_LAYOUT_SPACING = 1_000_000;
+const MIN_GRID_SIZE = 1;
+const MAX_GRID_SIZE = 100_000;
 
 const DEFAULT_CLIENT_SERVER_OPTIONS: LayoutOptions = {
   direction: "LR",
@@ -136,12 +140,12 @@ function sanitizeGeometry(input: LayoutInput): GeometrySanitization {
   const nodeSpacing = sanitizeSpacing(rawOptions.nodeSpacing, "nodeSpacing", recoveredOptions);
   const rankSpacing = sanitizeSpacing(rawOptions.rankSpacing, "rankSpacing", recoveredOptions);
   const edgeSpacing = sanitizeSpacing(rawOptions.edgeSpacing, "edgeSpacing", recoveredOptions);
-  const gridSize = finitePositive(rawOptions.gridSize) ? rawOptions.gridSize : undefined;
-  if (rawOptions.snapToGrid && gridSize === undefined) recoveredOptions.push("disabled grid snapping");
+  const gridSize = sanitizeGridSize(rawOptions.gridSize, recoveredOptions);
   const { gridSize: _ignoredGridSize, snapToGrid: _ignoredSnapToGrid, ...baseOptions } = rawOptions;
 
   const recoveredNodeIds: string[] = [];
   const nodes = input.nodes.map((node) => {
+    if (node.parentId) return node;
     const sanitized = sanitizeNodeDimensions(node);
     if (sanitized.recovered) recoveredNodeIds.push(node.id);
     return sanitized.node;
@@ -154,8 +158,8 @@ function sanitizeGeometry(input: LayoutInput): GeometrySanitization {
       nodeSpacing,
       rankSpacing,
       edgeSpacing,
-      snapToGrid: rawOptions.snapToGrid === true && gridSize !== undefined,
-      ...(gridSize !== undefined && { gridSize }),
+      snapToGrid: rawOptions.snapToGrid === true,
+      gridSize,
     },
     recoveredNodeIds: recoveredNodeIds.sort(),
     recoveredOptions,
@@ -163,9 +167,15 @@ function sanitizeGeometry(input: LayoutInput): GeometrySanitization {
 }
 
 function sanitizeSpacing(value: unknown, name: string, recoveredOptions: string[]): number {
-  if (finiteNonNegative(value)) return value;
+  if (boundedNonNegative(value)) return value;
   recoveredOptions.push(name);
   return DEFAULT_CLIENT_SERVER_OPTIONS[name as "nodeSpacing" | "rankSpacing" | "edgeSpacing"];
+}
+
+function sanitizeGridSize(value: unknown, recoveredOptions: string[]): number {
+  if (boundedGridSize(value)) return value;
+  recoveredOptions.push("gridSize");
+  return DEFAULT_CLIENT_SERVER_OPTIONS.gridSize!;
 }
 
 function sanitizeNodeDimensions(node: Node): { node: Node; recovered: boolean } {
@@ -191,8 +201,12 @@ function sanitizeDimension(
 ): { value: number; recovered: boolean } {
   const measuredInvalid = invalidDimension(measured);
   const styledInvalid = invalidDimension(styled);
-  if (!measuredInvalid && finitePositive(measured)) return { value: measured, recovered: styledInvalid };
-  if (!styledInvalid && finitePositive(styled)) return { value: styled, recovered: measuredInvalid };
+  if (!measuredInvalid && boundedPositive(measured, MAX_LAYOUT_DIMENSION)) {
+    return { value: measured, recovered: styledInvalid };
+  }
+  if (!styledInvalid && boundedPositive(styled, MAX_LAYOUT_DIMENSION)) {
+    return { value: styled, recovered: measuredInvalid };
+  }
   return { value: fallback, recovered: measuredInvalid || styledInvalid };
 }
 
@@ -252,13 +266,14 @@ function positionClientServer(
     assignmentsByRole.set(assignment.role, nodesForRole);
   }
 
-  const step = columnStep(nodes, options);
+  const width = columnWidth(nodes, options);
+  const step = columnStep(width, options);
   const columnX = new Map(PRIMARY_ROLES.map((role, index) => [role, index * step]));
   const cells = new Map<string, XYPosition>();
   const primaryBottom = Math.max(
     0,
     ...PRIMARY_ROLES.map((role) => {
-      const placement = stackColumn(assignmentsByRole.get(role) ?? [], columnX.get(role)!, 0, options);
+      const placement = stackColumn(assignmentsByRole.get(role) ?? [], columnX.get(role)!, width, 0, options);
       copyCells(cells, placement.cells);
       return placement.bottom;
     }),
@@ -271,7 +286,7 @@ function positionClientServer(
       const supportNodes = affinities
         .filter((affinity) => affinity.anchorRole === role)
         .map(({ nodeId }) => nodeById.get(nodeId)!);
-      const placement = stackColumn(supportNodes, columnX.get(role)!, supportStart, options);
+      const placement = stackColumn(supportNodes, columnX.get(role)!, width, supportStart, options);
       copyCells(cells, placement.cells);
       return placement.bottom;
     }),
@@ -281,6 +296,7 @@ function positionClientServer(
   const review = stackColumn(
     assignmentsByRole.get("unclassified") ?? [],
     columnX.get("service")!,
+    width,
     reviewStart,
     options,
   );
@@ -293,21 +309,26 @@ function positionClientServer(
   return normalizePositions(raw, options);
 }
 
-function columnStep(nodes: ReadonlyArray<Node>, options: LayoutOptions): number {
-  const maxWidth = Math.max(...nodes.map((node) => reservedDimensions(node, options).width));
-  return gridBoundary(maxWidth + options.nodeSpacing + options.rankSpacing, options);
+function columnWidth(nodes: ReadonlyArray<Node>, options: LayoutOptions): number {
+  return Math.max(...nodes.map((node) => reservedDimensions(node, options).width));
+}
+
+function columnStep(width: number, options: LayoutOptions): number {
+  return gridBoundary(width + options.nodeSpacing + options.rankSpacing, options);
 }
 
 function stackColumn(
   nodes: ReadonlyArray<Node>,
   x: number,
+  width: number,
   startY: number,
   options: LayoutOptions,
 ): StackPlacement {
   const cells = new Map<string, XYPosition>();
   let y = startY;
   for (const node of sortedNodes(nodes)) {
-    cells.set(node.id, { x, y });
+    const dimensions = getNodeDimensions(node);
+    cells.set(node.id, { x: x + (width - dimensions.width) / 2, y });
     y += gridBoundary(reservedDimensions(node, options).height + options.nodeSpacing, options);
   }
   return { cells, bottom: y };
@@ -433,7 +454,8 @@ function reservedDimensions(node: Node, options: LayoutOptions): { width: number
 
 function gridBoundary(value: number, options: LayoutOptions): number {
   if (!options.snapToGrid || !options.gridSize) return value;
-  return Math.ceil(value / options.gridSize) * options.gridSize;
+  const snapped = Math.ceil(value / options.gridSize) * options.gridSize;
+  return Number.isFinite(snapped) ? snapped : 0;
 }
 
 function affinityRoleRank(role: ArchitectureSemanticRole | undefined): number {
@@ -455,13 +477,17 @@ function sortedEdges(edges: ReadonlyArray<Edge>): Edge[] {
 }
 
 function invalidDimension(value: unknown): boolean {
-  return typeof value === "number" && !finitePositive(value);
+  return typeof value === "number" && !boundedPositive(value, MAX_LAYOUT_DIMENSION);
 }
 
-function finitePositive(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
+function boundedPositive(value: unknown, maximum: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 && value <= maximum;
 }
 
-function finiteNonNegative(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+function boundedNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_LAYOUT_SPACING;
+}
+
+function boundedGridSize(value: unknown): value is number {
+  return boundedPositive(value, MAX_GRID_SIZE) && value >= MIN_GRID_SIZE;
 }
