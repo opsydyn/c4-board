@@ -48,10 +48,10 @@ The shipped implementation now provides an architecture-grade deterministic foun
 Known limitations:
 
 - Several legacy menu presets still differ only by Dagre spacing and direction.
-- Hexagonal and Event-Driven now have complete shared semantic-role classification, review and correction UX, dedicated geometry, and reviewed native visual baselines; Client-Server still needs pattern-specific inference and deterministic columns.
+- Hexagonal, Event-Driven, and Client-Server now have complete shared semantic-role classification, review and correction UX, and dedicated geometry; Client-Server native visual baselines and inference evaluation remain open.
 - Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
 - ELK Radial has not justified replacing the product-specific radial strategies.
-- Native visual baselines cover custom Event-Driven representative, bridge, and detail previews plus inferred and corrected Hexagonal previews; custom Client-Server baselines, radial coverage, and full preset coverage remain open.
+- Native visual baselines cover custom Event-Driven representative, bridge, and detail previews plus inferred and corrected Hexagonal previews; inferred, corrected, and custom Client-Server baselines, radial coverage, and full preset coverage remain open.
 - Browser-worker startup and enforced large-board interaction budgets remain incomplete.
 - OPY can apply known layouts, but cannot yet classify architecture patterns, correct semantic roles, or author reusable `LayoutSpec` definitions.
 
@@ -457,7 +457,7 @@ Exit criteria:
 - [x] Add Hexagonal core, port, adapter, and infrastructure placement.
 - [x] Add Event-Driven publisher, bus, processor, and subscriber inference.
 - [x] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
-- [ ] Add Client-Server client, service, domain, and persistence columns.
+- [x] Add Client-Server client, service, domain, and persistence columns.
 - [x] Add role correction controls in the layout preview.
 - [ ] Add semantic violation diagnostics independent from layout quality.
 
@@ -531,9 +531,9 @@ Exit criteria:
 | P0 | Metrics, fixtures, and strategy contract | Foundation shipped; full preset coverage open | Makes future layout work safe and measurable | None |
 | P0 | True Hub-Spoke and System Context | Shipped | Immediate visible differentiation | Strategy contract |
 | P0 | ELK worker and compound graph support | Shipped; browser budgets open | Unlocks architecture-grade constraints and routing | Strategy contract |
-| P1 | Hexagonal and Event-Driven | In progress; Event-Driven shipped | Strong semantic differentiation | Shared semantic role schema |
+| P1 | Hexagonal and Event-Driven | Shipped | Strong semantic differentiation | Shared semantic role schema |
 | P1 | OPY/Rig classifier | Queued | Natural-language strategy and role selection | Stable role and strategy schemas |
-| P1 | Client-Server and improved hierarchical family | Queued | Completes common architecture patterns | Shared semantic role schema |
+| P1 | Client-Server and improved hierarchical family | Client-Server semantic geometry shipped; native baselines open | Completes common architecture patterns | Shared semantic role schema |
 | P2 | Microservices and mixed strategies | Future | Handles dense enterprise boards | ELK and classification |
 | P2 | OPY Custom Layout Studio | Future | Turns user intent into reusable product knowledge | Constraint grammar and persistence |
 
@@ -587,25 +587,23 @@ Quality measures:
 
 The foundation through Phase 3 is substantially shipped: strategy boundaries, quality metrics, radial strategies, asynchronous ELK Layered, routed preview, recommendations, audit history, and portable review evidence are in production code.
 
-The shared Phase 4 semantic role contract, deterministic inference, preview correction flow, Hexagonal geometry, and Event-Driven lanes are complete. Both completed patterns have reviewed native visual baselines.
+The shared Phase 4 semantic role contract, deterministic inference, preview correction flow, Hexagonal geometry, Event-Driven lanes, and Client-Server columns are shipped. Hexagonal and Event-Driven have reviewed native visual baselines; Client-Server native baselines remain open.
 
-The next product workstream is **Client-Server semantic layout**, sequenced as follows:
+The next product workstream is **Client-Server native baseline and evaluation**, sequenced as follows:
 
-1. Define deterministic Client-Server role inference with evidence, confidence, ambiguity, and contradiction diagnostics using the shared contract.
-2. Implement deterministic client, service/API, domain, and persistence columns with pattern-specific diagnostics.
-3. Reuse the existing non-destructive role review, correction, Apply, persistence, and audit boundaries for Client-Server previews.
-4. Add custom Client-Server desktop and narrow native visual baselines after the semantic geometry ships.
-5. Expose stable role evidence to OPY/Rig only after Client-Server inference and correction UX are evaluated.
+1. Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
+2. Capture custom Client-Server desktop and narrow native visual baselines.
+3. Evaluate Client-Server inference confidence and correction frequency before exposing role evidence to OPY/Rig.
 
-Open foundation debt remains visible but does not block the next Client-Server semantic layout slice:
+Open foundation debt remains visible but does not block the next Client-Server native baseline and evaluation slice:
 
 - Remaining C4 and DDD preset fixtures and radial visual baselines.
 - Browser-worker startup and realistic performance budgets.
 - Advanced Dagre controls and semantic preprocessing.
 - Strategy-specific menu status.
-- Remaining custom Client-Server, radial, and broader preset native baseline coverage.
+- Remaining inferred, corrected, and custom Client-Server, radial, and broader preset native baseline coverage.
 
-The next implementation slice should implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
+The next implementation slice should add inferred, corrected, and custom Client-Server native visual baselines, then evaluate inference confidence and correction frequency before OPY/Rig exposure.
 
 ### Slice 1 Delivery Record
 
@@ -1464,6 +1462,25 @@ Delivered:
 
 Next slice:
 
-- [ ] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
-- [ ] Add custom Client-Server native desktop and narrow visual baselines after semantic geometry ships.
+- [x] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
+- [ ] Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
+- [ ] Capture custom Client-Server desktop and narrow native visual baselines.
 - [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
+
+### Slice 40 Delivery Record
+
+**Completed**: 2026-07-12
+
+Delivered:
+
+- [x] Added schema-validated deterministic Client-Server role inference with explicit, type, label, topology, and fallback evidence.
+- [x] Preserved missing tiers without invented role assignments and surfaced semantic mismatch and ambiguity diagnostics.
+- [x] Added custom client, service/API, domain, and persistence columns with caller-affined external support and a separate review lane.
+- [x] Preserved child coordinates, hierarchy diagnostics, grid-safe spacing, zero-overlap fixtures, and input-order determinism.
+- [x] Routed the Client-Server preset through the custom strategy and reused the existing correction, preview, Apply, persistence, and audit boundaries.
+
+Next slice:
+
+- [ ] Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
+- [ ] Capture and visually review custom Client-Server desktop and narrow baselines.
+- [ ] Evaluate Client-Server inference confidence and correction frequency before exposing role evidence to OPY/Rig.
