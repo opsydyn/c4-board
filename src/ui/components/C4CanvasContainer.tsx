@@ -3105,7 +3105,9 @@ export function C4CanvasContainer() {
           animationsEnabled={state.context.animationsEnabled}
           ambientTone={canvasAmbientTone}
           readOnly={isLayoutPreviewOpen}
-          viewportFitNodeIds={visualHarnessViewportFitNodeIds}
+          {...(visualHarnessViewportFitNodeIds && {
+            viewportFitNodeIds: visualHarnessViewportFitNodeIds,
+          })}
         />
         {opyHostMode === "floating" && (
           <OpyFloatingWidget
