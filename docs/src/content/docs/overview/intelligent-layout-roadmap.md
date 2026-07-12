@@ -597,13 +597,13 @@ The next product workstream is **Client-Server semantic layout**, sequenced as f
 4. Add custom Client-Server desktop and narrow native visual baselines after the semantic geometry ships.
 5. Expose stable role evidence to OPY/Rig only after Client-Server inference and correction UX are evaluated.
 
-Open foundation debt remains visible but does not block the Phase 4 role-contract slice:
+Open foundation debt remains visible but does not block the next Client-Server semantic layout slice:
 
 - Remaining C4 and DDD preset fixtures and radial visual baselines.
 - Browser-worker startup and realistic performance budgets.
 - Advanced Dagre controls and semantic preprocessing.
 - Strategy-specific menu status.
-- Native baseline refresh when macOS capture is available.
+- Remaining custom Client-Server, radial, and broader preset native baseline coverage.
 
 The next implementation slice should implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
 
