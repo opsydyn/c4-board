@@ -137,6 +137,13 @@ import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
 import { Toolbar } from "./Toolbar";
 import { useBalancedCouplingModel } from "./useBalancedCouplingModel";
 
+export function scheduleCanvasGraphFit(
+  canvasRef: { current: Pick<C4CanvasRef, "fitViewToGraph"> | null },
+  requestFrame: (callback: FrameRequestCallback) => number = requestAnimationFrame,
+): void {
+  requestFrame(() => canvasRef.current?.fitViewToGraph());
+}
+
 const sidebarBrandMetaClass = flex({
   direction: "column",
   align: "start",
@@ -1066,6 +1073,8 @@ export function C4CanvasContainer() {
         if (import.meta.env.DEV && isLayoutVisualFixtureName(nativeFixture)) {
           const fixture = getLayoutVisualFixture(nativeFixture);
           visualHarnessPresetRef.current = fixture.preset;
+          setSidebarOpen(false);
+          setDetailsOpen(false);
           setCommandBarOpen(false);
           send({
             type: "LOAD_VISUAL_FIXTURE",
@@ -2236,6 +2245,7 @@ export function C4CanvasContainer() {
         preview,
       };
       setLayoutPreview(preview);
+      scheduleCanvasGraphFit(canvasRef);
       return;
     }
 
@@ -2259,6 +2269,7 @@ export function C4CanvasContainer() {
         };
         setLayoutPreview(preview);
         setLayoutPreviewStatus(null);
+        scheduleCanvasGraphFit(canvasRef);
       })
       .catch((error: unknown) => {
         if (
@@ -2273,6 +2284,7 @@ export function C4CanvasContainer() {
           setLayoutPreview(fallbackPreview);
           setLayoutPreviewStatus(null);
           setLayoutPreviewFailure({ message, attemptedLabel: "ELK Layered" });
+          scheduleCanvasGraphFit(canvasRef);
         } else {
           setLayoutPreviewStatus({ label: "ELK Layered", error: message });
         }
@@ -2298,12 +2310,14 @@ export function C4CanvasContainer() {
       active: "recommended",
     });
     setLayoutPreview(promoted);
+    scheduleCanvasGraphFit(canvasRef);
   }, [layoutPreview]);
 
   const handleLayoutComparisonModeChange = useCallback((mode: "original" | "recommended") => {
     if (!layoutPreviewComparison) return;
     setLayoutPreview(layoutPreviewComparison[mode]);
     setLayoutPreviewComparison((current) => current ? { ...current, active: mode } : null);
+    scheduleCanvasGraphFit(canvasRef);
   }, [layoutPreviewComparison]);
 
   // Handle auto-layout action
@@ -2376,9 +2390,7 @@ export function C4CanvasContainer() {
         options: { ...current.options, ...centerOptions },
       });
     });
-    requestAnimationFrame(() => {
-      canvasRef.current?.fitViewToGraph();
-    });
+    scheduleCanvasGraphFit(canvasRef);
   }, [state.context.edges, state.context.nodes]);
 
   const handleLayoutPreviewRoleChange = useCallback((
@@ -2387,9 +2399,7 @@ export function C4CanvasContainer() {
   ) => {
     setLayoutPreview((current) => current ? correctLayoutPreviewRole(current, nodeId, role) : current);
     setLayoutPreviewComparison(null);
-    requestAnimationFrame(() => {
-      canvasRef.current?.fitViewToGraph();
-    });
+    scheduleCanvasGraphFit(canvasRef);
   }, []);
 
   const handleApplyLayoutPreview = useCallback(() => {
