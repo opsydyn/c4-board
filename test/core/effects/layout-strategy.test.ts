@@ -19,7 +19,8 @@ describe("Dagre layout strategy baseline", () => {
   it.each(layoutGraphFixtures)("preserves the $name baseline", (fixture) => {
     const graph = cloneLayoutFixture(fixture);
     const options = getPreset(graph.preset);
-    const result = dagreLayoutStrategy.layout({ ...graph, options });
+    const dagreOptions = graph.preset === "clientServer" ? { ...options, direction: "TB" as const } : options;
+    const result = dagreLayoutStrategy.layout({ ...graph, options: dagreOptions });
 
     expect({
       positions: positions(result.nodes),

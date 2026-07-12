@@ -113,14 +113,33 @@ describe("architecture role classification", () => {
   });
 
   it.each(["container", "component", "system"])(
-    "infers a generic C4 %s coordinator as a service from grounded outbound calls",
+    "infers a generic C4 %s coordinator as a service from a grounded outbound domain request",
     (type) => {
       const result = inferClientServerRoles([
         { id: "checkout-coordinator", type, position: { x: 0, y: 0 }, data: { label: "Checkout Coordinator" } },
         { id: "checkout-domain", type: "aggregate", position: { x: 0, y: 0 }, data: { label: "Checkout" } },
-        { id: "checkout-store", type: "repository", position: { x: 0, y: 0 }, data: { label: "Checkout Store" } },
       ], [
         { id: "coordinator-domain", source: "checkout-coordinator", target: "checkout-domain", label: "calls" },
+      ]);
+
+      expect(result.assignments.find(({ nodeId }) => nodeId === "checkout-coordinator")).toEqual({
+        nodeId: "checkout-coordinator",
+        pattern: "client-server",
+        role: "service",
+        confidence: 0.65,
+        source: "topology",
+        evidence: ["Coordinates a grounded outbound request into an identified domain node."],
+      });
+    },
+  );
+
+  it.each(["container", "component", "system"])(
+    "infers a persistence-only generic C4 %s coordinator as a service from grounded data access",
+    (type) => {
+      const result = inferClientServerRoles([
+        { id: "checkout-coordinator", type, position: { x: 0, y: 0 }, data: { label: "Checkout Coordinator" } },
+        { id: "checkout-store", type: "repository", position: { x: 0, y: 0 }, data: { label: "Checkout Store" } },
+      ], [
         { id: "coordinator-store", source: "checkout-coordinator", target: "checkout-store", label: "loads" },
       ]);
 
@@ -130,7 +149,7 @@ describe("architecture role classification", () => {
         role: "service",
         confidence: 0.65,
         source: "topology",
-        evidence: ["Coordinates grounded outbound calls into an identified domain or persistence node."],
+        evidence: ["Coordinates grounded outbound data access into an identified persistence node."],
       });
     },
   );

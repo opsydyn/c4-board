@@ -309,13 +309,24 @@ const inferClientServerRole = (
   }
   if (
     ["container", "component", "system"].includes(nodeType(node))
-    && hasOutbound(["domain", "persistence"], REQUEST)
+    && hasOutbound(["domain"], REQUEST)
   ) {
     return withMismatch({
       role: "service",
       confidence: 0.65,
       source: "topology",
-      evidence: ["Coordinates grounded outbound calls into an identified domain or persistence node."],
+      evidence: ["Coordinates a grounded outbound request into an identified domain node."],
+    });
+  }
+  if (
+    ["container", "component", "system"].includes(nodeType(node))
+    && hasOutbound(["persistence"], DATA)
+  ) {
+    return withMismatch({
+      role: "service",
+      confidence: 0.65,
+      source: "topology",
+      evidence: ["Coordinates grounded outbound data access into an identified persistence node."],
     });
   }
   if (
