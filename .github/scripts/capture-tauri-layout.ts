@@ -6,7 +6,13 @@ const VIEWPORTS = {
   desktop: { width: 1600, height: 900 },
   narrow: { width: 960, height: 720 },
 } as const;
-const SCENARIOS = ["event-driven", "client-server", "hexagonal-inferred", "hexagonal-corrected"] as const;
+const SCENARIOS = [
+  "event-driven",
+  "event-driven-bridges",
+  "client-server",
+  "hexagonal-inferred",
+  "hexagonal-corrected",
+] as const;
 
 type Viewport = keyof typeof VIEWPORTS;
 type Scenario = typeof SCENARIOS[number];
@@ -22,7 +28,7 @@ const updateBaseline = args.includes("--update-baseline");
 
 if (!viewport || !(viewport in VIEWPORTS) || !scenario || !SCENARIOS.includes(scenario)) {
   console.error(
-    "Usage: bun run visual:tauri:capture -- --scenario <event-driven|client-server|hexagonal-inferred|hexagonal-corrected> "
+    "Usage: bun run visual:tauri:capture -- --scenario <event-driven|event-driven-bridges|client-server|hexagonal-inferred|hexagonal-corrected> "
       + "--viewport <desktop|narrow> [--update-baseline] [--output <path>]",
   );
   process.exit(1);

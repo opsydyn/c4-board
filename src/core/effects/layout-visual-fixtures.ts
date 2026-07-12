@@ -3,6 +3,7 @@ import type { LayoutPresetName } from "./layout";
 
 export type LayoutVisualFixtureName =
   | "event-driven"
+  | "event-driven-bridges"
   | "client-server"
   | "hexagonal-inferred"
   | "hexagonal-corrected";
@@ -34,19 +35,61 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
   "event-driven": {
     name: "event-driven",
     title: "VISUAL::EVENT DRIVEN",
-    preset: "elkLayered",
+    preset: "eventDriven",
     nodes: [
-      node("orders", "container"),
-      node("billing", "container"),
-      node("event-bus", "system"),
-      node("fulfilment", "container"),
-      node("analytics", "container"),
+      node("orders-publisher", "container", { layoutRole: "publisher" }),
+      node("billing-publisher", "container", { layoutRole: "publisher" }),
+      node("event-bus", "system", { layoutRole: "event-bus" }),
+      node("fulfilment-processor", "component", { layoutRole: "processor" }),
+      node("analytics-subscriber", "container", { layoutRole: "subscriber" }),
+      node("notifications-subscriber", "container", { layoutRole: "subscriber" }),
+      node("telemetry", "component", { layoutRole: "infrastructure" }),
     ],
     edges: [
-      edge("orders", "event-bus", "command: order accepted"),
-      edge("billing", "event-bus", "payment event"),
-      edge("event-bus", "fulfilment", "integration event"),
-      edge("event-bus", "analytics", "event data"),
+      edge("orders-publisher", "event-bus", "order accepted"),
+      edge("billing-publisher", "event-bus", "payment received"),
+      edge("event-bus", "fulfilment-processor", "fulfilment event"),
+      edge("event-bus", "analytics-subscriber", "event data"),
+      edge("fulfilment-processor", "notifications-subscriber", "notification event"),
+      edge("event-bus", "telemetry", "metrics event"),
+    ],
+  },
+  "event-driven-bridges": {
+    name: "event-driven-bridges",
+    title: "VISUAL::EVENT DRIVEN BRIDGES",
+    preset: "eventDriven",
+    nodes: [
+      node("orders-publisher", "container", { layoutRole: "publisher" }),
+      node("a-bus", "system", { layoutRole: "event-bus" }),
+      node("b-bus", "system", { layoutRole: "event-bus" }),
+      node("c-bus", "system", { layoutRole: "event-bus" }),
+      node("a-local", "component", { layoutRole: "processor" }),
+      node("a-to-b", "component", { layoutRole: "processor" }),
+      node("a-to-c", "component", { layoutRole: "processor" }),
+      node("b-to-c", "component", { layoutRole: "processor" }),
+      node("a-subscriber", "component", { layoutRole: "subscriber" }),
+      node("b-subscriber", "component", { layoutRole: "subscriber" }),
+      node("c-subscriber", "component", { layoutRole: "subscriber" }),
+      node("telemetry", "component", { layoutRole: "infrastructure" }),
+      node("external-monitor", "externalSystem", { layoutRole: "external-dependency" }),
+      node("review-node", "component", { layoutRole: "unclassified" }),
+    ],
+    edges: [
+      edge("orders-publisher", "a-bus", "order accepted"),
+      edge("a-bus", "a-local", "local event"),
+      edge("a-local", "a-subscriber", "local result"),
+      edge("a-bus", "a-to-b", "bridge event"),
+      edge("a-to-b", "b-bus", "forwarded event"),
+      edge("a-bus", "a-to-c", "bridge event"),
+      edge("a-to-c", "c-bus", "forwarded event"),
+      edge("b-bus", "b-to-c", "bridge event"),
+      edge("b-to-c", "c-bus", "forwarded event"),
+      edge("a-bus", "a-subscriber", "subscriber event"),
+      edge("b-bus", "b-subscriber", "subscriber event"),
+      edge("c-bus", "c-subscriber", "subscriber event"),
+      edge("a-bus", "telemetry", "metrics event"),
+      edge("c-bus", "external-monitor", "monitoring event"),
+      edge("b-bus", "review-node", "review event"),
     ],
   },
   "client-server": {
@@ -117,6 +160,7 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
 
 export function isLayoutVisualFixtureName(value: unknown): value is LayoutVisualFixtureName {
   return value === "event-driven"
+    || value === "event-driven-bridges"
     || value === "client-server"
     || value === "hexagonal-inferred"
     || value === "hexagonal-corrected";
