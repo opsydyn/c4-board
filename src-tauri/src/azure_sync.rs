@@ -767,13 +767,7 @@ async fn query_resource_rows(
 
         rows.extend(page.data);
 
-        let next_token = page.skip_token.and_then(|token| {
-            if token.trim().is_empty() {
-                None
-            } else {
-                Some(token)
-            }
-        });
+        let next_token = page.skip_token.filter(|token| !token.trim().is_empty());
         if next_token.is_none() {
             return Ok(AzureGraphQueryRows { rows, warnings });
         }

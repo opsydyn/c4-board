@@ -3,6 +3,9 @@
   // Dependency hardening scope. Export pruning is intentionally deferred until
   // the public/internal API surface has explicit ownership.
   "include": ["files", "dependencies", "unlisted"],
+  "workspaces": {
+    "docs": {}
+  },
   "ignoreDependencies": [
     "@astrojs/check",
     "@tauri-apps/plugin-sql"
@@ -24,9 +27,7 @@
     "src/ui/components/postee/PosteeEnvironmentPanel.tsx",
     "src/ui/components/postee/PosteeWorkspace.original.tsx",
     "tests/mocks/@vanilla-extract/css.ts",
-    "tests/mocks/vanilla-extract-css-stub.ts",
     "tests/mocks/vanilla-extract.mock.ts",
-    "tests/setup/bun-test-preload.ts",
     "tests/utils/index.ts"
   ]
 }
