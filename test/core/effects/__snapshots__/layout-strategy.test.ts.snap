@@ -4,51 +4,51 @@ exports[`Dagre layout strategy baseline > preserves the 'client-server' baseline
 {
   "positions": {
     "api-server": {
-      "x": 460,
-      "y": 320,
+      "x": 380,
+      "y": 380,
     },
     "audit-event": {
-      "x": 320,
-      "y": 600,
+      "x": 720,
+      "y": 260,
     },
     "command-handler": {
-      "x": 40,
-      "y": 600,
+      "x": 720,
+      "y": 40,
     },
     "customer-repository": {
-      "x": 600,
-      "y": 600,
+      "x": 720,
+      "y": 480,
     },
     "identity-provider": {
-      "x": 880,
-      "y": 600,
+      "x": 720,
+      "y": 700,
     },
     "mobile-client": {
-      "x": 600,
-      "y": 40,
+      "x": 40,
+      "y": 480,
     },
     "web-client": {
-      "x": 320,
-      "y": 40,
+      "x": 40,
+      "y": 260,
     },
   },
   "quality": {
-    "aspectRatio": 1.5151515151515151,
-    "averageNodeDisplacement": 668.4459061608651,
+    "aspectRatio": 1.105263157894737,
+    "averageNodeDisplacement": 662.6091445753974,
     "boundingBox": {
-      "height": 660,
-      "width": 1000,
+      "height": 760,
+      "width": 840,
       "x": 40,
       "y": 40,
     },
     "displacedNodeCount": 7,
-    "maximumEdgeLength": 504.7771785649585,
-    "maximumNodeDisplacement": 1065.0821564555479,
+    "maximumEdgeLength": 480.83261120685233,
+    "maximumNodeDisplacement": 1004.1912168506553,
     "nodeOverlapArea": 0,
     "nodeOverlapCount": 0,
-    "occupiedArea": 660000,
+    "occupiedArea": 638400,
     "straightLineCrossingCount": 0,
-    "totalEdgeLength": 2261.752424529799,
+    "totalEdgeLength": 2377.6493733635743,
   },
 }
 `;

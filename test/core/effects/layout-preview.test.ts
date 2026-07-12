@@ -20,6 +20,18 @@ const fixture = (name: string) =>
   );
 
 describe("createLayoutPreview", () => {
+  it("recomputes a corrected Client-Server role without mutating the source graph", () => {
+    const graph = fixture("client-server");
+    const source = graph.nodes.find(({ id }) => id === "command-handler")!;
+    const preview = createLayoutPreview({ ...graph, preset: "clientServer", scope: "graph" });
+    const corrected = correctLayoutPreviewRole(preview, source.id, "domain");
+
+    expect(source.data.layoutRole).toBeUndefined();
+    expect(corrected.result.nodes.find(({ id }) => id === source.id)?.data.layoutRole).toBe("domain");
+    expect(corrected.result.semanticRoles?.find(({ nodeId }) => nodeId === source.id))
+      .toMatchObject({ role: "domain", confidence: 1, source: "explicit" });
+  });
+
   it("recomputes a corrected Hexagonal role without mutating the source graph", () => {
     const graph = fixture("hexagonal");
     const sourceNode = graph.nodes.find(({ id }) => id === "rest-adapter")!;

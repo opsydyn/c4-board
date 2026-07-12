@@ -1,3 +1,4 @@
+import { clientServerLayoutStrategy } from "./client-server-layout-strategy";
 import { dagreLayoutStrategy } from "./dagre-layout-strategy";
 import { elkLayeredLayoutStrategy } from "./elk-layered-layout-strategy";
 import { eventDrivenLayoutStrategy } from "./event-driven-layout-strategy";
@@ -8,6 +9,7 @@ import { systemContextLayoutStrategy } from "./system-context-layout-strategy";
 
 const synchronousStrategies = new Map<string, SynchronousLayoutStrategy>([
   [dagreLayoutStrategy.id, dagreLayoutStrategy],
+  [clientServerLayoutStrategy.id, clientServerLayoutStrategy],
   [eventDrivenLayoutStrategy.id, eventDrivenLayoutStrategy],
   [hubSpokeLayoutStrategy.id, hubSpokeLayoutStrategy],
   [systemContextLayoutStrategy.id, systemContextLayoutStrategy],

@@ -1,4 +1,6 @@
 import { clientServerLayoutStrategy } from "@/core/effects/client-server-layout-strategy";
+import { dagreLayoutStrategy } from "@/core/effects/dagre-layout-strategy";
+import { calculateLayout, getPreset } from "@/core/effects/layout";
 import { getNodeDimensions } from "@/core/effects/layout-node-size";
 import type { Edge, Node, XYPosition } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
@@ -105,6 +107,20 @@ const clientServerGraphWithChildAndInvalidDimensions = () => ({
 });
 
 describe("Client-Server layout strategy", () => {
+  it("routes the Client-Server preset without Dagre fallback", () => {
+    const graph = clientServerGraph();
+    const options = getPreset("clientServer");
+    const result = calculateLayout(graph.nodes, graph.edges, options);
+    const baseline = dagreLayoutStrategy.layout({ ...graph, options });
+
+    expect(options.strategyId).toBe("client-server");
+    expect(result).toMatchObject({ strategyId: "client-server", engine: "custom" });
+    expect(result.nodes.map(({ position }) => position)).not.toEqual(
+      baseline.nodes.map(({ position }) => position),
+    );
+    expect(result.diagnostics.map(({ code }) => code)).not.toContain("layout-strategy-fallback");
+  });
+
   it("places the four semantic tiers in left-to-right columns", () => {
     const graph = clientServerGraph();
     const result = clientServerLayoutStrategy.layout(graph);

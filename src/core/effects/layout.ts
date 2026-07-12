@@ -300,7 +300,8 @@ export const C4_LAYOUT_PRESETS = {
    * Use for: Traditional web apps, mobile backends
    */
   clientServer: {
-    direction: "TB" as const,
+    strategyId: "client-server",
+    direction: "LR" as const,
     rankSpacing: 180,
     nodeSpacing: 120,
   },
