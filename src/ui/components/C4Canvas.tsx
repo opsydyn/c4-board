@@ -130,6 +130,13 @@ function C4CanvasInner(
 ) {
   const { setCenter, getNode, fitView, getViewport, setViewport } = useReactFlow();
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const fitGraph = useCallback((duration: number) => {
+    void fitView({
+      nodes: nodes.map(({ id }) => ({ id })),
+      padding: 0.2,
+      duration,
+    });
+  }, [fitView, nodes]);
 
   // Edge label editor state
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -151,7 +158,7 @@ function C4CanvasInner(
     const observer = new ResizeObserver(() => {
       if (frame !== null) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        fitView({ padding: 0.2, duration: 0 });
+        fitGraph(0);
       });
     });
     observer.observe(canvasContainerRef.current);
@@ -159,7 +166,7 @@ function C4CanvasInner(
       observer.disconnect();
       if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, [fitView, readOnly]);
+  }, [fitGraph, readOnly]);
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
@@ -175,12 +182,9 @@ function C4CanvasInner(
       }
     },
     fitViewToGraph: (options) => {
-      fitView({
-        padding: 0.2,
-        duration: options?.animated === false ? 0 : 600,
-      });
+      fitGraph(options?.animated === false ? 0 : 600);
     },
-  }));
+  }), [fitGraph, getNode, setCenter]);
 
   // Define custom node types for C4 and DDD elements
   const nodeTypes = useMemo(
@@ -497,40 +501,42 @@ function C4CanvasInner(
         >
           <Background color={theme.color.border.primary} />
           <Controls className={styles.reactFlowControls} />
-          <MiniMap
-            pannable
-            zoomable
-            nodeColor={(node) => {
-              // Color nodes based on their type using tactical colors
-              switch (node.type) {
-                case "person":
-                  return theme.color.semantic.person;
-                case "system":
-                  return theme.color.semantic.system;
-                case "externalSystem":
-                  return theme.color.semantic.external;
-                case "container":
-                  return theme.color.semantic.container;
-                case "component":
-                  return theme.color.semantic.component;
-                default:
-                  return theme.color.foreground.secondary;
-              }
-            }}
-            nodeStrokeColor={(node) => {
-              // Highlight selected nodes with tactical cyan
-              return node.selected
-                ? theme.color.status.selected
-                : theme.color.border.primary;
-            }}
-            nodeStrokeWidth={3}
-            maskColor={`${theme.color.background.base}cc`}
-            style={{
-              backgroundColor: theme.color.background.surface,
-              border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-              clipPath: theme.clipPath.md,
-            }}
-          />
+          {!readOnly && (
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor={(node) => {
+                // Color nodes based on their type using tactical colors
+                switch (node.type) {
+                  case "person":
+                    return theme.color.semantic.person;
+                  case "system":
+                    return theme.color.semantic.system;
+                  case "externalSystem":
+                    return theme.color.semantic.external;
+                  case "container":
+                    return theme.color.semantic.container;
+                  case "component":
+                    return theme.color.semantic.component;
+                  default:
+                    return theme.color.foreground.secondary;
+                }
+              }}
+              nodeStrokeColor={(node) => {
+                // Highlight selected nodes with tactical cyan
+                return node.selected
+                  ? theme.color.status.selected
+                  : theme.color.border.primary;
+              }}
+              nodeStrokeWidth={3}
+              maskColor={`${theme.color.background.base}cc`}
+              style={{
+                backgroundColor: theme.color.background.surface,
+                border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+                clipPath: theme.clipPath.md,
+              }}
+            />
+          )}
         </ReactFlow>
       </div>
       {selectedEdgeId && (() => {
