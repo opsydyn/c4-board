@@ -1,6 +1,7 @@
 import {
   ArchitectureRoleAssignmentSchema,
   ArchitectureRoleClassificationSchema,
+  inferClientServerRoles,
   inferEventDrivenRoles,
   inferHexagonalRoles,
 } from "@/core/effects/architecture-role-classification";
@@ -34,6 +35,23 @@ const eventDrivenFixture = (): { nodes: Node[]; edges: Edge[] } => ({
   ],
 });
 
+const clientServerFixture = (): { nodes: Node[]; edges: Edge[] } => ({
+  nodes: [
+    { id: "web-client", type: "person", position: { x: 0, y: 0 }, data: { label: "Web Client" } },
+    { id: "api-server", type: "container", position: { x: 0, y: 0 }, data: { label: "Customer API" } },
+    { id: "customer-domain", type: "aggregate", position: { x: 0, y: 0 }, data: { label: "Customer Domain" } },
+    { id: "customer-repository", type: "repository", position: { x: 0, y: 0 }, data: { label: "Customer Repository" } },
+    { id: "identity-provider", type: "externalSystem", position: { x: 0, y: 0 }, data: { label: "Identity Provider" } },
+    { id: "worker", type: "component", position: { x: 0, y: 0 }, data: { label: "Worker" } },
+  ],
+  edges: [
+    { id: "client-api", source: "web-client", target: "api-server", label: "request" },
+    { id: "api-domain", source: "api-server", target: "customer-domain", label: "command" },
+    { id: "domain-repository", source: "customer-domain", target: "customer-repository", label: "customer data" },
+    { id: "api-identity", source: "api-server", target: "identity-provider", label: "token request" },
+  ],
+});
+
 describe("architecture role classification", () => {
   it("rejects roles that belong to a different architecture pattern", () => {
     expect(() =>
@@ -46,6 +64,71 @@ describe("architecture role classification", () => {
         evidence: ["User supplied."],
       })
     ).toThrow();
+  });
+
+  it("classifies the representative Client-Server path with grounded evidence", () => {
+    const fixture = clientServerFixture();
+    const result = inferClientServerRoles(fixture.nodes, fixture.edges);
+
+    expect(Object.fromEntries(result.assignments.map(({ nodeId, role }) => [nodeId, role]))).toEqual({
+      "api-server": "service",
+      "customer-domain": "domain",
+      "customer-repository": "persistence",
+      "identity-provider": "external-dependency",
+      "web-client": "client",
+      worker: "unclassified",
+    });
+    expect(
+      result.assignments.filter(({ role }) => role !== "unclassified")
+        .every(({ confidence, evidence }) => confidence >= 0.65 && evidence.length > 0),
+    ).toBe(true);
+    expect(() => Schema.decodeUnknownSync(ArchitectureRoleClassificationSchema)(result)).not.toThrow();
+  });
+
+  it("keeps valid explicit roles authoritative and falls through after a mismatch", () => {
+    const fixture = clientServerFixture();
+    fixture.nodes.find(({ id }) => id === "worker")!.data.layoutRole = "domain";
+    fixture.nodes.find(({ id }) => id === "web-client")!.data.layoutRole = "publisher";
+    const result = inferClientServerRoles(fixture.nodes, fixture.edges);
+
+    expect(result.assignments.find(({ nodeId }) => nodeId === "worker"))
+      .toMatchObject({ role: "domain", confidence: 1, source: "explicit" });
+    expect(result.assignments.find(({ nodeId }) => nodeId === "web-client")?.role).toBe("client");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "semantic-role-pattern-mismatch",
+      nodeIds: ["web-client"],
+    }));
+  });
+
+  it("does not invent a domain role when the tier is absent", () => {
+    const fixture = clientServerFixture();
+    fixture.nodes = fixture.nodes.filter(({ id }) => id !== "customer-domain");
+    fixture.edges = [
+      { id: "client-api", source: "web-client", target: "api-server", label: "request" },
+      { id: "api-repository", source: "api-server", target: "customer-repository", label: "customer data" },
+    ];
+    const result = inferClientServerRoles(fixture.nodes, fixture.edges);
+
+    expect(result.assignments.some(({ role }) => role === "domain")).toBe(false);
+  });
+
+  it("classifies an external browser as a client before the external fallback", () => {
+    const result = inferClientServerRoles([{
+      id: "partner-browser",
+      type: "externalSystem",
+      position: { x: 0, y: 0 },
+      data: { label: "Partner Browser Client" },
+    }], []);
+
+    expect(result.assignments[0]).toMatchObject({ role: "client", source: "label" });
+  });
+
+  it("is invariant to Client-Server node and edge input order", () => {
+    const fixture = clientServerFixture();
+    const forward = inferClientServerRoles(fixture.nodes, fixture.edges);
+    const reversed = inferClientServerRoles([...fixture.nodes].reverse(), [...fixture.edges].reverse());
+
+    expect(reversed).toEqual(forward);
   });
 
   it("classifies the representative Hexagonal fixture with grounded evidence", () => {

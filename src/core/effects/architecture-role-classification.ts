@@ -108,6 +108,7 @@ export type ArchitectureRoleClassification = Schema.Schema.Type<typeof Architect
 
 const HEXAGONAL_ROLES = ROLES_BY_PATTERN.hexagonal;
 const EVENT_DRIVEN_ROLES = ROLES_BY_PATTERN["event-driven"];
+const CLIENT_SERVER_ROLES = ROLES_BY_PATTERN["client-server"];
 
 const ALL_ROLES = new Set<ArchitectureSemanticRole>(ArchitectureSemanticRoleSchema.literals);
 
@@ -166,6 +167,177 @@ interface InferredRole {
   evidence: string[];
   patternMismatch?: ArchitectureSemanticRole;
 }
+
+const CLIENT_LABEL =
+  /\b(?:browser|web[-_\s]?client|mobile[-_\s]?client|desktop[-_\s]?client|frontend|front[-_\s]?end|ui)\b/;
+const SERVICE_LABEL = /\b(?:api|server|gateway|controller|endpoint|backend|back[-_\s]?end|application[-_\s]?service)\b/;
+const DOMAIN_LABEL = /\b(?:domain|business[-_\s]?rules?|policy|core[-_\s]?business)\b/;
+const PERSISTENCE_LABEL = /\b(?:database|db|datastore|storage|repository|cache|persistence)\b/;
+
+const inferClientServerStaticRole = (node: Node): InferredRole | undefined => {
+  const explicit = explicitRole(node);
+  if (explicit && CLIENT_SERVER_ROLES.has(explicit)) {
+    return { role: explicit, confidence: 1, source: "explicit", evidence: [`Explicit role '${explicit}'.`] };
+  }
+
+  const mismatch = explicit && !CLIENT_SERVER_ROLES.has(explicit) ? explicit : undefined;
+  const label = nodeLabel(node);
+  const type = nodeType(node);
+  const withMismatch = (result: Omit<InferredRole, "patternMismatch">): InferredRole => ({
+    ...result,
+    ...(mismatch && { patternMismatch: mismatch }),
+  });
+
+  if (type === "person") {
+    return withMismatch({
+      role: "client",
+      confidence: 0.9,
+      source: "node-type",
+      evidence: ["Person initiates a client interaction."],
+    });
+  }
+  if (["applicationService", "command", "query"].includes(type)) {
+    return withMismatch({
+      role: "service",
+      confidence: 0.85,
+      source: "node-type",
+      evidence: [`DDD ${type} belongs to the application-service boundary.`],
+    });
+  }
+  if (["aggregate", "domainService", "entity", "valueObject"].includes(type)) {
+    return withMismatch({
+      role: "domain",
+      confidence: 0.9,
+      source: "node-type",
+      evidence: [`DDD ${type} represents domain logic.`],
+    });
+  }
+  if (type === "repository") {
+    return withMismatch({
+      role: "persistence",
+      confidence: 0.9,
+      source: "node-type",
+      evidence: ["DDD repository represents persistence access."],
+    });
+  }
+  if (CLIENT_LABEL.test(label)) {
+    return withMismatch({ role: "client", confidence: 0.85, source: "label", evidence: ["Client-facing label."] });
+  }
+  if (PERSISTENCE_LABEL.test(label)) {
+    return withMismatch({ role: "persistence", confidence: 0.85, source: "label", evidence: ["Persistence label."] });
+  }
+  if (DOMAIN_LABEL.test(label)) {
+    return withMismatch({
+      role: "domain",
+      confidence: 0.85,
+      source: "label",
+      evidence: ["Domain or business-logic label."],
+    });
+  }
+  if (SERVICE_LABEL.test(label)) {
+    return withMismatch({ role: "service", confidence: 0.85, source: "label", evidence: ["Service or API label."] });
+  }
+  if (type === "externalSystem") {
+    return withMismatch({
+      role: "external-dependency",
+      confidence: 0.8,
+      source: "node-type",
+      evidence: ["External system is outside the primary server tiers."],
+    });
+  }
+
+  return undefined;
+};
+
+const buildClientServerRoleHints = (
+  nodes: ReadonlyArray<Node>,
+): ReadonlyMap<string, ArchitectureSemanticRole> =>
+  new Map(
+    nodes.map((node) => [node.id, inferClientServerStaticRole(node)?.role ?? "unclassified"]),
+  );
+
+const inferClientServerRole = (
+  node: Node,
+  topology: Map<string, NodeTopology>,
+  roleHints: ReadonlyMap<string, ArchitectureSemanticRole>,
+  edges: ReadonlyArray<Edge>,
+): InferredRole => {
+  const staticRole = inferClientServerStaticRole(node);
+  if (staticRole) return staticRole;
+
+  const explicit = explicitRole(node);
+  const mismatch = explicit && !CLIENT_SERVER_ROLES.has(explicit) ? explicit : undefined;
+  const withMismatch = (result: Omit<InferredRole, "patternMismatch">): InferredRole => ({
+    ...result,
+    ...(mismatch && { patternMismatch: mismatch }),
+  });
+  const relation = topology.get(node.id);
+  const inboundRoles = [...(relation?.inbound ?? [])].map((id) => roleHints.get(id));
+  const outboundRoles = [...(relation?.outbound ?? [])].map((id) => roleHints.get(id));
+  const hasInbound = (roles: ArchitectureSemanticRole[], pattern: RegExp) =>
+    edges.some((edge) =>
+      edge.target === node.id
+      && roles.includes(roleHints.get(edge.source) ?? "unclassified")
+      && typeof edge.label === "string"
+      && pattern.test(edge.label.toLowerCase())
+    );
+  const hasOutbound = (roles: ArchitectureSemanticRole[], pattern: RegExp) =>
+    edges.some((edge) =>
+      edge.source === node.id
+      && roles.includes(roleHints.get(edge.target) ?? "unclassified")
+      && typeof edge.label === "string"
+      && pattern.test(edge.label.toLowerCase())
+    );
+  const REQUEST = /\b(?:request|http|https|call|calls|uses|command|query)\b/;
+  const DATA = /\b(?:data|read|reads|write|writes|store|stores|load|loads|query|queries)\b/;
+
+  if (outboundRoles.includes("service") && hasOutbound(["service"], REQUEST)) {
+    return withMismatch({
+      role: "client",
+      confidence: 0.7,
+      source: "topology",
+      evidence: ["Grounded outbound request reaches an identified service."],
+    });
+  }
+  if (inboundRoles.includes("client") && hasInbound(["client"], REQUEST)) {
+    return withMismatch({
+      role: "service",
+      confidence: 0.7,
+      source: "topology",
+      evidence: ["Receives a grounded request from an identified client."],
+    });
+  }
+  if (
+    inboundRoles.includes("service")
+    && outboundRoles.includes("persistence")
+    && hasInbound(["service"], REQUEST)
+    && hasOutbound(["persistence"], DATA)
+  ) {
+    return withMismatch({
+      role: "domain",
+      confidence: 0.65,
+      source: "topology",
+      evidence: ["Bridges a grounded service request and persistence data dependency."],
+    });
+  }
+  if (
+    inboundRoles.some((role) => role === "service" || role === "domain")
+    && hasInbound(["service", "domain"], DATA)
+  ) {
+    return withMismatch({
+      role: "persistence",
+      confidence: 0.65,
+      source: "topology",
+      evidence: ["Receives a grounded data dependency from the server path."],
+    });
+  }
+  return withMismatch({
+    role: "unclassified",
+    confidence: 0.25,
+    source: "fallback",
+    evidence: ["No grounded Client-Server role evidence was found."],
+  });
+};
 
 const inferHexagonalRole = (
   node: Node,
@@ -495,4 +667,18 @@ export function inferEventDrivenRoles(
     result: inferEventDrivenRole(node, busIds, topology, edges),
   }));
   return buildClassification("event-driven", inferred, "Event-Driven");
+}
+
+export function inferClientServerRoles(
+  nodes: ReadonlyArray<Node>,
+  edges: ReadonlyArray<Edge>,
+): ArchitectureRoleClassification {
+  const sortedNodes = [...nodes].sort((left, right) => left.id.localeCompare(right.id));
+  const topology = buildTopology(sortedNodes, edges);
+  const roleHints = buildClientServerRoleHints(sortedNodes);
+  const inferred = sortedNodes.map((node) => ({
+    node,
+    result: inferClientServerRole(node, topology, roleHints, edges),
+  }));
+  return buildClassification("client-server", inferred, "Client-Server");
 }
