@@ -884,3 +884,50 @@ Use the default query or ensure custom query projects those columns."
         warnings,
     })
 }
+
+#[cfg(test)]
+mod property_tests {
+    use super::{normalize_scope, AzureSyncScopeDto};
+    use proptest::collection::{btree_map, vec};
+    use proptest::prelude::*;
+
+    fn scope_strategy() -> impl Strategy<Value = AzureSyncScopeDto> {
+        let token = "[A-Fa-f0-9,; \\t\\n]{0,80}";
+        let text = "[A-Za-z0-9 _-]{0,40}";
+
+        (
+            vec(token, 0..8),
+            prop::option::of(vec(text, 0..8)),
+            prop::option::of(btree_map(text, text, 0..8)),
+            prop::option::of(text),
+        )
+            .prop_map(|(subscription_ids, resource_groups, tag_filters, query)| {
+                AzureSyncScopeDto {
+                    subscription_ids,
+                    resource_groups,
+                    tag_filters,
+                    query,
+                }
+            })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn normalize_scope_is_idempotent(scope in scope_strategy()) {
+            let once = normalize_scope(scope);
+            let twice = normalize_scope(AzureSyncScopeDto {
+                subscription_ids: once.subscription_ids.clone(),
+                resource_groups: once.resource_groups.clone(),
+                tag_filters: once.tag_filters.clone(),
+                query: once.query.clone(),
+            });
+
+            prop_assert_eq!(&twice.subscription_ids, &once.subscription_ids);
+            prop_assert_eq!(&twice.resource_groups, &once.resource_groups);
+            prop_assert_eq!(&twice.tag_filters, &once.tag_filters);
+            prop_assert_eq!(&twice.query, &once.query);
+        }
+    }
+}
