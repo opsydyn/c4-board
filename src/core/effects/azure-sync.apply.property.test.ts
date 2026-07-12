@@ -50,7 +50,7 @@ const existingCanvas = (
     data: { label: "Manual", description: "", technology: "", c4Type: "system" },
   };
   const stale: Node = {
-    id: "azure:/subscriptions/sub/resourcegroups/rg/providers/microsoft.web/sites/stale",
+    id: "azure:/subscriptions/sub/resourcegroups/rg/providers/microsoft.web/sites/stale-fixture",
     type: "component",
     position: { x: 320, y: 200 },
     data: {
@@ -95,6 +95,7 @@ describe("Azure sync reconciliation properties", () => {
     FastCheck.assert(
       FastCheck.property(syncCaseArbitrary, ({ mapped, includeExisting, includeStale }) => {
         const initial = existingCanvas(mapped, includeExisting, includeStale);
+        expect(new Set(initial.nodes.map((node) => node.id)).size).toBe(initial.nodes.length);
         const first = mergeAzureMappedGraphIntoCanvas({ ...initial, mapped, syncedAt: SYNCED_AT });
         const second = mergeAzureMappedGraphIntoCanvas({ ...first, mapped, syncedAt: SYNCED_AT });
 

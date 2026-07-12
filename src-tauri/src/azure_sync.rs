@@ -892,7 +892,7 @@ mod property_tests {
     use proptest::prelude::*;
 
     fn scope_strategy() -> impl Strategy<Value = AzureSyncScopeDto> {
-        let token = "[A-Fa-f0-9,; \\t\\n]{0,80}";
+        let token = "[A-Fa-f0-9,;\\- \\t\\n\\r\\x0B\\x0C]{0,80}";
         let text = "[A-Za-z0-9 _-]{0,40}";
 
         (
