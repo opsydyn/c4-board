@@ -144,6 +144,19 @@ export function scheduleCanvasGraphFit(
   requestFrame(() => canvasRef.current?.fitViewToGraph());
 }
 
+interface NodeDetailsRevealInput {
+  readonly isCompactLayout: boolean;
+  readonly hasLayoutPreview: boolean;
+  readonly hasLayoutPreviewStatus: boolean;
+}
+
+export const shouldRevealNodeDetails = ({
+  isCompactLayout,
+  hasLayoutPreview,
+  hasLayoutPreviewStatus,
+}: NodeDetailsRevealInput): boolean =>
+  !isCompactLayout && !hasLayoutPreview && !hasLayoutPreviewStatus;
+
 const sidebarBrandMetaClass = flex({
   direction: "column",
   align: "start",
@@ -1690,8 +1703,15 @@ export function C4CanvasContainer() {
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       send({ type: "SELECT_NODE", nodeId: node.id });
+      if (shouldRevealNodeDetails({
+        isCompactLayout,
+        hasLayoutPreview: layoutPreview !== null,
+        hasLayoutPreviewStatus: layoutPreviewStatus !== null,
+      })) {
+        setDetailsOpen(true);
+      }
     },
-    [send],
+    [isCompactLayout, layoutPreview, layoutPreviewStatus, send],
   );
 
   // Handle edge label updates
