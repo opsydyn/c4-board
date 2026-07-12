@@ -324,6 +324,7 @@ export function C4CanvasContainer() {
     reload: reloadAppSettings,
   } = useAppSettings();
   const rigAgentRolloutFlag = getRigAgentV1Flag();
+  const [isVisualHarness, setIsVisualHarness] = useState(false);
   const [visualHarnessViewportFitNodeIds, setVisualHarnessViewportFitNodeIds] = useState<string[]>();
   const canvasRegionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<C4CanvasRef>(null);
@@ -1073,6 +1074,7 @@ export function C4CanvasContainer() {
 
         if (import.meta.env.DEV && isLayoutVisualFixtureName(nativeFixture)) {
           const fixture = getLayoutVisualFixture(nativeFixture);
+          setIsVisualHarness(true);
           visualHarnessPresetRef.current = fixture.preset;
           setVisualHarnessViewportFitNodeIds(fixture.viewportFitNodeIds);
           setSidebarOpen(false);
@@ -3105,6 +3107,7 @@ export function C4CanvasContainer() {
           animationsEnabled={state.context.animationsEnabled}
           ambientTone={canvasAmbientTone}
           readOnly={isLayoutPreviewOpen}
+          visualHarness={isVisualHarness}
           {...(visualHarnessViewportFitNodeIds && {
             viewportFitNodeIds: visualHarnessViewportFitNodeIds,
           })}

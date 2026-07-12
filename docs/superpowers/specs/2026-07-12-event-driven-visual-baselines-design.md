@@ -1,6 +1,6 @@
 # Event-Driven Native Visual Baselines Design
 
-**Date:** 2026-07-12  
+**Date:** 2026-07-12
 **Status:** Approved for planning
 
 ## Objective

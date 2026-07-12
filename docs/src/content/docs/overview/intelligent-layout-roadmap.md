@@ -5,7 +5,7 @@ description: "Concrete roadmap for architecture-aware layout strategies using Da
 
 # Roadmap: Intelligent Architecture Layouts
 
-**Last Updated**: 2026-07-11
+**Last Updated**: 2026-07-12
 
 **Owner**: Product + Platform Engineering
 
@@ -48,10 +48,10 @@ The shipped implementation now provides an architecture-grade deterministic foun
 Known limitations:
 
 - Several legacy menu presets still differ only by Dagre spacing and direction.
-- Hexagonal and Event-Driven now have shared semantic-role classification, review and correction UX, and dedicated geometry; Client-Server still needs pattern-specific inference and geometry.
+- Hexagonal and Event-Driven now have complete shared semantic-role classification, review and correction UX, dedicated geometry, and reviewed native visual baselines; Client-Server still needs pattern-specific inference and deterministic columns.
 - Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
 - ELK Radial has not justified replacing the product-specific radial strategies.
-- Native visual baselines cover dense ELK Event-Driven and Client-Server fixtures plus inferred and corrected Hexagonal previews; radial and full preset coverage remain open.
+- Native visual baselines cover custom Event-Driven representative, bridge, and detail previews plus inferred and corrected Hexagonal previews; custom Client-Server baselines, radial coverage, and full preset coverage remain open.
 - Browser-worker startup and enforced large-board interaction budgets remain incomplete.
 - OPY can apply known layouts, but cannot yet classify architecture patterns, correct semantic roles, or author reusable `LayoutSpec` definitions.
 
@@ -587,14 +587,15 @@ Quality measures:
 
 The foundation through Phase 3 is substantially shipped: strategy boundaries, quality metrics, radial strategies, asynchronous ELK Layered, routed preview, recommendations, audit history, and portable review evidence are in production code.
 
-The next product workstream is **Phase 4 semantic architecture layouts**, sequenced as follows:
+The shared Phase 4 semantic role contract, deterministic inference, preview correction flow, Hexagonal geometry, and Event-Driven lanes are complete. Both completed patterns have reviewed native visual baselines.
 
-1. Define one schema-validated semantic role contract shared by Hexagonal, Event-Driven, and Client-Server.
-2. Add deterministic role inference with evidence, confidence, ambiguity, and contradiction diagnostics.
-3. Implement Hexagonal core, port, adapter, and infrastructure geometry as the first consumer.
-4. Add role correction controls to the non-destructive preview and persist accepted corrections.
-5. Reuse the same contract for Event-Driven lanes and Client-Server columns.
-6. Expose stable role evidence to OPY/Rig only after deterministic inference and correction UX are evaluated.
+The next product workstream is **Client-Server semantic layout**, sequenced as follows:
+
+1. Define deterministic Client-Server role inference with evidence, confidence, ambiguity, and contradiction diagnostics using the shared contract.
+2. Implement deterministic client, service/API, domain, and persistence columns with pattern-specific diagnostics.
+3. Reuse the existing non-destructive role review, correction, Apply, persistence, and audit boundaries for Client-Server previews.
+4. Add custom Client-Server desktop and narrow native visual baselines after the semantic geometry ships.
+5. Expose stable role evidence to OPY/Rig only after Client-Server inference and correction UX are evaluated.
 
 Open foundation debt remains visible but does not block the Phase 4 role-contract slice:
 
@@ -604,7 +605,7 @@ Open foundation debt remains visible but does not block the Phase 4 role-contrac
 - Strategy-specific menu status.
 - Native baseline refresh when macOS capture is available.
 
-The next implementation slice should stop export-history polish and begin the shared semantic role schema plus deterministic Hexagonal inference fixtures.
+The next implementation slice should implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
 
 ### Slice 1 Delivery Record
 

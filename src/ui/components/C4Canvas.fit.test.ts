@@ -2,9 +2,22 @@ import { describe, expect, it } from "vitest";
 
 import { getLayoutVisualFixture } from "@/core/effects/layout-visual-fixtures";
 
-import { resolveCanvasFitNodeIds } from "./C4Canvas";
+import { resolveCanvasFitNodeIds, resolveCanvasViewportChrome } from "./C4Canvas";
 
 describe("C4Canvas viewport fitting", () => {
+  it("keeps the normal canvas chrome for editable and read-only board views", () => {
+    expect(resolveCanvasViewportChrome(false)).toEqual({
+      showMiniMap: true,
+    });
+  });
+
+  it("uses capture-only viewport chrome for visual harness previews", () => {
+    expect(resolveCanvasViewportChrome(true)).toEqual({
+      minZoom: 0.1,
+      showMiniMap: false,
+    });
+  });
+
   it("fits the detail fixture to the event flow without mutating its complete graph", () => {
     const fixture = getLayoutVisualFixture("event-driven-bridges-detail");
     const nodesBeforeFit = structuredClone(fixture.nodes);

@@ -97,6 +97,7 @@ interface C4CanvasProps {
   animationsEnabled?: boolean;
   ambientTone?: CanvasAmbientTone;
   readOnly?: boolean;
+  visualHarness?: boolean;
   viewportFitNodeIds?: readonly string[];
 }
 
@@ -115,6 +116,15 @@ export function resolveCanvasFitNodeIds(
   const graphNodeIdSet = new Set(graphNodeIds);
   const selectedNodeIds = viewportFitNodeIds.filter(nodeId => graphNodeIdSet.has(nodeId));
   return selectedNodeIds.length > 0 ? selectedNodeIds : graphNodeIds;
+}
+
+export function resolveCanvasViewportChrome(visualHarness: boolean): {
+  minZoom?: number;
+  showMiniMap: boolean;
+} {
+  return visualHarness
+    ? { minZoom: 0.1, showMiniMap: false }
+    : { showMiniMap: true };
 }
 
 function C4CanvasInner(
@@ -138,6 +148,7 @@ function C4CanvasInner(
     animationsEnabled = true,
     ambientTone = "c4",
     readOnly = false,
+    visualHarness = false,
     viewportFitNodeIds,
   }: C4CanvasProps,
   ref: React.Ref<C4CanvasRef>,
@@ -148,6 +159,7 @@ function C4CanvasInner(
     () => resolveCanvasFitNodeIds(nodes, viewportFitNodeIds),
     [nodes, viewportFitNodeIds],
   );
+  const viewportChrome = resolveCanvasViewportChrome(visualHarness);
   const fitViewOptions = useMemo(() => ({
     nodes: fitNodeIds.map((id) => ({ id })),
     padding: 0.2,
@@ -513,7 +525,7 @@ function C4CanvasInner(
           defaultEdgeOptions={defaultEdgeOptions}
           fitView
           fitViewOptions={fitViewOptions}
-          minZoom={0.1}
+          {...(viewportChrome.minZoom && { minZoom: viewportChrome.minZoom })}
           snapToGrid
           snapGrid={[20, 20]}
           nodesDraggable={!readOnly}
@@ -523,7 +535,7 @@ function C4CanvasInner(
         >
           <Background color={theme.color.border.primary} />
           <Controls className={styles.reactFlowControls} />
-          {!readOnly && (
+          {viewportChrome.showMiniMap && (
             <MiniMap
               pannable
               zoomable
