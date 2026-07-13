@@ -16,6 +16,13 @@ export const drawer = style({
       maxHeight: "min(42vh, 30rem)",
       overflow: "hidden",
       color: theme.color.foreground.primary,
+
+      "@media": {
+        "screen and (max-width: 1180px)": {
+          minHeight: "26rem",
+          maxHeight: "min(62vh, 36rem)",
+        },
+      },
     },
   },
 });

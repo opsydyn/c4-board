@@ -19,11 +19,16 @@ export interface LayoutVisualFixture {
   viewportFitNodeIds?: string[];
 }
 
-const node = (id: string, type: string, data: Record<string, unknown> = {}): Node => ({
+const node = (
+  id: string,
+  type: string,
+  data: Record<string, unknown> = {},
+  dimensions = { width: 160, height: 100 },
+): Node => ({
   id,
   type,
   position: { x: 0, y: 0 },
-  style: { width: 160, height: 100 },
+  style: dimensions,
   data: { label: id, ...data },
 });
 
@@ -72,13 +77,13 @@ const EVENT_DRIVEN_BRIDGES_GRAPH: Pick<LayoutVisualFixture, "nodes" | "edges"> =
 
 const CLIENT_SERVER_GRAPH: Pick<LayoutVisualFixture, "nodes" | "edges"> = {
   nodes: [
-    node("web-client", "person"),
-    node("mobile-client", "person"),
-    node("api-server", "container", { label: "Customer API Server" }),
-    node("customer-domain", "aggregate", { label: "Customer Aggregate" }),
-    node("customer-repository", "repository", { label: "Customer Repository" }),
-    node("identity-provider", "externalSystem", { label: "Identity Provider" }),
-    node("decision-module", "component", { label: "Decision Module" }),
+    node("web-client", "person", {}, { width: 220, height: 100 }),
+    node("mobile-client", "person", {}, { width: 220, height: 100 }),
+    node("api-server", "container", { label: "Customer API Server" }, { width: 200, height: 150 }),
+    node("customer-domain", "aggregate", { label: "Customer Aggregate" }, { width: 220, height: 100 }),
+    node("customer-repository", "repository", { label: "Customer Repository" }, { width: 220, height: 100 }),
+    node("identity-provider", "externalSystem", { label: "Identity Provider" }, { width: 220, height: 100 }),
+    node("decision-module", "component", { label: "Decision Module" }, { width: 220, height: 100 }),
   ],
   edges: [
     edge("web-client", "api-server", "request"),

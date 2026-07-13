@@ -67,6 +67,16 @@ describe("layout visual fixtures", () => {
   it("moves only the corrected node while preserving exact external support centring", () => {
     const inferredFixture = getLayoutVisualFixture("client-server-inferred");
     const correctedFixture = getLayoutVisualFixture("client-server-corrected");
+    const renderedWidths = {
+      "api-server": 200,
+      "identity-provider": 220,
+    } as const;
+    const expectRenderedDimensions = (fixture: typeof inferredFixture) => {
+      expect(fixture.nodes.find(({ id }) => id === "api-server")?.style?.width)
+        .toBe(renderedWidths["api-server"]);
+      expect(fixture.nodes.find(({ id }) => id === "identity-provider")?.style?.width)
+        .toBe(renderedWidths["identity-provider"]);
+    };
     const inferred = calculateLayout(
       inferredFixture.nodes,
       inferredFixture.edges,
@@ -78,11 +88,15 @@ describe("layout visual fixtures", () => {
       getPreset(correctedFixture.preset),
     );
     const position = (result: typeof inferred, id: string) => result.nodes.find(node => node.id === id)!.position;
-    const centreX = (result: typeof inferred, id: string) => {
-      const layoutNode = result.nodes.find(node => node.id === id)!;
-      return layoutNode.position.x + Number(layoutNode.style?.width ?? 160) / 2;
+    const centreX = (
+      result: typeof inferred,
+      id: keyof typeof renderedWidths,
+    ) => {
+      return position(result, id).x + renderedWidths[id] / 2;
     };
 
+    expectRenderedDimensions(inferredFixture);
+    expectRenderedDimensions(correctedFixture);
     expect(inferred.semanticRoles?.find(({ nodeId }) => nodeId === "decision-module")?.role)
       .toBe("unclassified");
     expect(corrected.semanticRoles?.find(({ nodeId }) => nodeId === "decision-module")?.role)
