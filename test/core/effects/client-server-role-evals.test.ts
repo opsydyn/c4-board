@@ -169,4 +169,26 @@ describe("Client-Server role evaluation corpus", () => {
       },
     });
   });
+
+  it("rejects a prototype-colliding top-level node without an own expected-role entry", () => {
+    const cases = getClientServerRoleEvalCases();
+    const canonicalIndex = cases.findIndex(({ id }) => id === "canonical-typed");
+    const canonical = cases[canonicalIndex]!;
+    const { "typed-client": _missing, ...expectedRoles } = canonical.expectedRoles;
+    const nodes = canonical.nodes.map((node) => node.id === "typed-client" ? { ...node, id: "constructor" } : node);
+    const edges = canonical.edges.map((edge) =>
+      edge.source === "typed-client" ? { ...edge, source: "constructor" } : edge
+    );
+    cases[canonicalIndex] = { ...canonical, nodes, edges, expectedRoles };
+
+    expect(validateClientServerRoleEvalCases(cases)).toEqual({
+      status: "validation-failure",
+      error: {
+        _tag: "ClientServerRoleEvalCorpusValidationError",
+        caseId: "canonical-typed",
+        problem: "missing-expected-role",
+        message: "Top-level node 'constructor' has no expected role in case 'canonical-typed'.",
+      },
+    });
+  });
 });

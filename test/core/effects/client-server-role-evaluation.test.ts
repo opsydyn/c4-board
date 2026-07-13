@@ -333,6 +333,38 @@ describe("Client-Server role evaluation", () => {
     expect(classifierCalls).toBe(0);
   });
 
+  it("forwards prototype-colliding corpus failures without invoking the classifier", () => {
+    const cases = getClientServerRoleEvalCases();
+    const canonicalIndex = cases.findIndex(({ id }) => id === "canonical-typed");
+    const canonical = cases[canonicalIndex]!;
+    const { "typed-client": _missing, ...expectedRoles } = canonical.expectedRoles;
+    const nodes = canonical.nodes.map((node) => node.id === "typed-client" ? { ...node, id: "constructor" } : node);
+    const edges = canonical.edges.map((edge) =>
+      edge.source === "typed-client" ? { ...edge, source: "constructor" } : edge
+    );
+    cases[canonicalIndex] = { ...canonical, nodes, edges, expectedRoles };
+
+    const expected = validateClientServerRoleEvalCases(cases);
+    expect(expected).toEqual({
+      status: "validation-failure",
+      error: {
+        _tag: "ClientServerRoleEvalCorpusValidationError",
+        caseId: "canonical-typed",
+        problem: "missing-expected-role",
+        message: "Top-level node 'constructor' has no expected role in case 'canonical-typed'.",
+      },
+    });
+
+    let classifierCalls = 0;
+    const classify: typeof inferClientServerRoles = (nodes, edges) => {
+      classifierCalls += 1;
+      return inferClientServerRoles(nodes, edges);
+    };
+
+    expect(runClientServerRoleEvaluationFromClassifications(cases, classify)).toEqual(expected);
+    expect(classifierCalls).toBe(0);
+  });
+
   it("does not retain caller mutations in the default corpus", () => {
     const baseline = runClientServerRoleEvaluation();
     const cases = getClientServerRoleEvalCases();

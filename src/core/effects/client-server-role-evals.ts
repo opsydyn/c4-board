@@ -311,7 +311,7 @@ export const validateClientServerRoleEvalCases = (
 
     const topLevelNodes = sortedNodes.filter(({ parentId }) => parentId === undefined);
     for (const node of topLevelNodes) {
-      if (!(node.id in roleEvalCase.expectedRoles)) {
+      if (!Object.hasOwn(roleEvalCase.expectedRoles, node.id)) {
         return validationFailure(
           "missing-expected-role",
           roleEvalCase.id,
