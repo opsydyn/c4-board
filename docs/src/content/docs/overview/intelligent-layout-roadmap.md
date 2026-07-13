@@ -1514,8 +1514,8 @@ Next slice:
 
 Delivered:
 
-- [x] Added a clone-isolated, hand-authored Client-Server gold corpus covering eight categories, 33 threshold-eligible assignments, and two explicit-role controls.
-- [x] Measured 31 correct and two incorrect eligible assignments: correction frequency `6.06%` and fallback rate `15.15%`.
+- [x] Added a clone-isolated, hand-authored Client-Server gold corpus covering eight categories and 35 total assignments: 33 threshold-eligible assignments and two explicit-role controls.
+- [x] Measured 31 correct and two incorrect eligible assignments, with five fallback assignments: correction frequency `6.06%` and fallback rate `15.15%`.
 - [x] Evaluated only emitted confidence candidates: `0.65`, `0.70`, `0.80`, `0.85`, and `0.90`.
 - [x] Selected `0.70` as the lowest threshold with zero overconfident errors, `100%` exposed precision, `75.76%` coverage, and at least three correct examples for each recommended role.
 - [x] Qualified `client`, `service`, `domain`, `persistence`, and `external-dependency` for future OPY/Rig evidence exposure.
