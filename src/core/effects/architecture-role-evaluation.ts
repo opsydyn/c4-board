@@ -99,6 +99,7 @@ export interface ArchitectureRoleEvaluationValidationError {
     | "unknown-assignment"
     | "duplicate-assignment"
     | "missing-assignment"
+    | "invalid-assignment-confidence"
     | "pattern-mismatch"
     | "no-threshold-eligible-assignments"
     | "invalid-policy";
@@ -294,6 +295,13 @@ export const evaluateArchitectureRoles = (
           "pattern-mismatch",
           caseId,
           `Assignment pattern '${prediction.pattern}' does not match '${input.pattern}'.`,
+        );
+      }
+      if (!Number.isFinite(prediction.confidence) || prediction.confidence < 0 || prediction.confidence > 1) {
+        return validationFailure(
+          "invalid-assignment-confidence",
+          caseId,
+          `Classifier assignment '${prediction.nodeId}' in case '${caseId}' must have a finite confidence in [0, 1]; received ${prediction.confidence}.`,
         );
       }
       if (!goldByKey.has(key)) {

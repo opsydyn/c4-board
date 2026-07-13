@@ -254,6 +254,33 @@ describe("architecture role evaluation", () => {
     expectValidation({ ...input(), policy }, "invalid-policy");
   });
 
+  it.each(
+    [
+      ["NaN", NaN],
+      ["positive Infinity", Infinity],
+      ["negative Infinity", -Infinity],
+      ["below zero", -0.01],
+      ["above one", 1.01],
+    ] as const,
+  )("rejects classifier confidence %s", (_name, confidence) => {
+    const candidate = input();
+    const firstClassification = candidate.classifications[0];
+    const firstAssignment = firstClassification.classification.assignments[0];
+    const classifications = candidate.classifications.map((entry, index) =>
+      index === 0
+        ? {
+          ...entry,
+          classification: {
+            ...entry.classification,
+            assignments: [{ ...firstAssignment, confidence }, ...entry.classification.assignments.slice(1)],
+          },
+        }
+        : entry
+    );
+
+    expectValidation({ ...candidate, classifications }, "invalid-assignment-confidence", "case-a");
+  });
+
   it("rejects a corpus with no threshold-eligible assignments", () => {
     const candidate = input();
     expectValidation({
