@@ -271,6 +271,18 @@ export const validateClientServerRoleEvalCases = (
       nodeIds.add(node.id);
     }
 
+    if (roleEvalCase.thresholdEligible) {
+      for (const node of sortedNodes) {
+        if (node.data.layoutRole !== undefined) {
+          return validationFailure(
+            "threshold-eligible-explicit-role",
+            roleEvalCase.id,
+            `Threshold-eligible node '${node.id}' has an explicit layout role in case '${roleEvalCase.id}'.`,
+          );
+        }
+      }
+    }
+
     for (const nodeId of Object.keys(roleEvalCase.expectedRoles).sort((left, right) => left.localeCompare(right))) {
       const node = sortedNodes.find(({ id }) => id === nodeId);
       if (!node) {
@@ -304,13 +316,6 @@ export const validateClientServerRoleEvalCases = (
           "missing-expected-role",
           roleEvalCase.id,
           `Top-level node '${node.id}' has no expected role in case '${roleEvalCase.id}'.`,
-        );
-      }
-      if (roleEvalCase.thresholdEligible && node.data.layoutRole !== undefined) {
-        return validationFailure(
-          "threshold-eligible-explicit-role",
-          roleEvalCase.id,
-          `Threshold-eligible node '${node.id}' has an explicit layout role in case '${roleEvalCase.id}'.`,
         );
       }
     }

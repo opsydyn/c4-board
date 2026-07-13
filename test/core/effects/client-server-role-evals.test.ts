@@ -82,8 +82,7 @@ describe("Client-Server role evaluation corpus", () => {
         break;
       }
       case "duplicate-node-id": {
-        const nodes = [...canonical.nodes];
-        nodes[1] = { ...nodes[1]!, id: nodes[0]!.id };
+        const nodes = [...canonical.nodes, structuredClone(canonical.nodes[0]!)];
         cases[canonicalIndex] = { ...canonical, nodes };
         break;
       }
@@ -144,6 +143,30 @@ describe("Client-Server role evaluation corpus", () => {
     expect(validateClientServerRoleEvalCases(cases)).toMatchObject({
       status: "validation-failure",
       error: { caseId: expectedCaseId, problem },
+    });
+  });
+
+  it("rejects an explicit role on an eligible child without an expected-role entry", () => {
+    const cases = getClientServerRoleEvalCases();
+    const canonicalIndex = cases.findIndex(({ id }) => id === "canonical-typed");
+    const canonical = cases[canonicalIndex]!;
+    const childNode = {
+      ...structuredClone(canonical.nodes[0]!),
+      id: "typed-child-explicit",
+      parentId: "typed-service",
+      data: { ...canonical.nodes[0]!.data, layoutRole: "domain" },
+    };
+    cases[canonicalIndex] = { ...canonical, nodes: [...canonical.nodes, childNode] };
+
+    expect(validateClientServerRoleEvalCases(cases)).toEqual({
+      status: "validation-failure",
+      error: {
+        _tag: "ClientServerRoleEvalCorpusValidationError",
+        caseId: "canonical-typed",
+        problem: "threshold-eligible-explicit-role",
+        message:
+          "Threshold-eligible node 'typed-child-explicit' has an explicit layout role in case 'canonical-typed'.",
+      },
     });
   });
 });
