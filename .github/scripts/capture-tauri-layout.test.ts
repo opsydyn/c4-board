@@ -3,7 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { chooseCaptureWindow, parseWindowCandidates, readPngDimensions } from "./capture-tauri-layout";
+import {
+  chooseCaptureWindow,
+  parseWindowCandidates,
+  prepareWindowScript,
+  readPngDimensions,
+} from "./capture-tauri-layout";
+
+const captureWindow = {
+  pid: 501,
+  windowId: 9001,
+  width: 800,
+  height: 600,
+};
 
 describe("native Tauri layout capture", () => {
   const windows = parseWindowCandidates([
@@ -53,5 +65,27 @@ describe("native Tauri layout capture", () => {
     writeFileSync(path, header);
 
     expect(readPngDimensions(path)).toEqual({ width: 960, height: 720 });
+  });
+
+  it("activates the selected process without AX resize work when resize is skipped", () => {
+    const script = prepareWindowScript(captureWindow, 1600, 900, false);
+
+    expect(script).toContain("import AppKit");
+    expect(script).toContain("NSRunningApplication(processIdentifier: pid_t(501))");
+    expect(script).toContain("app.activate(options: [.activateIgnoringOtherApps])");
+    expect(script).not.toContain("AXUIElementCreateApplication");
+    expect(script).not.toContain("kAXPositionAttribute");
+    expect(script).not.toContain("kAXSizeAttribute");
+  });
+
+  it("keeps AX window resizing and AppKit activation when resize is requested", () => {
+    const script = prepareWindowScript(captureWindow, 1600, 900, true);
+
+    expect(script).toContain("import AppKit");
+    expect(script).toContain("app.activate(options: [.activateIgnoringOtherApps])");
+    expect(script).toContain("AXUIElementCreateApplication(pid_t(501))");
+    expect(script).toContain("kAXPositionAttribute");
+    expect(script).toContain("kAXSizeAttribute");
+    expect(script).toContain("CGSize(width: 1600, height: 900)");
   });
 });
