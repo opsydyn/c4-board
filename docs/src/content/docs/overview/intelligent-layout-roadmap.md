@@ -48,10 +48,10 @@ The shipped implementation now provides an architecture-grade deterministic foun
 Known limitations:
 
 - Several legacy menu presets still differ only by Dagre spacing and direction.
-- Hexagonal, Event-Driven, and Client-Server now have complete shared semantic-role classification, review and correction UX, and dedicated geometry; Client-Server native visual baselines and inference evaluation remain open.
+- Hexagonal, Event-Driven, and Client-Server now have complete shared semantic-role classification, review and correction UX, and dedicated geometry. Client-Server inferred and corrected native visual baselines have manual visual acceptance; inference evaluation remains open, and an automated post-fix baseline refresh is deferred.
 - Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
 - ELK Radial has not justified replacing the product-specific radial strategies.
-- Native visual baselines cover custom Event-Driven representative, bridge, and detail previews plus inferred and corrected Hexagonal previews; inferred, corrected, and custom Client-Server baselines, radial coverage, and full preset coverage remain open.
+- Native visual baselines cover custom Event-Driven representative, bridge, and detail previews; inferred and corrected Hexagonal previews; and inferred and corrected Client-Server previews. Automated post-fix Client-Server refresh, radial coverage, and full preset coverage remain open.
 - Browser-worker startup and enforced large-board interaction budgets remain incomplete.
 - OPY can apply known layouts, but cannot yet classify architecture patterns, correct semantic roles, or author reusable `LayoutSpec` definitions.
 
@@ -533,7 +533,7 @@ Exit criteria:
 | P0 | ELK worker and compound graph support | Shipped; browser budgets open | Unlocks architecture-grade constraints and routing | Strategy contract |
 | P1 | Hexagonal and Event-Driven | Shipped | Strong semantic differentiation | Shared semantic role schema |
 | P1 | OPY/Rig classifier | Queued | Natural-language strategy and role selection | Stable role and strategy schemas |
-| P1 | Client-Server and improved hierarchical family | Client-Server semantic geometry shipped; native baselines open | Completes common architecture patterns | Shared semantic role schema |
+| P1 | Client-Server and improved hierarchical family | Client-Server semantic geometry and inferred/corrected native baselines shipped; inference evaluation open | Completes common architecture patterns | Shared semantic role schema |
 | P2 | Microservices and mixed strategies | Future | Handles dense enterprise boards | ELK and classification |
 | P2 | OPY Custom Layout Studio | Future | Turns user intent into reusable product knowledge | Constraint grammar and persistence |
 
@@ -587,23 +587,22 @@ Quality measures:
 
 The foundation through Phase 3 is substantially shipped: strategy boundaries, quality metrics, radial strategies, asynchronous ELK Layered, routed preview, recommendations, audit history, and portable review evidence are in production code.
 
-The shared Phase 4 semantic role contract, deterministic inference, preview correction flow, Hexagonal geometry, Event-Driven lanes, and Client-Server columns are shipped. Hexagonal and Event-Driven have reviewed native visual baselines; Client-Server native baselines remain open.
+The shared Phase 4 semantic role contract, deterministic inference, preview correction flow, Hexagonal geometry, Event-Driven lanes, and Client-Server columns are shipped. Hexagonal, Event-Driven, and Client-Server have reviewed native visual baselines. Client-Server manual visual acceptance covers the tracked inferred and corrected desktop and narrow baselines at `1600x900` and `960x720`; an automated post-fix refresh is deferred.
 
-The next product workstream is **Client-Server native baseline and evaluation**, sequenced as follows:
+The next product workstream is **Client-Server inference evaluation and role-evidence thresholding**, sequenced as follows:
 
-1. Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
-2. Capture custom Client-Server desktop and narrow native visual baselines.
-3. Evaluate Client-Server inference confidence and correction frequency before exposing role evidence to OPY/Rig.
+1. Evaluate Client-Server inference confidence and correction frequency.
+2. Define the evidence threshold required before exposing Client-Server role evidence to OPY/Rig.
 
-Open foundation debt remains visible but does not block the next Client-Server native baseline and evaluation slice:
+Open foundation debt remains visible but does not block the next Client-Server inference evaluation slice:
 
 - Remaining C4 and DDD preset fixtures and radial visual baselines.
 - Browser-worker startup and realistic performance budgets.
 - Advanced Dagre controls and semantic preprocessing.
 - Strategy-specific menu status.
-- Remaining inferred, corrected, and custom Client-Server, radial, and broader preset native baseline coverage.
+- Deferred automated post-fix Client-Server refresh, radial coverage, and broader preset native baseline coverage.
 
-The next implementation slice should add inferred, corrected, and custom Client-Server native visual baselines, then evaluate inference confidence and correction frequency before OPY/Rig exposure.
+The next implementation slice should evaluate inference confidence and correction frequency, then define the evidence threshold for OPY/Rig exposure. Automated post-fix Client-Server recapture remains deferred.
 
 ### Slice 1 Delivery Record
 
@@ -1484,6 +1483,24 @@ Delivered:
 
 Next slice:
 
-- [ ] Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
-- [ ] Capture and visually review custom Client-Server desktop and narrow baselines.
+- [x] Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
+- [x] Capture and manually visually accept inferred and corrected Client-Server desktop and narrow baselines at `1600x900` and `960x720`.
 - [ ] Evaluate Client-Server inference confidence and correction frequency before exposing role evidence to OPY/Rig.
+
+### Slice 41 Delivery Record
+
+**Completed**: 2026-07-13
+
+Delivered:
+
+- [x] Replaced the legacy Client-Server ELK fixture with clone-isolated inferred and corrected custom-strategy fixtures.
+- [x] Kept both fixtures structurally identical while correcting only the ambiguous decision module into the domain role.
+- [x] Captured and visually reviewed inferred and corrected Client-Server desktop and narrow native baselines at exactly `1600x900` and `960x720`.
+- [x] Protected four-tier ordering, review-to-domain correction movement, exact caller-centred external support, semantic evidence, and narrow drawer usability.
+- [x] Removed the stale legacy Client-Server images and documented the paired native capture workflow.
+- [x] Recorded manual visual acceptance for the four tracked baseline files; automated post-fix recapture is deferred and was not performed for this delivery record.
+
+Next slice:
+
+- [ ] Evaluate Client-Server inference confidence and correction frequency.
+- [ ] Define the evidence threshold required before exposing Client-Server role evidence to OPY/Rig.
