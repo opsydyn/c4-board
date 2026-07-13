@@ -80,7 +80,7 @@ const CLIENT_SERVER_GRAPH: Pick<LayoutVisualFixture, "nodes" | "edges"> = {
     node("web-client", "person", {}, { width: 220, height: 100 }),
     node("mobile-client", "person", {}, { width: 220, height: 100 }),
     node("api-server", "container", { label: "Customer API Server" }, { width: 200, height: 150 }),
-    node("customer-domain", "aggregate", { label: "Customer Aggregate" }, { width: 220, height: 100 }),
+    node("customer-domain", "aggregate", { label: "Customer Aggregate" }, { width: 240, height: 160 }),
     node("customer-repository", "repository", { label: "Customer Repository" }, { width: 220, height: 100 }),
     node("identity-provider", "externalSystem", { label: "Identity Provider" }, { width: 220, height: 100 }),
     node("decision-module", "component", { label: "Decision Module" }, { width: 220, height: 100 }),

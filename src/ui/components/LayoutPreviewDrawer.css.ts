@@ -18,7 +18,7 @@ export const drawer = style({
       color: theme.color.foreground.primary,
 
       "@media": {
-        "screen and (max-width: 1180px)": {
+        "screen and (max-width: 1180px) and (min-height: 680px)": {
           minHeight: "26rem",
           maxHeight: "min(62vh, 36rem)",
         },

@@ -1444,7 +1444,7 @@ Delivered:
 Next slice:
 
 - [x] Capture native Event-Driven desktop and narrow visual baselines for the custom semantic layout.
-- [ ] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
+- [x] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
 - [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
 
 ### Slice 39 Delivery Record
@@ -1462,8 +1462,8 @@ Delivered:
 Next slice:
 
 - [x] Implement Client-Server semantic inference and deterministic client, service/API, domain, and persistence columns.
-- [ ] Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
-- [ ] Capture custom Client-Server desktop and narrow native visual baselines.
+- [x] Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
+- [x] Capture custom Client-Server desktop and narrow native visual baselines.
 - [ ] Keep signed evidence and artifact import in the evidence-exchange backlog.
 
 ### Slice 40 Delivery Record
@@ -1495,10 +1495,10 @@ Delivered:
 
 - [x] Replaced the legacy Client-Server ELK fixture with clone-isolated inferred and corrected custom-strategy fixtures.
 - [x] Kept both fixtures structurally identical while correcting only the ambiguous decision module into the domain role.
-- [x] Captured and visually reviewed inferred and corrected Client-Server desktop and narrow native baselines at exactly `1600x900` and `960x720`.
-- [x] Protected four-tier ordering, review-to-domain correction movement, exact caller-centred external support, semantic evidence, and narrow drawer usability.
+- [x] Manually accepted the four tracked exact-dimension Client-Server files at `1600x900` and `960x720`; their stale PNG bytes do not encode the post-fix centring and drawer changes.
+- [x] Protected four-tier ordering, review-to-domain correction movement, exact caller-centred external support, semantic evidence, and narrow drawer usability with non-PNG regression coverage.
 - [x] Removed the stale legacy Client-Server images and documented the paired native capture workflow.
-- [x] Recorded manual visual acceptance for the four tracked baseline files; automated post-fix recapture is deferred and was not performed for this delivery record.
+- [x] Recorded manual acceptance for the four tracked exact-dimension files; automated post-fix baseline refresh and protection remain deferred and were not performed for this delivery record.
 
 Next slice:
 

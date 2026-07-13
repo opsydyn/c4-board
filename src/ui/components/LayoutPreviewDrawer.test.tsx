@@ -1,6 +1,8 @@
 import { createLayoutPreview } from "@/core/effects/layout-preview";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { cloneLayoutFixture, layoutGraphFixtures } from "../../../tests/fixtures/layoutGraphs";
 import { LayoutPreviewDrawer } from "./LayoutPreviewDrawer";
@@ -30,6 +32,18 @@ const createHexagonalPreview = () => {
 };
 
 describe("LayoutPreviewDrawer", () => {
+  it("keeps the default native viewport compact while reserving roomy sizing for tall narrow viewports", () => {
+    const styles = readFileSync(
+      path.resolve(process.cwd(), "src/ui/components/LayoutPreviewDrawer.css.ts"),
+      "utf8",
+    );
+
+    expect(styles).toContain("\"screen and (max-width: 1180px) and (min-height: 680px)\"");
+    expect(styles).toContain("minHeight: \"18rem\"");
+    expect(styles).toContain("minHeight: \"26rem\"");
+    expect(styles).toContain("maxHeight: \"min(62vh, 36rem)\"");
+  });
+
   it("renders strategy, scope, quality metrics, diagnostics, and center control", () => {
     render(
       <LayoutPreviewDrawer

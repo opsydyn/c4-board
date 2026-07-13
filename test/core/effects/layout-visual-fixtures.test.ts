@@ -64,18 +64,20 @@ describe("layout visual fixtures", () => {
     expect(normalized(corrected)).toEqual(normalized(inferred));
   });
 
-  it("moves only the corrected node while preserving exact external support centring", () => {
+  it("moves the corrected node while preserving primary-column positions and exact external support centring", () => {
     const inferredFixture = getLayoutVisualFixture("client-server-inferred");
     const correctedFixture = getLayoutVisualFixture("client-server-corrected");
-    const renderedWidths = {
-      "api-server": 200,
-      "identity-provider": 220,
+    const renderedDimensions = {
+      "api-server": { width: 200, height: 150 },
+      "customer-domain": { width: 240, height: 160 },
+      "identity-provider": { width: 220, height: 100 },
     } as const;
     const expectRenderedDimensions = (fixture: typeof inferredFixture) => {
-      expect(fixture.nodes.find(({ id }) => id === "api-server")?.style?.width)
-        .toBe(renderedWidths["api-server"]);
-      expect(fixture.nodes.find(({ id }) => id === "identity-provider")?.style?.width)
-        .toBe(renderedWidths["identity-provider"]);
+      for (const [id, dimensions] of Object.entries(renderedDimensions)) {
+        const style = fixture.nodes.find(node => node.id === id)?.style;
+        expect(style?.width).toBe(dimensions.width);
+        expect(style?.height).toBe(dimensions.height);
+      }
     };
     const inferred = calculateLayout(
       inferredFixture.nodes,
@@ -90,9 +92,9 @@ describe("layout visual fixtures", () => {
     const position = (result: typeof inferred, id: string) => result.nodes.find(node => node.id === id)!.position;
     const centreX = (
       result: typeof inferred,
-      id: keyof typeof renderedWidths,
+      id: keyof typeof renderedDimensions,
     ) => {
-      return position(result, id).x + renderedWidths[id] / 2;
+      return position(result, id).x + renderedDimensions[id].width / 2;
     };
 
     expectRenderedDimensions(inferredFixture);
@@ -112,7 +114,6 @@ describe("layout visual fixtures", () => {
         "api-server",
         "customer-domain",
         "customer-repository",
-        "identity-provider",
       ]
     ) {
       expect(position(corrected, id)).toEqual(position(inferred, id));
