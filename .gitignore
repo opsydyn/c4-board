@@ -30,3 +30,4 @@ target-review-check/
 # local visual-regression captures
 .artifacts/
 .worktrees/
+.superpowers/sdd/
