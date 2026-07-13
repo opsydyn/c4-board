@@ -269,22 +269,22 @@ function positionClientServer(
   const step = columnStep(width, options);
   const columnX = new Map(PRIMARY_ROLES.map((role, index) => [role, index * step]));
   const cells = new Map<string, XYPosition>();
-  const primaryBottom = Math.max(
-    0,
-    ...PRIMARY_ROLES.map((role) => {
+  const primaryBottomByRole = new Map(
+    PRIMARY_ROLES.map((role) => {
       const placement = stackColumn(assignmentsByRole.get(role) ?? [], columnX.get(role)!, width, 0, options);
       copyCells(cells, placement.cells);
-      return placement.bottom;
+      return [role, placement.bottom] as const;
     }),
   );
+  const primaryBottom = Math.max(0, ...primaryBottomByRole.values());
 
-  const supportStart = gridBoundary(primaryBottom + options.rankSpacing, options);
   const supportBottom = Math.max(
-    supportStart,
+    0,
     ...(["service", "domain"] as const).map((role) => {
       const supportNodes = affinities
         .filter((affinity) => affinity.anchorRole === role)
         .map(({ nodeId }) => nodeById.get(nodeId)!);
+      const supportStart = gridBoundary((primaryBottomByRole.get(role) ?? 0) + options.rankSpacing, options);
       const placement = stackColumn(supportNodes, columnX.get(role)!, width, supportStart, options);
       copyCells(cells, placement.cells);
       return placement.bottom;

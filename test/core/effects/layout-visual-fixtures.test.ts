@@ -64,7 +64,7 @@ describe("layout visual fixtures", () => {
     expect(normalized(corrected)).toEqual(normalized(inferred));
   });
 
-  it("moves the corrected node while preserving primary-column positions and exact external support centring", () => {
+  it("moves only the corrected node while preserving exact external support centring", () => {
     const inferredFixture = getLayoutVisualFixture("client-server-inferred");
     const correctedFixture = getLayoutVisualFixture("client-server-corrected");
     const renderedDimensions = {
@@ -114,6 +114,7 @@ describe("layout visual fixtures", () => {
         "api-server",
         "customer-domain",
         "customer-repository",
+        "identity-provider",
       ]
     ) {
       expect(position(corrected, id)).toEqual(position(inferred, id));

@@ -142,6 +142,24 @@ describe("Client-Server layout strategy", () => {
     expect(byId.get("unknown")!.y).toBeGreaterThan(byId.get("identity-provider")!.y);
   });
 
+  it("keeps caller-affined support vertically stable when another primary column grows", () => {
+    const baseline = clientServerGraph();
+    const tallerDomain = clientServerGraph();
+    tallerDomain.nodes.find(({ id }) => id === "customer-domain")!.style = { width: 240, height: 160 };
+
+    const baselineResult = clientServerLayoutStrategy.layout(baseline);
+    const tallerDomainResult = clientServerLayoutStrategy.layout(tallerDomain);
+    const baselineSupport = baselineResult.nodes.find(({ id }) => id === "identity-provider")!;
+    const tallerDomainSupport = tallerDomainResult.nodes.find(({ id }) => id === "identity-provider")!;
+    const baselineCaller = baselineResult.nodes.find(({ id }) => id === "api-server")!;
+    const tallerDomainCaller = tallerDomainResult.nodes.find(({ id }) => id === "api-server")!;
+
+    expect(tallerDomainSupport.position.y).toBe(baselineSupport.position.y);
+    expect(center(tallerDomainSupport).x).toBe(center(tallerDomainCaller).x);
+    expect(center(baselineSupport).x).toBe(center(baselineCaller).x);
+    expect(tallerDomainResult.quality.nodeOverlapCount).toBe(0);
+  });
+
   it.each([
     [280, 240],
     [281, 240],
