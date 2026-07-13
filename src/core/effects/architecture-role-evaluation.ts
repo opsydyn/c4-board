@@ -137,11 +137,11 @@ const validationFailure = (
 
 const isValidPolicy = (policy: ArchitectureRoleEvaluationInput["policy"]): boolean =>
   Number.isFinite(policy.minimumPrecision)
-  && policy.minimumPrecision >= 0
+  && policy.minimumPrecision >= 0.98
   && policy.minimumPrecision <= 1
   && Number.isFinite(policy.minimumCorrectPerRole)
   && Number.isInteger(policy.minimumCorrectPerRole)
-  && policy.minimumCorrectPerRole >= 1;
+  && policy.minimumCorrectPerRole >= 3;
 
 interface EvaluatedAssignment {
   readonly gold: ArchitectureRoleGoldAssignment;
@@ -235,7 +235,7 @@ export const evaluateArchitectureRoles = (
     return validationFailure(
       "invalid-policy",
       null,
-      "Evaluation policy must use a precision between 0 and 1 and a positive integer role-support floor.",
+      "Evaluation policy must use a precision between 0.98 and 1 and an integer role-support floor of at least 3.",
     );
   }
 

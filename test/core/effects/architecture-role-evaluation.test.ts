@@ -245,10 +245,16 @@ describe("architecture role evaluation", () => {
 
   it.each(
     [
+      ["minimumPrecision below approved floor", { minimumPrecision: 0.979999, minimumCorrectPerRole: 3 }],
       ["minimumPrecision below zero", { minimumPrecision: -0.01, minimumCorrectPerRole: 3 }],
       ["minimumPrecision above one", { minimumPrecision: 1.01, minimumCorrectPerRole: 3 }],
+      ["minimumCorrectPerRole below approved floor", { minimumPrecision: 0.98, minimumCorrectPerRole: 2 }],
       ["minimumCorrectPerRole below one", { minimumPrecision: 0.98, minimumCorrectPerRole: 0 }],
       ["minimumCorrectPerRole is fractional", { minimumPrecision: 0.98, minimumCorrectPerRole: 1.5 }],
+      ["minimumPrecision is NaN", { minimumPrecision: NaN, minimumCorrectPerRole: 3 }],
+      ["minimumPrecision is infinite", { minimumPrecision: Infinity, minimumCorrectPerRole: 3 }],
+      ["minimumCorrectPerRole is NaN", { minimumPrecision: 0.98, minimumCorrectPerRole: NaN }],
+      ["minimumCorrectPerRole is infinite", { minimumPrecision: 0.98, minimumCorrectPerRole: Infinity }],
     ] as const,
   )("rejects %s", (_name, policy) => {
     expectValidation({ ...input(), policy }, "invalid-policy");
@@ -307,7 +313,7 @@ describe("architecture role evaluation", () => {
           diagnostics: [],
         },
       }],
-      policy: { minimumPrecision: 0.98, minimumCorrectPerRole: 1 },
+      policy: { minimumPrecision: 0.98, minimumCorrectPerRole: 3 },
     });
 
     expect(result).toMatchObject({
