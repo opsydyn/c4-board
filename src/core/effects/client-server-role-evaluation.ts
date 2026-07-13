@@ -3,6 +3,7 @@ import {
   type ArchitectureRoleEvaluation,
   type ArchitectureRoleEvaluationValidationError,
   evaluateArchitectureRoles,
+  validateArchitectureRoleClassifierOutput,
 } from "./architecture-role-evaluation";
 import {
   type ClientServerRoleEvalCase,
@@ -25,6 +26,24 @@ export const runClientServerRoleEvaluationFromClassifications = (
   const validation = validateClientServerRoleEvalCases(cases);
   if (validation.status === "validation-failure") return validation;
 
+  const classifications = cases.map((evalCase) => ({
+    caseId: evalCase.id,
+    classification: classify(evalCase.nodes, evalCase.edges),
+  }));
+  const classifierOutputValidation = validateArchitectureRoleClassifierOutput({
+    pattern: "client-server",
+    cases: cases.map((evalCase) => ({
+      caseId: evalCase.id,
+      nodeIds: evalCase.nodes.map(({ id }) => id),
+    })),
+    classifications,
+  });
+  if (classifierOutputValidation.status === "validation-failure") return classifierOutputValidation;
+
+  const goldNodeIdsByCase = new Map(
+    cases.map((evalCase) => [evalCase.id, new Set(Object.keys(evalCase.expectedRoles))]),
+  );
+
   const result = evaluateArchitectureRoles({
     pattern: "client-server",
     goldAssignments: cases.flatMap((evalCase) =>
@@ -36,11 +55,10 @@ export const runClientServerRoleEvaluationFromClassifications = (
         thresholdEligible: evalCase.thresholdEligible,
       }))
     ),
-    classifications: cases.map((evalCase) => {
-      const goldNodeIds = new Set(Object.keys(evalCase.expectedRoles));
-      const classification = classify(evalCase.nodes, evalCase.edges);
+    classifications: classifications.map(({ caseId, classification }) => {
+      const goldNodeIds = goldNodeIdsByCase.get(caseId)!;
       return {
-        caseId: evalCase.id,
+        caseId,
         classification: {
           ...classification,
           assignments: classification.assignments.filter(({ nodeId }) => goldNodeIds.has(nodeId)),

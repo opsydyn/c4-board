@@ -1,4 +1,7 @@
-import { inferClientServerRoles } from "@/core/effects/architecture-role-classification";
+import {
+  type ArchitectureRoleClassification,
+  inferClientServerRoles,
+} from "@/core/effects/architecture-role-classification";
 import {
   type ClientServerRoleEvalCase,
   getClientServerRoleEvalCases,
@@ -18,6 +21,47 @@ const reverseAssignments: typeof inferClientServerRoles = (nodes, edges) => {
 
 const reverseExpectedRoles = <T extends Record<string, unknown>>(expectedRoles: T): T =>
   Object.fromEntries(Object.entries(expectedRoles).reverse()) as T;
+
+const childNode = (): Node => ({
+  id: "typed-service-child",
+  parentId: "typed-service",
+  type: "component",
+  position: { x: 0, y: 0 },
+  data: { label: "Internal Worker" },
+});
+
+const childNodeCases = (): ReadonlyArray<ClientServerRoleEvalCase> => {
+  const canonical = getClientServerRoleEvalCases()[0]!;
+  const child = childNode();
+  const childEdge: Edge = {
+    id: "typed-service-child-edge",
+    source: "typed-service",
+    target: child.id,
+    label: "delegates",
+  };
+  return [{
+    ...canonical,
+    nodes: [...canonical.nodes, child],
+    edges: [...canonical.edges, childEdge],
+  }];
+};
+
+const childAssignment = (classification: ArchitectureRoleClassification) =>
+  classification.assignments.find(({ nodeId }) => nodeId === "typed-service-child")!;
+
+const expectChildOutputValidationFailure = (
+  result: ReturnType<typeof runClientServerRoleEvaluationFromClassifications>,
+  problem: string,
+) => {
+  expect(result).toEqual({
+    status: "validation-failure",
+    error: expect.objectContaining({
+      _tag: "ArchitectureRoleEvaluationValidationError",
+      caseId: "canonical-typed",
+      problem,
+    }),
+  });
+};
 
 describe("Client-Server role evaluation", () => {
   it("freezes current classifier quality and the lowest safe evidence threshold", () => {
@@ -204,25 +248,8 @@ describe("Client-Server role evaluation", () => {
   });
 
   it("evaluates only top-level gold nodes while classifying child-node topology", () => {
-    const canonical = getClientServerRoleEvalCases()[0]!;
-    const child: Node = {
-      id: "typed-service-child",
-      parentId: "typed-service",
-      type: "component",
-      position: { x: 0, y: 0 },
-      data: { label: "Internal Worker" },
-    };
-    const childEdge: Edge = {
-      id: "typed-service-child-edge",
-      source: "typed-service",
-      target: child.id,
-      label: "delegates",
-    };
-    const cases: ReadonlyArray<ClientServerRoleEvalCase> = [{
-      ...canonical,
-      nodes: [...canonical.nodes, child],
-      edges: [...canonical.edges, childEdge],
-    }];
+    const child = childNode();
+    const cases = childNodeCases();
     let classifiedNodes: ReadonlyArray<Node> | undefined;
     let classifiedEdges: ReadonlyArray<Edge> | undefined;
     const classify: typeof inferClientServerRoles = (nodes, edges) => {
@@ -235,13 +262,61 @@ describe("Client-Server role evaluation", () => {
 
     expect(result.status).toBe("success");
     expect(classifiedNodes).toContainEqual(child);
-    expect(classifiedEdges).toContainEqual(childEdge);
+    expect(classifiedEdges).toContainEqual(expect.objectContaining({ id: "typed-service-child-edge" }));
     if (result.status !== "success") return;
     expect(result.evaluation).toMatchObject({
       totalAssignmentCount: 6,
       eligibleAssignmentCount: 6,
       controlAssignmentCount: 0,
     });
+  });
+
+  it.each([
+    ["an unknown node ID", "unknown-assignment", (classification: ArchitectureRoleClassification) => ({
+      ...classification,
+      assignments: [...classification.assignments, { ...childAssignment(classification), nodeId: "unknown-child" }],
+    })],
+    ["a duplicate child assignment", "duplicate-assignment", (classification: ArchitectureRoleClassification) => ({
+      ...classification,
+      assignments: [...classification.assignments, childAssignment(classification)],
+    })],
+    ["a missing child assignment", "missing-assignment", (classification: ArchitectureRoleClassification) => ({
+      ...classification,
+      assignments: classification.assignments.filter(({ nodeId }) => nodeId !== "typed-service-child"),
+    })],
+    [
+      "a child role disallowed for Client-Server",
+      "role-pattern-mismatch",
+      (classification: ArchitectureRoleClassification) => ({
+        ...classification,
+        assignments: classification.assignments.map((entry) =>
+          entry.nodeId === "typed-service-child" ? { ...entry, role: "publisher" as const } : entry
+        ),
+      }),
+    ],
+    ["a NaN child confidence", "invalid-assignment-confidence", (classification: ArchitectureRoleClassification) => ({
+      ...classification,
+      assignments: classification.assignments.map((entry) =>
+        entry.nodeId === "typed-service-child" ? { ...entry, confidence: NaN } : entry
+      ),
+    })],
+    [
+      "an out-of-range child confidence",
+      "invalid-assignment-confidence",
+      (classification: ArchitectureRoleClassification) => ({
+        ...classification,
+        assignments: classification.assignments.map((entry) =>
+          entry.nodeId === "typed-service-child" ? { ...entry, confidence: 1.01 } : entry
+        ),
+      }),
+    ],
+  ])("rejects %s before projecting assignments", (_name, problem, mutate) => {
+    const result = runClientServerRoleEvaluationFromClassifications(
+      childNodeCases(),
+      (nodes, edges) => mutate(inferClientServerRoles(nodes, edges)),
+    );
+
+    expectChildOutputValidationFailure(result, problem);
   });
 
   it("forwards corpus validation failures without invoking the classifier", () => {

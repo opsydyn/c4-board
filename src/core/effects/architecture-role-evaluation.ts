@@ -28,6 +28,15 @@ export interface ArchitectureRoleEvaluationInput {
   };
 }
 
+export interface ArchitectureRoleClassifierOutputValidationInput {
+  readonly pattern: ArchitecturePattern;
+  readonly cases: ReadonlyArray<{
+    readonly caseId: string;
+    readonly nodeIds: ReadonlyArray<string>;
+  }>;
+  readonly classifications: ArchitectureRoleEvaluationInput["classifications"];
+}
+
 export type EvaluationBreakdownDimension =
   | "expected-role"
   | "predicted-role"
@@ -112,6 +121,10 @@ export type ArchitectureRoleEvaluationResult =
   | { readonly status: "success"; readonly evaluation: ArchitectureRoleEvaluation }
   | { readonly status: "validation-failure"; readonly error: ArchitectureRoleEvaluationValidationError };
 
+export type ArchitectureRoleClassifierOutputValidationResult =
+  | { readonly status: "valid" }
+  | { readonly status: "validation-failure"; readonly error: ArchitectureRoleEvaluationValidationError };
+
 const ratio = (numerator: number, denominator: number): number | null =>
   denominator === 0 ? null : numerator / denominator;
 
@@ -133,6 +146,15 @@ const validationFailure = (
   caseId: string | null,
   message: string,
 ): ArchitectureRoleEvaluationResult => ({
+  status: "validation-failure",
+  error: { _tag: "ArchitectureRoleEvaluationValidationError", caseId, problem, message },
+});
+
+const classifierOutputValidationFailure = (
+  problem: ArchitectureRoleEvaluationValidationError["problem"],
+  caseId: string | null,
+  message: string,
+): ArchitectureRoleClassifierOutputValidationResult => ({
   status: "validation-failure",
   error: { _tag: "ArchitectureRoleEvaluationValidationError", caseId, problem, message },
 });
@@ -170,6 +192,95 @@ const addBreakdown = (
 
 const sortedBreakdowns = (breakdowns: Map<string, EvaluationBreakdown>): EvaluationBreakdown[] =>
   [...breakdowns.values()].sort((left, right) => left.key.localeCompare(right.key));
+
+export const validateArchitectureRoleClassifierOutput = (
+  input: ArchitectureRoleClassifierOutputValidationInput,
+): ArchitectureRoleClassifierOutputValidationResult => {
+  const nodeIdsByCase = new Map(input.cases.map(({ caseId, nodeIds }) => [caseId, new Set(nodeIds)]));
+  const classificationsByCase = new Map<string, ArchitectureRoleClassification>();
+  for (const entry of input.classifications) {
+    if (classificationsByCase.has(entry.caseId)) {
+      return classifierOutputValidationFailure(
+        "duplicate-classification-case",
+        entry.caseId,
+        `Classification case '${entry.caseId}' is duplicated.`,
+      );
+    }
+    if (!nodeIdsByCase.has(entry.caseId)) {
+      return classifierOutputValidationFailure(
+        "unknown-assignment",
+        entry.caseId,
+        `Classification case '${entry.caseId}' has no expected nodes.`,
+      );
+    }
+    if (entry.classification.pattern !== input.pattern) {
+      return classifierOutputValidationFailure(
+        "pattern-mismatch",
+        entry.caseId,
+        `Classification pattern '${entry.classification.pattern}' does not match '${input.pattern}'.`,
+      );
+    }
+    classificationsByCase.set(entry.caseId, entry.classification);
+  }
+
+  const predictionsByKey = new Map<string, ArchitectureRoleAssignment>();
+  for (const [caseId, classification] of classificationsByCase) {
+    const nodeIds = nodeIdsByCase.get(caseId)!;
+    for (const prediction of classification.assignments) {
+      const key = keyFor(caseId, prediction.nodeId);
+      if (prediction.pattern !== input.pattern) {
+        return classifierOutputValidationFailure(
+          "pattern-mismatch",
+          caseId,
+          `Assignment pattern '${prediction.pattern}' does not match '${input.pattern}'.`,
+        );
+      }
+      if (!isRoleAllowedForPattern(input.pattern, prediction.role)) {
+        return classifierOutputValidationFailure(
+          "role-pattern-mismatch",
+          caseId,
+          `Assignment role '${prediction.role}' is not valid for ${input.pattern} classification.`,
+        );
+      }
+      if (!Number.isFinite(prediction.confidence) || prediction.confidence < 0 || prediction.confidence > 1) {
+        return classifierOutputValidationFailure(
+          "invalid-assignment-confidence",
+          caseId,
+          `Classifier assignment '${prediction.nodeId}' in case '${caseId}' must have a finite confidence in [0, 1]; received ${prediction.confidence}.`,
+        );
+      }
+      if (!nodeIds.has(prediction.nodeId)) {
+        return classifierOutputValidationFailure(
+          "unknown-assignment",
+          caseId,
+          `Assignment '${prediction.nodeId}' is not present in the expected case.`,
+        );
+      }
+      if (predictionsByKey.has(key)) {
+        return classifierOutputValidationFailure(
+          "duplicate-assignment",
+          caseId,
+          `Classifier assignment '${prediction.nodeId}' is duplicated in case '${caseId}'.`,
+        );
+      }
+      predictionsByKey.set(key, prediction);
+    }
+  }
+
+  for (const { caseId, nodeIds } of input.cases) {
+    for (const nodeId of nodeIds) {
+      if (!predictionsByKey.has(keyFor(caseId, nodeId))) {
+        return classifierOutputValidationFailure(
+          "missing-assignment",
+          caseId,
+          `Classifier output is missing assignment '${nodeId}'.`,
+        );
+      }
+    }
+  }
+
+  return { status: "valid" };
+};
 
 const buildCandidates = (
   assignments: ReadonlyArray<EvaluatedAssignment>,
@@ -262,82 +373,23 @@ export const evaluateArchitectureRoles = (
     goldByKey.set(key, gold);
   }
 
-  const classificationByCase = new Map<string, ArchitectureRoleClassification>();
-  for (const entry of input.classifications) {
-    if (classificationByCase.has(entry.caseId)) {
-      return validationFailure(
-        "duplicate-classification-case",
-        entry.caseId,
-        `Classification case '${entry.caseId}' is duplicated.`,
-      );
-    }
-    if (!goldByKeyHasCase(goldByKey, entry.caseId)) {
-      return validationFailure(
-        "unknown-assignment",
-        entry.caseId,
-        `Classification case '${entry.caseId}' has no gold assignments.`,
-      );
-    }
-    if (entry.classification.pattern !== input.pattern) {
-      return validationFailure(
-        "pattern-mismatch",
-        entry.caseId,
-        `Classification pattern '${entry.classification.pattern}' does not match '${input.pattern}'.`,
-      );
-    }
-    classificationByCase.set(entry.caseId, entry.classification);
+  const nodeIdsByCase = new Map<string, string[]>();
+  for (const gold of input.goldAssignments) {
+    const nodeIds = nodeIdsByCase.get(gold.caseId) ?? [];
+    nodeIds.push(gold.nodeId);
+    nodeIdsByCase.set(gold.caseId, nodeIds);
   }
+  const classifierOutputValidation = validateArchitectureRoleClassifierOutput({
+    pattern: input.pattern,
+    cases: [...nodeIdsByCase].map(([caseId, nodeIds]) => ({ caseId, nodeIds })),
+    classifications: input.classifications,
+  });
+  if (classifierOutputValidation.status === "validation-failure") return classifierOutputValidation;
 
   const predictionsByKey = new Map<string, ArchitectureRoleAssignment>();
-  for (const [caseId, classification] of classificationByCase) {
+  for (const { caseId, classification } of input.classifications) {
     for (const prediction of classification.assignments) {
-      const key = keyFor(caseId, prediction.nodeId);
-      if (prediction.pattern !== input.pattern) {
-        return validationFailure(
-          "pattern-mismatch",
-          caseId,
-          `Assignment pattern '${prediction.pattern}' does not match '${input.pattern}'.`,
-        );
-      }
-      if (!isRoleAllowedForPattern(input.pattern, prediction.role)) {
-        return validationFailure(
-          "role-pattern-mismatch",
-          caseId,
-          `Assignment role '${prediction.role}' is not valid for ${input.pattern} classification.`,
-        );
-      }
-      if (!Number.isFinite(prediction.confidence) || prediction.confidence < 0 || prediction.confidence > 1) {
-        return validationFailure(
-          "invalid-assignment-confidence",
-          caseId,
-          `Classifier assignment '${prediction.nodeId}' in case '${caseId}' must have a finite confidence in [0, 1]; received ${prediction.confidence}.`,
-        );
-      }
-      if (!goldByKey.has(key)) {
-        return validationFailure(
-          "unknown-assignment",
-          caseId,
-          `Assignment '${prediction.nodeId}' is not present in the gold case.`,
-        );
-      }
-      if (predictionsByKey.has(key)) {
-        return validationFailure(
-          "duplicate-assignment",
-          caseId,
-          `Classifier assignment '${prediction.nodeId}' is duplicated in case '${caseId}'.`,
-        );
-      }
-      predictionsByKey.set(key, prediction);
-    }
-  }
-
-  for (const [key, gold] of goldByKey) {
-    if (!predictionsByKey.has(key)) {
-      return validationFailure(
-        "missing-assignment",
-        gold.caseId,
-        `Classifier output is missing assignment '${gold.nodeId}'.`,
-      );
+      predictionsByKey.set(keyFor(caseId, prediction.nodeId), prediction);
     }
   }
 
@@ -415,6 +467,3 @@ export const evaluateArchitectureRoles = (
     },
   };
 };
-
-const goldByKeyHasCase = (goldByKey: ReadonlyMap<string, ArchitectureRoleGoldAssignment>, caseId: string): boolean =>
-  [...goldByKey.values()].some((gold) => gold.caseId === caseId);
