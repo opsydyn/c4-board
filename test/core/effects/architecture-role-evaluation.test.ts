@@ -168,11 +168,11 @@ describe("architecture role evaluation", () => {
     [
       ["duplicate-gold-assignment", (candidate: ArchitectureRoleEvaluationInput) => ({
         ...candidate,
-        goldAssignments: [...candidate.goldAssignments, candidate.goldAssignments[0]],
+        goldAssignments: [...candidate.goldAssignments, candidate.goldAssignments[0]!],
       }), "case-a"],
       ["duplicate-classification-case", (candidate: ArchitectureRoleEvaluationInput) => ({
         ...candidate,
-        classifications: [...candidate.classifications, candidate.classifications[0]],
+        classifications: [...candidate.classifications, candidate.classifications[0]!],
       }), "case-a"],
       ["unknown-assignment", (candidate: ArchitectureRoleEvaluationInput) => ({
         ...candidate,
@@ -196,7 +196,7 @@ describe("architecture role evaluation", () => {
               ...entry,
               classification: {
                 ...entry.classification,
-                assignments: [...entry.classification.assignments, entry.classification.assignments[0]],
+                assignments: [...entry.classification.assignments, entry.classification.assignments[0]!],
               },
             }
             : entry
@@ -270,8 +270,8 @@ describe("architecture role evaluation", () => {
     ] as const,
   )("rejects classifier confidence %s", (_name, confidence) => {
     const candidate = input();
-    const firstClassification = candidate.classifications[0];
-    const firstAssignment = firstClassification.classification.assignments[0];
+    const firstClassification = candidate.classifications[0]!;
+    const firstAssignment = firstClassification.classification.assignments[0]!;
     const classifications = candidate.classifications.map((entry, index) =>
       index === 0
         ? {

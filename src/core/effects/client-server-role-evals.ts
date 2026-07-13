@@ -239,8 +239,8 @@ const validationFailure = (
   error: { _tag: "ClientServerRoleEvalCorpusValidationError", caseId, problem, message },
 });
 
-export const getClientServerRoleEvalCases = (): ClientServerRoleEvalCase[] =>
-  structuredClone(CLIENT_SERVER_ROLE_EVAL_CASES);
+export const getClientServerRoleEvalCases =
+  (): ClientServerRoleEvalCase[] => [...structuredClone(CLIENT_SERVER_ROLE_EVAL_CASES)];
 
 export const validateClientServerRoleEvalCases = (
   cases: ReadonlyArray<ClientServerRoleEvalCase>,
