@@ -5,7 +5,8 @@ export type LayoutVisualFixtureName =
   | "event-driven"
   | "event-driven-bridges"
   | "event-driven-bridges-detail"
-  | "client-server"
+  | "client-server-inferred"
+  | "client-server-corrected"
   | "hexagonal-inferred"
   | "hexagonal-corrected";
 
@@ -69,6 +70,27 @@ const EVENT_DRIVEN_BRIDGES_GRAPH: Pick<LayoutVisualFixture, "nodes" | "edges"> =
   ],
 };
 
+const CLIENT_SERVER_GRAPH: Pick<LayoutVisualFixture, "nodes" | "edges"> = {
+  nodes: [
+    node("web-client", "person"),
+    node("mobile-client", "person"),
+    node("api-server", "container", { label: "Customer API Server" }),
+    node("customer-domain", "aggregate", { label: "Customer Aggregate" }),
+    node("customer-repository", "repository", { label: "Customer Repository" }),
+    node("identity-provider", "externalSystem", { label: "Identity Provider" }),
+    node("decision-module", "component", { label: "Decision Module" }),
+  ],
+  edges: [
+    edge("web-client", "api-server", "request"),
+    edge("mobile-client", "api-server", "request"),
+    edge("api-server", "customer-domain", "calls"),
+    edge("customer-domain", "customer-repository", "customer data"),
+    edge("api-server", "identity-provider", "token request"),
+    edge("api-server", "decision-module", "evaluate"),
+    edge("decision-module", "customer-domain", "decision"),
+  ],
+};
+
 const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
   "event-driven": {
     name: "event-driven",
@@ -118,27 +140,24 @@ const FIXTURES: Record<LayoutVisualFixtureName, LayoutVisualFixture> = {
       "c-subscriber",
     ],
   },
-  "client-server": {
-    name: "client-server",
-    title: "VISUAL::CLIENT SERVER",
-    preset: "elkLayered",
-    nodes: [
-      node("web-client", "person"),
-      node("mobile-client", "person"),
-      node("api-server", "container"),
-      node("command-handler", "command"),
-      node("audit-event", "integrationEvent"),
-      node("customer-repository", "repository"),
-      node("identity-provider", "externalSystem"),
-    ],
-    edges: [
-      edge("web-client", "api-server", "request"),
-      edge("mobile-client", "api-server", "request"),
-      edge("api-server", "command-handler", "command: update customer"),
-      edge("api-server", "audit-event", "audit event"),
-      edge("api-server", "customer-repository", "customer data"),
-      edge("api-server", "identity-provider", "token request"),
-    ],
+  "client-server-inferred": {
+    name: "client-server-inferred",
+    title: "VISUAL::CLIENT SERVER INFERRED",
+    preset: "clientServer",
+    ...CLIENT_SERVER_GRAPH,
+  },
+  "client-server-corrected": {
+    name: "client-server-corrected",
+    title: "VISUAL::CLIENT SERVER CORRECTED",
+    preset: "clientServer",
+    nodes: CLIENT_SERVER_GRAPH.nodes.map((fixtureNode) => ({
+      ...fixtureNode,
+      data: {
+        ...fixtureNode.data,
+        ...(fixtureNode.id === "decision-module" && { layoutRole: "domain" }),
+      },
+    })),
+    edges: CLIENT_SERVER_GRAPH.edges.map((fixtureEdge) => ({ ...fixtureEdge })),
   },
   "hexagonal-inferred": {
     name: "hexagonal-inferred",
@@ -188,7 +207,8 @@ export function isLayoutVisualFixtureName(value: unknown): value is LayoutVisual
   return value === "event-driven"
     || value === "event-driven-bridges"
     || value === "event-driven-bridges-detail"
-    || value === "client-server"
+    || value === "client-server-inferred"
+    || value === "client-server-corrected"
     || value === "hexagonal-inferred"
     || value === "hexagonal-corrected";
 }

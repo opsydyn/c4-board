@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { calculateLayout, getPreset } from "@/core/effects/layout";
 import { getLayoutVisualFixture, isLayoutVisualFixtureName } from "@/core/effects/layout-visual-fixtures";
 
 describe("layout visual fixtures", () => {
@@ -8,7 +9,8 @@ describe("layout visual fixtures", () => {
       "event-driven",
       "event-driven-bridges",
       "event-driven-bridges-detail",
-      "client-server",
+      "client-server-inferred",
+      "client-server-corrected",
       "hexagonal-inferred",
       "hexagonal-corrected",
     ] as const,
@@ -31,10 +33,76 @@ describe("layout visual fixtures", () => {
     expect(isLayoutVisualFixtureName("event-driven")).toBe(true);
     expect(isLayoutVisualFixtureName("event-driven-bridges")).toBe(true);
     expect(isLayoutVisualFixtureName("event-driven-bridges-detail")).toBe(true);
-    expect(isLayoutVisualFixtureName("client-server")).toBe(true);
+    expect(isLayoutVisualFixtureName("client-server-inferred")).toBe(true);
+    expect(isLayoutVisualFixtureName("client-server-corrected")).toBe(true);
     expect(isLayoutVisualFixtureName("hexagonal-inferred")).toBe(true);
     expect(isLayoutVisualFixtureName("hexagonal-corrected")).toBe(true);
     expect(isLayoutVisualFixtureName("user-board")).toBe(false);
+  });
+
+  it("keeps inferred and corrected Client-Server fixtures structurally identical", () => {
+    const inferred = getLayoutVisualFixture("client-server-inferred");
+    const corrected = getLayoutVisualFixture("client-server-corrected");
+    const nodeIds = (fixture: typeof inferred) => fixture.nodes.map(({ id }) => id).sort();
+    const edgeIds = (fixture: typeof inferred) => fixture.edges.map(({ id }) => id).sort();
+    const inferredDecision = inferred.nodes.find(({ id }) => id === "decision-module");
+    const correctedDecision = corrected.nodes.find(({ id }) => id === "decision-module");
+
+    expect(inferred.preset).toBe("clientServer");
+    expect(corrected.preset).toBe("clientServer");
+    expect(nodeIds(corrected)).toEqual(nodeIds(inferred));
+    expect(edgeIds(corrected)).toEqual(edgeIds(inferred));
+    expect(inferredDecision?.data.layoutRole).toBeUndefined();
+    expect(correctedDecision?.data.layoutRole).toBe("domain");
+
+    const normalized = (fixture: typeof inferred) =>
+      fixture.nodes.map((fixtureNode) => {
+        if (fixtureNode.id !== "decision-module") return fixtureNode;
+        const { layoutRole: _layoutRole, ...data } = fixtureNode.data;
+        return { ...fixtureNode, data };
+      });
+    expect(normalized(corrected)).toEqual(normalized(inferred));
+  });
+
+  it("moves only the corrected node while preserving exact external support centring", () => {
+    const inferredFixture = getLayoutVisualFixture("client-server-inferred");
+    const correctedFixture = getLayoutVisualFixture("client-server-corrected");
+    const inferred = calculateLayout(
+      inferredFixture.nodes,
+      inferredFixture.edges,
+      getPreset(inferredFixture.preset),
+    );
+    const corrected = calculateLayout(
+      correctedFixture.nodes,
+      correctedFixture.edges,
+      getPreset(correctedFixture.preset),
+    );
+    const position = (result: typeof inferred, id: string) => result.nodes.find(node => node.id === id)!.position;
+    const centreX = (result: typeof inferred, id: string) => {
+      const layoutNode = result.nodes.find(node => node.id === id)!;
+      return layoutNode.position.x + Number(layoutNode.style?.width ?? 160) / 2;
+    };
+
+    expect(inferred.semanticRoles?.find(({ nodeId }) => nodeId === "decision-module")?.role)
+      .toBe("unclassified");
+    expect(corrected.semanticRoles?.find(({ nodeId }) => nodeId === "decision-module")?.role)
+      .toBe("domain");
+    expect(position(corrected, "decision-module")).not.toEqual(position(inferred, "decision-module"));
+    expect(centreX(inferred, "identity-provider")).toBe(centreX(inferred, "api-server"));
+    expect(centreX(corrected, "identity-provider")).toBe(centreX(corrected, "api-server"));
+
+    for (
+      const id of [
+        "web-client",
+        "mobile-client",
+        "api-server",
+        "customer-domain",
+        "customer-repository",
+        "identity-provider",
+      ]
+    ) {
+      expect(position(corrected, id)).toEqual(position(inferred, id));
+    }
   });
 
   it("selects Hexagonal and preserves explicit corrected roles", () => {

@@ -50,6 +50,24 @@ bun run visual:tauri:capture -- --scenario event-driven-bridges-detail --viewpor
 bun run visual:tauri:capture -- --scenario event-driven-bridges-detail --viewport narrow
 ```
 
+Use the paired Client-Server fixtures to compare inferred and corrected role
+classification. The corrected fixture changes only `decision-module`, assigning it
+the `domain` layout role:
+
+```sh
+C4_VISUAL_FIXTURE=client-server-inferred bun tauri dev
+C4_VISUAL_FIXTURE=client-server-corrected bun tauri dev
+```
+
+Capture each fixture at both viewport profiles:
+
+```sh
+bun run visual:tauri:capture -- --scenario client-server-inferred --viewport desktop
+bun run visual:tauri:capture -- --scenario client-server-inferred --viewport narrow
+bun run visual:tauri:capture -- --scenario client-server-corrected --viewport desktop
+bun run visual:tauri:capture -- --scenario client-server-corrected --viewport narrow
+```
+
 Disposable captures are written to `.artifacts/tauri-layout/`. Inspect them before
 promoting intentional output to a tracked baseline:
 
@@ -68,7 +86,8 @@ resizing and avoid another compositor cycle.
 The Event-Driven scenarios are `event-driven`, `event-driven-bridges`, and
 `event-driven-bridges-detail`. The full and detail bridge baselines are complementary:
 the full frame protects support/review lanes while the detail frame protects bridge
-track and subscriber-clearance readability. Repeat for `client-server`,
-`hexagonal-inferred`, and `hexagonal-corrected`. The command refuses unknown scenarios
+track and subscriber-clearance readability. The Client-Server scenarios are
+`client-server-inferred` and `client-server-corrected`; the Hexagonal scenarios are
+`hexagonal-inferred` and `hexagonal-corrected`. The command refuses unknown scenarios
 and validates the native window dimensions before writing a file, preventing mislabeled
 baselines.
