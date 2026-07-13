@@ -5,7 +5,7 @@ description: "Concrete roadmap for architecture-aware layout strategies using Da
 
 # Roadmap: Intelligent Architecture Layouts
 
-**Last Updated**: 2026-07-12
+**Last Updated**: 2026-07-13
 
 **Owner**: Product + Platform Engineering
 
@@ -48,7 +48,7 @@ The shipped implementation now provides an architecture-grade deterministic foun
 Known limitations:
 
 - Several legacy menu presets still differ only by Dagre spacing and direction.
-- Hexagonal, Event-Driven, and Client-Server now have complete shared semantic-role classification, review and correction UX, and dedicated geometry. Client-Server inferred and corrected native visual baselines have manual visual acceptance; inference evaluation remains open, and an automated post-fix baseline refresh is deferred.
+- Hexagonal, Event-Driven, and Client-Server now have complete shared semantic-role classification, review and correction UX, and dedicated geometry. Client-Server inferred and corrected native visual baselines have manual visual acceptance; Slice 42 shipped a precision-first inference evaluation and threshold for future OPY/Rig evidence exposure, while an automated post-fix baseline refresh remains deferred.
 - Dagre ranking, alignment, cycle-breaking, main-path, and semantic-layer controls remain basic.
 - ELK Radial has not justified replacing the product-specific radial strategies.
 - Native visual baselines cover custom Event-Driven representative, bridge, and detail previews; inferred and corrected Hexagonal previews; and inferred and corrected Client-Server previews. Automated post-fix Client-Server refresh, radial coverage, and full preset coverage remain open.
@@ -459,6 +459,8 @@ Exit criteria:
 - [x] Add deterministic Event-Driven publisher, bus, processor, and subscriber lane geometry.
 - [x] Add Client-Server client, service, domain, and persistence columns.
 - [x] Add role correction controls in the layout preview.
+- [x] Evaluate Client-Server inference confidence and correction frequency.
+- [x] Define the evidence threshold required before exposing Client-Server role evidence to OPY/Rig.
 - [ ] Add semantic violation diagnostics independent from layout quality.
 
 Exit criteria:
@@ -533,7 +535,7 @@ Exit criteria:
 | P0 | ELK worker and compound graph support | Shipped; browser budgets open | Unlocks architecture-grade constraints and routing | Strategy contract |
 | P1 | Hexagonal and Event-Driven | Shipped | Strong semantic differentiation | Shared semantic role schema |
 | P1 | OPY/Rig classifier | Queued | Natural-language strategy and role selection | Stable role and strategy schemas |
-| P1 | Client-Server and improved hierarchical family | Client-Server semantic geometry and inferred/corrected native baselines shipped; inference evaluation open | Completes common architecture patterns | Shared semantic role schema |
+| P1 | Client-Server and improved hierarchical family | Client-Server semantic geometry, inferred/corrected native baselines, and precision-first evidence threshold shipped; OPY/Rig evidence exposure next | Completes common architecture patterns | Shared semantic role schema |
 | P2 | Microservices and mixed strategies | Future | Handles dense enterprise boards | ELK and classification |
 | P2 | OPY Custom Layout Studio | Future | Turns user intent into reusable product knowledge | Constraint grammar and persistence |
 
@@ -587,14 +589,15 @@ Quality measures:
 
 The foundation through Phase 3 is substantially shipped: strategy boundaries, quality metrics, radial strategies, asynchronous ELK Layered, routed preview, recommendations, audit history, and portable review evidence are in production code.
 
-The shared Phase 4 semantic role contract, deterministic inference, preview correction flow, Hexagonal geometry, Event-Driven lanes, and Client-Server columns are shipped. Hexagonal, Event-Driven, and Client-Server have reviewed native visual baselines. Client-Server manual visual acceptance covers the tracked inferred and corrected desktop and narrow baselines at `1600x900` and `960x720`; an automated post-fix refresh is deferred.
+The shared Phase 4 semantic role contract, deterministic inference, preview correction flow, Hexagonal geometry, Event-Driven lanes, and Client-Server columns are shipped. Hexagonal, Event-Driven, and Client-Server have reviewed native visual baselines. Client-Server manual visual acceptance covers the tracked inferred and corrected desktop and narrow baselines at `1600x900` and `960x720`; Slice 42 has also shipped the precision-first inference evaluation and evidence threshold. An automated post-fix Client-Server PNG refresh remains deferred.
 
-The next product workstream is **Client-Server inference evaluation and role-evidence thresholding**, sequenced as follows:
+The next product workstream is **OPY/Rig Client-Server role-evidence exposure**, bounded as follows:
 
-1. Evaluate Client-Server inference confidence and correction frequency.
-2. Define the evidence threshold required before exposing Client-Server role evidence to OPY/Rig.
+1. Expose evidence only for `client`, `service`, `domain`, `persistence`, and `external-dependency` assignments at confidence `>= 0.70`.
+2. Withhold `unclassified` and below-threshold assignments while preserving source and evidence provenance for qualified assignments.
+3. Rerun the exact evaluation contract before changing the corpus or classifier.
 
-Open foundation debt remains visible but does not block the next Client-Server inference evaluation slice:
+Open foundation debt remains visible but does not block the next OPY/Rig Client-Server role-evidence exposure slice:
 
 - Remaining C4 and DDD preset fixtures and radial visual baselines.
 - Browser-worker startup and realistic performance budgets.
@@ -602,7 +605,7 @@ Open foundation debt remains visible but does not block the next Client-Server i
 - Strategy-specific menu status.
 - Deferred automated post-fix Client-Server refresh, radial coverage, and broader preset native baseline coverage.
 
-The next implementation slice should evaluate inference confidence and correction frequency, then define the evidence threshold for OPY/Rig exposure. Automated post-fix Client-Server recapture remains deferred.
+The next implementation slice should design OPY/Rig Client-Server role-evidence exposure using only the five qualified roles at confidence `>= 0.70`. Automated post-fix Client-Server PNG refresh remains deferred.
 
 ### Slice 1 Delivery Record
 
@@ -1485,7 +1488,7 @@ Next slice:
 
 - [x] Add inferred and corrected Client-Server native desktop and narrow visual fixtures.
 - [x] Capture and manually visually accept inferred and corrected Client-Server desktop and narrow baselines at `1600x900` and `960x720`.
-- [ ] Evaluate Client-Server inference confidence and correction frequency before exposing role evidence to OPY/Rig.
+- [x] Evaluate Client-Server inference confidence and correction frequency before exposing role evidence to OPY/Rig.
 
 ### Slice 41 Delivery Record
 
@@ -1502,5 +1505,24 @@ Delivered:
 
 Next slice:
 
-- [ ] Evaluate Client-Server inference confidence and correction frequency.
-- [ ] Define the evidence threshold required before exposing Client-Server role evidence to OPY/Rig.
+- [x] Evaluate Client-Server inference confidence and correction frequency.
+- [x] Define the evidence threshold required before exposing Client-Server role evidence to OPY/Rig.
+
+### Slice 42 Delivery Record
+
+**Completed**: 2026-07-13
+
+Delivered:
+
+- [x] Added a clone-isolated, hand-authored Client-Server gold corpus covering eight categories, 33 threshold-eligible assignments, and two explicit-role controls.
+- [x] Measured 31 correct and two incorrect eligible assignments: correction frequency `6.06%` and fallback rate `15.15%`.
+- [x] Evaluated only emitted confidence candidates: `0.65`, `0.70`, `0.80`, `0.85`, and `0.90`.
+- [x] Selected `0.70` as the lowest threshold with zero overconfident errors, `100%` exposed precision, `75.76%` coverage, and at least three correct examples for each recommended role.
+- [x] Qualified `client`, `service`, `domain`, `persistence`, and `external-dependency` for future OPY/Rig evidence exposure.
+- [x] Kept runtime telemetry, persistence, classifier tuning, and evidence-exposure UI outside this measurement slice.
+
+Next slice:
+
+- [ ] Design OPY/Rig Client-Server role-evidence exposure using only the five qualified roles at confidence `>= 0.70`.
+- [ ] Keep `unclassified` and below-threshold assignments withheld while preserving source and evidence provenance for qualified assignments.
+- [ ] Treat corpus expansion or classifier changes as threshold-invalidating changes that must rerun the exact evaluation contract.
