@@ -102,14 +102,26 @@ function scenarioPid(windows: CaptureWindow[], scenario: Scenario): number | und
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-function prepareWindowScript(
+export function prepareWindowScript(
   window: CaptureWindow,
   width: number,
   height: number,
   shouldResize: boolean,
 ): string {
-  const resize = shouldResize
-    ? `
+  const activation = `
+import AppKit
+import Foundation
+
+guard let app = NSRunningApplication(processIdentifier: pid_t(${window.pid})) else {
+  fatalError("c4-board process not found")
+}
+guard app.activate(options: [.activateIgnoringOtherApps]) else {
+  fatalError("c4-board process activation failed")
+}
+`;
+  if (!shouldResize) return activation;
+
+  const resize = `
 var position = CGPoint(x: 40, y: 40)
 var size = CGSize(width: ${width}, height: ${height})
 guard let positionValue = AXValueCreate(.cgPoint, &position),
@@ -118,22 +130,18 @@ guard let positionValue = AXValueCreate(.cgPoint, &position),
       AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue) == .success else {
   fatalError("c4-board window resize failed")
 }
-`
-    : "";
+`;
   return `
+${activation}
 import ApplicationServices
-import Foundation
 
-let app = AXUIElementCreateApplication(pid_t(${window.pid}))
+let axApp = AXUIElementCreateApplication(pid_t(${window.pid}))
 var value: CFTypeRef?
-guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &value) == .success,
       let windows = value as? [AXUIElement],
       windows.count == 1,
       let window = windows.first else {
   fatalError("c4-board AX windows not found")
-}
-guard AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue) == .success else {
-  fatalError("c4-board process activation failed")
 }
 ${resize}
 `;
@@ -174,12 +182,10 @@ async function main(args: string[]): Promise<void> {
   const selectedPid = requestedPid ?? scenarioPid(initialWindows, scenario);
   const selectedWindow = chooseCaptureWindow(initialWindows, selectedPid);
 
-  if (!skipResize) {
-    run("swift", [
-      "-e",
-      prepareWindowScript(selectedWindow, viewportSize.width, viewportSize.height, true),
-    ]);
-  }
+  run("swift", [
+    "-e",
+    prepareWindowScript(selectedWindow, viewportSize.width, viewportSize.height, !skipResize),
+  ]);
   await Bun.sleep(3_000);
 
   const resizedWindow = parseWindowCandidates(run("swift", ["-e", windowLookupScript]))
