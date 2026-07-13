@@ -243,6 +243,28 @@ describe("architecture role evaluation", () => {
     expectValidation(mutate(input()), problem, caseId);
   });
 
+  it("rejects a classifier role that is disallowed for the declared pattern", () => {
+    const candidate = input();
+    const firstClassification = candidate.classifications[0]!;
+    const firstAssignment = firstClassification.classification.assignments[0]!;
+    const classifications = candidate.classifications.map((entry, index) =>
+      index === 0
+        ? {
+          ...entry,
+          classification: {
+            ...entry.classification,
+            assignments: [
+              { ...firstAssignment, role: "publisher" as const },
+              ...entry.classification.assignments.slice(1),
+            ],
+          },
+        }
+        : entry
+    );
+
+    expectValidation({ ...candidate, classifications }, "role-pattern-mismatch", "case-a");
+  });
+
   it.each(
     [
       ["minimumPrecision below approved floor", { minimumPrecision: 0.979999, minimumCorrectPerRole: 3 }],

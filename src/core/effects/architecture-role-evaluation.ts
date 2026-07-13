@@ -4,6 +4,7 @@ import {
   type ArchitectureRoleClassification,
   type ArchitectureSemanticRole,
   getRolesForPattern,
+  isRoleAllowedForPattern,
 } from "./architecture-role-classification";
 
 export interface ArchitectureRoleGoldAssignment {
@@ -101,6 +102,7 @@ export interface ArchitectureRoleEvaluationValidationError {
     | "missing-assignment"
     | "invalid-assignment-confidence"
     | "pattern-mismatch"
+    | "role-pattern-mismatch"
     | "no-threshold-eligible-assignments"
     | "invalid-policy";
   readonly message: string;
@@ -295,6 +297,13 @@ export const evaluateArchitectureRoles = (
           "pattern-mismatch",
           caseId,
           `Assignment pattern '${prediction.pattern}' does not match '${input.pattern}'.`,
+        );
+      }
+      if (!isRoleAllowedForPattern(input.pattern, prediction.role)) {
+        return validationFailure(
+          "role-pattern-mismatch",
+          caseId,
+          `Assignment role '${prediction.role}' is not valid for ${input.pattern} classification.`,
         );
       }
       if (!Number.isFinite(prediction.confidence) || prediction.confidence < 0 || prediction.confidence > 1) {

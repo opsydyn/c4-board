@@ -36,10 +36,17 @@ export const runClientServerRoleEvaluationFromClassifications = (
         thresholdEligible: evalCase.thresholdEligible,
       }))
     ),
-    classifications: cases.map((evalCase) => ({
-      caseId: evalCase.id,
-      classification: classify(evalCase.nodes, evalCase.edges),
-    })),
+    classifications: cases.map((evalCase) => {
+      const goldNodeIds = new Set(Object.keys(evalCase.expectedRoles));
+      const classification = classify(evalCase.nodes, evalCase.edges);
+      return {
+        caseId: evalCase.id,
+        classification: {
+          ...classification,
+          assignments: classification.assignments.filter(({ nodeId }) => goldNodeIds.has(nodeId)),
+        },
+      };
+    }),
     policy: { minimumPrecision: 0.98, minimumCorrectPerRole: 3 },
   });
 

@@ -1,5 +1,6 @@
 import { inferClientServerRoles } from "@/core/effects/architecture-role-classification";
 import {
+  type ClientServerRoleEvalCase,
   getClientServerRoleEvalCases,
   validateClientServerRoleEvalCases,
 } from "@/core/effects/client-server-role-evals";
@@ -7,6 +8,7 @@ import {
   runClientServerRoleEvaluation,
   runClientServerRoleEvaluationFromClassifications,
 } from "@/core/effects/client-server-role-evaluation";
+import type { Edge, Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 const reverseAssignments: typeof inferClientServerRoles = (nodes, edges) => {
@@ -199,6 +201,47 @@ describe("Client-Server role evaluation", () => {
     );
 
     expect(reordered).toEqual(baseline);
+  });
+
+  it("evaluates only top-level gold nodes while classifying child-node topology", () => {
+    const canonical = getClientServerRoleEvalCases()[0]!;
+    const child: Node = {
+      id: "typed-service-child",
+      parentId: "typed-service",
+      type: "component",
+      position: { x: 0, y: 0 },
+      data: { label: "Internal Worker" },
+    };
+    const childEdge: Edge = {
+      id: "typed-service-child-edge",
+      source: "typed-service",
+      target: child.id,
+      label: "delegates",
+    };
+    const cases: ReadonlyArray<ClientServerRoleEvalCase> = [{
+      ...canonical,
+      nodes: [...canonical.nodes, child],
+      edges: [...canonical.edges, childEdge],
+    }];
+    let classifiedNodes: ReadonlyArray<Node> | undefined;
+    let classifiedEdges: ReadonlyArray<Edge> | undefined;
+    const classify: typeof inferClientServerRoles = (nodes, edges) => {
+      classifiedNodes = nodes;
+      classifiedEdges = edges;
+      return inferClientServerRoles(nodes, edges);
+    };
+
+    const result = runClientServerRoleEvaluationFromClassifications(cases, classify);
+
+    expect(result.status).toBe("success");
+    expect(classifiedNodes).toContainEqual(child);
+    expect(classifiedEdges).toContainEqual(childEdge);
+    if (result.status !== "success") return;
+    expect(result.evaluation).toMatchObject({
+      totalAssignmentCount: 6,
+      eligibleAssignmentCount: 6,
+      controlAssignmentCount: 0,
+    });
   });
 
   it("forwards corpus validation failures without invoking the classifier", () => {
