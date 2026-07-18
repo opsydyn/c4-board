@@ -11,9 +11,11 @@ import existing decision evidence, review OPY's structured interpretation, and
 explicitly confirm versioned decision records that future OPY analysis can
 search and cite.
 
-Architecture Decision Memory precedes the multi-alternative architecture
-workbench. Alternatives become more valuable once OPY can evaluate them against
-the organization's accepted, rejected, deprecated, and superseded decisions.
+Architecture Decision Memory follows the Rig/OPY/Azure prerequisite program
+defined in `2026-07-18-rig-opy-azure-prerequisites-design.md`, and precedes the
+multi-alternative architecture workbench. Alternatives become more valuable once
+OPY can evaluate them against the organization's accepted, rejected, deprecated,
+and superseded decisions.
 
 ## Product Decision
 
@@ -352,13 +354,14 @@ parsing and validation deterministic without requiring live provider calls.
 
 ## Roadmap Reconciliation
 
-Architecture Decision Memory becomes the next forward OPY feature stream. The
-existing Architecture Change Intelligence roadmap should be revised so:
+Architecture Decision Memory becomes the next forward OPY feature stream after
+the approved Rig/OPY/Azure prerequisite program. The existing Architecture
+Change Intelligence roadmap should be revised so:
 
 1. documentation reconciliation remains the immediate housekeeping slice;
-2. the Rig `0.30` to current-stable upgrade is a bounded enabler for structured
-   extraction and usage metadata, not the product headline;
-3. Architecture Decision Memory precedes multi-alternative proposals;
+2. the prerequisite program delivers the Rig `0.30` to current-stable upgrade,
+   OPY core stabilization, and safe/cited Azure intelligence first;
+3. Architecture Decision Memory then precedes multi-alternative proposals;
 4. decision search and conflict detection precede automatic use in mutation
    proposals; and
 5. the multi-alternative workbench becomes the first major consumer of durable
