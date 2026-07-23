@@ -70,7 +70,7 @@ export const savePosteeRequestDraft = (
       Effect.gen(function*() {
         yield* updatePosteeRequest(draft.request);
         yield* replacePosteeRequestHeaders(draft.request.id, headers);
-        yield* upsertPosteeRequestBody(draft.body);
+        yield* upsertPosteeRequestBody({ ...draft.body, request_id: draft.request.id });
       }),
     );
 

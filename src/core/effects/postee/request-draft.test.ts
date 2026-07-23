@@ -36,11 +36,13 @@ const draft: PosteeRequestDraft = {
 interface DatabaseRecorder {
   readonly transactionCalls: () => number;
   readonly executedSql: () => ReadonlyArray<string>;
+  readonly executedBindValues: () => ReadonlyArray<ReadonlyArray<unknown> | undefined>;
 }
 
 const makeDatabaseService = (body: PosteeRequestBody | null): [typeof DatabaseService.Service, DatabaseRecorder] => {
   let transactionCalls = 0;
   const executedSql: string[] = [];
+  const executedBindValues: Array<ReadonlyArray<unknown> | undefined> = [];
 
   const service: typeof DatabaseService.Service = {
     query: <T>(sql: string) => {
@@ -63,8 +65,9 @@ const makeDatabaseService = (body: PosteeRequestBody | null): [typeof DatabaseSe
 
       return Effect.succeed([] as T[]);
     },
-    execute: (sql: string) => {
+    execute: (sql: string, bindValues?: unknown[]) => {
       executedSql.push(sql);
+      executedBindValues.push(bindValues);
       return Effect.void;
     },
     transaction: (effect) => {
@@ -78,6 +81,7 @@ const makeDatabaseService = (body: PosteeRequestBody | null): [typeof DatabaseSe
     {
       transactionCalls: () => transactionCalls,
       executedSql: () => executedSql,
+      executedBindValues: () => executedBindValues,
     },
   ];
 };
@@ -126,5 +130,21 @@ describe("Postee request drafts", () => {
     );
     expect(recorder.executedSql().filter((sql) => sql.includes("INSERT INTO postee_request_headers"))).toHaveLength(1);
     expect(saved).toEqual(draft);
+  });
+
+  it("binds the saved body to the draft request", async () => {
+    const [service, recorder] = makeDatabaseService(persistedBody);
+    const draftWithMismatchedBody = {
+      ...draft,
+      body: { ...draft.body, request_id: "different-request" },
+    };
+
+    await runWithDatabase(savePosteeRequestDraft(draftWithMismatchedBody), service);
+
+    const bodyUpsertIndex = recorder
+      .executedSql()
+      .findIndex((sql) => sql.includes("INSERT INTO postee_request_bodies"));
+
+    expect(recorder.executedBindValues()[bodyUpsertIndex]?.[0]).toBe(request.id);
   });
 });
