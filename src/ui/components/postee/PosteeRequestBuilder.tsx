@@ -10,14 +10,16 @@
  */
 
 import type { PosteeEnvironment, PosteeEnvironmentVariable, PosteeRequest } from "@/core/effects/database.postee";
+import type { PosteeRequestDraft } from "@/core/effects/postee";
 import type { HttpMethod } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
+import type { RequestDraftSaveState } from "@/ui/machines/postee.machine";
 import {
   CheckCircleIcon as CheckCircle,
   SpinnerGapIcon as SpinnerGap,
   WarningIcon as Warning,
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 import { type Header, HeadersEditor } from "./HeadersEditor";
@@ -68,6 +70,8 @@ export interface PosteeRequestBuilderProps {
 
   // Request state
   selectedRequest: PosteeRequest | null;
+  selectedRequestDraft: PosteeRequestDraft | null;
+  requestDraftSave: RequestDraftSaveState;
 
   // Request execution state
   isInitialising: boolean;
@@ -85,7 +89,7 @@ export interface PosteeRequestBuilderProps {
 
   // Callbacks
   onCreateRequest: (method: HttpMethod, name: string, url: string) => void;
-  onUpdateRequest: (name: string, method: HttpMethod, url: string) => void;
+  onSaveRequestDraft: (draft: PosteeRequestDraft) => void;
   onRunRequest: () => void;
   onCancelRequest: () => void;
   onCreateEnvironment: (name: string) => void;
@@ -96,6 +100,8 @@ export interface PosteeRequestBuilderProps {
 export function PosteeRequestBuilder({
   activeCollectionId,
   selectedRequest,
+  selectedRequestDraft,
+  requestDraftSave,
   isInitialising,
   isRunning,
   canRunRequest,
@@ -105,7 +111,7 @@ export function PosteeRequestBuilder({
   currentEnvironmentId,
   currentVariables,
   onCreateRequest,
-  onUpdateRequest,
+  onSaveRequestDraft,
   onRunRequest,
   onCancelRequest,
   onCreateEnvironment,
@@ -132,6 +138,17 @@ export function PosteeRequestBuilder({
   const [activeTab, setActiveTab] = useState<"Body" | "Headers" | "Environment">("Body");
   const [requestHeaders, setRequestHeaders] = useState<Header[]>([]);
   const [requestBody, setRequestBody] = useState<string>("{}");
+  const [requestBodyMode, setRequestBodyMode] = useState("json");
+  const [bodyWasEdited, setBodyWasEdited] = useState(false);
+  const hydratedRequestIdRef = useRef<string | null>(null);
+  const editVersionRef = useRef(0);
+  const pendingSaveRef = useRef<
+    {
+      readonly requestId: string;
+      readonly serverRevision: number;
+      readonly editVersion: number;
+    } | null
+  >(null);
 
   // Environment creation state
   const [newEnvironmentName, setNewEnvironmentName] = useState("");
@@ -141,49 +158,169 @@ export function PosteeRequestBuilder({
     return validateUrl(requestUrl);
   }, [requestUrl]);
 
-  // Sync unified bar with selected request
+  // Replace the complete local editor state when request identity changes.
   useEffect(() => {
     if (!selectedRequest) {
-      // New request mode - clear the bar
       setRequestUrl("");
       setRequestMethod("GET");
+      setRequestHeaders([]);
+      setRequestBody("{}");
+      setRequestBodyMode("json");
+      setBodyWasEdited(false);
       setHasUnsavedChanges(false);
+      hydratedRequestIdRef.current = null;
+      editVersionRef.current = 0;
+      pendingSaveRef.current = null;
       return;
     }
 
-    // Edit mode - populate from selected request
+    if (
+      !selectedRequestDraft
+      || selectedRequestDraft.request.id !== selectedRequest.id
+    ) {
+      if (hydratedRequestIdRef.current !== selectedRequest.id) {
+        setRequestUrl(selectedRequest.url);
+        setRequestMethod(selectedRequest.method as HttpMethod);
+        setRequestHeaders([]);
+        setRequestBody("{}");
+        setRequestBodyMode("json");
+        setBodyWasEdited(false);
+        setHasUnsavedChanges(false);
+        editVersionRef.current = 0;
+        pendingSaveRef.current = null;
+      }
+      return;
+    }
+
+    if (hydratedRequestIdRef.current === selectedRequest.id) {
+      return;
+    }
+
     setRequestUrl(selectedRequest.url);
     setRequestMethod(selectedRequest.method as HttpMethod);
+    setRequestHeaders(selectedRequestDraft.headers.map((header) => ({ ...header })));
+    setRequestBody(selectedRequestDraft.body.raw ?? "");
+    setRequestBodyMode(selectedRequestDraft.body.mode);
+    setBodyWasEdited(false);
     setHasUnsavedChanges(false);
-  }, [selectedRequest]);
+    hydratedRequestIdRef.current = selectedRequest.id;
+    editVersionRef.current = 0;
+    pendingSaveRef.current = null;
+  }, [selectedRequest, selectedRequestDraft]);
+
+  useEffect(() => {
+    const pendingSave = pendingSaveRef.current;
+    if (
+      !pendingSave
+      || requestDraftSave.status !== "success"
+      || requestDraftSave.requestId !== pendingSave.requestId
+      || requestDraftSave.revision <= pendingSave.serverRevision
+    ) {
+      return;
+    }
+
+    pendingSaveRef.current = null;
+    if (
+      selectedRequest?.id === pendingSave.requestId
+      && editVersionRef.current === pendingSave.editVersion
+    ) {
+      setHasUnsavedChanges(false);
+      setBodyWasEdited(false);
+      setRequestBodyMode((mode) => bodyWasEdited ? "json" : mode);
+    }
+  }, [
+    bodyWasEdited,
+    requestDraftSave.requestId,
+    requestDraftSave.revision,
+    requestDraftSave.status,
+    selectedRequest?.id,
+  ]);
+
+  const markDirty = useCallback(() => {
+    editVersionRef.current += 1;
+    setHasUnsavedChanges(true);
+  }, []);
 
   // Track changes to detect unsaved state
   const handleUrlChange = useCallback((newUrl: string) => {
     setRequestUrl(newUrl);
-    setHasUnsavedChanges(true);
-  }, []);
+    markDirty();
+  }, [markDirty]);
 
   const handleMethodChange = useCallback((newMethod: HttpMethod) => {
     setRequestMethod(newMethod);
-    setHasUnsavedChanges(true);
-  }, []);
+    markDirty();
+  }, [markDirty]);
+
+  const handleHeadersChange = useCallback((headers: Header[]) => {
+    setRequestHeaders(headers);
+    markDirty();
+  }, [markDirty]);
+
+  const handleBodyChange = useCallback((body: string) => {
+    setRequestBody(body);
+    setBodyWasEdited(true);
+    markDirty();
+  }, [markDirty]);
 
   // Save action (create new or update existing)
   const handleSave = useCallback(() => {
     const trimmedUrl = requestUrl.trim();
     if (!trimmedUrl || !activeCollectionId) return;
 
-    if (selectedRequest) {
-      // Update existing request
-      onUpdateRequest(selectedRequest.name, requestMethod, trimmedUrl);
+    if (
+      selectedRequest
+      && selectedRequestDraft
+      && selectedRequest.id === selectedRequestDraft.request.id
+    ) {
+      pendingSaveRef.current = {
+        requestId: selectedRequest.id,
+        serverRevision: requestDraftSave.revision,
+        editVersion: editVersionRef.current,
+      };
+      onSaveRequestDraft({
+        request: {
+          ...selectedRequestDraft.request,
+          method: requestMethod,
+          url: trimmedUrl,
+        },
+        headers: requestHeaders,
+        body: {
+          ...selectedRequestDraft.body,
+          mode: bodyWasEdited ? "json" : requestBodyMode,
+          raw: requestBody,
+        },
+      });
     } else {
-      // Create new request with auto-generated name
       const name = `New ${requestMethod} Request`;
       onCreateRequest(requestMethod, name, trimmedUrl);
+      setHasUnsavedChanges(false);
     }
+  }, [
+    activeCollectionId,
+    bodyWasEdited,
+    onCreateRequest,
+    onSaveRequestDraft,
+    requestBody,
+    requestBodyMode,
+    requestDraftSave.revision,
+    requestHeaders,
+    requestMethod,
+    requestUrl,
+    selectedRequest,
+    selectedRequestDraft,
+  ]);
 
-    setHasUnsavedChanges(false);
-  }, [requestUrl, requestMethod, selectedRequest, activeCollectionId, onCreateRequest, onUpdateRequest]);
+  const isMatchingSave = Boolean(
+    selectedRequest
+      && requestDraftSave.status === "saving"
+      && requestDraftSave.requestId === selectedRequest.id,
+  );
+  const matchingSaveError = selectedRequest
+      && requestDraftSave.status === "error"
+      && requestDraftSave.requestId === selectedRequest.id
+    ? requestDraftSave.error
+    : null;
 
   // Handle environment creation
   const handleCreateEnvironment = useCallback((event: React.SubmitEvent<HTMLFormElement>) => {
@@ -202,7 +339,7 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + Enter: Send request
       if (modKey && event.key === "Enter") {
         event.preventDefault();
-        if (canRunRequest && !isRunning) {
+        if (canRunRequest && !isRunning && !hasUnsavedChanges && !isMatchingSave) {
           onRunRequest();
         }
         return;
@@ -220,7 +357,16 @@ export function PosteeRequestBuilder({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canRunRequest, isRunning, hasUnsavedChanges, requestUrl, activeCollectionId, onRunRequest, handleSave]);
+  }, [
+    activeCollectionId,
+    canRunRequest,
+    handleSave,
+    hasUnsavedChanges,
+    isMatchingSave,
+    isRunning,
+    onRunRequest,
+    requestUrl,
+  ]);
 
   return (
     <>
@@ -259,9 +405,12 @@ export function PosteeRequestBuilder({
                 type="button"
                 className={styles.saveButton}
                 onClick={handleSave}
-                disabled={!requestUrl.trim() || !activeCollectionId}
+                disabled={!requestUrl.trim()
+                  || !activeCollectionId
+                  || isMatchingSave
+                  || Boolean(selectedRequest && !selectedRequestDraft)}
               >
-                Save
+                {isMatchingSave ? "Saving..." : "Save"}
               </button>
             </Tooltip>
           )}
@@ -321,6 +470,13 @@ export function PosteeRequestBuilder({
           </div>
         )}
 
+        {matchingSaveError && hasUnsavedChanges && (
+          <div className={styles.validationError} role="alert">
+            <Warning size={14} weight="bold" />
+            <span>{matchingSaveError}</span>
+          </div>
+        )}
+
         {!activeCollectionId && (
           <div className={styles.emptyState}>
             <strong>Select a collection</strong>
@@ -358,7 +514,7 @@ export function PosteeRequestBuilder({
             <TabPanel id="Body" className={styles.tabContent}>
               <MonacoJsonEditor
                 value={requestBody}
-                onChange={setRequestBody}
+                onChange={handleBodyChange}
                 height="300px"
                 placeholder="{}"
               />
@@ -366,7 +522,7 @@ export function PosteeRequestBuilder({
             <TabPanel id="Headers" className={styles.tabContent}>
               <HeadersEditor
                 headers={requestHeaders}
-                onChange={setRequestHeaders}
+                onChange={handleHeadersChange}
               />
             </TabPanel>
             <TabPanel id="Environment" className={styles.tabContent}>

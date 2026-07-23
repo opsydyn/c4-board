@@ -9,6 +9,7 @@
  */
 
 import type { PosteeCollection, PosteeRequest } from "@/core/effects/database.postee";
+import type { PosteeRequestDraft } from "@/core/effects/postee";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMachine } from "@xstate/react";
 import { nanoid } from "nanoid";
@@ -41,6 +42,8 @@ export function PosteeWorkspace() {
   const {
     collections,
     requestsByCollection,
+    requestDrafts,
+    requestDraftSave,
     activeCollectionId,
     activeRequestId,
     activeEnvironmentId,
@@ -75,6 +78,9 @@ export function PosteeWorkspace() {
   // Additional derived state (not in machine)
   const lastResponse = runner.response;
   const lastResponseDurationMs = lastResponse ? durationToMillis(lastResponse.duration) : null;
+  const selectedRequestDraft = selectedRequest
+    ? requestDrafts[selectedRequest.id] ?? null
+    : null;
 
   const currentEnvironmentId = activeEnvironmentId
     ? (activeEnvironmentId as unknown as string)
@@ -215,23 +221,16 @@ export function PosteeWorkspace() {
     [activeCollectionKey, send],
   );
 
-  const handleUpdateRequest = useCallback(
-    (name: string, method: HttpMethod, url: string) => {
-      if (!selectedRequest) return;
-
+  const handleSaveRequestDraft = useCallback(
+    (draft: PosteeRequestDraft) => {
       send(
         {
-          type: "UPDATE_REQUEST_METADATA",
-          payload: {
-            id: RequestIdBrand(selectedRequest.id),
-            name,
-            method,
-            url,
-          },
+          type: "SAVE_REQUEST_DRAFT",
+          draft,
         } satisfies PosteeEvent,
       );
     },
-    [selectedRequest, send],
+    [send],
   );
 
   const handleRunRequest = useCallback(() => {
@@ -463,6 +462,8 @@ export function PosteeWorkspace() {
         <PosteeRequestBuilder
           activeCollectionId={activeCollectionKey}
           selectedRequest={selectedRequest}
+          selectedRequestDraft={selectedRequestDraft}
+          requestDraftSave={requestDraftSave}
           isInitialising={isInitialising}
           isRunning={isRunning}
           canRunRequest={canRunRequest}
@@ -472,7 +473,7 @@ export function PosteeWorkspace() {
           currentEnvironmentId={currentEnvironmentId}
           currentVariables={currentVariables}
           onCreateRequest={handleCreateRequest}
-          onUpdateRequest={handleUpdateRequest}
+          onSaveRequestDraft={handleSaveRequestDraft}
           onRunRequest={handleRunRequest}
           onCancelRequest={handleCancelRequest}
           onCreateEnvironment={handleCreateEnvironment}
