@@ -10,14 +10,16 @@
  */
 
 import type { PosteeEnvironment, PosteeEnvironmentVariable, PosteeRequest } from "@/core/effects/database.postee";
+import type { PosteeRequestDraft } from "@/core/effects/postee";
 import type { HttpMethod } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
+import type { RequestDraftSaveState } from "@/ui/machines/postee.machine";
 import {
   CheckCircleIcon as CheckCircle,
   SpinnerGapIcon as SpinnerGap,
   WarningIcon as Warning,
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 import { type Header, HeadersEditor } from "./HeadersEditor";
@@ -68,6 +70,8 @@ export interface PosteeRequestBuilderProps {
 
   // Request state
   selectedRequest: PosteeRequest | null;
+  selectedRequestDraft: PosteeRequestDraft | null;
+  requestDraftSave: RequestDraftSaveState;
 
   // Request execution state
   isInitialising: boolean;
@@ -85,7 +89,7 @@ export interface PosteeRequestBuilderProps {
 
   // Callbacks
   onCreateRequest: (method: HttpMethod, name: string, url: string) => void;
-  onUpdateRequest: (name: string, method: HttpMethod, url: string) => void;
+  onSaveRequestDraft: (draft: PosteeRequestDraft) => void;
   onRunRequest: () => void;
   onCancelRequest: () => void;
   onCreateEnvironment: (name: string) => void;
@@ -93,9 +97,95 @@ export interface PosteeRequestBuilderProps {
   onVariablesChange: (variables: PosteeEnvironmentVariable[]) => void;
 }
 
+interface PendingRequestDraftSave {
+  readonly requestId: string;
+  readonly serverRevision: number;
+  readonly editVersion: number;
+}
+
+interface RequestEditorLocalState {
+  readonly requestUrl: string;
+  readonly requestMethod: string;
+  readonly requestHeaders: ReadonlyArray<Header>;
+  readonly requestBody: string;
+  readonly requestBodyMode: string;
+}
+
+interface RequestEditorPresentationInput {
+  readonly selectedRequest: PosteeRequest | null;
+  readonly selectedRequestDraft: PosteeRequestDraft | null;
+  readonly hydratedRequestId: string | null;
+  readonly pendingSave: PendingRequestDraftSave | null;
+  readonly requestDraftSave: RequestDraftSaveState;
+  readonly currentEditVersion: number;
+  readonly local: RequestEditorLocalState;
+}
+
+interface RequestEditorPresentation extends RequestEditorLocalState {
+  readonly synchronized: boolean;
+}
+
+export const deriveRequestEditorPresentation = ({
+  selectedRequest,
+  selectedRequestDraft,
+  hydratedRequestId,
+  pendingSave,
+  requestDraftSave,
+  currentEditVersion,
+  local,
+}: RequestEditorPresentationInput): RequestEditorPresentation => {
+  const selectedRequestId = selectedRequest?.id ?? null;
+  const confirmedDraftMatches = Boolean(
+    selectedRequestId
+      && selectedRequestDraft?.request.id === selectedRequestId,
+  );
+  const awaitingCanonicalCompletion = Boolean(
+    pendingSave
+      && selectedRequestId === pendingSave.requestId
+      && requestDraftSave.status === "success"
+      && requestDraftSave.requestId === pendingSave.requestId
+      && requestDraftSave.revision > pendingSave.serverRevision
+      && currentEditVersion === pendingSave.editVersion,
+  );
+  const identitySynchronized = selectedRequestId === null
+    ? hydratedRequestId === null
+    : confirmedDraftMatches && hydratedRequestId === selectedRequestId;
+  const synchronized = identitySynchronized && !awaitingCanonicalCompletion;
+
+  if (synchronized) {
+    return { ...local, synchronized };
+  }
+
+  if (selectedRequest && selectedRequestDraft?.request.id === selectedRequest.id) {
+    return {
+      synchronized,
+      requestUrl: selectedRequestDraft.request.url,
+      requestMethod: selectedRequestDraft.request.method,
+      requestHeaders: selectedRequestDraft.headers.map((header) => ({ ...header })),
+      requestBody: selectedRequestDraft.body.raw ?? "",
+      requestBodyMode: selectedRequestDraft.body.mode,
+    };
+  }
+
+  if (selectedRequest) {
+    return {
+      synchronized,
+      requestUrl: selectedRequest.url,
+      requestMethod: selectedRequest.method,
+      requestHeaders: [],
+      requestBody: "{}",
+      requestBodyMode: "json",
+    };
+  }
+
+  return { ...local, synchronized };
+};
+
 export function PosteeRequestBuilder({
   activeCollectionId,
   selectedRequest,
+  selectedRequestDraft,
+  requestDraftSave,
   isInitialising,
   isRunning,
   canRunRequest,
@@ -105,7 +195,7 @@ export function PosteeRequestBuilder({
   currentEnvironmentId,
   currentVariables,
   onCreateRequest,
-  onUpdateRequest,
+  onSaveRequestDraft,
   onRunRequest,
   onCancelRequest,
   onCreateEnvironment,
@@ -132,58 +222,239 @@ export function PosteeRequestBuilder({
   const [activeTab, setActiveTab] = useState<"Body" | "Headers" | "Environment">("Body");
   const [requestHeaders, setRequestHeaders] = useState<Header[]>([]);
   const [requestBody, setRequestBody] = useState<string>("{}");
+  const [requestBodyMode, setRequestBodyMode] = useState("json");
+  const [bodyWasEdited, setBodyWasEdited] = useState(false);
+  const [hydratedRequestId, setHydratedRequestId] = useState<string | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingRequestDraftSave | null>(null);
+  const editVersionsRef = useRef<Record<string, number>>({});
 
   // Environment creation state
   const [newEnvironmentName, setNewEnvironmentName] = useState("");
 
+  const currentEditVersion = selectedRequest
+    ? editVersionsRef.current[selectedRequest.id] ?? 0
+    : editVersionsRef.current.__new_request__ ?? 0;
+  const editorPresentation = deriveRequestEditorPresentation({
+    selectedRequest,
+    selectedRequestDraft,
+    hydratedRequestId,
+    pendingSave,
+    requestDraftSave,
+    currentEditVersion,
+    local: {
+      requestUrl,
+      requestMethod,
+      requestHeaders,
+      requestBody,
+      requestBodyMode,
+    },
+  });
+  const isEditorSynchronized = editorPresentation.synchronized;
+
   // URL validation - runs on every URL change
   const urlValidation = useMemo<UrlValidationResult>(() => {
-    return validateUrl(requestUrl);
-  }, [requestUrl]);
+    return validateUrl(editorPresentation.requestUrl);
+  }, [editorPresentation.requestUrl]);
 
-  // Sync unified bar with selected request
-  useEffect(() => {
+  const applyConfirmedDraft = useCallback((draft: PosteeRequestDraft) => {
+    setRequestUrl(draft.request.url);
+    setRequestMethod(draft.request.method as HttpMethod);
+    setRequestHeaders(draft.headers.map((header) => ({ ...header })));
+    setRequestBody(draft.body.raw ?? "");
+    setRequestBodyMode(draft.body.mode);
+    setBodyWasEdited(false);
+    setHasUnsavedChanges(false);
+    setHydratedRequestId(draft.request.id);
+  }, []);
+
+  // Replace the complete local editor state when request identity changes.
+  useLayoutEffect(() => {
     if (!selectedRequest) {
-      // New request mode - clear the bar
       setRequestUrl("");
       setRequestMethod("GET");
+      setRequestHeaders([]);
+      setRequestBody("{}");
+      setRequestBodyMode("json");
+      setBodyWasEdited(false);
       setHasUnsavedChanges(false);
+      setHydratedRequestId(null);
       return;
     }
 
-    // Edit mode - populate from selected request
-    setRequestUrl(selectedRequest.url);
-    setRequestMethod(selectedRequest.method as HttpMethod);
-    setHasUnsavedChanges(false);
-  }, [selectedRequest]);
+    if (
+      !selectedRequestDraft
+      || selectedRequestDraft.request.id !== selectedRequest.id
+    ) {
+      if (hydratedRequestId !== selectedRequest.id) {
+        setRequestUrl(selectedRequest.url);
+        setRequestMethod(selectedRequest.method as HttpMethod);
+        setRequestHeaders([]);
+        setRequestBody("{}");
+        setRequestBodyMode("json");
+        setBodyWasEdited(false);
+        setHasUnsavedChanges(false);
+      }
+      return;
+    }
+
+    if (hydratedRequestId === selectedRequest.id) {
+      return;
+    }
+
+    applyConfirmedDraft(selectedRequestDraft);
+  }, [applyConfirmedDraft, hydratedRequestId, selectedRequest, selectedRequestDraft]);
+
+  useLayoutEffect(() => {
+    if (
+      !pendingSave
+    ) {
+      return;
+    }
+
+    if (
+      requestDraftSave.status === "error"
+      && requestDraftSave.requestId === pendingSave.requestId
+    ) {
+      setPendingSave(null);
+      return;
+    }
+
+    if (
+      requestDraftSave.status !== "success"
+      || requestDraftSave.requestId !== pendingSave.requestId
+      || requestDraftSave.revision <= pendingSave.serverRevision
+    ) {
+      return;
+    }
+
+    if (
+      selectedRequest?.id === pendingSave.requestId
+      && selectedRequestDraft?.request.id === pendingSave.requestId
+      && (editVersionsRef.current[pendingSave.requestId] ?? 0) === pendingSave.editVersion
+    ) {
+      applyConfirmedDraft(selectedRequestDraft);
+    }
+    setPendingSave(null);
+  }, [
+    applyConfirmedDraft,
+    pendingSave,
+    requestDraftSave.requestId,
+    requestDraftSave.revision,
+    requestDraftSave.status,
+    selectedRequest?.id,
+    selectedRequestDraft,
+  ]);
+
+  const markDirty = useCallback(() => {
+    const requestId = selectedRequest?.id ?? "__new_request__";
+    editVersionsRef.current[requestId] = (editVersionsRef.current[requestId] ?? 0) + 1;
+    setHasUnsavedChanges(true);
+  }, [selectedRequest?.id]);
 
   // Track changes to detect unsaved state
   const handleUrlChange = useCallback((newUrl: string) => {
+    if (isRunning || !isEditorSynchronized) return;
     setRequestUrl(newUrl);
-    setHasUnsavedChanges(true);
-  }, []);
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
 
   const handleMethodChange = useCallback((newMethod: HttpMethod) => {
+    if (isRunning || !isEditorSynchronized) return;
     setRequestMethod(newMethod);
-    setHasUnsavedChanges(true);
-  }, []);
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
+
+  const handleHeadersChange = useCallback((headers: Header[]) => {
+    if (isRunning || !isEditorSynchronized) return;
+    setRequestHeaders(headers);
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
+
+  const handleBodyChange = useCallback((body: string) => {
+    if (isRunning || !isEditorSynchronized) return;
+    setRequestBody(body);
+    setBodyWasEdited(true);
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
+
+  const activeSaveRequestId = requestDraftSave.status === "saving"
+    ? requestDraftSave.requestId
+    : pendingSave?.requestId ?? null;
+  const isAnySaveActive = requestDraftSave.status === "saving" || pendingSave !== null;
+  const isMatchingSave = Boolean(
+    selectedRequest
+      && isAnySaveActive
+      && activeSaveRequestId === selectedRequest.id,
+  );
+  const isAnotherRequestSaving = Boolean(
+    selectedRequest
+      && isAnySaveActive
+      && activeSaveRequestId !== selectedRequest.id,
+  );
+  const visibleHasUnsavedChanges = isEditorSynchronized && hasUnsavedChanges;
 
   // Save action (create new or update existing)
   const handleSave = useCallback(() => {
     const trimmedUrl = requestUrl.trim();
-    if (!trimmedUrl || !activeCollectionId) return;
+    if (
+      !trimmedUrl
+      || !activeCollectionId
+      || isAnySaveActive
+      || !isEditorSynchronized
+      || isRunning
+    ) return;
 
-    if (selectedRequest) {
-      // Update existing request
-      onUpdateRequest(selectedRequest.name, requestMethod, trimmedUrl);
+    if (
+      selectedRequest
+      && selectedRequestDraft
+      && selectedRequest.id === selectedRequestDraft.request.id
+    ) {
+      setPendingSave({
+        requestId: selectedRequest.id,
+        serverRevision: requestDraftSave.revision,
+        editVersion: editVersionsRef.current[selectedRequest.id] ?? 0,
+      });
+      onSaveRequestDraft({
+        request: {
+          ...selectedRequestDraft.request,
+          method: requestMethod,
+          url: trimmedUrl,
+        },
+        headers: requestHeaders,
+        body: {
+          ...selectedRequestDraft.body,
+          mode: bodyWasEdited ? "json" : requestBodyMode,
+          raw: requestBody,
+        },
+      });
     } else {
-      // Create new request with auto-generated name
       const name = `New ${requestMethod} Request`;
       onCreateRequest(requestMethod, name, trimmedUrl);
+      setHasUnsavedChanges(false);
     }
+  }, [
+    activeCollectionId,
+    bodyWasEdited,
+    isAnySaveActive,
+    isEditorSynchronized,
+    isRunning,
+    onCreateRequest,
+    onSaveRequestDraft,
+    requestBody,
+    requestBodyMode,
+    requestDraftSave.revision,
+    requestHeaders,
+    requestMethod,
+    requestUrl,
+    selectedRequest,
+    selectedRequestDraft,
+  ]);
 
-    setHasUnsavedChanges(false);
-  }, [requestUrl, requestMethod, selectedRequest, activeCollectionId, onCreateRequest, onUpdateRequest]);
+  const matchingSaveError = selectedRequest
+      && requestDraftSave.status === "error"
+      && requestDraftSave.requestId === selectedRequest.id
+    ? requestDraftSave.error
+    : null;
 
   // Handle environment creation
   const handleCreateEnvironment = useCallback((event: React.SubmitEvent<HTMLFormElement>) => {
@@ -202,7 +473,13 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + Enter: Send request
       if (modKey && event.key === "Enter") {
         event.preventDefault();
-        if (canRunRequest && !isRunning) {
+        if (
+          canRunRequest
+          && !isRunning
+          && !hasUnsavedChanges
+          && !isAnySaveActive
+          && isEditorSynchronized
+        ) {
           onRunRequest();
         }
         return;
@@ -211,7 +488,14 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + S: Save changes
       if (modKey && event.key === "s") {
         event.preventDefault();
-        if (hasUnsavedChanges && requestUrl.trim() && activeCollectionId) {
+        if (
+          hasUnsavedChanges
+          && requestUrl.trim()
+          && activeCollectionId
+          && !isAnySaveActive
+          && isEditorSynchronized
+          && !isRunning
+        ) {
           handleSave();
         }
         return;
@@ -220,7 +504,39 @@ export function PosteeRequestBuilder({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canRunRequest, isRunning, hasUnsavedChanges, requestUrl, activeCollectionId, onRunRequest, handleSave]);
+  }, [
+    activeCollectionId,
+    canRunRequest,
+    handleSave,
+    hasUnsavedChanges,
+    isAnySaveActive,
+    isEditorSynchronized,
+    isRunning,
+    onRunRequest,
+    requestUrl,
+  ]);
+
+  const globalSaveMessage = isAnotherRequestSaving
+    ? "Another request is saving. Save and Send are temporarily unavailable."
+    : "Saving request details. Save and Send are temporarily unavailable.";
+  const saveCommandDescription = isAnotherRequestSaving
+    ? "Another request is saving. Save is temporarily unavailable."
+    : isRunning
+    ? "Request is running. Save is temporarily unavailable."
+    : !isEditorSynchronized
+    ? "Request details are synchronising. Save is temporarily unavailable."
+    : selectedRequest
+    ? "Save changes (Cmd+S)"
+    : "Save as new request (Cmd+S)";
+  const sendCommandDescription = isAnotherRequestSaving
+    ? "Another request is saving. Send is temporarily unavailable."
+    : isMatchingSave
+    ? "This request is saving. Send is temporarily unavailable."
+    : !isEditorSynchronized
+    ? "Request details are synchronising. Send is temporarily unavailable."
+    : canRunRequest
+    ? "Send request (Cmd+Enter)"
+    : "Save request first";
 
   return (
     <>
@@ -228,10 +544,10 @@ export function PosteeRequestBuilder({
       <section className={styles.requestBar}>
         <div className={styles.requestBarRow}>
           <Select
-            value={requestMethod}
+            value={editorPresentation.requestMethod as HttpMethod}
             options={methodOptions}
             onChange={handleMethodChange}
-            disabled={!activeCollectionId || isInitialising}
+            disabled={!activeCollectionId || isInitialising || !isEditorSynchronized || isRunning}
           />
           <div className={styles.urlInputWrapper}>
             <input
@@ -242,30 +558,36 @@ export function PosteeRequestBuilder({
                 : selectedRequest
                 ? "Enter request URL"
                 : "Enter URL and Save to create new request"}
-              value={requestUrl}
+              value={editorPresentation.requestUrl}
               onChange={(e) => handleUrlChange(e.target.value)}
-              disabled={!activeCollectionId || isInitialising}
+              disabled={!activeCollectionId || isInitialising || !isEditorSynchronized || isRunning}
               aria-label="Request URL"
               data-validation={urlValidation._tag.toLowerCase()}
             />
-            {urlValidation._tag === "Valid" && requestUrl.trim() !== "" && (
+            {urlValidation._tag === "Valid" && editorPresentation.requestUrl.trim() !== "" && (
               <CheckCircle size={16} weight="bold" className={styles.urlValidIcon} />
             )}
             {urlValidation._tag === "Invalid" && <Warning size={16} weight="bold" className={styles.urlInvalidIcon} />}
           </div>
-          {hasUnsavedChanges && (
-            <Tooltip content={selectedRequest ? "Save changes (Cmd+S)" : "Save as new request (Cmd+S)"}>
+          {visibleHasUnsavedChanges && (
+            <Tooltip content={saveCommandDescription}>
               <button
                 type="button"
                 className={styles.saveButton}
                 onClick={handleSave}
-                disabled={!requestUrl.trim() || !activeCollectionId}
+                disabled={!editorPresentation.requestUrl.trim()
+                  || !activeCollectionId
+                  || isAnySaveActive
+                  || !isEditorSynchronized
+                  || isRunning
+                  || Boolean(selectedRequest && !selectedRequestDraft)}
+                title={saveCommandDescription}
               >
-                Save
+                {isMatchingSave ? "Saving..." : "Save"}
               </button>
             </Tooltip>
           )}
-          {selectedRequest && !hasUnsavedChanges && (
+          {selectedRequest && (!visibleHasUnsavedChanges || isRunning) && (
             <div className={styles.actionRow}>
               {isRunning
                 ? (
@@ -281,12 +603,13 @@ export function PosteeRequestBuilder({
                   </Tooltip>
                 )
                 : (
-                  <Tooltip content={canRunRequest ? "Send request (Cmd+Enter)" : "Save request first"}>
+                  <Tooltip content={sendCommandDescription}>
                     <button
                       type="button"
                       className={styles.runButton}
                       onClick={onRunRequest}
-                      disabled={!canRunRequest}
+                      disabled={!canRunRequest || isAnySaveActive || !isEditorSynchronized}
+                      title={sendCommandDescription}
                     >
                       Send
                     </button>
@@ -304,6 +627,13 @@ export function PosteeRequestBuilder({
           )}
         </div>
 
+        {isAnySaveActive && (
+          <div className={styles.validationError} role="status" aria-live="polite">
+            <SpinnerGap size={14} weight="bold" className={styles.spinner} />
+            <span>{globalSaveMessage}</span>
+          </div>
+        )}
+
         {/* URL Validation Error Message */}
         {urlValidation._tag === "Invalid" && (
           <div className={styles.validationError}>
@@ -314,10 +644,18 @@ export function PosteeRequestBuilder({
                 type="button"
                 className={styles.suggestionButton}
                 onClick={() => handleUrlChange(urlValidation.suggestion!)}
+                disabled={!isEditorSynchronized || isRunning}
               >
                 Use: {urlValidation.suggestion}
               </button>
             )}
+          </div>
+        )}
+
+        {matchingSaveError && hasUnsavedChanges && (
+          <div className={styles.validationError} role="alert">
+            <Warning size={14} weight="bold" />
+            <span>{matchingSaveError}</span>
           </div>
         )}
 
@@ -337,14 +675,18 @@ export function PosteeRequestBuilder({
           </div>
         )}
 
-        {!isInitialising && activeCollectionId && !selectedRequest && requestUrl.trim() === "" && (
-          <div className={styles.emptyState}>
-            <strong>Enter a URL to create a new request</strong>
-            <span>
-              Or select an existing request from the sidebar to edit it.
-            </span>
-          </div>
-        )}
+        {!isInitialising
+          && activeCollectionId
+          && !selectedRequest
+          && editorPresentation.requestUrl.trim() === ""
+          && (
+            <div className={styles.emptyState}>
+              <strong>Enter a URL to create a new request</strong>
+              <span>
+                Or select an existing request from the sidebar to edit it.
+              </span>
+            </div>
+          )}
       </section>
 
       {/* Request Details - Only show when request is selected */}
@@ -357,16 +699,18 @@ export function PosteeRequestBuilder({
           >
             <TabPanel id="Body" className={styles.tabContent}>
               <MonacoJsonEditor
-                value={requestBody}
-                onChange={setRequestBody}
+                value={editorPresentation.requestBody}
+                onChange={handleBodyChange}
+                readOnly={!isEditorSynchronized || isRunning}
                 height="300px"
                 placeholder="{}"
               />
             </TabPanel>
             <TabPanel id="Headers" className={styles.tabContent}>
               <HeadersEditor
-                headers={requestHeaders}
-                onChange={setRequestHeaders}
+                headers={editorPresentation.requestHeaders.map((header) => ({ ...header }))}
+                onChange={handleHeadersChange}
+                disabled={!isEditorSynchronized || isRunning}
               />
             </TabPanel>
             <TabPanel id="Environment" className={styles.tabContent}>

@@ -31,10 +31,21 @@ export interface Header {
 interface HeadersEditorProps {
   headers: Header[];
   onChange: (headers: Header[]) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
 }
 
-export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
+export function HeadersEditor({
+  headers,
+  onChange,
+  disabled = false,
+  readOnly = false,
+}: HeadersEditorProps) {
+  const isDisabled = disabled || readOnly;
+
   const handleAddHeader = useCallback(() => {
+    if (isDisabled) return;
+
     const newHeader: Header = {
       id: crypto.randomUUID(),
       key: "",
@@ -42,22 +53,24 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
       enabled: true,
     };
     onChange([...headers, newHeader]);
-  }, [headers, onChange]);
+  }, [headers, isDisabled, onChange]);
 
   const handleRemoveHeader = useCallback(
     (id: string) => {
+      if (isDisabled) return;
       onChange(headers.filter((h) => h.id !== id));
     },
-    [headers, onChange],
+    [headers, isDisabled, onChange],
   );
 
   const handleUpdateHeader = useCallback(
     (id: string, updates: Partial<Header>) => {
+      if (isDisabled) return;
       onChange(
         headers.map((h) => (h.id === id ? { ...h, ...updates } : h)),
       );
     },
-    [headers, onChange],
+    [headers, isDisabled, onChange],
   );
 
   return (
@@ -67,6 +80,7 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
           <CheckboxField
             className={headerCheckboxField}
             isSelected={header.enabled}
+            isDisabled={isDisabled}
             onChange={(isSelected) => handleUpdateHeader(header.id, { enabled: isSelected })}
           >
             <CheckboxButton className={headerCheckbox} aria-label="Enable or disable header" />
@@ -74,6 +88,7 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
 
           <TextField
             value={header.key}
+            isDisabled={isDisabled}
             onChange={(value) => handleUpdateHeader(header.id, { key: value })}
             aria-label="Header name"
           >
@@ -82,6 +97,7 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
 
           <TextField
             value={header.value}
+            isDisabled={isDisabled}
             onChange={(value) => handleUpdateHeader(header.id, { value })}
             aria-label="Header value"
           >
@@ -90,6 +106,7 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
 
           <Button
             className={headerDeleteButton}
+            isDisabled={isDisabled}
             onPress={() => handleRemoveHeader(header.id)}
             aria-label="Delete header"
           >
@@ -98,7 +115,7 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
         </div>
       ))}
 
-      <Button className={headerAddButton} onPress={handleAddHeader}>
+      <Button className={headerAddButton} isDisabled={isDisabled} onPress={handleAddHeader}>
         <PlusIcon size={16} weight="bold" />
         Add Header
       </Button>
