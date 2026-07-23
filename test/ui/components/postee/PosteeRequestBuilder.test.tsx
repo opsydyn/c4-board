@@ -108,6 +108,28 @@ const secondDraft: PosteeRequestDraft = {
   },
 };
 
+const committedFirstDraft: PosteeRequestDraft = {
+  request: {
+    ...firstDraft.request,
+    url: "https://example.com/committed",
+    updated_at: 3,
+  },
+  headers: [
+    {
+      id: "header-committed",
+      key: "Content-Type",
+      value: "application/canonical",
+      enabled: true,
+    },
+  ],
+  body: {
+    request_id: "request-1",
+    mode: "form",
+    raw: "committed-body",
+    form_values: "{\"field\":\"committed\"}",
+  },
+};
+
 const idleSave: RequestDraftSaveState = {
   status: "idle",
   requestId: null,
@@ -312,6 +334,177 @@ describe("PosteeRequestBuilder durable request details", () => {
 
     expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+  });
+
+  it("reconciles the same-request editor to the committed normalized draft", async () => {
+    const user = userEvent.setup();
+    const onSaveRequestDraft = vi.fn();
+    const view = renderBuilder({ onSaveRequestDraft });
+
+    await user.click(screen.getByRole("tab", { name: "Headers" }));
+    await user.click(screen.getByRole("button", { name: "Add Header" }));
+    expect(screen.getAllByLabelText("Header name")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    view.rerenderWith({
+      selectedRequest: committedFirstDraft.request,
+      selectedRequestDraft: committedFirstDraft,
+      requestDraftSave: {
+        status: "success",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 1,
+      },
+    });
+
+    expect(screen.getAllByLabelText("Header name")).toHaveLength(1);
+    expect(screen.getByLabelText("Header name")).toHaveValue("Content-Type");
+    expect(screen.getByLabelText("Header value")).toHaveValue("application/canonical");
+
+    await user.click(screen.getByRole("tab", { name: "Body" }));
+    expect(screen.getByLabelText("Request body")).toHaveValue("committed-body");
+    expect(screen.getByLabelText("Request URL")).toHaveValue("https://example.com/committed");
+
+    await user.type(screen.getByLabelText("Request URL"), "?next=true");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSaveRequestDraft).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        headers: committedFirstDraft.headers,
+        body: committedFirstDraft.body,
+      }),
+    );
+  });
+
+  it("reconciles committed A after switching A to B to A while A saves", async () => {
+    const user = userEvent.setup();
+    const view = renderBuilder();
+
+    fireEvent.change(screen.getByLabelText("Request body"), {
+      target: { value: "{\"submitted\":true}" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    view.rerenderWith({
+      requestDraftSave: {
+        status: "saving",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 0,
+      },
+    });
+
+    view.rerenderWith({
+      selectedRequest: secondDraft.request,
+      selectedRequestDraft: secondDraft,
+    });
+    view.rerenderWith({
+      selectedRequest: firstDraft.request,
+      selectedRequestDraft: firstDraft,
+    });
+
+    expect(screen.getByLabelText("Request body")).toHaveValue("{\"saved\":true}");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+
+    view.rerenderWith({
+      selectedRequest: committedFirstDraft.request,
+      selectedRequestDraft: committedFirstDraft,
+      requestDraftSave: {
+        status: "success",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 1,
+      },
+    });
+
+    expect(screen.getByLabelText("Request body")).toHaveValue("committed-body");
+    expect(screen.getByLabelText("Request URL")).toHaveValue("https://example.com/committed");
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  });
+
+  it("does not overwrite newer same-request edits when save confirmation arrives", async () => {
+    const user = userEvent.setup();
+    const view = renderBuilder();
+
+    await user.type(screen.getByLabelText("Request URL"), "?submitted=true");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    view.rerenderWith({
+      requestDraftSave: {
+        status: "saving",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 0,
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText("Request body"), {
+      target: { value: "{\"newer\":true}" },
+    });
+    view.rerenderWith({
+      selectedRequest: committedFirstDraft.request,
+      selectedRequestDraft: committedFirstDraft,
+      requestDraftSave: {
+        status: "success",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 1,
+      },
+    });
+
+    expect(screen.getByLabelText("Request body")).toHaveValue("{\"newer\":true}");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("globally disables another request's Save and Send while a save is active", async () => {
+    const user = userEvent.setup();
+    const onRunRequest = vi.fn();
+    const onSaveRequestDraft = vi.fn();
+    renderBuilder({
+      selectedRequest: secondDraft.request,
+      selectedRequestDraft: secondDraft,
+      requestDraftSave: {
+        status: "saving",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 0,
+      },
+      onRunRequest,
+      onSaveRequestDraft,
+    });
+
+    const sendButton = screen.getByRole("button", { name: "Send" });
+    expect(sendButton).toBeDisabled();
+    await user.click(sendButton);
+    expect(onRunRequest).not.toHaveBeenCalled();
+
+    await user.type(screen.getByLabelText("Request URL"), "?dirty=true");
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeDisabled();
+    await user.click(saveButton);
+    expect(onSaveRequestDraft).not.toHaveBeenCalled();
+  });
+
+  it("blocks save and send keyboard shortcuts while any request save is active", async () => {
+    const user = userEvent.setup();
+    const onRunRequest = vi.fn();
+    const onSaveRequestDraft = vi.fn();
+    renderBuilder({
+      selectedRequest: secondDraft.request,
+      selectedRequestDraft: secondDraft,
+      requestDraftSave: {
+        status: "saving",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 0,
+      },
+      onRunRequest,
+      onSaveRequestDraft,
+    });
+
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true, metaKey: true });
+    await user.type(screen.getByLabelText("Request URL"), "?dirty=true");
+    fireEvent.keyDown(window, { key: "s", ctrlKey: true, metaKey: true });
+
+    expect(onRunRequest).not.toHaveBeenCalled();
+    expect(onSaveRequestDraft).not.toHaveBeenCalled();
   });
 
   it("blocks the keyboard send shortcut while the draft is dirty", async () => {

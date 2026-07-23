@@ -141,7 +141,7 @@ export function PosteeRequestBuilder({
   const [requestBodyMode, setRequestBodyMode] = useState("json");
   const [bodyWasEdited, setBodyWasEdited] = useState(false);
   const hydratedRequestIdRef = useRef<string | null>(null);
-  const editVersionRef = useRef(0);
+  const editVersionsRef = useRef<Record<string, number>>({});
   const pendingSaveRef = useRef<
     {
       readonly requestId: string;
@@ -158,6 +158,17 @@ export function PosteeRequestBuilder({
     return validateUrl(requestUrl);
   }, [requestUrl]);
 
+  const applyConfirmedDraft = useCallback((draft: PosteeRequestDraft) => {
+    setRequestUrl(draft.request.url);
+    setRequestMethod(draft.request.method as HttpMethod);
+    setRequestHeaders(draft.headers.map((header) => ({ ...header })));
+    setRequestBody(draft.body.raw ?? "");
+    setRequestBodyMode(draft.body.mode);
+    setBodyWasEdited(false);
+    setHasUnsavedChanges(false);
+    hydratedRequestIdRef.current = draft.request.id;
+  }, []);
+
   // Replace the complete local editor state when request identity changes.
   useEffect(() => {
     if (!selectedRequest) {
@@ -169,8 +180,6 @@ export function PosteeRequestBuilder({
       setBodyWasEdited(false);
       setHasUnsavedChanges(false);
       hydratedRequestIdRef.current = null;
-      editVersionRef.current = 0;
-      pendingSaveRef.current = null;
       return;
     }
 
@@ -186,8 +195,6 @@ export function PosteeRequestBuilder({
         setRequestBodyMode("json");
         setBodyWasEdited(false);
         setHasUnsavedChanges(false);
-        editVersionRef.current = 0;
-        pendingSaveRef.current = null;
       }
       return;
     }
@@ -196,17 +203,8 @@ export function PosteeRequestBuilder({
       return;
     }
 
-    setRequestUrl(selectedRequest.url);
-    setRequestMethod(selectedRequest.method as HttpMethod);
-    setRequestHeaders(selectedRequestDraft.headers.map((header) => ({ ...header })));
-    setRequestBody(selectedRequestDraft.body.raw ?? "");
-    setRequestBodyMode(selectedRequestDraft.body.mode);
-    setBodyWasEdited(false);
-    setHasUnsavedChanges(false);
-    hydratedRequestIdRef.current = selectedRequest.id;
-    editVersionRef.current = 0;
-    pendingSaveRef.current = null;
-  }, [selectedRequest, selectedRequestDraft]);
+    applyConfirmedDraft(selectedRequestDraft);
+  }, [applyConfirmedDraft, selectedRequest, selectedRequestDraft]);
 
   useEffect(() => {
     const pendingSave = pendingSaveRef.current;
@@ -222,24 +220,25 @@ export function PosteeRequestBuilder({
     pendingSaveRef.current = null;
     if (
       selectedRequest?.id === pendingSave.requestId
-      && editVersionRef.current === pendingSave.editVersion
+      && selectedRequestDraft?.request.id === pendingSave.requestId
+      && (editVersionsRef.current[pendingSave.requestId] ?? 0) === pendingSave.editVersion
     ) {
-      setHasUnsavedChanges(false);
-      setBodyWasEdited(false);
-      setRequestBodyMode((mode) => bodyWasEdited ? "json" : mode);
+      applyConfirmedDraft(selectedRequestDraft);
     }
   }, [
-    bodyWasEdited,
+    applyConfirmedDraft,
     requestDraftSave.requestId,
     requestDraftSave.revision,
     requestDraftSave.status,
     selectedRequest?.id,
+    selectedRequestDraft,
   ]);
 
   const markDirty = useCallback(() => {
-    editVersionRef.current += 1;
+    const requestId = selectedRequest?.id ?? "__new_request__";
+    editVersionsRef.current[requestId] = (editVersionsRef.current[requestId] ?? 0) + 1;
     setHasUnsavedChanges(true);
-  }, []);
+  }, [selectedRequest?.id]);
 
   // Track changes to detect unsaved state
   const handleUrlChange = useCallback((newUrl: string) => {
@@ -263,10 +262,12 @@ export function PosteeRequestBuilder({
     markDirty();
   }, [markDirty]);
 
+  const isAnySaveActive = requestDraftSave.status === "saving";
+
   // Save action (create new or update existing)
   const handleSave = useCallback(() => {
     const trimmedUrl = requestUrl.trim();
-    if (!trimmedUrl || !activeCollectionId) return;
+    if (!trimmedUrl || !activeCollectionId || isAnySaveActive) return;
 
     if (
       selectedRequest
@@ -276,7 +277,7 @@ export function PosteeRequestBuilder({
       pendingSaveRef.current = {
         requestId: selectedRequest.id,
         serverRevision: requestDraftSave.revision,
-        editVersion: editVersionRef.current,
+        editVersion: editVersionsRef.current[selectedRequest.id] ?? 0,
       };
       onSaveRequestDraft({
         request: {
@@ -299,6 +300,7 @@ export function PosteeRequestBuilder({
   }, [
     activeCollectionId,
     bodyWasEdited,
+    isAnySaveActive,
     onCreateRequest,
     onSaveRequestDraft,
     requestBody,
@@ -313,7 +315,7 @@ export function PosteeRequestBuilder({
 
   const isMatchingSave = Boolean(
     selectedRequest
-      && requestDraftSave.status === "saving"
+      && isAnySaveActive
       && requestDraftSave.requestId === selectedRequest.id,
   );
   const matchingSaveError = selectedRequest
@@ -339,7 +341,7 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + Enter: Send request
       if (modKey && event.key === "Enter") {
         event.preventDefault();
-        if (canRunRequest && !isRunning && !hasUnsavedChanges && !isMatchingSave) {
+        if (canRunRequest && !isRunning && !hasUnsavedChanges && !isAnySaveActive) {
           onRunRequest();
         }
         return;
@@ -348,7 +350,7 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + S: Save changes
       if (modKey && event.key === "s") {
         event.preventDefault();
-        if (hasUnsavedChanges && requestUrl.trim() && activeCollectionId) {
+        if (hasUnsavedChanges && requestUrl.trim() && activeCollectionId && !isAnySaveActive) {
           handleSave();
         }
         return;
@@ -362,7 +364,7 @@ export function PosteeRequestBuilder({
     canRunRequest,
     handleSave,
     hasUnsavedChanges,
-    isMatchingSave,
+    isAnySaveActive,
     isRunning,
     onRunRequest,
     requestUrl,
@@ -407,7 +409,7 @@ export function PosteeRequestBuilder({
                 onClick={handleSave}
                 disabled={!requestUrl.trim()
                   || !activeCollectionId
-                  || isMatchingSave
+                  || isAnySaveActive
                   || Boolean(selectedRequest && !selectedRequestDraft)}
               >
                 {isMatchingSave ? "Saving..." : "Save"}
@@ -435,7 +437,7 @@ export function PosteeRequestBuilder({
                       type="button"
                       className={styles.runButton}
                       onClick={onRunRequest}
-                      disabled={!canRunRequest}
+                      disabled={!canRunRequest || isAnySaveActive}
                     >
                       Send
                     </button>
