@@ -243,16 +243,6 @@ const defaultRequestDraft = (request: PosteeRequest): PosteeRequestDraft => ({
   },
 });
 
-const publicErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  return String(error ?? "Request draft save failed");
-};
-
 // =============================================================================
 // Machine
 // =============================================================================
@@ -544,6 +534,11 @@ const posteeWorkspaceSetup = setup({
           ([collectionId]) => !deletedSet.has(collectionId),
         ),
       );
+      const nextRequestDrafts = Object.fromEntries(
+        Object.entries(context.requestDrafts).filter(
+          ([, draft]) => !deletedSet.has(draft.request.collection_id),
+        ),
+      );
 
       runLayeredEffect(
         context.layer,
@@ -585,6 +580,7 @@ const posteeWorkspaceSetup = setup({
         ...context,
         collections: remainingCollections,
         requestsByCollection: nextRequestsByCollection,
+        requestDrafts: nextRequestDrafts,
         activeCollectionId: nextActiveCollectionId,
         activeRequestId: nextActiveRequestId,
       };
@@ -882,7 +878,7 @@ const posteeWorkspaceSetup = setup({
         requestDraftSave: {
           ...context.requestDraftSave,
           status: "error",
-          error: publicErrorMessage(event.error),
+          error: "Request draft save failed. Try again.",
         },
       };
     }),
@@ -1310,6 +1306,16 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
           actions: "failRequestDraftSave",
         },
       },
+      on: {
+        SAVE_REQUEST_DRAFT: {},
+        RUN_REQUEST: {},
+        SELECT_REQUEST: {
+          actions: ["selectRequest", "deriveWorkspaceState"],
+        },
+        SELECT_COLLECTION: {
+          actions: ["selectCollection", "deriveWorkspaceState"],
+        },
+      },
     },
     running: {
       entry: ["markRunnerRunning", "deriveWorkspaceState"],
@@ -1350,6 +1356,10 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         },
       },
       on: {
+        SAVE_REQUEST_DRAFT: {
+          target: "savingDraft",
+          actions: "stageRequestDraft",
+        },
         RUN_REQUEST: {
           target: "running",
           guard: "hasActiveRequest",
@@ -1364,6 +1374,10 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
     },
     error: {
       on: {
+        SAVE_REQUEST_DRAFT: {
+          target: "savingDraft",
+          actions: "stageRequestDraft",
+        },
         RUN_REQUEST: {
           target: "running",
           guard: "hasActiveRequest",
