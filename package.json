@@ -7,6 +7,10 @@
     "dev:reset": "node -e \"const fs=require('node:fs');fs.rmSync('node_modules/.vite',{recursive:true,force:true});fs.rmSync('.astro',{recursive:true,force:true});\" && astro dev --force",
     "start": "astro dev",
     "build": "bun .github/scripts/build-frontend.ts",
+    "env:check": "varlock load --agent",
+    "env:scan": "varlock scan",
+    "env:scan:build": "varlock scan dist",
+    "env:scan:staged": "varlock scan --staged",
     "preview": "astro preview",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
@@ -100,8 +104,10 @@
     "knip": "^6.26.0",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.63.0",
+    "varlock": "1.13.0",
     "vite": "8.1.4",
     "vite-plugin-static-copy": "^4.1.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "2.9.0"
   }
 }

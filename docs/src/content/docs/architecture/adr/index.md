@@ -32,6 +32,7 @@ Each ADR follows this structure:
 | [ADR-006](./006-balanced-coupling-v2-and-mud-threshold-controls.md) | Balanced Coupling V2 Model and Big Ball of Mud Threshold Controls | Proposed | 2026-02-10 |
 | [ADR-007](./007-azure-graph-sync.md)             | Azure Resource Graph Sync for Dynamic C4 Infrastructure Diagrams | Proposed | 2026-02-12 |
 | [ADR-008](./008-rig-agent-platform-orchestration.md) | Rig Agent Platform Orchestration for OPY Net                 | Proposed | 2026-02-15 |
+| [ADR-009](./009-varlock-environment-governance.md) | Adopt Varlock for Environment Governance                    | Accepted | 2026-07-23 |
 
 ## Contributing
 

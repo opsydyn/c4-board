@@ -35,11 +35,21 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      - name: Validate environment schema
+        run: bun run env:check
+
       - name: Run frontend tests
         run: bun run test:run
 
-      - name: Build frontend
+      - name: Build frontend with secret sentinel
+        env:
+          OPSYDYN_OPENAI_API_KEY: c4-board-build-secret-sentinel-v1
         run: bun run build
+
+      - name: Scan frontend build for secret sentinel
+        env:
+          OPSYDYN_OPENAI_API_KEY: c4-board-build-secret-sentinel-v1
+        run: bun run env:scan:build
 
   knip:
     name: Knip

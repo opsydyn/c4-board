@@ -128,10 +128,31 @@ If Vite reports stale optimized dependencies, reset the dev cache:
 bun run dev:reset
 ```
 
+## Environment Governance
+
+[ADR-009](docs/src/content/docs/architecture/adr/009-varlock-environment-governance.md) adopts Varlock for development and CI validation without replacing runtime secret storage. The committed [.env.schema](.env.schema) contains metadata and optional defaults only; never add a real credential to it.
+
+For local environment overrides, use an ignored `.env.local` file. OPY credentials should normally be entered through `Settings > AI Agent`, which keeps the OS keychain first in the resolution order.
+
+```sh
+bun run env:check
+bun run env:scan
+bun run env:scan:build
+bun run env:scan:staged
+```
+
+`env:check` validates resolved values against the schema. The scan commands look for the exact values of sensitive variables Varlock can resolve in the current environment; when no sensitive value is configured, Varlock has no value to scan for. They are not generic credential-pattern or entropy scanners.
+
+CI and release builds set a non-secret sentinel as a sensitive OPY value, build the frontend, and scan `dist`. This makes the build-output gate fail if a provider variable is accidentally bundled without exposing a real credential. Manually rebuilt tags created before ADR-009 skip these Varlock steps because their dependency graph has no schema or CLI.
+
 ## Common Scripts
 
 ```sh
 bun run build
+bun run env:check
+bun run env:scan
+bun run env:scan:build
+bun run env:scan:staged
 bun run astro check
 bun run lint
 bun run lint:fix
