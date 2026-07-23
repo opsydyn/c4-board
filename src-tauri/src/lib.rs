@@ -10,6 +10,7 @@ mod ai_agent;
 mod azure_sync;
 mod db;
 mod load_test;
+mod rig_runtime;
 
 use ai_agent::{
     rig_agent_clear_openai_api_key, rig_agent_hello, rig_agent_plan_c4_diagram,
