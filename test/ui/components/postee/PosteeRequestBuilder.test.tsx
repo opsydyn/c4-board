@@ -1,5 +1,6 @@
 import type { PosteeRequestDraft } from "@/core/effects/postee";
 import { RequestId } from "@/core/effects/postee/types";
+import { HeadersEditor } from "@/ui/components/postee/HeadersEditor";
 import {
   deriveRequestEditorPresentation,
   PosteeRequestBuilder,
@@ -42,14 +43,17 @@ vi.mock("@/ui/components/postee/MonacoJsonEditor", () => ({
   MonacoJsonEditor: ({
     value,
     onChange,
+    readOnly,
   }: {
     value: string;
     onChange: (value: string) => void;
+    readOnly?: boolean;
   }) => (
     <textarea
       aria-label="Request body"
       value={value}
       onChange={(event) => onChange(event.target.value)}
+      readOnly={readOnly}
     />
   ),
 }));
@@ -587,6 +591,86 @@ describe("PosteeRequestBuilder durable request details", () => {
     fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
 
     expect(onRunRequest).not.toHaveBeenCalled();
+  });
+
+  it("makes a running request read-only without staging a save and remains cancellable", async () => {
+    const user = userEvent.setup();
+    const onSaveRequestDraft = vi.fn();
+    const onCancelRequest = vi.fn();
+    const view = renderBuilder({ onSaveRequestDraft, onCancelRequest });
+
+    await user.type(screen.getByLabelText("Request URL"), "?dirty=true");
+    const dirtyUrl = screen.getByLabelText("Request URL").getAttribute("value");
+    view.rerenderWith({ isRunning: true });
+
+    expect(screen.getByRole("button", { name: "POST" })).toBeDisabled();
+    expect(screen.getByLabelText("Request URL")).toBeDisabled();
+    expect(screen.getByLabelText("Request body")).toHaveAttribute("readonly");
+
+    await user.click(screen.getByRole("tab", { name: "Headers" }));
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByLabelText("Header name")).toBeDisabled();
+    expect(screen.getByLabelText("Header value")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete header" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add Header" })).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Request URL"), "&ignored=true");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.keyDown(window, { key: "s", ctrlKey: true });
+
+    expect(screen.getByLabelText("Request URL")).toHaveValue(dirtyUrl);
+    expect(onSaveRequestDraft).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    expect(cancelButton).toBeEnabled();
+    await user.click(cancelButton);
+    expect(onCancelRequest).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["missing", null],
+    ["mismatched", secondDraft],
+  ])("disables header editing when the selected draft is %s", async (_, selectedRequestDraft) => {
+    const user = userEvent.setup();
+    const onSaveRequestDraft = vi.fn();
+    renderBuilder({ selectedRequestDraft, onSaveRequestDraft });
+
+    await user.click(screen.getByRole("tab", { name: "Headers" }));
+    const addButton = screen.getByRole("button", { name: "Add Header" });
+    expect(addButton).toBeDisabled();
+    await user.click(addButton);
+
+    expect(screen.queryByLabelText("Header name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    expect(onSaveRequestDraft).not.toHaveBeenCalled();
+  });
+
+  it("disables every HeadersEditor control and suppresses its callback", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <HeadersEditor
+        headers={firstDraft.headers.map((header) => ({ ...header }))}
+        onChange={onChange}
+        disabled
+      />,
+    );
+
+    const controls = [
+      screen.getByRole("checkbox"),
+      screen.getByLabelText("Header name"),
+      screen.getByLabelText("Header value"),
+      screen.getByRole("button", { name: "Delete header" }),
+      screen.getByRole("button", { name: "Add Header" }),
+    ];
+    for (const control of controls) {
+      expect(control).toBeDisabled();
+      await user.click(control);
+    }
+    await user.type(screen.getByLabelText("Header value"), "ignored");
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("clears dirty state only after the matching successful revision increases", async () => {

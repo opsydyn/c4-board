@@ -353,25 +353,29 @@ export function PosteeRequestBuilder({
 
   // Track changes to detect unsaved state
   const handleUrlChange = useCallback((newUrl: string) => {
+    if (isRunning || !isEditorSynchronized) return;
     setRequestUrl(newUrl);
     markDirty();
-  }, [markDirty]);
+  }, [isEditorSynchronized, isRunning, markDirty]);
 
   const handleMethodChange = useCallback((newMethod: HttpMethod) => {
+    if (isRunning || !isEditorSynchronized) return;
     setRequestMethod(newMethod);
     markDirty();
-  }, [markDirty]);
+  }, [isEditorSynchronized, isRunning, markDirty]);
 
   const handleHeadersChange = useCallback((headers: Header[]) => {
+    if (isRunning || !isEditorSynchronized) return;
     setRequestHeaders(headers);
     markDirty();
-  }, [markDirty]);
+  }, [isEditorSynchronized, isRunning, markDirty]);
 
   const handleBodyChange = useCallback((body: string) => {
+    if (isRunning || !isEditorSynchronized) return;
     setRequestBody(body);
     setBodyWasEdited(true);
     markDirty();
-  }, [markDirty]);
+  }, [isEditorSynchronized, isRunning, markDirty]);
 
   const activeSaveRequestId = requestDraftSave.status === "saving"
     ? requestDraftSave.requestId
@@ -397,6 +401,7 @@ export function PosteeRequestBuilder({
       || !activeCollectionId
       || isAnySaveActive
       || !isEditorSynchronized
+      || isRunning
     ) return;
 
     if (
@@ -432,6 +437,7 @@ export function PosteeRequestBuilder({
     bodyWasEdited,
     isAnySaveActive,
     isEditorSynchronized,
+    isRunning,
     onCreateRequest,
     onSaveRequestDraft,
     requestBody,
@@ -488,6 +494,7 @@ export function PosteeRequestBuilder({
           && activeCollectionId
           && !isAnySaveActive
           && isEditorSynchronized
+          && !isRunning
         ) {
           handleSave();
         }
@@ -514,6 +521,8 @@ export function PosteeRequestBuilder({
     : "Saving request details. Save and Send are temporarily unavailable.";
   const saveCommandDescription = isAnotherRequestSaving
     ? "Another request is saving. Save is temporarily unavailable."
+    : isRunning
+    ? "Request is running. Save is temporarily unavailable."
     : !isEditorSynchronized
     ? "Request details are synchronising. Save is temporarily unavailable."
     : selectedRequest
@@ -538,7 +547,7 @@ export function PosteeRequestBuilder({
             value={editorPresentation.requestMethod as HttpMethod}
             options={methodOptions}
             onChange={handleMethodChange}
-            disabled={!activeCollectionId || isInitialising || !isEditorSynchronized}
+            disabled={!activeCollectionId || isInitialising || !isEditorSynchronized || isRunning}
           />
           <div className={styles.urlInputWrapper}>
             <input
@@ -551,7 +560,7 @@ export function PosteeRequestBuilder({
                 : "Enter URL and Save to create new request"}
               value={editorPresentation.requestUrl}
               onChange={(e) => handleUrlChange(e.target.value)}
-              disabled={!activeCollectionId || isInitialising || !isEditorSynchronized}
+              disabled={!activeCollectionId || isInitialising || !isEditorSynchronized || isRunning}
               aria-label="Request URL"
               data-validation={urlValidation._tag.toLowerCase()}
             />
@@ -570,6 +579,7 @@ export function PosteeRequestBuilder({
                   || !activeCollectionId
                   || isAnySaveActive
                   || !isEditorSynchronized
+                  || isRunning
                   || Boolean(selectedRequest && !selectedRequestDraft)}
                 title={saveCommandDescription}
               >
@@ -577,7 +587,7 @@ export function PosteeRequestBuilder({
               </button>
             </Tooltip>
           )}
-          {selectedRequest && !visibleHasUnsavedChanges && (
+          {selectedRequest && (!visibleHasUnsavedChanges || isRunning) && (
             <div className={styles.actionRow}>
               {isRunning
                 ? (
@@ -634,6 +644,7 @@ export function PosteeRequestBuilder({
                 type="button"
                 className={styles.suggestionButton}
                 onClick={() => handleUrlChange(urlValidation.suggestion!)}
+                disabled={!isEditorSynchronized || isRunning}
               >
                 Use: {urlValidation.suggestion}
               </button>
@@ -690,7 +701,7 @@ export function PosteeRequestBuilder({
               <MonacoJsonEditor
                 value={editorPresentation.requestBody}
                 onChange={handleBodyChange}
-                readOnly={!isEditorSynchronized}
+                readOnly={!isEditorSynchronized || isRunning}
                 height="300px"
                 placeholder="{}"
               />
@@ -699,6 +710,7 @@ export function PosteeRequestBuilder({
               <HeadersEditor
                 headers={editorPresentation.requestHeaders.map((header) => ({ ...header }))}
                 onChange={handleHeadersChange}
+                disabled={!isEditorSynchronized || isRunning}
               />
             </TabPanel>
             <TabPanel id="Environment" className={styles.tabContent}>
