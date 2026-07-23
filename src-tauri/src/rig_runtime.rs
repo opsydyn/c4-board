@@ -1,4 +1,8 @@
-use rig::{client::CompletionClient, completion::Prompt, providers::openai};
+use rig_core::{
+    client::CompletionClient,
+    completion::{Prompt, Usage},
+    providers::openai,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +14,18 @@ pub struct RigUsageMetadata {
     pub total_tokens: u64,
     pub cached_input_tokens: u64,
     pub cache_creation_input_tokens: u64,
+}
+
+impl From<Usage> for RigUsageMetadata {
+    fn from(usage: Usage) -> Self {
+        Self {
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+            total_tokens: usage.total_tokens,
+            cached_input_tokens: usage.cached_input_tokens,
+            cache_creation_input_tokens: usage.cache_creation_input_tokens,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,14 +68,15 @@ pub async fn prompt_openai(
         .temperature(temperature)
         .max_tokens(max_tokens)
         .build();
-    let message = agent
+    let response = agent
         .prompt(prompt)
+        .extended_details()
         .await
         .map_err(|_| RigRuntimeError::Prompt)?;
 
     Ok(RigPromptOutput {
-        message,
-        usage: RigUsageMetadata::default(),
+        message: response.output().to_string(),
+        usage: response.usage().into(),
     })
 }
 
@@ -89,15 +106,15 @@ where
         extractor = extractor.context(context);
     }
 
-    let data = extractor
+    let response = extractor
         .build()
-        .extract(prompt)
+        .extract_with_usage(prompt)
         .await
         .map_err(|_| RigRuntimeError::Extraction)?;
 
     Ok(RigExtractionOutput {
-        data,
-        usage: RigUsageMetadata::default(),
+        data: response.data,
+        usage: response.usage.into(),
     })
 }
 
@@ -108,15 +125,24 @@ mod tests {
     #[test]
     fn zero_usage_remains_a_valid_provider_metadata_value() {
         assert_eq!(
-            RigUsageMetadata::default(),
-            RigUsageMetadata {
-                input_tokens: 0,
-                output_tokens: 0,
-                total_tokens: 0,
-                cached_input_tokens: 0,
-                cache_creation_input_tokens: 0,
-            }
+            RigUsageMetadata::from(Usage::new()),
+            RigUsageMetadata::default()
         );
+    }
+
+    #[test]
+    fn usage_metadata_serializes_with_camel_case_fields() {
+        let json = serde_json::to_value(RigUsageMetadata {
+            input_tokens: 1,
+            output_tokens: 2,
+            total_tokens: 3,
+            cached_input_tokens: 4,
+            cache_creation_input_tokens: 5,
+        })
+        .expect("usage should serialize");
+
+        assert_eq!(json["inputTokens"], 1);
+        assert_eq!(json["cacheCreationInputTokens"], 5);
     }
 
     #[test]
