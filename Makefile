@@ -2,7 +2,7 @@ SHELL := /bin/bash
 BUN ?= bun
 BUNX ?= bunx
 
-.PHONY: help dev start build preview astro tauri knip test test-run test-watch test-ui test-coverage astro-upgrade bun-update
+.PHONY: help dev start build preview astro tauri tauri-dev knip test test-run test-watch test-ui test-coverage astro-upgrade bun-update
 
 help:
 	@echo "Available targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make preview        # bun run preview"
 	@echo "  make astro          # bun run astro"
 	@echo "  make tauri          # bun run tauri"
+	@echo "  make tauri-dev      # bun tauri dev"
 	@echo "  make knip           # bun run knip"
 	@echo "  make test           # bun run test"
 	@echo "  make test-run       # bun run test:run"
@@ -39,6 +40,9 @@ test-ui:
 
 test-coverage:
 	$(BUN) run test:coverage
+
+tauri-dev:
+	$(BUN) tauri dev
 
 # Maintenance helpers that are not in package.json scripts
 astro-upgrade:
