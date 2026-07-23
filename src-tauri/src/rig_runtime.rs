@@ -1,7 +1,6 @@
-use rig::completion::Usage;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RigUsageMetadata {
     pub input_tokens: u64,
@@ -25,58 +24,51 @@ pub struct RigExtractionOutput<T> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum RigRuntimeError {
-    #[error("Failed to initialize OpenAI client: {0}")]
-    Client(String),
-    #[error("Rig prompt failed: {0}")]
-    Prompt(String),
-    #[error("Rig extraction failed: {0}")]
-    Extraction(String),
-}
-
-impl From<Usage> for RigUsageMetadata {
-    fn from(usage: Usage) -> Self {
-        Self {
-            input_tokens: usage.input_tokens,
-            output_tokens: usage.output_tokens,
-            total_tokens: usage.total_tokens,
-            cached_input_tokens: usage.cached_input_tokens,
-            cache_creation_input_tokens: 0,
-        }
-    }
+    #[error("Failed to initialize OpenAI client: provider client initialization failed")]
+    Client,
+    #[error("Rig prompt failed: provider request failed")]
+    Prompt,
+    #[error("Rig extraction failed: provider request failed")]
+    Extraction,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rig::completion::Usage;
 
     #[test]
-    fn usage_metadata_preserves_every_rig_usage_counter() {
-        let usage = Usage {
-            input_tokens: 13,
-            output_tokens: 8,
-            total_tokens: 21,
-            cached_input_tokens: 5,
-        };
-
+    fn zero_usage_remains_a_valid_provider_metadata_value() {
         assert_eq!(
-            RigUsageMetadata::from(usage),
+            RigUsageMetadata::default(),
             RigUsageMetadata {
-                input_tokens: 13,
-                output_tokens: 8,
-                total_tokens: 21,
-                cached_input_tokens: 5,
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                cached_input_tokens: 0,
                 cache_creation_input_tokens: 0,
             }
         );
     }
 
     #[test]
-    fn runtime_errors_keep_the_public_operation_prefix() {
-        let error = RigRuntimeError::Extraction("provider rejected request".to_string());
-        assert_eq!(
-            error.to_string(),
-            "Rig extraction failed: provider rejected request"
-        );
+    fn runtime_errors_do_not_expose_secret_like_provider_details() {
+        let provider_detail = "authorization failed for sk-proj-rig-runtime-secret";
+        let display = RigRuntimeError::Extraction.to_string();
+
+        assert_eq!(display, "Rig extraction failed: provider request failed");
+        assert!(!display.contains(provider_detail));
+    }
+
+    #[test]
+    fn runtime_errors_keep_operation_specific_public_prefixes() {
+        assert!(RigRuntimeError::Client
+            .to_string()
+            .starts_with("Failed to initialize OpenAI client:"));
+        assert!(RigRuntimeError::Prompt
+            .to_string()
+            .starts_with("Rig prompt failed:"));
+        assert!(RigRuntimeError::Extraction
+            .to_string()
+            .starts_with("Rig extraction failed:"));
     }
 }
