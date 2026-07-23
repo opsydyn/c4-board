@@ -1,6 +1,10 @@
 import type { PosteeRequestDraft } from "@/core/effects/postee";
 import { RequestId } from "@/core/effects/postee/types";
-import { PosteeRequestBuilder, type PosteeRequestBuilderProps } from "@/ui/components/postee/PosteeRequestBuilder";
+import {
+  deriveRequestEditorPresentation,
+  PosteeRequestBuilder,
+  type PosteeRequestBuilderProps,
+} from "@/ui/components/postee/PosteeRequestBuilder";
 import { PosteeWorkspace } from "@/ui/components/postee/PosteeWorkspace";
 import type { RequestDraftSaveState } from "@/ui/machines/postee.machine";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -179,6 +183,61 @@ const renderBuilder = (
 };
 
 describe("PosteeRequestBuilder durable request details", () => {
+  it("derives confirmed presentation and blocks commands before editor synchronisation", () => {
+    const switching = deriveRequestEditorPresentation({
+      selectedRequest: secondDraft.request,
+      selectedRequestDraft: secondDraft,
+      hydratedRequestId: "request-1",
+      pendingSave: null,
+      requestDraftSave: idleSave,
+      currentEditVersion: 0,
+      local: {
+        requestUrl: firstDraft.request.url,
+        requestMethod: firstDraft.request.method,
+        requestHeaders: firstDraft.headers,
+        requestBody: firstDraft.body.raw ?? "",
+        requestBodyMode: firstDraft.body.mode,
+      },
+    });
+    expect(switching).toMatchObject({
+      synchronized: false,
+      requestUrl: secondDraft.request.url,
+      requestBody: secondDraft.body.raw,
+      requestHeaders: secondDraft.headers,
+    });
+
+    const awaitingCanonical = deriveRequestEditorPresentation({
+      selectedRequest: committedFirstDraft.request,
+      selectedRequestDraft: committedFirstDraft,
+      hydratedRequestId: "request-1",
+      pendingSave: {
+        requestId: "request-1",
+        serverRevision: 0,
+        editVersion: 1,
+      },
+      requestDraftSave: {
+        status: "success",
+        requestId: RequestId("request-1"),
+        error: null,
+        revision: 1,
+      },
+      currentEditVersion: 1,
+      local: {
+        requestUrl: firstDraft.request.url,
+        requestMethod: firstDraft.request.method,
+        requestHeaders: firstDraft.headers,
+        requestBody: firstDraft.body.raw ?? "",
+        requestBodyMode: firstDraft.body.mode,
+      },
+    });
+    expect(awaitingCanonical).toMatchObject({
+      synchronized: false,
+      requestUrl: committedFirstDraft.request.url,
+      requestBody: committedFirstDraft.body.raw,
+      requestHeaders: committedFirstDraft.headers,
+    });
+  });
+
   it("hydrates URL, method, body, and headers from the confirmed draft", async () => {
     const user = userEvent.setup();
     renderBuilder();
@@ -470,14 +529,26 @@ describe("PosteeRequestBuilder durable request details", () => {
       onSaveRequestDraft,
     });
 
+    const globalSaveStatus = screen.getByRole("status");
+    expect(globalSaveStatus).toHaveAttribute("aria-live", "polite");
+    expect(globalSaveStatus).toHaveTextContent(
+      "Another request is saving. Save and Send are temporarily unavailable.",
+    );
+
     const sendButton = screen.getByRole("button", { name: "Send" });
     expect(sendButton).toBeDisabled();
+    expect(sendButton).toHaveAccessibleDescription(
+      "Another request is saving. Send is temporarily unavailable.",
+    );
     await user.click(sendButton);
     expect(onRunRequest).not.toHaveBeenCalled();
 
     await user.type(screen.getByLabelText("Request URL"), "?dirty=true");
     const saveButton = screen.getByRole("button", { name: "Save" });
     expect(saveButton).toBeDisabled();
+    expect(saveButton).toHaveAccessibleDescription(
+      "Another request is saving. Save is temporarily unavailable.",
+    );
     await user.click(saveButton);
     expect(onSaveRequestDraft).not.toHaveBeenCalled();
   });
@@ -533,7 +604,7 @@ describe("PosteeRequestBuilder durable request details", () => {
         revision: 1,
       },
     });
-    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
 
     view.rerenderWith({
       requestDraftSave: {
@@ -543,7 +614,7 @@ describe("PosteeRequestBuilder durable request details", () => {
         revision: 0,
       },
     });
-    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
 
     view.rerenderWith({
       requestDraftSave: {

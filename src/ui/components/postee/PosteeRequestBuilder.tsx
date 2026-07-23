@@ -19,7 +19,7 @@ import {
   SpinnerGapIcon as SpinnerGap,
   WarningIcon as Warning,
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 import { type Header, HeadersEditor } from "./HeadersEditor";
@@ -97,6 +97,90 @@ export interface PosteeRequestBuilderProps {
   onVariablesChange: (variables: PosteeEnvironmentVariable[]) => void;
 }
 
+interface PendingRequestDraftSave {
+  readonly requestId: string;
+  readonly serverRevision: number;
+  readonly editVersion: number;
+}
+
+interface RequestEditorLocalState {
+  readonly requestUrl: string;
+  readonly requestMethod: string;
+  readonly requestHeaders: ReadonlyArray<Header>;
+  readonly requestBody: string;
+  readonly requestBodyMode: string;
+}
+
+interface RequestEditorPresentationInput {
+  readonly selectedRequest: PosteeRequest | null;
+  readonly selectedRequestDraft: PosteeRequestDraft | null;
+  readonly hydratedRequestId: string | null;
+  readonly pendingSave: PendingRequestDraftSave | null;
+  readonly requestDraftSave: RequestDraftSaveState;
+  readonly currentEditVersion: number;
+  readonly local: RequestEditorLocalState;
+}
+
+interface RequestEditorPresentation extends RequestEditorLocalState {
+  readonly synchronized: boolean;
+}
+
+export const deriveRequestEditorPresentation = ({
+  selectedRequest,
+  selectedRequestDraft,
+  hydratedRequestId,
+  pendingSave,
+  requestDraftSave,
+  currentEditVersion,
+  local,
+}: RequestEditorPresentationInput): RequestEditorPresentation => {
+  const selectedRequestId = selectedRequest?.id ?? null;
+  const confirmedDraftMatches = Boolean(
+    selectedRequestId
+      && selectedRequestDraft?.request.id === selectedRequestId,
+  );
+  const awaitingCanonicalCompletion = Boolean(
+    pendingSave
+      && selectedRequestId === pendingSave.requestId
+      && requestDraftSave.status === "success"
+      && requestDraftSave.requestId === pendingSave.requestId
+      && requestDraftSave.revision > pendingSave.serverRevision
+      && currentEditVersion === pendingSave.editVersion,
+  );
+  const identitySynchronized = selectedRequestId === null
+    ? hydratedRequestId === null
+    : confirmedDraftMatches && hydratedRequestId === selectedRequestId;
+  const synchronized = identitySynchronized && !awaitingCanonicalCompletion;
+
+  if (synchronized) {
+    return { ...local, synchronized };
+  }
+
+  if (selectedRequest && selectedRequestDraft?.request.id === selectedRequest.id) {
+    return {
+      synchronized,
+      requestUrl: selectedRequestDraft.request.url,
+      requestMethod: selectedRequestDraft.request.method,
+      requestHeaders: selectedRequestDraft.headers.map((header) => ({ ...header })),
+      requestBody: selectedRequestDraft.body.raw ?? "",
+      requestBodyMode: selectedRequestDraft.body.mode,
+    };
+  }
+
+  if (selectedRequest) {
+    return {
+      synchronized,
+      requestUrl: selectedRequest.url,
+      requestMethod: selectedRequest.method,
+      requestHeaders: [],
+      requestBody: "{}",
+      requestBodyMode: "json",
+    };
+  }
+
+  return { ...local, synchronized };
+};
+
 export function PosteeRequestBuilder({
   activeCollectionId,
   selectedRequest,
@@ -140,23 +224,37 @@ export function PosteeRequestBuilder({
   const [requestBody, setRequestBody] = useState<string>("{}");
   const [requestBodyMode, setRequestBodyMode] = useState("json");
   const [bodyWasEdited, setBodyWasEdited] = useState(false);
-  const hydratedRequestIdRef = useRef<string | null>(null);
+  const [hydratedRequestId, setHydratedRequestId] = useState<string | null>(null);
+  const [pendingSave, setPendingSave] = useState<PendingRequestDraftSave | null>(null);
   const editVersionsRef = useRef<Record<string, number>>({});
-  const pendingSaveRef = useRef<
-    {
-      readonly requestId: string;
-      readonly serverRevision: number;
-      readonly editVersion: number;
-    } | null
-  >(null);
 
   // Environment creation state
   const [newEnvironmentName, setNewEnvironmentName] = useState("");
 
+  const currentEditVersion = selectedRequest
+    ? editVersionsRef.current[selectedRequest.id] ?? 0
+    : editVersionsRef.current.__new_request__ ?? 0;
+  const editorPresentation = deriveRequestEditorPresentation({
+    selectedRequest,
+    selectedRequestDraft,
+    hydratedRequestId,
+    pendingSave,
+    requestDraftSave,
+    currentEditVersion,
+    local: {
+      requestUrl,
+      requestMethod,
+      requestHeaders,
+      requestBody,
+      requestBodyMode,
+    },
+  });
+  const isEditorSynchronized = editorPresentation.synchronized;
+
   // URL validation - runs on every URL change
   const urlValidation = useMemo<UrlValidationResult>(() => {
-    return validateUrl(requestUrl);
-  }, [requestUrl]);
+    return validateUrl(editorPresentation.requestUrl);
+  }, [editorPresentation.requestUrl]);
 
   const applyConfirmedDraft = useCallback((draft: PosteeRequestDraft) => {
     setRequestUrl(draft.request.url);
@@ -166,11 +264,11 @@ export function PosteeRequestBuilder({
     setRequestBodyMode(draft.body.mode);
     setBodyWasEdited(false);
     setHasUnsavedChanges(false);
-    hydratedRequestIdRef.current = draft.request.id;
+    setHydratedRequestId(draft.request.id);
   }, []);
 
   // Replace the complete local editor state when request identity changes.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!selectedRequest) {
       setRequestUrl("");
       setRequestMethod("GET");
@@ -179,7 +277,7 @@ export function PosteeRequestBuilder({
       setRequestBodyMode("json");
       setBodyWasEdited(false);
       setHasUnsavedChanges(false);
-      hydratedRequestIdRef.current = null;
+      setHydratedRequestId(null);
       return;
     }
 
@@ -187,7 +285,7 @@ export function PosteeRequestBuilder({
       !selectedRequestDraft
       || selectedRequestDraft.request.id !== selectedRequest.id
     ) {
-      if (hydratedRequestIdRef.current !== selectedRequest.id) {
+      if (hydratedRequestId !== selectedRequest.id) {
         setRequestUrl(selectedRequest.url);
         setRequestMethod(selectedRequest.method as HttpMethod);
         setRequestHeaders([]);
@@ -199,25 +297,36 @@ export function PosteeRequestBuilder({
       return;
     }
 
-    if (hydratedRequestIdRef.current === selectedRequest.id) {
+    if (hydratedRequestId === selectedRequest.id) {
       return;
     }
 
     applyConfirmedDraft(selectedRequestDraft);
-  }, [applyConfirmedDraft, selectedRequest, selectedRequestDraft]);
+  }, [applyConfirmedDraft, hydratedRequestId, selectedRequest, selectedRequestDraft]);
 
-  useEffect(() => {
-    const pendingSave = pendingSaveRef.current;
+  useLayoutEffect(() => {
     if (
       !pendingSave
-      || requestDraftSave.status !== "success"
+    ) {
+      return;
+    }
+
+    if (
+      requestDraftSave.status === "error"
+      && requestDraftSave.requestId === pendingSave.requestId
+    ) {
+      setPendingSave(null);
+      return;
+    }
+
+    if (
+      requestDraftSave.status !== "success"
       || requestDraftSave.requestId !== pendingSave.requestId
       || requestDraftSave.revision <= pendingSave.serverRevision
     ) {
       return;
     }
 
-    pendingSaveRef.current = null;
     if (
       selectedRequest?.id === pendingSave.requestId
       && selectedRequestDraft?.request.id === pendingSave.requestId
@@ -225,8 +334,10 @@ export function PosteeRequestBuilder({
     ) {
       applyConfirmedDraft(selectedRequestDraft);
     }
+    setPendingSave(null);
   }, [
     applyConfirmedDraft,
+    pendingSave,
     requestDraftSave.requestId,
     requestDraftSave.revision,
     requestDraftSave.status,
@@ -262,23 +373,42 @@ export function PosteeRequestBuilder({
     markDirty();
   }, [markDirty]);
 
-  const isAnySaveActive = requestDraftSave.status === "saving";
+  const activeSaveRequestId = requestDraftSave.status === "saving"
+    ? requestDraftSave.requestId
+    : pendingSave?.requestId ?? null;
+  const isAnySaveActive = requestDraftSave.status === "saving" || pendingSave !== null;
+  const isMatchingSave = Boolean(
+    selectedRequest
+      && isAnySaveActive
+      && activeSaveRequestId === selectedRequest.id,
+  );
+  const isAnotherRequestSaving = Boolean(
+    selectedRequest
+      && isAnySaveActive
+      && activeSaveRequestId !== selectedRequest.id,
+  );
+  const visibleHasUnsavedChanges = isEditorSynchronized && hasUnsavedChanges;
 
   // Save action (create new or update existing)
   const handleSave = useCallback(() => {
     const trimmedUrl = requestUrl.trim();
-    if (!trimmedUrl || !activeCollectionId || isAnySaveActive) return;
+    if (
+      !trimmedUrl
+      || !activeCollectionId
+      || isAnySaveActive
+      || !isEditorSynchronized
+    ) return;
 
     if (
       selectedRequest
       && selectedRequestDraft
       && selectedRequest.id === selectedRequestDraft.request.id
     ) {
-      pendingSaveRef.current = {
+      setPendingSave({
         requestId: selectedRequest.id,
         serverRevision: requestDraftSave.revision,
         editVersion: editVersionsRef.current[selectedRequest.id] ?? 0,
-      };
+      });
       onSaveRequestDraft({
         request: {
           ...selectedRequestDraft.request,
@@ -301,6 +431,7 @@ export function PosteeRequestBuilder({
     activeCollectionId,
     bodyWasEdited,
     isAnySaveActive,
+    isEditorSynchronized,
     onCreateRequest,
     onSaveRequestDraft,
     requestBody,
@@ -313,11 +444,6 @@ export function PosteeRequestBuilder({
     selectedRequestDraft,
   ]);
 
-  const isMatchingSave = Boolean(
-    selectedRequest
-      && isAnySaveActive
-      && requestDraftSave.requestId === selectedRequest.id,
-  );
   const matchingSaveError = selectedRequest
       && requestDraftSave.status === "error"
       && requestDraftSave.requestId === selectedRequest.id
@@ -341,7 +467,13 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + Enter: Send request
       if (modKey && event.key === "Enter") {
         event.preventDefault();
-        if (canRunRequest && !isRunning && !hasUnsavedChanges && !isAnySaveActive) {
+        if (
+          canRunRequest
+          && !isRunning
+          && !hasUnsavedChanges
+          && !isAnySaveActive
+          && isEditorSynchronized
+        ) {
           onRunRequest();
         }
         return;
@@ -350,7 +482,13 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + S: Save changes
       if (modKey && event.key === "s") {
         event.preventDefault();
-        if (hasUnsavedChanges && requestUrl.trim() && activeCollectionId && !isAnySaveActive) {
+        if (
+          hasUnsavedChanges
+          && requestUrl.trim()
+          && activeCollectionId
+          && !isAnySaveActive
+          && isEditorSynchronized
+        ) {
           handleSave();
         }
         return;
@@ -365,10 +503,31 @@ export function PosteeRequestBuilder({
     handleSave,
     hasUnsavedChanges,
     isAnySaveActive,
+    isEditorSynchronized,
     isRunning,
     onRunRequest,
     requestUrl,
   ]);
+
+  const globalSaveMessage = isAnotherRequestSaving
+    ? "Another request is saving. Save and Send are temporarily unavailable."
+    : "Saving request details. Save and Send are temporarily unavailable.";
+  const saveCommandDescription = isAnotherRequestSaving
+    ? "Another request is saving. Save is temporarily unavailable."
+    : !isEditorSynchronized
+    ? "Request details are synchronising. Save is temporarily unavailable."
+    : selectedRequest
+    ? "Save changes (Cmd+S)"
+    : "Save as new request (Cmd+S)";
+  const sendCommandDescription = isAnotherRequestSaving
+    ? "Another request is saving. Send is temporarily unavailable."
+    : isMatchingSave
+    ? "This request is saving. Send is temporarily unavailable."
+    : !isEditorSynchronized
+    ? "Request details are synchronising. Send is temporarily unavailable."
+    : canRunRequest
+    ? "Send request (Cmd+Enter)"
+    : "Save request first";
 
   return (
     <>
@@ -376,10 +535,10 @@ export function PosteeRequestBuilder({
       <section className={styles.requestBar}>
         <div className={styles.requestBarRow}>
           <Select
-            value={requestMethod}
+            value={editorPresentation.requestMethod as HttpMethod}
             options={methodOptions}
             onChange={handleMethodChange}
-            disabled={!activeCollectionId || isInitialising}
+            disabled={!activeCollectionId || isInitialising || !isEditorSynchronized}
           />
           <div className={styles.urlInputWrapper}>
             <input
@@ -390,33 +549,35 @@ export function PosteeRequestBuilder({
                 : selectedRequest
                 ? "Enter request URL"
                 : "Enter URL and Save to create new request"}
-              value={requestUrl}
+              value={editorPresentation.requestUrl}
               onChange={(e) => handleUrlChange(e.target.value)}
-              disabled={!activeCollectionId || isInitialising}
+              disabled={!activeCollectionId || isInitialising || !isEditorSynchronized}
               aria-label="Request URL"
               data-validation={urlValidation._tag.toLowerCase()}
             />
-            {urlValidation._tag === "Valid" && requestUrl.trim() !== "" && (
+            {urlValidation._tag === "Valid" && editorPresentation.requestUrl.trim() !== "" && (
               <CheckCircle size={16} weight="bold" className={styles.urlValidIcon} />
             )}
             {urlValidation._tag === "Invalid" && <Warning size={16} weight="bold" className={styles.urlInvalidIcon} />}
           </div>
-          {hasUnsavedChanges && (
-            <Tooltip content={selectedRequest ? "Save changes (Cmd+S)" : "Save as new request (Cmd+S)"}>
+          {visibleHasUnsavedChanges && (
+            <Tooltip content={saveCommandDescription}>
               <button
                 type="button"
                 className={styles.saveButton}
                 onClick={handleSave}
-                disabled={!requestUrl.trim()
+                disabled={!editorPresentation.requestUrl.trim()
                   || !activeCollectionId
                   || isAnySaveActive
+                  || !isEditorSynchronized
                   || Boolean(selectedRequest && !selectedRequestDraft)}
+                title={saveCommandDescription}
               >
                 {isMatchingSave ? "Saving..." : "Save"}
               </button>
             </Tooltip>
           )}
-          {selectedRequest && !hasUnsavedChanges && (
+          {selectedRequest && !visibleHasUnsavedChanges && (
             <div className={styles.actionRow}>
               {isRunning
                 ? (
@@ -432,12 +593,13 @@ export function PosteeRequestBuilder({
                   </Tooltip>
                 )
                 : (
-                  <Tooltip content={canRunRequest ? "Send request (Cmd+Enter)" : "Save request first"}>
+                  <Tooltip content={sendCommandDescription}>
                     <button
                       type="button"
                       className={styles.runButton}
                       onClick={onRunRequest}
-                      disabled={!canRunRequest || isAnySaveActive}
+                      disabled={!canRunRequest || isAnySaveActive || !isEditorSynchronized}
+                      title={sendCommandDescription}
                     >
                       Send
                     </button>
@@ -454,6 +616,13 @@ export function PosteeRequestBuilder({
             </div>
           )}
         </div>
+
+        {isAnySaveActive && (
+          <div className={styles.validationError} role="status" aria-live="polite">
+            <SpinnerGap size={14} weight="bold" className={styles.spinner} />
+            <span>{globalSaveMessage}</span>
+          </div>
+        )}
 
         {/* URL Validation Error Message */}
         {urlValidation._tag === "Invalid" && (
@@ -495,14 +664,18 @@ export function PosteeRequestBuilder({
           </div>
         )}
 
-        {!isInitialising && activeCollectionId && !selectedRequest && requestUrl.trim() === "" && (
-          <div className={styles.emptyState}>
-            <strong>Enter a URL to create a new request</strong>
-            <span>
-              Or select an existing request from the sidebar to edit it.
-            </span>
-          </div>
-        )}
+        {!isInitialising
+          && activeCollectionId
+          && !selectedRequest
+          && editorPresentation.requestUrl.trim() === ""
+          && (
+            <div className={styles.emptyState}>
+              <strong>Enter a URL to create a new request</strong>
+              <span>
+                Or select an existing request from the sidebar to edit it.
+              </span>
+            </div>
+          )}
       </section>
 
       {/* Request Details - Only show when request is selected */}
@@ -515,15 +688,16 @@ export function PosteeRequestBuilder({
           >
             <TabPanel id="Body" className={styles.tabContent}>
               <MonacoJsonEditor
-                value={requestBody}
+                value={editorPresentation.requestBody}
                 onChange={handleBodyChange}
+                readOnly={!isEditorSynchronized}
                 height="300px"
                 placeholder="{}"
               />
             </TabPanel>
             <TabPanel id="Headers" className={styles.tabContent}>
               <HeadersEditor
-                headers={requestHeaders}
+                headers={editorPresentation.requestHeaders.map((header) => ({ ...header }))}
                 onChange={handleHeadersChange}
               />
             </TabPanel>
