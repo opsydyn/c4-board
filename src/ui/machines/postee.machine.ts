@@ -14,6 +14,7 @@ import type { DoneActorEvent, ErrorActorEvent } from "xstate";
 import { DatabaseService } from "../../core/effects/database.base";
 import { DatabaseServiceLive } from "../../core/effects/database.runtime";
 import {
+  loadPosteeRequestDraft,
   type PosteeCollection,
   PosteeCollections,
   type PosteeEnvironment,
@@ -22,7 +23,9 @@ import {
   PosteeHistory,
   type PosteeHistoryEntry,
   type PosteeRequest,
+  type PosteeRequestDraft,
   PosteeRequests,
+  savePosteeRequestDraft,
 } from "../../core/effects/postee";
 import {
   HttpClient,
@@ -62,9 +65,19 @@ export interface RunnerState {
   startedAt: number | null;
 }
 
+export interface RequestDraftSaveState {
+  readonly status: "idle" | "saving" | "success" | "error";
+  readonly requestId: RequestId | null;
+  readonly error: string | null;
+  readonly revision: number;
+}
+
 export interface PosteeContext {
   collections: PosteeCollection[];
   requestsByCollection: Record<string, PosteeRequest[]>;
+  requestDrafts: Record<string, PosteeRequestDraft>;
+  pendingRequestDraft: PosteeRequestDraft | null;
+  requestDraftSave: RequestDraftSaveState;
   environments: PosteeEnvironment[];
   variablesByEnvironment: Record<string, PosteeEnvironmentVariable[]>;
   activeCollectionId: CollectionId | null;
@@ -93,6 +106,7 @@ export type PosteeEvent =
   | { type: "RUN_REQUEST" }
   | { type: "RUN_CANCEL" }
   | { type: "REFRESH_HISTORY" }
+  | { type: "SAVE_REQUEST_DRAFT"; draft: PosteeRequestDraft }
   | { type: "SET_BASELINE_RESPONSE" } // Set current response as baseline for diff
   | { type: "CLEAR_BASELINE_RESPONSE" } // Clear baseline
   | {
@@ -160,6 +174,7 @@ export type PosteeEvent =
 export interface LoadWorkspaceResult {
   collections: PosteeCollection[];
   requestMap: Record<string, PosteeRequest[]>;
+  requestDrafts: Record<string, PosteeRequestDraft>;
   environments: PosteeEnvironment[];
   variables: Record<string, PosteeEnvironmentVariable[]>;
   history: PosteeHistoryEntry[];
@@ -175,12 +190,16 @@ export interface RunRequestResult {
 }
 
 type LoadWorkspaceDoneEvent = DoneActorEvent<LoadWorkspaceResult, "loadWorkspace">;
+type SaveRequestDraftDoneEvent = DoneActorEvent<PosteeRequestDraft, "saveRequestDraft">;
+type SaveRequestDraftErrorEvent = ErrorActorEvent<unknown, "saveRequestDraft">;
 type RunRequestDoneEvent = DoneActorEvent<RunRequestResult, "runRequest">;
 type RunRequestErrorEvent = ErrorActorEvent<unknown, "runRequest">;
 
 type PosteeMachineEvent =
   | PosteeEvent
   | LoadWorkspaceDoneEvent
+  | SaveRequestDraftDoneEvent
+  | SaveRequestDraftErrorEvent
   | RunRequestDoneEvent
   | RunRequestErrorEvent;
 
@@ -205,6 +224,34 @@ const initialRunner = (): RunnerState => ({
   error: null,
   startedAt: null,
 });
+
+const initialRequestDraftSave = (): RequestDraftSaveState => ({
+  status: "idle",
+  requestId: null,
+  error: null,
+  revision: 0,
+});
+
+const defaultRequestDraft = (request: PosteeRequest): PosteeRequestDraft => ({
+  request,
+  headers: [],
+  body: {
+    request_id: request.id,
+    mode: "json",
+    raw: "{}",
+    form_values: null,
+  },
+});
+
+const publicErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return String(error ?? "Request draft save failed");
+};
 
 // =============================================================================
 // Machine
@@ -239,6 +286,17 @@ const posteeWorkspaceSetup = setup({
             { batching: true },
           );
 
+          const requestMap = Object.fromEntries(requestPairs);
+          const requestDraftEntries = yield* Effect.forEach(
+            Object.values(requestMap).flat(),
+            (request) =>
+              Effect.map(
+                loadPosteeRequestDraft(request),
+                (draft) => [request.id, draft] as const,
+              ),
+            { batching: true },
+          );
+
           const environments = yield* PosteeEnvironments.list();
 
           const variableEntries = yield* Effect.forEach(
@@ -253,7 +311,7 @@ const posteeWorkspaceSetup = setup({
 
           const history = yield* PosteeHistory.list(50);
 
-          const requestMap = Object.fromEntries(requestPairs);
+          const requestDrafts = Object.fromEntries(requestDraftEntries);
           const variables = Object.fromEntries(variableEntries);
 
           // Brand IDs from database strings
@@ -276,6 +334,7 @@ const posteeWorkspaceSetup = setup({
           return {
             collections,
             requestMap,
+            requestDrafts,
             environments,
             variables,
             history,
@@ -284,6 +343,22 @@ const posteeWorkspaceSetup = setup({
             defaultEnvironmentId: defaultEnvironment,
           } satisfies LoadWorkspaceResult;
         }),
+      );
+    }),
+
+    saveRequestDraft: fromPromise<
+      PosteeRequestDraft,
+      {
+        layer: WorkspaceLayer;
+        draft: PosteeRequestDraft | null;
+      }
+    >(async ({ input }) => {
+      if (!input.draft) {
+        throw new Error("No request draft staged for save");
+      }
+      return runLayeredEffect(
+        input.layer,
+        savePosteeRequestDraft(input.draft),
       );
     }),
 
@@ -657,6 +732,10 @@ const posteeWorkspaceSetup = setup({
           ...context.requestsByCollection,
           [collectionKey]: nextRequests,
         },
+        requestDrafts: {
+          ...context.requestDrafts,
+          [requestId]: defaultRequestDraft(nextRequest),
+        },
         activeCollectionId: event.payload.collectionId,
         activeRequestId: event.payload.id,
       };
@@ -723,6 +802,7 @@ const posteeWorkspaceSetup = setup({
       const {
         collections,
         requestMap,
+        requestDrafts,
         environments,
         variables,
         history,
@@ -735,6 +815,7 @@ const posteeWorkspaceSetup = setup({
         ...context,
         collections,
         requestsByCollection: requestMap,
+        requestDrafts,
         environments,
         variablesByEnvironment: variables,
         history,
@@ -742,6 +823,67 @@ const posteeWorkspaceSetup = setup({
         activeRequestId: defaultRequestId,
         activeEnvironmentId: defaultEnvironmentId,
         runner: initialRunner(),
+      };
+    }),
+    stageRequestDraft: assign(({ context, event }) => {
+      if (event.type !== "SAVE_REQUEST_DRAFT") {
+        return context;
+      }
+
+      return {
+        ...context,
+        pendingRequestDraft: event.draft,
+        requestDraftSave: {
+          status: "saving",
+          requestId: RequestIdBrand(event.draft.request.id),
+          error: null,
+          revision: context.requestDraftSave.revision,
+        },
+      };
+    }),
+    publishSavedRequestDraft: assign(({ context, event }) => {
+      if (event.type !== "xstate.done.actor.saveRequestDraft") {
+        return context;
+      }
+
+      const draft = event.output;
+      const requestId = draft.request.id;
+      const collectionId = draft.request.collection_id;
+
+      return {
+        ...context,
+        requestsByCollection: {
+          ...context.requestsByCollection,
+          [collectionId]: context.requestsByCollection[collectionId]?.map(
+            (request) => request.id === requestId ? draft.request : request,
+          ) ?? [],
+        },
+        requestDrafts: {
+          ...context.requestDrafts,
+          [requestId]: draft,
+        },
+        pendingRequestDraft: null,
+        requestDraftSave: {
+          status: "success",
+          requestId: RequestIdBrand(requestId),
+          error: null,
+          revision: context.requestDraftSave.revision + 1,
+        },
+      };
+    }),
+    failRequestDraftSave: assign(({ context, event }) => {
+      if (event.type !== "xstate.error.actor.saveRequestDraft") {
+        return context;
+      }
+
+      return {
+        ...context,
+        pendingRequestDraft: null,
+        requestDraftSave: {
+          ...context.requestDraftSave,
+          status: "error",
+          error: publicErrorMessage(event.error),
+        },
       };
     }),
     markRunnerIdle: assign({
@@ -1116,6 +1258,10 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         UPDATE_REQUEST_METADATA: {
           actions: ["updateRequestMetadata", "deriveWorkspaceState"],
         },
+        SAVE_REQUEST_DRAFT: {
+          target: "savingDraft",
+          actions: "stageRequestDraft",
+        },
         RUN_REQUEST: {
           target: "running",
           guard: "hasActiveRequest",
@@ -1144,6 +1290,24 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         // Derive request statuses when history is refreshed
         REFRESH_HISTORY: {
           actions: "deriveRequestStatuses",
+        },
+      },
+    },
+    savingDraft: {
+      invoke: {
+        id: "saveRequestDraft",
+        src: "saveRequestDraft",
+        input: ({ context }) => ({
+          layer: context.layer,
+          draft: context.pendingRequestDraft,
+        }),
+        onDone: {
+          target: "idle",
+          actions: ["publishSavedRequestDraft", "deriveWorkspaceState"],
+        },
+        onError: {
+          target: "idle",
+          actions: "failRequestDraftSave",
         },
       },
     },
@@ -1248,6 +1412,9 @@ export const createPosteeWorkspaceMachine = (options?: {
     context: {
       collections: [],
       requestsByCollection: {},
+      requestDrafts: {},
+      pendingRequestDraft: null,
+      requestDraftSave: initialRequestDraftSave(),
       environments: [],
       variablesByEnvironment: {},
       activeCollectionId: null,
