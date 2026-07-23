@@ -7,6 +7,13 @@ title: "C4 Board - Feature Roadmap"
 ## Vision
 Transform the C4 board from a static diagram tool into a **living, breathing blueprint** of real systems - a single source of truth that connects architecture diagrams with actual code, metrics, documentation, and team context.
 
+## Dedicated Product Workstreams
+
+Postee is a first-class API workspace with its own delivery sequence. Its
+canonical product direction, UX-first milestones, REST credibility floor,
+native load-testing work, and optional C4/OPY differentiation are maintained in
+the [Postee Product Roadmap](./postee-product-roadmap/).
+
 ---
 
 ## Feature Categories
