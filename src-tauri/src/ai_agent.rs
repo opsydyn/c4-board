@@ -1,6 +1,6 @@
 use crate::db::AppDb;
+use crate::rig_runtime::{extract_openai, prompt_openai, RigRuntimeError, RigUsageMetadata};
 use keyring::Entry;
-use rig::{client::CompletionClient, completion::Prompt, providers::openai};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -50,6 +50,7 @@ pub struct RigAgentHelloResponse {
     pub prompt: String,
     pub temperature: f64,
     pub max_tokens: u64,
+    pub usage: RigUsageMetadata,
     pub responded_at_ms: i64,
 }
 
@@ -150,6 +151,7 @@ pub struct RigC4DiagramPlanResponse {
     pub proposal: RigC4DiagramProposalPayload,
     pub provider: String,
     pub model: String,
+    pub usage: RigUsageMetadata,
     pub responded_at_ms: i64,
 }
 
@@ -203,6 +205,7 @@ pub struct RigC4BoardReviewResponse {
     pub review: RigC4BoardReviewPayload,
     pub provider: String,
     pub model: String,
+    pub usage: RigUsageMetadata,
     pub responded_at_ms: i64,
 }
 
@@ -311,6 +314,43 @@ fn first_non_empty(value: Option<String>, fallback: &str) -> String {
             }
         }
         None => fallback.to_string(),
+    }
+}
+
+fn resolve_model(value: Option<String>) -> String {
+    first_non_empty(value, DEFAULT_MODEL)
+}
+
+fn resolve_temperature(value: Option<f64>) -> f64 {
+    normalize_temperature(value).unwrap_or(DEFAULT_TEMPERATURE)
+}
+
+fn resolve_max_tokens(value: Option<u64>) -> u64 {
+    normalize_max_tokens(value).unwrap_or(DEFAULT_MAX_TOKENS)
+}
+
+fn map_runtime_error(operation: &str, error: RigRuntimeError) -> String {
+    format!("{operation} failed: {error}")
+}
+
+fn to_hello_response(
+    message: String,
+    model: String,
+    prompt: String,
+    temperature: f64,
+    max_tokens: u64,
+    usage: RigUsageMetadata,
+    responded_at_ms: i64,
+) -> RigAgentHelloResponse {
+    RigAgentHelloResponse {
+        message,
+        provider: "openai".to_string(),
+        model,
+        prompt,
+        temperature,
+        max_tokens,
+        usage,
+        responded_at_ms,
     }
 }
 
@@ -1278,40 +1318,35 @@ pub async fn rig_agent_hello(
     state: State<'_, AppDb>,
     input: RigAgentHelloRequest,
 ) -> Result<RigAgentHelloResponse, String> {
-    let model = first_non_empty(input.model, DEFAULT_MODEL);
+    let model = resolve_model(input.model);
     let prompt = first_non_empty(input.prompt, DEFAULT_PROMPT);
-    let temperature = normalize_temperature(input.temperature).unwrap_or(DEFAULT_TEMPERATURE);
-    let max_tokens = normalize_max_tokens(input.max_tokens).unwrap_or(DEFAULT_MAX_TOKENS);
+    let temperature = resolve_temperature(input.temperature);
+    let max_tokens = resolve_max_tokens(input.max_tokens);
 
     let secret = resolve_openai_secret(&state).await?.ok_or_else(|| {
         "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
     })?;
 
-    let client: openai::Client = openai::Client::builder()
-        .api_key(&secret.value)
-        .build()
-        .map_err(|error| format!("Failed to initialize OpenAI client: {error}"))?;
-    let agent = client
-        .agent(&model)
-        .preamble("You are the OPSYDYN assistant. Reply with one concise sentence.")
-        .temperature(temperature)
-        .max_tokens(max_tokens)
-        .build();
+    let output = prompt_openai(
+        &secret.value,
+        &model,
+        "You are the OPSYDYN assistant. Reply with one concise sentence.",
+        temperature,
+        max_tokens,
+        &prompt,
+    )
+    .await
+    .map_err(|error| map_runtime_error("rig_agent_hello", error))?;
 
-    let message = agent
-        .prompt(&prompt)
-        .await
-        .map_err(|error| format!("rig_agent_hello failed: {error}"))?;
-
-    Ok(RigAgentHelloResponse {
-        message,
-        provider: "openai".to_string(),
+    Ok(to_hello_response(
+        output.message,
         model,
         prompt,
         temperature,
         max_tokens,
-        responded_at_ms: now_unix_ms(),
-    })
+        output.usage,
+        now_unix_ms(),
+    ))
 }
 
 #[tauri::command]
@@ -1333,8 +1368,8 @@ pub async fn rig_agent_plan_c4_diagram(
     }
 
     let prompt_text = build_c4_diagram_plan_text(description);
-    let model = first_non_empty(model, DEFAULT_MODEL);
-    let max_tokens = normalize_max_tokens(max_tokens).unwrap_or(DEFAULT_MAX_TOKENS);
+    let model = resolve_model(model);
+    let max_tokens = resolve_max_tokens(max_tokens);
     let mut context_sections = Vec::new();
 
     if let Some(context) = normalize_optional_string(diagram_context) {
@@ -1358,34 +1393,26 @@ pub async fn rig_agent_plan_c4_diagram(
         "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
     })?;
 
-    let client: openai::Client = openai::Client::builder()
-        .api_key(&secret.value)
-        .build()
-        .map_err(|error| format!("Failed to initialize OpenAI client: {error}"))?;
+    let output = extract_openai::<RigC4DiagramProposalPayload>(
+        &secret.value,
+        &model,
+        build_c4_diagram_plan_preamble(),
+        max_tokens,
+        combined_context.as_deref(),
+        1,
+        &prompt_text,
+    )
+    .await
+    .map_err(|error| map_runtime_error("rig_agent_plan_c4_diagram", error))?;
 
-    let mut extractor = client
-        .extractor::<RigC4DiagramProposalPayload>(&model)
-        .preamble(build_c4_diagram_plan_preamble())
-        .max_tokens(max_tokens)
-        .retries(1);
-
-    if let Some(ref context) = combined_context {
-        extractor = extractor.context(context);
-    }
-
-    let proposal = extractor
-        .build()
-        .extract(prompt_text)
-        .await
-        .map_err(|error| format!("rig_agent_plan_c4_diagram failed: {error}"))?;
-
-    let proposal = sanitize_c4_diagram_plan(proposal)?;
+    let proposal = sanitize_c4_diagram_plan(output.data)?;
     validate_c4_diagram_plan(&proposal)?;
 
     Ok(RigC4DiagramPlanResponse {
         proposal,
         provider: "openai".to_string(),
         model,
+        usage: output.usage,
         responded_at_ms: now_unix_ms(),
     })
 }
@@ -1409,8 +1436,8 @@ pub async fn rig_agent_review_c4_board(
 
     let focus = normalize_optional_string(focus);
     let prompt_text = build_c4_board_review_text(focus.as_deref());
-    let model = first_non_empty(model, DEFAULT_MODEL);
-    let max_tokens = normalize_max_tokens(max_tokens).unwrap_or(DEFAULT_MAX_TOKENS);
+    let model = resolve_model(model);
+    let max_tokens = resolve_max_tokens(max_tokens);
     let mut context_sections = Vec::new();
 
     if let Some(context) = normalize_optional_string(diagram_context) {
@@ -1431,33 +1458,25 @@ pub async fn rig_agent_review_c4_board(
         "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
     })?;
 
-    let client: openai::Client = openai::Client::builder()
-        .api_key(&secret.value)
-        .build()
-        .map_err(|error| format!("Failed to initialize OpenAI client: {error}"))?;
+    let output = extract_openai::<RigC4BoardReviewPayload>(
+        &secret.value,
+        &model,
+        build_c4_board_review_preamble(),
+        max_tokens,
+        combined_context.as_deref(),
+        1,
+        &prompt_text,
+    )
+    .await
+    .map_err(|error| map_runtime_error("rig_agent_review_c4_board", error))?;
 
-    let mut extractor = client
-        .extractor::<RigC4BoardReviewPayload>(&model)
-        .preamble(build_c4_board_review_preamble())
-        .max_tokens(max_tokens)
-        .retries(1);
-
-    if let Some(ref context) = combined_context {
-        extractor = extractor.context(context);
-    }
-
-    let review = extractor
-        .build()
-        .extract(prompt_text)
-        .await
-        .map_err(|error| format!("rig_agent_review_c4_board failed: {error}"))?;
-
-    validate_c4_board_review(&review)?;
+    validate_c4_board_review(&output.data)?;
 
     Ok(RigC4BoardReviewResponse {
-        review,
+        review: output.data,
         provider: "openai".to_string(),
         model,
+        usage: output.usage,
         responded_at_ms: now_unix_ms(),
     })
 }
@@ -1465,6 +1484,37 @@ pub async fn rig_agent_review_c4_board(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hello_defaults_are_stable() {
+        assert_eq!(resolve_model(None), DEFAULT_MODEL);
+        assert_eq!(resolve_temperature(None), DEFAULT_TEMPERATURE);
+        assert_eq!(resolve_max_tokens(None), DEFAULT_MAX_TOKENS);
+    }
+
+    #[test]
+    fn hello_response_preserves_runtime_usage() {
+        let usage = RigUsageMetadata {
+            input_tokens: 12,
+            output_tokens: 4,
+            total_tokens: 16,
+            cached_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+        };
+
+        let response = to_hello_response(
+            "ready".to_string(),
+            "gpt-4o-mini".to_string(),
+            "hello".to_string(),
+            DEFAULT_TEMPERATURE,
+            DEFAULT_MAX_TOKENS,
+            usage.clone(),
+            99,
+        );
+
+        assert_eq!(response.usage, usage);
+        assert_eq!(response.responded_at_ms, 99);
+    }
 
     fn create_proposal() -> RigC4DiagramProposalPayload {
         RigC4DiagramProposalPayload {

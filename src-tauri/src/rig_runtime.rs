@@ -1,3 +1,5 @@
+use rig::{client::CompletionClient, completion::Prompt, providers::openai};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,6 +32,73 @@ pub enum RigRuntimeError {
     Prompt,
     #[error("Rig extraction failed: provider request failed")]
     Extraction,
+}
+
+pub async fn prompt_openai(
+    api_key: &str,
+    model: &str,
+    preamble: &str,
+    temperature: f64,
+    max_tokens: u64,
+    prompt: &str,
+) -> Result<RigPromptOutput, RigRuntimeError> {
+    let client: openai::Client = openai::Client::builder()
+        .api_key(api_key)
+        .build()
+        .map_err(|_| RigRuntimeError::Client)?;
+    let agent = client
+        .agent(model)
+        .preamble(preamble)
+        .temperature(temperature)
+        .max_tokens(max_tokens)
+        .build();
+    let message = agent
+        .prompt(prompt)
+        .await
+        .map_err(|_| RigRuntimeError::Prompt)?;
+
+    Ok(RigPromptOutput {
+        message,
+        usage: RigUsageMetadata::default(),
+    })
+}
+
+pub async fn extract_openai<T>(
+    api_key: &str,
+    model: &str,
+    preamble: &str,
+    max_tokens: u64,
+    context: Option<&str>,
+    retries: u64,
+    prompt: &str,
+) -> Result<RigExtractionOutput<T>, RigRuntimeError>
+where
+    T: JsonSchema + for<'de> Deserialize<'de> + Serialize + Send + Sync + 'static,
+{
+    let client: openai::Client = openai::Client::builder()
+        .api_key(api_key)
+        .build()
+        .map_err(|_| RigRuntimeError::Client)?;
+    let mut extractor = client
+        .extractor::<T>(model)
+        .preamble(preamble)
+        .max_tokens(max_tokens)
+        .retries(retries);
+
+    if let Some(context) = context {
+        extractor = extractor.context(context);
+    }
+
+    let data = extractor
+        .build()
+        .extract(prompt)
+        .await
+        .map_err(|_| RigRuntimeError::Extraction)?;
+
+    Ok(RigExtractionOutput {
+        data,
+        usage: RigUsageMetadata::default(),
+    })
 }
 
 #[cfg(test)]
