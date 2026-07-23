@@ -14,6 +14,8 @@ pub struct RigUsageMetadata {
     pub total_tokens: u64,
     pub cached_input_tokens: u64,
     pub cache_creation_input_tokens: u64,
+    pub tool_use_prompt_tokens: u64,
+    pub reasoning_tokens: u64,
 }
 
 impl From<Usage> for RigUsageMetadata {
@@ -24,6 +26,8 @@ impl From<Usage> for RigUsageMetadata {
             total_tokens: usage.total_tokens,
             cached_input_tokens: usage.cached_input_tokens,
             cache_creation_input_tokens: usage.cache_creation_input_tokens,
+            tool_use_prompt_tokens: usage.tool_use_prompt_tokens,
+            reasoning_tokens: usage.reasoning_tokens,
         }
     }
 }
@@ -106,6 +110,9 @@ where
         extractor = extractor.context(context);
     }
 
+    // Rig 0.40 discards usage when an extraction attempt fails to parse. With
+    // retries, this response therefore reports only the final successful
+    // attempt and can under-report provider spend.
     let response = extractor
         .build()
         .extract_with_usage(prompt)
@@ -131,18 +138,31 @@ mod tests {
     }
 
     #[test]
-    fn usage_metadata_serializes_with_camel_case_fields() {
-        let json = serde_json::to_value(RigUsageMetadata {
+    fn all_usage_counters_convert_and_serialize_with_camel_case_fields() {
+        let usage = Usage {
             input_tokens: 1,
             output_tokens: 2,
             total_tokens: 3,
             cached_input_tokens: 4,
             cache_creation_input_tokens: 5,
-        })
-        .expect("usage should serialize");
+            tool_use_prompt_tokens: 6,
+            reasoning_tokens: 7,
+        };
+        let json =
+            serde_json::to_value(RigUsageMetadata::from(usage)).expect("usage should serialize");
 
-        assert_eq!(json["inputTokens"], 1);
-        assert_eq!(json["cacheCreationInputTokens"], 5);
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "inputTokens": 1,
+                "outputTokens": 2,
+                "totalTokens": 3,
+                "cachedInputTokens": 4,
+                "cacheCreationInputTokens": 5,
+                "toolUsePromptTokens": 6,
+                "reasoningTokens": 7,
+            })
+        );
     }
 
     #[test]
