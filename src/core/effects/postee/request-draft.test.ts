@@ -24,6 +24,20 @@ const persistedBody: PosteeRequestBody = {
   form_values: null,
 };
 
+const rawBody: PosteeRequestBody = {
+  request_id: request.id,
+  mode: "raw",
+  raw: "plain text",
+  form_values: null,
+};
+
+const formBody: PosteeRequestBody = {
+  request_id: request.id,
+  mode: "form",
+  raw: null,
+  form_values: JSON.stringify([["name", "Ada"]]),
+};
+
 const draft: PosteeRequestDraft = {
   request,
   headers: [
@@ -114,6 +128,17 @@ describe("Postee request drafts", () => {
     });
   });
 
+  it.each([
+    ["raw", rawBody],
+    ["form", formBody],
+  ])("hydrates a persisted %s body unchanged", async (_mode, body) => {
+    const [service] = makeDatabaseService(body);
+
+    const loaded = await runWithDatabase(loadPosteeRequestDraft(request), service);
+
+    expect(loaded.body).toEqual(body);
+  });
+
   it("saves metadata headers and body in one transaction", async () => {
     const [service, recorder] = makeDatabaseService(persistedBody);
 
@@ -129,7 +154,18 @@ describe("Postee request drafts", () => {
       ]),
     );
     expect(recorder.executedSql().filter((sql) => sql.includes("INSERT INTO postee_request_headers"))).toHaveLength(1);
-    expect(saved).toEqual(draft);
+    expect(saved.request).toEqual({
+      ...draft.request,
+      updated_at: expect.any(Number),
+    });
+    expect(saved.request.updated_at).toBeGreaterThan(draft.request.updated_at);
+    expect(saved.headers).toEqual([
+      { id: "41", key: "Accept", value: "application/json", enabled: true },
+    ]);
+    expect(saved.body).toEqual({
+      ...draft.body,
+      request_id: draft.request.id,
+    });
   });
 
   it("binds the saved body to the draft request", async () => {
@@ -139,12 +175,13 @@ describe("Postee request drafts", () => {
       body: { ...draft.body, request_id: "different-request" },
     };
 
-    await runWithDatabase(savePosteeRequestDraft(draftWithMismatchedBody), service);
+    const saved = await runWithDatabase(savePosteeRequestDraft(draftWithMismatchedBody), service);
 
     const bodyUpsertIndex = recorder
       .executedSql()
       .findIndex((sql) => sql.includes("INSERT INTO postee_request_bodies"));
 
     expect(recorder.executedBindValues()[bodyUpsertIndex]?.[0]).toBe(request.id);
+    expect(saved.body.request_id).toBe(request.id);
   });
 });

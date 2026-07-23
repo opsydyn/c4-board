@@ -56,8 +56,10 @@ export const savePosteeRequestDraft = (
 ): Effect.Effect<PosteeRequestDraft, DatabaseError, DatabaseService> =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
-    const headers = draft.headers
-      .filter((header) => header.key.trim().length > 0)
+    const acceptedHeaders = draft.headers.filter(
+      (header) => header.key.trim().length > 0,
+    );
+    const persistedHeaders = acceptedHeaders
       .map((header, sortOrder) => ({
         request_id: draft.request.id,
         key: header.key,
@@ -65,14 +67,19 @@ export const savePosteeRequestDraft = (
         is_enabled: header.enabled ? 1 : 0,
         sort_order: sortOrder,
       }));
+    const body = { ...draft.body, request_id: draft.request.id };
 
-    yield* service.transaction(
+    return yield* service.transaction(
       Effect.gen(function*() {
-        yield* updatePosteeRequest(draft.request);
-        yield* replacePosteeRequestHeaders(draft.request.id, headers);
-        yield* upsertPosteeRequestBody({ ...draft.body, request_id: draft.request.id });
+        const request = yield* updatePosteeRequest(draft.request);
+        yield* replacePosteeRequestHeaders(draft.request.id, persistedHeaders);
+        yield* upsertPosteeRequestBody(body);
+
+        return {
+          request,
+          headers: acceptedHeaders,
+          body,
+        };
       }),
     );
-
-    return draft;
   });
