@@ -65,6 +65,8 @@ Full handbook: [docs/src/content/docs/opy/index.md](docs/src/content/docs/opy/in
 The app also includes the Postee workspace for local API/client experimentation:
 
 - request builder
+- durable scratch requests that can be sent before creating a collection
+- scratch tabs with close and reopen controls, plus atomic save-to-collection promotion
 - response viewer
 - Monaco JSON editor
 - environment support

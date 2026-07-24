@@ -5,7 +5,7 @@ import { newPosteeScratchDraft, serialisePosteeScratchDraft } from "./scratch-dr
 describe("Postee scratch draft serialization", () => {
   it("never serializes a resolved environment value", () => {
     fc.assert(
-      fc.property(fc.hexaString({ minLength: 12, maxLength: 32 }), (suffix) => {
+      fc.property(fc.stringMatching(/[a-f0-9]{12,32}/), (suffix) => {
         const resolvedToken = `resolved-secret-${suffix}`;
         const stored = serialisePosteeScratchDraft({
           ...newPosteeScratchDraft({ id: "scratch-property", tabOrder: 0, now: 1 }),

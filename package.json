@@ -99,6 +99,7 @@
     "@vitest/ui": "4.1.10",
     "eslint": "^10.6.0",
     "eslint-plugin-react": "^7.37.5",
+    "fast-check": "^4.9.0",
     "globals": "^17.7.0",
     "jiti": "^2.7.0",
     "jsdom": "^29.1.1",

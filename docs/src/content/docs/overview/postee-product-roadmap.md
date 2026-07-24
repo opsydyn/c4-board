@@ -41,6 +41,8 @@ Postee already has a substantial implementation:
   percentiles, errors, throughput, and live charts;
 - Effect-based domain modules, XState orchestration, React Aria controls, and a
   focused Postee test suite.
+- durable local scratch drafts that open immediately, execute without a
+  collection, reopen after closing, and promote atomically into saved requests.
 
 The current product is mature in capability breadth but transitional in
 workflow coherence and lifecycle correctness.
@@ -55,15 +57,14 @@ workflow coherence and lifecycle correctness.
 4. Secret-marked environment values are stored as plaintext.
 5. Load tests do not inherit the complete prepared request and cannot be
    cancelled after starting.
-6. The collection-first empty state prevents immediate scratch requests.
-7. Request, response, history, environment, and load-test activities appear as
+6. Request, response, history, environment, and load-test activities appear as
    separate tools rather than one request lifecycle.
-8. Request selection and panel state are split between React-local state and the
+7. Request selection and panel state are split between React-local state and the
    workspace machine.
-9. Request authoring lacks first-class parameters, authentication, body modes,
+8. Request authoring lacks first-class parameters, authentication, body modes,
    cookies, and common import paths.
-10. Existing tests do not prove the full edit, save, reload, execute, inspect,
-    and replay lifecycle.
+9. Existing tests do not prove the full edit, save, reload, execute, inspect,
+   and replay lifecycle.
 
 ## Product Principles
 
@@ -159,21 +160,23 @@ usable. This is the first delivery stream.
 
 ### 1.2 Immediate Request UX
 
-- [ ] Open Postee with a ready scratch request tab.
-- [ ] Allow Send before a collection exists.
-- [ ] Add explicit New Request and Import actions.
-- [ ] Keep method, URL, environment, Send, Save, and Cancel in one stable command
-      row.
+- [x] Open Postee with a ready scratch request tab.
+- [x] Allow Send before a collection exists.
+- [x] Add an explicit New Request action.
+- [ ] Add Import actions.
+- [x] Keep method, URL, Send, Save, and Cancel in one stable command row.
 - [ ] Provide clear dirty, saving, saved, running, cancelled, and failed states.
-- [ ] Ask for a collection only when the user saves a scratch request.
+- [x] Ask for a collection only when the user saves a scratch request.
 - [ ] Replace passive empty space with useful quick starts: HTTP request, cURL
       import, OpenAPI import, and recent request.
 
 ### 1.3 Request Tabs and Split Workspace
 
-- [ ] Add accessible request tabs with close, reopen, reorder, overflow, and
-      keyboard navigation.
-- [ ] Preserve unsaved draft state while switching requests.
+- [x] Add accessible scratch tabs with close, reopen, overflow, and keyboard
+      navigation.
+- [ ] Add saved-request tabs and scratch-tab reordering.
+- [x] Preserve durable scratch draft state while switching, closing, and
+      reopening scratch requests.
 - [ ] Add a resizable request/result split with horizontal and vertical modes.
 - [ ] Persist panel sizes and collapsed state per workspace.
 - [ ] Move Response, History, and Performance from header toggles into the
