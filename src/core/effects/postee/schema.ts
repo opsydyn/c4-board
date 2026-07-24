@@ -99,6 +99,7 @@ export const RequestBodyModeSchema = S.Union(
   S.Literal("raw" as const),
   S.Literal("json" as const),
   S.Literal("form" as const),
+  S.Literal("graphql" as const),
 );
 
 export type RequestBodyMode = S.Schema.Type<typeof RequestBodyModeSchema>;

@@ -1,5 +1,5 @@
 import { DatabaseService } from "@/core/effects/database.base";
-import type { PosteeRequest, PosteeRequestBody } from "@/core/effects/database.postee";
+import type { PosteeGraphqlRequest, PosteeRequest, PosteeRequestBody } from "@/core/effects/database.postee";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { loadPosteeRequestDraft, type PosteeRequestDraft, savePosteeRequestDraft } from "./request-draft";
@@ -17,7 +17,7 @@ const request: PosteeRequest = {
   updated_at: 1,
 };
 
-const persistedBody: PosteeRequestBody = {
+const pre031JsonBody: PosteeRequestBody = {
   request_id: request.id,
   mode: "json",
   raw: "{\"hello\":\"world\"}",
@@ -38,13 +38,32 @@ const formBody: PosteeRequestBody = {
   form_values: JSON.stringify([["name", "Ada"]]),
 };
 
+const graphqlRequest: PosteeGraphqlRequest = {
+  request_id: request.id,
+  document: "query Viewer { viewer { id } }",
+  variables_json: "{\"includeEmail\":true}",
+  operation_name: "Viewer",
+};
+
 const draft: PosteeRequestDraft = {
   request,
   headers: [
     { id: "41", key: "Accept", value: "application/json", enabled: true },
     { id: "new-header", key: "", value: "discarded", enabled: false },
   ],
-  body: persistedBody,
+  body: pre031JsonBody,
+  graphql: null,
+};
+
+const graphqlDraft: PosteeRequestDraft = {
+  ...draft,
+  body: {
+    request_id: request.id,
+    mode: "graphql",
+    raw: null,
+    form_values: null,
+  },
+  graphql: graphqlRequest,
 };
 
 interface DatabaseRecorder {
@@ -53,7 +72,10 @@ interface DatabaseRecorder {
   readonly executedBindValues: () => ReadonlyArray<ReadonlyArray<unknown> | undefined>;
 }
 
-const makeDatabaseService = (body: PosteeRequestBody | null): [typeof DatabaseService.Service, DatabaseRecorder] => {
+const makeDatabaseService = (
+  body: PosteeRequestBody | null,
+  graphql: PosteeGraphqlRequest | null = null,
+): [typeof DatabaseService.Service, DatabaseRecorder] => {
   let transactionCalls = 0;
   const executedSql: string[] = [];
   const executedBindValues: Array<ReadonlyArray<unknown> | undefined> = [];
@@ -75,6 +97,10 @@ const makeDatabaseService = (body: PosteeRequestBody | null): [typeof DatabaseSe
 
       if (sql.includes("postee_request_bodies")) {
         return Effect.succeed((body === null ? [] : [body]) as T[]);
+      }
+
+      if (sql.includes("postee_graphql_requests")) {
+        return Effect.succeed((graphql === null ? [] : [graphql]) as T[]);
       }
 
       return Effect.succeed([] as T[]);
@@ -104,15 +130,16 @@ const runWithDatabase = <A, E>(effect: Effect.Effect<A, E, DatabaseService>, ser
   Effect.runPromise(effect.pipe(Effect.provide(Layer.succeed(DatabaseService, service))));
 
 describe("Postee request drafts", () => {
-  it("hydrates persisted headers and body into a complete request draft", async () => {
-    const [service] = makeDatabaseService(persistedBody);
+  it("hydrates a pre-031 JSON body into a complete request draft", async () => {
+    const [service] = makeDatabaseService(pre031JsonBody);
 
     const loaded = await runWithDatabase(loadPosteeRequestDraft(request), service);
 
     expect(loaded.headers).toEqual([
       { id: "41", key: "Accept", value: "application/json", enabled: true },
     ]);
-    expect(loaded.body).toEqual(persistedBody);
+    expect(loaded.body).toEqual(pre031JsonBody);
+    expect(loaded.graphql).toBeNull();
   });
 
   it("uses an empty JSON body when a request has no persisted body", async () => {
@@ -126,6 +153,7 @@ describe("Postee request drafts", () => {
       raw: "{}",
       form_values: null,
     });
+    expect(loaded.graphql).toBeNull();
   });
 
   it.each([
@@ -140,7 +168,7 @@ describe("Postee request drafts", () => {
   });
 
   it("saves metadata headers and body in one transaction", async () => {
-    const [service, recorder] = makeDatabaseService(persistedBody);
+    const [service, recorder] = makeDatabaseService(pre031JsonBody);
 
     const saved = await runWithDatabase(savePosteeRequestDraft(draft), service);
 
@@ -169,7 +197,7 @@ describe("Postee request drafts", () => {
   });
 
   it("binds the saved body to the draft request", async () => {
-    const [service, recorder] = makeDatabaseService(persistedBody);
+    const [service, recorder] = makeDatabaseService(pre031JsonBody);
     const draftWithMismatchedBody = {
       ...draft,
       body: { ...draft.body, request_id: "different-request" },
@@ -183,5 +211,41 @@ describe("Postee request drafts", () => {
 
     expect(recorder.executedBindValues()[bodyUpsertIndex]?.[0]).toBe(request.id);
     expect(saved.body.request_id).toBe(request.id);
+  });
+
+  it("hydrates a persisted GraphQL draft alongside its GraphQL body mode", async () => {
+    const [service] = makeDatabaseService(graphqlDraft.body, graphqlRequest);
+
+    const loaded = await runWithDatabase(loadPosteeRequestDraft(request), service);
+
+    expect(loaded.body).toEqual(graphqlDraft.body);
+    expect(loaded.graphql).toEqual(graphqlRequest);
+  });
+
+  it("saves GraphQL data with request metadata, headers, and body in one transaction", async () => {
+    const [service, recorder] = makeDatabaseService(graphqlDraft.body, graphqlRequest);
+
+    const saved = await runWithDatabase(savePosteeRequestDraft(graphqlDraft), service);
+
+    expect(recorder.transactionCalls()).toBe(1);
+    expect(recorder.executedSql()).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("UPDATE postee_requests"),
+        expect.stringContaining("INSERT INTO postee_request_headers"),
+        expect.stringContaining("INSERT INTO postee_request_bodies"),
+        expect.stringContaining("INSERT INTO postee_graphql_requests"),
+      ]),
+    );
+    expect(saved.graphql).toEqual(graphqlRequest);
+  });
+
+  it("deletes a persisted GraphQL row when saving a non-GraphQL body", async () => {
+    const [service, recorder] = makeDatabaseService(pre031JsonBody, graphqlRequest);
+
+    await runWithDatabase(savePosteeRequestDraft({ ...draft, graphql: null }), service);
+
+    expect(recorder.executedSql()).toEqual(
+      expect.arrayContaining([expect.stringContaining("DELETE FROM postee_graphql_requests")]),
+    );
   });
 });

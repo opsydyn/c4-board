@@ -53,6 +53,7 @@ const originalDraft: PosteeRequestDraft = {
     },
   ],
   body: originalBody,
+  graphql: null,
 };
 
 const changedHeader = {
@@ -78,6 +79,7 @@ const changedDraft: PosteeRequestDraft = {
     request_id: "different-request",
     raw: "{\"after\":true}",
   },
+  graphql: null,
 };
 
 interface TransactionGate {
@@ -196,6 +198,7 @@ const expectCommittedDraft = (draft: PosteeRequestDraft | undefined) => {
       ...changedDraft.body,
       request_id: request.id,
     },
+    graphql: null,
   });
   expect(draft?.request.updated_at).toBeGreaterThan(
     changedDraft.request.updated_at,
@@ -269,6 +272,7 @@ describe("Postee machine request drafts", () => {
         raw: "select * from systems",
         form_values: null,
       },
+      graphql: null,
     } satisfies PosteeRequestDraft;
     const { layer, recorder } = makeLayer({ draft: queryDraft });
     const actor = createActor(createPosteeWorkspaceMachine({ layer }));

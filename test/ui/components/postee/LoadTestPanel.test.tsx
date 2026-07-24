@@ -53,6 +53,7 @@ const queryJsonDraft: PosteeRequestDraft = {
     raw: "{\"q\":\"opsy\"}",
     form_values: null,
   },
+  graphql: null,
 };
 
 const rawQueryDraft: PosteeRequestDraft = {

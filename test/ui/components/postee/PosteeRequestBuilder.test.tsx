@@ -85,6 +85,7 @@ const firstDraft: PosteeRequestDraft = {
     raw: "{\"saved\":true}",
     form_values: null,
   },
+  graphql: null,
 };
 
 const secondDraft: PosteeRequestDraft = {
@@ -114,6 +115,7 @@ const secondDraft: PosteeRequestDraft = {
     raw: "{\"second\":true}",
     form_values: "{\"field\":\"value\"}",
   },
+  graphql: null,
 };
 
 const committedFirstDraft: PosteeRequestDraft = {
@@ -136,6 +138,7 @@ const committedFirstDraft: PosteeRequestDraft = {
     raw: "committed-body",
     form_values: "{\"field\":\"committed\"}",
   },
+  graphql: null,
 };
 
 const makeQueryDraft = ({
@@ -160,6 +163,7 @@ const makeQueryDraft = ({
     raw,
     form_values: null,
   },
+  graphql: null,
 });
 
 const queryJsonDraft = makeQueryDraft({
@@ -466,6 +470,7 @@ describe("PosteeRequestBuilder durable request details", () => {
         mode: "json",
         raw: "{\"changed\":true}",
       },
+      graphql: null,
     });
   });
 

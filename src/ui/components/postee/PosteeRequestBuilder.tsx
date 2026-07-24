@@ -438,6 +438,9 @@ export function PosteeRequestBuilder({
           mode: bodyWasEdited ? "json" : requestBodyMode,
           raw: requestBody,
         },
+        graphql: requestBodyMode === "graphql" && !bodyWasEdited
+          ? selectedRequestDraft.graphql
+          : null,
       });
     } else {
       const name = `New ${requestMethod} Request`;

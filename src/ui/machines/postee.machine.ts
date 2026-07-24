@@ -241,6 +241,7 @@ const defaultRequestDraft = (request: PosteeRequest): PosteeRequestDraft => ({
     raw: "{}",
     form_values: null,
   },
+  graphql: null,
 });
 
 // =============================================================================

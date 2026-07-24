@@ -39,6 +39,23 @@ export interface PosteeRequestBody {
   form_values: string | null;
 }
 
+export interface PosteeGraphqlRequest {
+  request_id: string;
+  document: string;
+  variables_json: string;
+  operation_name: string | null;
+}
+
+export interface PosteeGraphqlSchemaSnapshot {
+  id: string;
+  endpoint_url: string;
+  context_fingerprint: string;
+  introspection_json: string;
+  schema_digest: string;
+  fetched_at: number;
+  last_used_at: number;
+}
+
 export interface PosteeEnvironment {
   id: string;
   name: string;
@@ -250,6 +267,81 @@ export const upsertPosteeRequestBody = (body: PosteeRequestBody) =>
 			 VALUES (?, ?, ?, ?)
 			 ON CONFLICT(request_id) DO UPDATE SET mode = excluded.mode, raw = excluded.raw, form_values = excluded.form_values`,
       [body.request_id, body.mode, body.raw ?? null, body.form_values ?? null],
+    );
+  });
+
+export const getPosteeGraphqlRequest = (requestId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<PosteeGraphqlRequest>(
+      `SELECT * FROM postee_graphql_requests WHERE request_id = ?`,
+      [requestId],
+    );
+    return rows[0] ?? null;
+  });
+
+export const upsertPosteeGraphqlRequest = (request: PosteeGraphqlRequest) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(
+      `INSERT INTO postee_graphql_requests (request_id, document, variables_json, operation_name)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(request_id) DO UPDATE SET
+         document = excluded.document,
+         variables_json = excluded.variables_json,
+         operation_name = excluded.operation_name`,
+      [request.request_id, request.document, request.variables_json, request.operation_name],
+    );
+  });
+
+export const deletePosteeGraphqlRequest = (requestId: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(`DELETE FROM postee_graphql_requests WHERE request_id = ?`, [requestId]);
+  });
+
+export const getPosteeGraphqlSchemaSnapshot = (endpointUrl: string, contextFingerprint: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<PosteeGraphqlSchemaSnapshot>(
+      `SELECT * FROM postee_graphql_schema_snapshots
+       WHERE endpoint_url = ? AND context_fingerprint = ?`,
+      [endpointUrl, contextFingerprint],
+    );
+    return rows[0] ?? null;
+  });
+
+export const upsertPosteeGraphqlSchemaSnapshot = (snapshot: PosteeGraphqlSchemaSnapshot) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(
+      `INSERT INTO postee_graphql_schema_snapshots (
+         id, endpoint_url, context_fingerprint, introspection_json, schema_digest, fetched_at, last_used_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(endpoint_url, context_fingerprint) DO UPDATE SET
+         id = excluded.id,
+         introspection_json = excluded.introspection_json,
+         schema_digest = excluded.schema_digest,
+         fetched_at = excluded.fetched_at,
+         last_used_at = excluded.last_used_at`,
+      [
+        snapshot.id,
+        snapshot.endpoint_url,
+        snapshot.context_fingerprint,
+        snapshot.introspection_json,
+        snapshot.schema_digest,
+        snapshot.fetched_at,
+        snapshot.last_used_at,
+      ],
+    );
+  });
+
+export const touchPosteeGraphqlSchemaSnapshot = (id: string, lastUsedAt: number) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(
+      `UPDATE postee_graphql_schema_snapshots SET last_used_at = ? WHERE id = ?`,
+      [lastUsedAt, id],
     );
   });
 

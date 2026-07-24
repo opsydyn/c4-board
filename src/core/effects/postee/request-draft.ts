@@ -2,13 +2,16 @@ import { Effect } from "effect";
 import {
   type DatabaseError,
   DatabaseService,
+  deletePosteeGraphqlRequest,
+  getPosteeGraphqlRequest,
   getPosteeRequestBody,
   listPosteeRequestHeaders,
   replacePosteeRequestHeaders,
   updatePosteeRequest,
+  upsertPosteeGraphqlRequest,
   upsertPosteeRequestBody,
 } from "../database";
-import type { PosteeRequest, PosteeRequestBody, PosteeRequestHeader } from "../database";
+import type { PosteeGraphqlRequest, PosteeRequest, PosteeRequestBody, PosteeRequestHeader } from "../database";
 
 export interface PosteeDraftHeader {
   readonly id: string;
@@ -21,6 +24,7 @@ export interface PosteeRequestDraft {
   readonly request: PosteeRequest;
   readonly headers: ReadonlyArray<PosteeDraftHeader>;
   readonly body: PosteeRequestBody;
+  readonly graphql: PosteeGraphqlRequest | null;
 }
 
 const toDraftHeader = (header: PosteeRequestHeader): PosteeDraftHeader => ({
@@ -43,11 +47,13 @@ export const loadPosteeRequestDraft = (
   Effect.gen(function*() {
     const headers = yield* listPosteeRequestHeaders(request.id);
     const body = yield* getPosteeRequestBody(request.id);
+    const graphql = yield* getPosteeGraphqlRequest(request.id);
 
     return {
       request,
       headers: headers.map(toDraftHeader),
       body: body ?? defaultBody(request.id),
+      graphql,
     };
   });
 
@@ -74,11 +80,22 @@ export const savePosteeRequestDraft = (
         const request = yield* updatePosteeRequest(draft.request);
         yield* replacePosteeRequestHeaders(draft.request.id, persistedHeaders);
         yield* upsertPosteeRequestBody(body);
+        if (body.mode === "graphql" && draft.graphql !== null) {
+          yield* upsertPosteeGraphqlRequest({
+            ...draft.graphql,
+            request_id: draft.request.id,
+          });
+        } else {
+          yield* deletePosteeGraphqlRequest(draft.request.id);
+        }
 
         return {
           request,
           headers: acceptedHeaders,
           body,
+          graphql: body.mode === "graphql" && draft.graphql !== null
+            ? { ...draft.graphql, request_id: draft.request.id }
+            : null,
         };
       }),
     );

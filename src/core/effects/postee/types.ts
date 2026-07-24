@@ -193,7 +193,7 @@ export const PreparedBody = Data.taggedEnum<PreparedBody>();
  * Legacy body mode type for database schema
  * Can be converted to/from RequestBody sum type
  */
-export const RequestBodyModeSchema = Schema.Literal("raw", "json", "form");
+export const RequestBodyModeSchema = Schema.Literal("raw", "json", "form", "graphql");
 export type RequestBodyMode = Schema.Schema.Type<typeof RequestBodyModeSchema>;
 
 /**
@@ -227,6 +227,8 @@ export const bodyModeToSumType = (
         return RequestBody.Form({ entries: [] });
       }
     }
+    case "graphql":
+      return RequestBody.Json({ content: rawBody ?? "" });
   }
 };
 
