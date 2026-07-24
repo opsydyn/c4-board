@@ -240,9 +240,11 @@ professional REST client.
 
 ### 2.4 HTTP QUERY ([RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html))
 
-- [x] Author, persist, execute, replay, and inspect HTTP QUERY requests.
+- [x] Author, persist, execute, and inspect HTTP QUERY requests; retained QUERY
+      history supports inspection and comparison, not replay or replay-to-draft.
 - [x] Require query content and an effective Content-Type before execution.
-- [x] Preserve QUERY method, headers, and body in native load testing.
+- [x] Preserve QUERY method, headers, and body in native load-test request
+      preparation, covered by focused Vitest/mock IPC and Rust engine tests.
 - [x] Classify QUERY as safe and idempotent without silently retrying it.
 - [ ] Parse `Accept-Query` structured fields and expose supported media types.
 - [ ] Define QUERY redirect handling for 301, 302, 303, 307, and 308.
@@ -259,7 +261,7 @@ professional REST client.
 5. Request previews show the effective method, URL, headers, and body before
    execution.
 6. RFC-valid QUERY requests preserve content and media type across authoring,
-   execution, history, replay, and load testing.
+   execution, history inspection/comparison, and load-test request preparation.
 
 ## Workstream 3: Collections, Navigation, and Portability
 
