@@ -7,6 +7,7 @@ import {
   deletePosteeCollections,
   deletePosteeEnvironment,
   deletePosteeRequest,
+  getPosteeGraphqlRequest,
   getPosteeRequest,
   getPosteeRequestBody,
   insertPosteeHistory,
@@ -53,6 +54,7 @@ export const PosteeRequests = {
   replaceHeaders: (requestId: string, headers: ReadonlyArray<Omit<PosteeRequestHeader, "id">>) =>
     replacePosteeRequestHeaders(requestId, headers),
   getBody: getPosteeRequestBody,
+  getGraphql: getPosteeGraphqlRequest,
   saveBody: upsertPosteeRequestBody,
 };
 
@@ -90,6 +92,8 @@ export {
   loadPosteeRequestDraft,
   type PosteeDraftHeader,
   type PosteeRequestDraft,
+  preparePosteeDraftBody,
+  preparePosteeDraftHeaders,
   savePosteeRequestDraft,
 } from "./request-draft";
 
@@ -128,7 +132,13 @@ export {
   serializeRequestBody,
 } from "./http-method-policy";
 
-export { type GraphqlDraft, type GraphqlDraftIssue, type GraphqlPreparation, prepareGraphqlDraft } from "./graphql";
+export {
+  type GraphqlDraft,
+  type GraphqlDraftIssue,
+  type GraphqlPreparation,
+  graphqlProtocolHeaders,
+  prepareGraphqlDraft,
+} from "./graphql";
 
 export {
   fingerprintGraphqlSchemaContext,

@@ -142,6 +142,9 @@ const makeLayer = (options?: {
       if (sql.includes("postee_request_bodies")) {
         return Effect.succeed([options?.body ?? persistedDraft.body] as T[]);
       }
+      if (sql.includes("postee_graphql_requests")) {
+        return Effect.succeed((persistedDraft.graphql === null ? [] : [persistedDraft.graphql]) as T[]);
+      }
       return Effect.succeed([] as T[]);
     },
     execute: () => Effect.void,
@@ -289,6 +292,99 @@ describe("Postee machine request drafts", () => {
       RequestBody.Raw({ content: "select * from systems" }),
     );
     expect(history?.request_snapshot).toContain("\"method\": \"QUERY\"");
+
+    actor.stop();
+  });
+
+  it("executes a persisted GraphQL draft as an exact POST envelope without recording credentials in history", async () => {
+    const graphqlDraft = {
+      request: {
+        ...request,
+        method: "POST",
+        url: "https://example.com/graphql",
+      },
+      headers: [{
+        id: "authorization",
+        key: "Authorization",
+        value: "Bearer secret-value",
+        enabled: true,
+      }],
+      body: {
+        request_id: request.id,
+        mode: "graphql",
+        raw: null,
+        form_values: null,
+      },
+      graphql: {
+        request_id: request.id,
+        document: "query Viewer { viewer { id } }",
+        variables_json: "{\"includeEmail\":true}",
+        operation_name: "Viewer",
+      },
+    } satisfies PosteeRequestDraft;
+    const { layer, recorder } = makeLayer({ draft: graphqlDraft });
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    actor.send({ type: "RUN_REQUEST" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "success" }));
+
+    const captured = recorder.capturedRequest();
+    const history = actor.getSnapshot().context.history[0];
+    const snapshot = history ? JSON.parse(history.request_snapshot) : null;
+    expect(captured).toMatchObject({
+      method: "POST",
+      body: {
+        _tag: "Json",
+        content: JSON.stringify({
+          query: "query Viewer { viewer { id } }",
+          variables: { includeEmail: true },
+          operationName: "Viewer",
+        }),
+      },
+    });
+    expect(captured?.headers).toEqual(expect.arrayContaining([
+      { key: "Content-Type", value: "application/json; charset=utf-8" },
+      { key: "Accept", value: "application/graphql-response+json, application/json;q=0.9" },
+    ]));
+    expect(snapshot?.prepared.body).toEqual(captured?.body);
+    expect(history?.request_snapshot).not.toContain("secret-value");
+
+    actor.stop();
+  });
+
+  it("rejects a persisted GraphQL draft stored with a non-POST method before transport", async () => {
+    const graphqlDraft = {
+      request: {
+        ...request,
+        method: "GET",
+        url: "https://example.com/graphql",
+      },
+      headers: [],
+      body: {
+        request_id: request.id,
+        mode: "graphql",
+        raw: null,
+        form_values: null,
+      },
+      graphql: {
+        request_id: request.id,
+        document: "query Viewer { viewer { id } }",
+        variables_json: "",
+        operation_name: "Viewer",
+      },
+    } satisfies PosteeRequestDraft;
+    const { layer, recorder } = makeLayer({ draft: graphqlDraft });
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    actor.send({ type: "RUN_REQUEST" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "error" }));
+
+    expect(recorder.httpCalls()).toBe(0);
+    expect(actor.getSnapshot().context.runner.error).toContain("GraphQL requests require POST.");
 
     actor.stop();
   });

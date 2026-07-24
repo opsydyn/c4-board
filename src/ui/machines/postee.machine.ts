@@ -25,10 +25,13 @@ import {
   type PosteeRequest,
   type PosteeRequestDraft,
   PosteeRequests,
+  preparePosteeDraftBody,
+  preparePosteeDraftHeaders,
   savePosteeRequestDraft,
 } from "../../core/effects/postee";
 import {
   HttpClient,
+  HttpClientError,
   HttpClientLive,
   type PreparedRequest,
   type PreparedResponse,
@@ -36,7 +39,6 @@ import {
 } from "../../core/effects/postee/http-client";
 import { deriveRequestStatuses, type RequestStatus } from "../../core/effects/postee/status-derivation";
 import {
-  bodyModeToSumType,
   type CollectionId,
   CollectionId as CollectionIdBrand,
   durationToMillis,
@@ -379,25 +381,46 @@ const posteeWorkspaceSetup = setup({
 
         const headers = yield* PosteeRequests.listHeaders(requestIdString);
         const body = yield* PosteeRequests.getBody(requestIdString);
+        const graphql = yield* PosteeRequests.getGraphql(requestIdString);
 
         // Lookup variables by environment (need string key for Record)
         const variables = (environmentId
           && context.variablesByEnvironment[environmentId as unknown as string])
           || [];
 
-        // Convert database body format to sum type
-        const bodyMode = body?.mode ?? "raw";
-        const requestBody = bodyModeToSumType(
-          bodyMode as "raw" | "json" | "form",
-          body?.raw ?? null,
-          body?.form_values ?? null,
+        const draft: PosteeRequestDraft = {
+          request,
+          headers: headers.map((header) => ({
+            id: String(header.id),
+            key: header.key,
+            value: header.value ?? "",
+            enabled: header.is_enabled === 1,
+          })),
+          body: body ?? {
+            request_id: request.id,
+            mode: "raw",
+            raw: null,
+            form_values: null,
+          },
+          graphql,
+        };
+        const requestBody = yield* preparePosteeDraftBody(draft).pipe(
+          Effect.mapError((message) => HttpClientError({ message })),
         );
+        const requestHeaders = preparePosteeDraftHeaders(draft).map((header, index) => ({
+          id: index,
+          request_id: request.id,
+          key: header.key,
+          value: header.value,
+          is_enabled: 1,
+          sort_order: index,
+        }));
 
         const prepared = yield* prepareRequest({
           id: RequestIdBrand(request.id),
           method: request.method as HttpMethod,
           url: request.url,
-          headers,
+          headers: requestHeaders,
           body: requestBody,
           env: { variables },
           timeout: Duration.seconds(30),
@@ -414,10 +437,14 @@ const posteeWorkspaceSetup = setup({
           request_snapshot: JSON.stringify(
             {
               request,
-              headers,
+              headers: draft.body.mode === "graphql"
+                ? headers.map((header) => ({ ...header, value: header.value === null ? null : "[redacted]" }))
+                : headers,
               body,
               environmentId,
-              prepared,
+              prepared: draft.body.mode === "graphql"
+                ? { ...prepared, headers: prepared.headers.map((header) => ({ ...header, value: "[redacted]" })) }
+                : prepared,
             },
             null,
             2,

@@ -12,6 +12,9 @@ import {
   upsertPosteeRequestBody,
 } from "../database";
 import type { PosteeGraphqlRequest, PosteeRequest, PosteeRequestBody, PosteeRequestHeader } from "../database";
+import { graphqlProtocolHeaders, prepareGraphqlDraft } from "./graphql";
+import type { GraphqlDraftIssue } from "./graphql";
+import { bodyModeToSumType, type RequestBody, type RequestBodyMode } from "./types";
 
 export interface PosteeDraftHeader {
   readonly id: string;
@@ -40,6 +43,61 @@ const defaultBody = (requestId: string): PosteeRequestBody => ({
   raw: "{}",
   form_values: null,
 });
+
+const graphqlProtocolHeaderNames = new Set(
+  graphqlProtocolHeaders.map((header) => header.key.toLowerCase()),
+);
+
+export const preparePosteeDraftBody = (
+  draft: PosteeRequestDraft,
+): Effect.Effect<RequestBody, GraphqlDraftIssue> => {
+  if (draft.body.mode !== "graphql") {
+    return Effect.succeed(
+      bodyModeToSumType(
+        draft.body.mode as Exclude<RequestBodyMode, "graphql">,
+        draft.body.raw,
+        draft.body.form_values,
+      ),
+    );
+  }
+  if (draft.request.method !== "POST") {
+    return Effect.fail("GraphQL requests require POST.");
+  }
+  if (draft.graphql === null) {
+    return Effect.fail("GraphQL requires an operation document.");
+  }
+
+  const preparation = prepareGraphqlDraft({
+    document: draft.graphql.document,
+    variablesJson: draft.graphql.variables_json,
+    operationName: draft.graphql.operation_name,
+  });
+  return preparation.issue === null && preparation.body !== null
+    ? Effect.succeed(preparation.body)
+    : Effect.fail(preparation.issue ?? "GraphQL document is invalid.");
+};
+
+export const preparePosteeDraftHeaders = (
+  draft: PosteeRequestDraft,
+): ReadonlyArray<PosteeDraftHeader> => {
+  const enabledHeaders = draft.headers.filter(
+    (header) => header.enabled && header.key.trim().length > 0,
+  );
+  if (draft.body.mode !== "graphql") {
+    return enabledHeaders;
+  }
+  return [
+    ...enabledHeaders.filter(
+      (header) => !graphqlProtocolHeaderNames.has(header.key.trim().toLowerCase()),
+    ),
+    ...graphqlProtocolHeaders.map((header) => ({
+      id: `graphql-${header.key.toLowerCase()}`,
+      key: header.key,
+      value: header.value,
+      enabled: true,
+    })),
+  ];
+};
 
 export const loadPosteeRequestDraft = (
   request: PosteeRequest,

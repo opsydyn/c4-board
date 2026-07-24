@@ -325,4 +325,35 @@ mod tests {
         assert_eq!(plan.method.as_str(), "QUERY");
         assert_eq!(plan.body.as_deref(), Some(r#"{\"q\":\"opsy\"}"#.as_bytes()));
     }
+
+    #[test]
+    fn build_request_plan_preserves_the_derived_graphql_post_envelope() {
+        let graphql_body = r#"{"query":"query Viewer { viewer { id } }","variables":{"includeEmail":true},"operationName":"Viewer"}"#;
+        let config = LoadTestConfig {
+            url: "https://example.com/graphql".to_string(),
+            method: "POST".to_string(),
+            headers: vec![
+                (
+                    "content-type".to_string(),
+                    "application/json; charset=utf-8".to_string(),
+                ),
+                (
+                    "accept".to_string(),
+                    "application/graphql-response+json, application/json;q=0.9".to_string(),
+                ),
+            ],
+            body: Some(graphql_body.to_string()),
+            duration_secs: 1,
+            concurrency: 1,
+            rps_limit: None,
+            timeout_ms: 5_000,
+        };
+
+        let plan = LoadTestEngine::build_request_plan(&config)
+            .expect("derived GraphQL POST plan should be valid");
+
+        assert_eq!(plan.method.as_str(), "POST");
+        assert_eq!(plan.body.as_deref(), Some(graphql_body.as_bytes()));
+        assert_eq!(plan.headers.len(), 2);
+    }
 }

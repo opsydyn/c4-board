@@ -14,7 +14,8 @@ export type GraphqlDraftIssue =
   | "GraphQL variables must be valid JSON."
   | "GraphQL variables must be a JSON object."
   | "GraphQL requires an operation selection."
-  | "The selected GraphQL operation no longer exists.";
+  | "The selected GraphQL operation no longer exists."
+  | "GraphQL requests require POST.";
 
 export interface GraphqlPreparation {
   readonly issue: GraphqlDraftIssue | null;
@@ -23,7 +24,7 @@ export interface GraphqlPreparation {
   readonly protocolHeaders: ReadonlyArray<EffectiveRequestHeader>;
 }
 
-const protocolHeaders: ReadonlyArray<EffectiveRequestHeader> = [
+export const graphqlProtocolHeaders: ReadonlyArray<EffectiveRequestHeader> = [
   { key: "Content-Type", value: "application/json; charset=utf-8" },
   { key: "Accept", value: "application/graphql-response+json, application/json;q=0.9" },
 ];
@@ -32,7 +33,7 @@ const preparationIssue = (issue: GraphqlDraftIssue, operationNames: ReadonlyArra
   issue,
   operationNames,
   body: null,
-  protocolHeaders,
+  protocolHeaders: graphqlProtocolHeaders,
 });
 
 export const prepareGraphqlDraft = (draft: GraphqlDraft): GraphqlPreparation => {
@@ -83,6 +84,6 @@ export const prepareGraphqlDraft = (draft: GraphqlDraft): GraphqlPreparation => 
         ...(draft.operationName === null ? {} : { operationName: draft.operationName }),
       }),
     }),
-    protocolHeaders,
+    protocolHeaders: graphqlProtocolHeaders,
   };
 };

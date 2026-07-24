@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type EventCallback, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Data, Effect } from "effect";
+import type { GraphqlDraftIssue } from "./graphql";
 import { evaluateRequestSemantics, getEffectiveRequestPayload, type RequestSemanticsIssue } from "./http-method-policy";
-import type { PosteeRequestDraft } from "./request-draft";
-import { bodyModeToSumType, type HttpMethod, type RequestBodyMode } from "./types";
+import { type PosteeRequestDraft, preparePosteeDraftBody, preparePosteeDraftHeaders } from "./request-draft";
+import type { HttpMethod } from "./types";
 
 const hasTauriInjection = (): boolean => {
   if (typeof window === "undefined") {
@@ -102,23 +103,31 @@ export type LoadTestRequestPayload =
   }
   | {
     readonly _tag: "Invalid";
-    readonly message: RequestSemanticsIssue;
+    readonly message: RequestSemanticsIssue | GraphqlDraftIssue;
   };
 
 export const buildLoadTestRequestPayload = (
   method: HttpMethod,
   draft: PosteeRequestDraft,
 ): LoadTestRequestPayload => {
-  const body = bodyModeToSumType(
-    draft.body.mode as RequestBodyMode,
-    draft.body.raw,
-    draft.body.form_values,
+  if (draft.body.mode === "graphql" && method !== "POST") {
+    return { _tag: "Invalid", message: "GraphQL requests require POST." };
+  }
+  const preparedBody = Effect.runSync(
+    preparePosteeDraftBody(draft).pipe(
+      Effect.match({
+        onFailure: (message) => ({ _tag: "Invalid" as const, message }),
+        onSuccess: (body) => ({ _tag: "Valid" as const, body }),
+      }),
+    ),
   );
-  const headers = draft.headers
-    .filter((header) => header.enabled)
+  if (preparedBody._tag === "Invalid") {
+    return preparedBody;
+  }
+  const headers = preparePosteeDraftHeaders(draft)
     .map(({ key, value }) => ({ key, value }));
-  const issue = evaluateRequestSemantics(method, headers, body);
-  const payload = getEffectiveRequestPayload(method, headers, body);
+  const issue = evaluateRequestSemantics(method, headers, preparedBody.body);
+  const payload = getEffectiveRequestPayload(method, headers, preparedBody.body);
 
   return issue
     ? { _tag: "Invalid", message: issue }

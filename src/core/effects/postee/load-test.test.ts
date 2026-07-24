@@ -76,6 +76,33 @@ const blankContentTypeQueryDraft: PosteeRequestDraft = {
   }],
 };
 
+const graphqlDraft: PosteeRequestDraft = {
+  request: {
+    ...queryJsonDraft.request,
+    id: "graphql-1",
+    method: "POST",
+    url: "https://example.com/graphql",
+  },
+  headers: [{
+    id: "authorization",
+    key: "Authorization",
+    value: "Bearer secret-value",
+    enabled: true,
+  }],
+  body: {
+    request_id: "graphql-1",
+    mode: "graphql",
+    raw: null,
+    form_values: null,
+  },
+  graphql: {
+    request_id: "graphql-1",
+    document: "query Viewer { viewer { id } }",
+    variables_json: "{\"includeEmail\":true}",
+    operation_name: "Viewer",
+  },
+};
+
 const tauriWindow = window as typeof window & {
   __TAURI_INTERNALS__?: unknown;
 };
@@ -181,6 +208,69 @@ describe("buildLoadTestRequestPayload", () => {
         method: "QUERY",
         headers: [["Content-Type", "application/sql"]],
         body: "select * from systems",
+        duration_secs: 10,
+        concurrency: 10,
+        rps_limit: null,
+        timeout_ms: 30_000,
+      },
+    });
+  });
+
+  it("builds the GraphQL POST envelope with required protocol headers", () => {
+    expect(buildLoadTestRequestPayload("POST", graphqlDraft)).toEqual({
+      _tag: "Valid",
+      method: "POST",
+      headers: [
+        { key: "Authorization", value: "Bearer secret-value" },
+        { key: "Content-Type", value: "application/json; charset=utf-8" },
+        { key: "Accept", value: "application/graphql-response+json, application/json;q=0.9" },
+      ],
+      body: JSON.stringify({
+        query: "query Viewer { viewer { id } }",
+        variables: { includeEmail: true },
+        operationName: "Viewer",
+      }),
+    });
+  });
+
+  it("rejects a GraphQL draft stored with a non-POST method before native load testing", () => {
+    expect(buildLoadTestRequestPayload("GET", graphqlDraft)).toEqual({
+      _tag: "Invalid",
+      message: "GraphQL requests require POST.",
+    });
+  });
+
+  it("invokes the native runner with the derived GraphQL POST body", async () => {
+    tauriWindow.__TAURI_INTERNALS__ = {};
+    invokeMock.mockResolvedValue(undefined);
+    const payload = buildLoadTestRequestPayload("POST", graphqlDraft);
+    if (payload._tag === "Invalid") {
+      throw new Error(payload.message);
+    }
+
+    await Effect.runPromise(
+      startLoadTest({
+        url: graphqlDraft.request.url,
+        method: payload.method,
+        headers: [...payload.headers],
+        body: payload.body,
+      }),
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("start_load_test", {
+      config: {
+        url: "https://example.com/graphql",
+        method: "POST",
+        headers: [
+          ["Authorization", "Bearer secret-value"],
+          ["Content-Type", "application/json; charset=utf-8"],
+          ["Accept", "application/graphql-response+json, application/json;q=0.9"],
+        ],
+        body: JSON.stringify({
+          query: "query Viewer { viewer { id } }",
+          variables: { includeEmail: true },
+          operationName: "Viewer",
+        }),
         duration_secs: 10,
         concurrency: 10,
         rps_limit: null,
