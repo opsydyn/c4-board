@@ -1,13 +1,13 @@
 import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
-import type {
-  PosteeCollection,
-  PosteeRequest,
-  PosteeRequestBody,
-  PosteeRequestHeader,
-} from "@/core/effects/database.postee";
+import type { PosteeCollection, PosteeRequest, PosteeRequestBody } from "@/core/effects/database.postee";
 import type { PosteeRequestDraft } from "@/core/effects/postee";
-import { HttpClientError, makeHttpClientTestLayer, type PreparedResponse } from "@/core/effects/postee/http-client";
-import { Bytes, CollectionId, RequestId, StatusCode } from "@/core/effects/postee/types";
+import {
+  HttpClientError,
+  makeHttpClientTestLayer,
+  type PreparedRequest,
+  type PreparedResponse,
+} from "@/core/effects/postee/http-client";
+import { Bytes, CollectionId, RequestBody, RequestId, StatusCode } from "@/core/effects/postee/types";
 import { createPosteeWorkspaceMachine } from "@/ui/machines/postee.machine";
 import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
@@ -41,17 +41,6 @@ const originalBody: PosteeRequestBody = {
   raw: "{\"before\":true}",
   form_values: null,
 };
-
-const originalHeaders: PosteeRequestHeader[] = [
-  {
-    id: 41,
-    request_id: request.id,
-    key: "Accept",
-    value: "application/json",
-    is_enabled: 1,
-    sort_order: 0,
-  },
-];
 
 const originalDraft: PosteeRequestDraft = {
   request,
@@ -114,29 +103,42 @@ const makeTransactionGate = (): TransactionGate => {
 interface MachineRecorder {
   readonly transactionCalls: () => number;
   readonly httpCalls: () => number;
+  readonly capturedRequest: () => PreparedRequest | undefined;
 }
 
 const makeLayer = (options?: {
   readonly body?: PosteeRequestBody;
+  readonly draft?: PosteeRequestDraft;
   readonly httpFailure?: boolean;
   readonly transactionGate?: TransactionGate;
   readonly transactionError?: DatabaseError;
 }) => {
   let transactionCalls = 0;
   let httpCalls = 0;
+  let capturedRequest: PreparedRequest | undefined;
+  const persistedDraft = options?.draft ?? originalDraft;
   const database = Layer.succeed(DatabaseService, {
     query: <T>(sql: string) => {
       if (sql.includes("postee_collections")) {
         return Effect.succeed([collection] as T[]);
       }
       if (sql.includes("postee_requests")) {
-        return Effect.succeed([request] as T[]);
+        return Effect.succeed([persistedDraft.request] as T[]);
       }
       if (sql.includes("postee_request_headers")) {
-        return Effect.succeed(originalHeaders as T[]);
+        return Effect.succeed(
+          persistedDraft.headers.map((header, sort_order) => ({
+            id: Number(header.id) || sort_order + 1,
+            request_id: persistedDraft.request.id,
+            key: header.key,
+            value: header.value,
+            is_enabled: header.enabled ? 1 : 0,
+            sort_order,
+          })) as T[],
+        );
       }
       if (sql.includes("postee_request_bodies")) {
-        return Effect.succeed([options?.body ?? originalBody] as T[]);
+        return Effect.succeed([options?.body ?? persistedDraft.body] as T[]);
       }
       return Effect.succeed([] as T[]);
     },
@@ -164,8 +166,9 @@ const makeLayer = (options?: {
     duration: Duration.millis(5),
     rawSize: Bytes(2),
   };
-  const httpClient = makeHttpClientTestLayer(() => {
+  const httpClient = makeHttpClientTestLayer((prepared) => {
     httpCalls += 1;
+    capturedRequest = prepared;
     return options?.httpFailure
       ? Effect.fail(HttpClientError({ message: "run failed" }))
       : Effect.succeed(successfulResponse);
@@ -173,6 +176,7 @@ const makeLayer = (options?: {
   const recorder: MachineRecorder = {
     transactionCalls: () => transactionCalls,
     httpCalls: () => httpCalls,
+    capturedRequest: () => capturedRequest,
   };
 
   return {
@@ -242,6 +246,45 @@ describe("Postee machine request drafts", () => {
     expect(actor.getSnapshot().context.requestDrafts["request-1"]?.body).toEqual(
       body,
     );
+
+    actor.stop();
+  });
+
+  it("executes and records a persisted QUERY draft unchanged", async () => {
+    const queryDraft = {
+      request: {
+        ...request,
+        method: "QUERY",
+        url: "https://example.com/feed",
+      },
+      headers: [{
+        id: "header-query",
+        key: "Content-Type",
+        value: "application/sql",
+        enabled: true,
+      }],
+      body: {
+        request_id: request.id,
+        mode: "raw",
+        raw: "select * from systems",
+        form_values: null,
+      },
+    } satisfies PosteeRequestDraft;
+    const { layer, recorder } = makeLayer({ draft: queryDraft });
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    actor.send({ type: "RUN_REQUEST" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "success" }));
+
+    const captured = recorder.capturedRequest();
+    const history = actor.getSnapshot().context.history[0];
+    expect(captured?.method).toBe("QUERY");
+    expect(captured?.body).toEqual(
+      RequestBody.Raw({ content: "select * from systems" }),
+    );
+    expect(history?.request_snapshot).toContain("\"method\": \"QUERY\"");
 
     actor.stop();
   });

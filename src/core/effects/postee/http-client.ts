@@ -1,6 +1,11 @@
-import { Semigroup } from "@effect/typeclass";
 import { fetch as TauriFetch } from "@tauri-apps/plugin-http";
 import { Context, Data, Duration, Effect, Layer, Match } from "effect";
+import {
+  completeContentTypeHeaders,
+  evaluateRequestSemantics,
+  getHttpMethodPolicy,
+  serializeRequestBody,
+} from "./http-method-policy";
 import type { EnvironmentVariable, RequestHeader } from "./schema";
 import {
   type Bytes,
@@ -211,11 +216,26 @@ export const prepareRequest = (
       Match.exhaustive,
     );
 
+    const issue = evaluateRequestSemantics(params.method, headers, body);
+    if (issue) {
+      return yield* Effect.fail(
+        HttpClientError({
+          message: issue,
+          request: {
+            method: params.method,
+            url: resolvedUrl,
+          },
+        }),
+      );
+    }
+
+    const effectiveHeaders = completeContentTypeHeaders(headers, body);
+
     return {
       id: params.id,
       method: params.method,
       url,
-      headers,
+      headers: effectiveHeaders,
       body,
       timeout,
     };
@@ -225,74 +245,18 @@ export const prepareRequest = (
 // Live Layer
 // =============================================================================
 
-/**
- * Semigroup for combining header records (last value wins)
- */
-const HeaderRecordSemigroup: Semigroup.Semigroup<Record<string, string>> = Semigroup.make((a, b) => ({ ...a, ...b }));
-
-const toFetchInit = (request: PreparedRequest): RequestInit => {
-  // Use Semigroup to combine headers (functional approach)
+export const toRequestInit = (request: PreparedRequest): RequestInit => {
   const headers = request.headers.reduce(
-    (acc, row) => HeaderRecordSemigroup.combine(acc, { [row.key]: row.value }),
+    (record, header) => ({ ...record, [header.key]: header.value }),
     {} as Record<string, string>,
   );
+  const body = serializeRequestBody(request.body);
+  const methodAllowsBody = getHttpMethodPolicy(request.method).content
+    !== "forbidden";
 
-  const method = request.method;
-
-  // Methods that cannot have a body
-  const methodAllowsBody = method !== "GET" && method !== "HEAD";
-
-  // Use pattern matching for body handling
-  return Match.value(request.body).pipe(
-    Match.tag("None", () => ({
-      method,
-      headers,
-    })),
-    Match.tag("Raw", ({ content }) => {
-      // Only include body if method allows it and content exists
-      if (!methodAllowsBody || content.length === 0) {
-        return { method, headers };
-      }
-      return {
-        method,
-        headers,
-        body: content,
-      };
-    }),
-    Match.tag("Json", ({ content }) => {
-      // Only include body if method allows it and content exists
-      if (!methodAllowsBody || content.length === 0) {
-        return { method, headers };
-      }
-      return {
-        method,
-        headers: {
-          "content-type": headers["content-type"] ?? "application/json; charset=utf-8",
-          ...headers,
-        },
-        body: content,
-      };
-    }),
-    Match.tag("Form", ({ entries }) => {
-      // Only include body if method allows it and form has entries
-      if (!methodAllowsBody || entries.length === 0) {
-        return { method, headers };
-      }
-      const form = new URLSearchParams();
-      for (const [key, value] of entries) {
-        form.append(key, value);
-      }
-      return {
-        method,
-        headers: {
-          "content-type": headers["content-type"] ?? "application/x-www-form-urlencoded",
-          ...headers,
-        },
-        body: form,
-      };
-    }),
-    Match.exhaustive,
-  );
+  return body !== null && body.length > 0 && methodAllowsBody
+    ? { method: request.method, headers, body }
+    : { method: request.method, headers };
 };
 
 const responseHeadersToRecord = (headers: Headers): Record<string, string> => {
@@ -339,7 +303,7 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
       }, durationToMillis(request.timeout));
 
       const init: RequestInit = {
-        ...toFetchInit(request),
+        ...toRequestInit(request),
         signal: controller.signal,
       };
 
