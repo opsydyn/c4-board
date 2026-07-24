@@ -47,4 +47,20 @@ describe("Postee scratch workspace machine", () => {
     expect(actor.getSnapshot().context.closedScratchIds).toEqual(["scratch-recovered"]);
     actor.stop();
   });
+
+  it("creates and selects an additional scratch without replacing the current draft", async () => {
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    const firstScratchId = actor.getSnapshot().context.activeEditor?.kind === "scratch"
+      ? actor.getSnapshot().context.activeEditor.scratchId
+      : null;
+    actor.send({ type: "CREATE_SCRATCH" });
+
+    expect(actor.getSnapshot().context.openScratchIds).toHaveLength(2);
+    expect(actor.getSnapshot().context.activeEditor).toMatchObject({ kind: "scratch" });
+    expect(actor.getSnapshot().context.activeEditor).not.toEqual({ kind: "scratch", scratchId: firstScratchId });
+    actor.stop();
+  });
 });

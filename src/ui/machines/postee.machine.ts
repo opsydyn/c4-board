@@ -129,6 +129,7 @@ export interface PosteeContext {
 
 export type PosteeEvent =
   | { type: "REFRESH" }
+  | { type: "CREATE_SCRATCH" }
   | { type: "SELECT_COLLECTION"; collectionId: CollectionId }
   | { type: "SELECT_REQUEST"; requestId: RequestId }
   | { type: "SELECT_ENVIRONMENT"; environmentId: EnvironmentId | null }
@@ -583,6 +584,29 @@ const posteeWorkspaceSetup = setup({
     hasActiveGraphqlRequest: ({ context }) => graphqlSchemaContext(context) !== null,
   },
   actions: {
+    createScratch: assign(({ context }) => {
+      const tabOrder = context.openScratchIds.length;
+      const scratch = newPosteeScratchDraft({
+        id: nanoid(),
+        tabOrder,
+        now: Date.now(),
+      });
+
+      runLayeredEffect(context.layer, savePosteeScratchDraft(scratch)).catch(() => {
+        // Scratch remains available in memory when durable persistence fails.
+      });
+
+      return {
+        ...context,
+        scratchDrafts: {
+          ...context.scratchDrafts,
+          [scratch.id]: scratch,
+        },
+        openScratchIds: [...context.openScratchIds, scratch.id],
+        activeEditor: { kind: "scratch", scratchId: scratch.id },
+        runner: initialRunner(),
+      };
+    }),
     createCollection: assign(({ context, event }) => {
       if (!event || event.type !== "CREATE_COLLECTION") {
         return context;
@@ -1465,6 +1489,9 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
   states: {
     idle: {
       on: {
+        CREATE_SCRATCH: {
+          actions: "createScratch",
+        },
         CREATE_COLLECTION: {
           actions: "createCollection",
         },
