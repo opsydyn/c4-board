@@ -82,4 +82,25 @@ describe("Postee scratch workspace machine", () => {
     expect(actor.getSnapshot().context.activeEditor).toEqual({ kind: "scratch", scratchId });
     actor.stop();
   });
+
+  it("updates the active scratch without changing its editor target", async () => {
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    const target = actor.getSnapshot().context.activeEditor;
+    if (target?.kind !== "scratch") throw new Error("Expected a scratch editor");
+    const draft = actor.getSnapshot().context.scratchDrafts[target.scratchId]!;
+    actor.send({
+      type: "UPDATE_SCRATCH_DRAFT",
+      draft: { ...draft, method: "POST", url: "https://api.example.test/users" },
+    });
+
+    expect(actor.getSnapshot().context.activeEditor).toEqual(target);
+    expect(actor.getSnapshot().context.scratchDrafts[target.scratchId]).toMatchObject({
+      method: "POST",
+      url: "https://api.example.test/users",
+    });
+    actor.stop();
+  });
 });

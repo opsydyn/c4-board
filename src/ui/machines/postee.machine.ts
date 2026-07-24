@@ -134,6 +134,7 @@ export type PosteeEvent =
   | { type: "CREATE_SCRATCH" }
   | { type: "CLOSE_SCRATCH"; scratchId: string }
   | { type: "REOPEN_SCRATCH"; scratchId: string }
+  | { type: "UPDATE_SCRATCH_DRAFT"; draft: PosteeScratchDraft }
   | { type: "SELECT_COLLECTION"; collectionId: CollectionId }
   | { type: "SELECT_REQUEST"; requestId: RequestId }
   | { type: "SELECT_ENVIRONMENT"; environmentId: EnvironmentId | null }
@@ -645,6 +646,24 @@ const posteeWorkspaceSetup = setup({
         closedScratchIds: context.closedScratchIds.filter((id) => id !== event.scratchId),
         activeEditor: { kind: "scratch", scratchId: event.scratchId },
         runner: initialRunner(),
+      };
+    }),
+    updateScratchDraft: assign(({ context, event }) => {
+      if (event.type !== "UPDATE_SCRATCH_DRAFT" || context.scratchDrafts[event.draft.id] === undefined) {
+        return context;
+      }
+
+      const draft = { ...event.draft, updatedAt: Date.now() };
+      runLayeredEffect(context.layer, savePosteeScratchDraft(draft)).catch(() => {
+        // Scratch remains available in memory when durable persistence fails.
+      });
+
+      return {
+        ...context,
+        scratchDrafts: {
+          ...context.scratchDrafts,
+          [draft.id]: draft,
+        },
       };
     }),
     createCollection: assign(({ context, event }) => {
@@ -1537,6 +1556,9 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         },
         REOPEN_SCRATCH: {
           actions: "reopenScratch",
+        },
+        UPDATE_SCRATCH_DRAFT: {
+          actions: "updateScratchDraft",
         },
         CREATE_COLLECTION: {
           actions: "createCollection",
