@@ -1,6 +1,7 @@
 import { fetch as TauriFetch } from "@tauri-apps/plugin-http";
 import { Context, Data, Duration, Effect, Layer, Match, Option } from "effect";
 import { contentTypeCharset, decodeBodyText, ResponseBody, responseBodySize } from "./response-body";
+import { findHeader, type HeaderEntries } from "./response-headers";
 import {
   evaluateRequestSemantics,
   getEffectiveRequestContent,
@@ -41,35 +42,15 @@ export interface PreparedRequest {
 export interface PreparedResponse {
   readonly status: StatusCode;
   readonly statusText: string;
-  /**
-   * Repeated field lines collapse here — `Set-Cookie` in particular keeps only the
-   * last value. Prefer `headerEntries`; this remains for callers not yet migrated
-   * and is removed in ADR-010 Phase 4.
-   */
-  readonly headers: Record<string, string>;
   /** Every field line as received, repeats included. */
-  readonly headerEntries: ReadonlyArray<readonly [string, string]>;
-  /** The body as received, with its own success or failure state. */
+  readonly headerEntries: HeaderEntries;
+  /**
+   * The body as received, with its own success or failure state.
+   *
+   * Text is derived on demand via `responseText` rather than decoded eagerly, so
+   * a body that is not text is never silently presented as an empty one.
+   */
   readonly body: ResponseBody;
-  /**
-   * The body decoded as text, or `""` when it is not text.
-   *
-   * Interim shim per ADR-010: read `body` and decode via `decodeBodyText` instead.
-   * Removed in Phase 4.
-   */
-  readonly bodyText: string;
-  /**
-   * Why the body could not be decoded, or `null` when it decoded cleanly.
-   *
-   * A response that reached the status line is delivered even when its body is
-   * unreadable — status, headers, and timing are real information and must not be
-   * discarded. `bodyText` is empty in that case, so this field is the only way to
-   * tell "the server sent nothing" apart from "we could not read what it sent".
-   *
-   * Interim shim per ADR-010: superseded in Phase 2 by a tagged `ResponseBody`
-   * that carries the raw bytes.
-   */
-  readonly bodyDecodeError: string | null;
   readonly duration: TimeDuration;
   readonly rawSize: Bytes;
 }
@@ -339,6 +320,23 @@ const describeBodyTextFailure = (
         : `Response body is not valid ${contentTypeCharset(contentType)} text`,
   });
 
+/**
+ * The response body as text, when it is text.
+ *
+ * `None` means the caller must not pretend otherwise: either nothing arrived, or
+ * what arrived is not valid text in the declared charset. Decoding is derived
+ * here rather than stored on the response so there is one policy, applied at the
+ * point of use (ADR-010).
+ */
+export const responseText = (response: PreparedResponse): Option.Option<string> =>
+  decodeBodyText(response.body, Option.getOrNull(findHeader(response.headerEntries, "content-type")));
+
+/** Why the body is not available as text, or `null` when it is. */
+export const responseTextFailure = (response: PreparedResponse): string | null => {
+  const contentType = Option.getOrNull(findHeader(response.headerEntries, "content-type"));
+  return describeBodyTextFailure(response.body, decodeBodyText(response.body, contentType), contentType);
+};
+
 /** Preserves repeated field lines; `Set-Cookie` is the one that matters in practice. */
 const responseHeadersToEntries = (headers: Headers): ReadonlyArray<readonly [string, string]> => {
   const entries: Array<readonly [string, string]> = [];
@@ -348,13 +346,6 @@ const responseHeadersToEntries = (headers: Headers): ReadonlyArray<readonly [str
   return entries;
 };
 
-const responseHeadersToRecord = (headers: Headers): Record<string, string> => {
-  const result: Record<string, string> = {};
-  headers.forEach((value, key) => {
-    result[key] = value;
-  });
-  return result;
-};
 
 const makeAbortController = () => new AbortController();
 
@@ -402,18 +393,11 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
         .then(async (response) => {
           const body = await readResponseBody(response);
           const durationMs = performance.now() - started;
-          const contentType = response.headers.get("content-type");
-          // Decode once; both shim fields are derived from the same result.
-          const decodedText = decodeBodyText(body, contentType);
-
           const payload: PreparedResponse = {
             status: StatusCodeBrand(response.status),
             statusText: response.statusText,
-            headers: responseHeadersToRecord(response.headers),
             headerEntries: responseHeadersToEntries(response.headers),
             body,
-            bodyText: Option.getOrElse(decodedText, () => ""),
-            bodyDecodeError: describeBodyTextFailure(body, decodedText, contentType),
             duration: durationFromMillis(Math.round(durationMs)),
             rawSize: BytesBrand(responseBodySize(body)),
           };

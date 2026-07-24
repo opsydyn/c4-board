@@ -1,4 +1,4 @@
-import { Data, Effect } from "effect";
+import { Data, Effect, Option } from "effect";
 import { buildClientSchema, getIntrospectionQuery, type IntrospectionQuery } from "graphql";
 import {
   getPosteeGraphqlSchemaSnapshot,
@@ -7,7 +7,7 @@ import {
 } from "../database";
 import type { DatabaseService, PosteeGraphqlSchemaSnapshot } from "../database";
 import { prepareGraphqlDraft } from "./graphql";
-import { HttpClient, prepareRequest } from "./http-client";
+import { HttpClient, prepareRequest, responseText, responseTextFailure } from "./http-client";
 import type { EffectiveRequestHeader } from "./http-method-policy";
 import type { RequestHeader } from "./schema";
 import { RequestId } from "./types";
@@ -182,13 +182,17 @@ export const refreshGraphqlSchema = (
 
     // A body that never decoded is not "invalid JSON" — saying so would send the
     // reader looking for a syntax error that isn't there (ADR-010).
-    if (response.bodyDecodeError !== null) {
+    const bodyText = responseText(response);
+    if (Option.isNone(bodyText)) {
       return yield* Effect.fail(
-        schemaError("Response", `The GraphQL schema response body could not be decoded: ${response.bodyDecodeError}`),
+        schemaError(
+          "Response",
+          `The GraphQL schema response body could not be decoded: ${responseTextFailure(response) ?? "unknown reason"}`,
+        ),
       );
     }
 
-    const introspection = yield* parseIntrospection(response.bodyText);
+    const introspection = yield* parseIntrospection(bodyText.value);
     const snapshot: PosteeGraphqlSchemaSnapshot = {
       id: globalThis.crypto.randomUUID(),
       endpoint_url: key.endpointUrl,

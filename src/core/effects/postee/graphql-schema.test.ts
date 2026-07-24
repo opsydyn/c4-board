@@ -37,9 +37,6 @@ const context: GraphqlSchemaContext = {
 const response = (bodyText: string, status = 200): PreparedResponse => ({
   status: StatusCode(status),
   statusText: status === 200 ? "OK" : "Bad Request",
-  headers: {},
-  bodyText,
-  bodyDecodeError: null,
   headerEntries: [],
   body: ResponseBody.Decoded({ bytes: new TextEncoder().encode(bodyText) }),
   duration: durationFromMillis(5),
@@ -190,7 +187,8 @@ describe("GraphQL schema snapshots", () => {
     const { layer } = makeDatabaseLayer();
     const undecodable: PreparedResponse = {
       ...response(""),
-      bodyDecodeError: "Response body is not valid utf-8 text",
+      // 0x80 is a continuation byte with no lead byte — never valid UTF-8.
+      body: ResponseBody.Decoded({ bytes: new Uint8Array([0x7b, 0x80, 0x7d]) }),
     };
 
     const exit = await Effect.runPromiseExit(

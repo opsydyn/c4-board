@@ -10,9 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fetchMock = vi.fn();
 vi.mock("@tauri-apps/plugin-http", () => ({ fetch: (...args: unknown[]) => fetchMock(...args) }));
 
-const { HttpClient, HttpClientLive, prepareRequest } = await import("@/core/effects/postee/http-client");
+const { HttpClient, HttpClientLive, prepareRequest, responseText, responseTextFailure } = await import(
+  "@/core/effects/postee/http-client"
+);
 const { RequestBody, RequestId } = await import("@/core/effects/postee/types");
 const { decodeBodyText } = await import("@/core/effects/postee/response-body");
+const { findHeader } = await import("@/core/effects/postee/response-headers");
 
 const preparedRequest = (id = "req-1") =>
   Effect.runPromise(
@@ -68,7 +71,7 @@ describe("HTTP response integrity", () => {
 
     expect(response.status).toBe(500);
     expect(response.statusText).toBe("Internal Server Error");
-    expect(response.headers["retry-after"]).toBe("30");
+    expect(findHeader(response.headerEntries, "retry-after")).toEqual(Option.some("30"));
     expect(response.body._tag).toBe("DecodeFailure");
   });
 
@@ -77,8 +80,8 @@ describe("HTTP response integrity", () => {
 
     const response = await Effect.runPromise(send(await preparedRequest()));
 
-    expect(response.bodyDecodeError).toContain("stream closed");
-    expect(response.bodyText).toBe("");
+    expect(responseTextFailure(response)).toContain("stream closed");
+    expect(responseText(response)).toEqual(Option.none());
     expect(response.rawSize).toBe(0);
   });
 
@@ -88,8 +91,8 @@ describe("HTTP response integrity", () => {
 
     const response = await Effect.runPromise(send(await preparedRequest()));
 
-    expect(response.bodyText).toBe(payload);
-    expect(response.bodyDecodeError).toBeNull();
+    expect(responseText(response)).toEqual(Option.some(payload));
+    expect(responseTextFailure(response)).toBeNull();
     expect(response.body._tag).toBe("Decoded");
   });
 
@@ -153,8 +156,8 @@ describe("HTTP response body (ADR-010 Phase 2)", () => {
 
     const response = await Effect.runPromise(send(await preparedRequest()));
 
-    expect(response.bodyText).toBe("café");
-    expect(response.bodyDecodeError).toBeNull();
+    expect(responseText(response)).toEqual(Option.some("café"));
+    expect(responseTextFailure(response)).toBeNull();
   });
 
   it("reports a body that is not valid text in its declared charset", async () => {
@@ -166,7 +169,7 @@ describe("HTTP response body (ADR-010 Phase 2)", () => {
     const response = await Effect.runPromise(send(await preparedRequest()));
 
     expect(response.body._tag).toBe("Decoded"); // the bytes arrived
-    expect(response.bodyText).toBe(""); // but they are not text
-    expect(response.bodyDecodeError).toBeTruthy();
+    expect(responseText(response)).toEqual(Option.none()); // but they are not text
+    expect(responseTextFailure(response)).toBeTruthy();
   });
 });

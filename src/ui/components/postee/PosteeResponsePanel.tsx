@@ -9,8 +9,10 @@
 
 import type { PosteeHistoryEntry } from "@/core/effects/database.postee";
 import type { PosteeRequestDraft } from "@/core/effects/postee";
-import type { PreparedResponse } from "@/core/effects/postee/http-client";
+import { type PreparedResponse, responseText, responseTextFailure } from "@/core/effects/postee/http-client";
+import { headerEntriesFromStored } from "@/core/effects/postee/response-headers";
 import { CaretRightIcon, PlayIcon, SpinnerGapIcon as SpinnerGap, WarningIcon } from "@phosphor-icons/react";
+import { Option } from "effect";
 import { useCallback, useMemo, useState } from "react";
 import { ToggleButton } from "react-aria-components";
 import { LoadTestPanel } from "./LoadTestPanel";
@@ -128,16 +130,9 @@ export function PosteeResponsePanel({
       return null;
     }
 
-    const headers = (() => {
-      const raw = inspectedHistoryEntry.response_headers;
-      if (!raw) return undefined;
-      if (typeof raw === "object") return raw as unknown as Record<string, string>;
-      try {
-        return JSON.parse(raw) as Record<string, string>;
-      } catch {
-        return raw;
-      }
-    })();
+    // Accepts both entry-array rows and the legacy object rows written before
+    // headers became entries (ADR-010).
+    const headerEntries = headerEntriesFromStored(inspectedHistoryEntry.response_headers);
 
     const body = inspectedHistoryEntry.response_body
       ?? inspectedHistoryEntry.error_message
@@ -145,7 +140,7 @@ export function PosteeResponsePanel({
 
     return {
       body,
-      headers,
+      headerEntries,
       status: inspectedHistoryEntry.response_status ?? undefined,
       statusText: inspectedHistoryEntry.error_message ?? undefined,
       duration: inspectedHistoryEntry.response_time_ms ?? undefined,
@@ -236,9 +231,9 @@ export function PosteeResponsePanel({
           {/* Success state: Show response */}
           {lastResponse && !isRunning && (
             <ResponseViewer
-              body={lastResponse.bodyText}
-              bodyDecodeError={lastResponse.bodyDecodeError}
-              headers={lastResponse.headers}
+              body={Option.getOrElse(responseText(lastResponse), () => "")}
+              bodyDecodeError={responseTextFailure(lastResponse)}
+              headerEntries={lastResponse.headerEntries}
               status={lastResponse.status}
               statusText={lastResponse.statusText}
               {...(lastResponseDurationMs !== undefined && lastResponseDurationMs !== null && {
@@ -246,7 +241,7 @@ export function PosteeResponsePanel({
               })}
               size={Number(lastResponse.rawSize)}
               defaultExpanded
-              baselineBody={baselineResponse?.bodyText ?? null}
+              baselineBody={baselineResponse ? Option.getOrNull(responseText(baselineResponse)) : null}
               showDiff={showDiff}
               onSetBaseline={onSetBaseline}
               onClearBaseline={onClearBaseline}
@@ -356,9 +351,7 @@ export function PosteeResponsePanel({
               </div>
               <ResponseViewer
                 body={inspectedHistoryResponse.body}
-                {...(inspectedHistoryResponse.headers !== undefined && {
-                  headers: inspectedHistoryResponse.headers,
-                })}
+                headerEntries={inspectedHistoryResponse.headerEntries}
                 {...(inspectedHistoryResponse.status !== undefined && {
                   status: inspectedHistoryResponse.status,
                 })}

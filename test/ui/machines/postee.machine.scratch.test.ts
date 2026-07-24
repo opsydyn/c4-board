@@ -155,9 +155,6 @@ describe("Postee scratch workspace machine", () => {
     const response: PreparedResponse = {
       status: StatusCode(200),
       statusText: "OK",
-      headers: {},
-      bodyText: "{\"healthy\":true}",
-      bodyDecodeError: null,
       headerEntries: [],
       body: ResponseBody.Decoded({ bytes: new TextEncoder().encode("{\"healthy\":true}") }),
       duration: Duration.millis(5),

@@ -7,7 +7,7 @@
  * The machine orchestrates WHEN workflows occur; Effect services provide WHAT happens.
  */
 
-import { Duration, Effect, Layer } from "effect";
+import { Duration, Effect, Layer, Option } from "effect";
 import { nanoid } from "nanoid";
 import { assign, fromPromise, setup } from "xstate";
 import type { DoneActorEvent, ErrorActorEvent } from "xstate";
@@ -47,6 +47,7 @@ import {
   type PreparedResponse,
   prepareRequest,
   resolveTemplate,
+  responseText,
 } from "../../core/effects/postee/http-client";
 import type { EffectiveRequestHeader } from "../../core/effects/postee/http-method-policy";
 import { deriveRequestStatuses, type RequestStatus } from "../../core/effects/postee/status-derivation";
@@ -650,7 +651,8 @@ const posteeWorkspaceSetup = setup({
           response_status: response.status,
           response_time_ms: durationToMillis(response.duration),
           response_size_bytes: response.rawSize,
-          response_body: response.bodyText, // ✅ Save response body as JSON
+          // Null when the body is not text — storing a damaged string would be worse.
+          response_body: Option.getOrNull(responseText(response)),
           // Every field line, repeats included — a Record keeps only the last Set-Cookie.
           response_headers: JSON.stringify(response.headerEntries),
           error_message: null,

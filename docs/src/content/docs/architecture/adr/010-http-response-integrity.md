@@ -391,3 +391,25 @@ this ADR addresses: one message for two unrelated events, with the distinguishin
   read `body` and `headerEntries` directly — remains outstanding and is tracked
   here rather than in a separate ADR, since it changes no decision, only finishes
   this one.
+- 2026-07-24: **Phase 4 implemented — this ADR is now fully realised.** The
+  `headers`, `bodyText`, and `bodyDecodeError` shims are gone; `PreparedResponse`
+  is `status`, `statusText`, `headerEntries`, `body`, `duration`, `rawSize`. Text
+  is derived at the point of use through `responseText` / `responseTextFailure`
+  rather than decoded eagerly and stored, so there is one decoding policy and no
+  field that can quietly disagree with the bytes.
+
+  Three things the migration turned up:
+
+  1. **Phase 3 introduced a display regression that Phase 4 fixes.** Once history
+     stored headers as an entry array, `ResponseViewer` still did
+     `Object.keys(parsed)`, so a saved response would have rendered its headers as
+     an indexed array. Headers are now shown as a header block
+     (`name: value` per line), which is both correct for repeats and the form these
+     are conventionally read in — an object literally cannot hold two `Set-Cookie`
+     lines.
+  2. **Old history rows still had to render.** `headerEntriesFromStored` accepts
+     both the entry array and the legacy object, replacing an ad-hoc `try`/`catch`
+     in the panel that returned three different shapes.
+  3. **`PosteeWorkspace.original.tsx` was deleted, not migrated.** Removing the
+     shims made the dead file a compile error, which is the clearest possible
+     argument that it was never live.

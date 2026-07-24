@@ -14,6 +14,7 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react";
 import type { editor } from "monaco-editor";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { highlightMatches, type JsonSearchResult, searchJsonContent } from "../../../core/effects/json-search";
+import { formatHeaderBlock, type HeaderEntries } from "../../../core/effects/postee/response-headers";
 import {
   emptyState,
   kbd,
@@ -48,7 +49,8 @@ interface ResponseViewerProps {
    * other is exactly the silent misreporting ADR-010 removes.
    */
   bodyDecodeError?: string | null;
-  headers?: Record<string, string> | string;
+  /** Field lines as received, repeats included (ADR-010). */
+  headerEntries?: HeaderEntries;
   status?: number;
   statusText?: string;
   duration?: number;
@@ -65,7 +67,7 @@ interface ResponseViewerProps {
 export function ResponseViewer({
   body,
   bodyDecodeError = null,
-  headers,
+  headerEntries = [],
   status,
   statusText,
   duration,
@@ -113,9 +115,6 @@ export function ResponseViewer({
       return baselineBody;
     }
   })();
-
-  // Parse headers if string
-  const parsedHeaders = typeof headers === "string" ? JSON.parse(headers) : headers;
 
   // Monaco has a nice high-contrast dark theme built-in
   // We'll use "hc-black" (high contrast black) for techy vibes
@@ -667,7 +666,7 @@ export function ResponseViewer({
       </div>
 
       {/* Response Headers */}
-      {parsedHeaders && Object.keys(parsedHeaders).length > 0 && (
+      {headerEntries.length > 0 && (
         <div className={responseViewerContent}>
           <button
             type="button"
@@ -680,8 +679,9 @@ export function ResponseViewer({
           {showHeaders && (
             <Editor
               height="150px"
-              defaultLanguage="json"
-              value={JSON.stringify(parsedHeaders, null, 2)}
+              // A header block, not JSON: an object cannot hold two Set-Cookie lines.
+              defaultLanguage="plaintext"
+              value={formatHeaderBlock(headerEntries)}
               theme="postee-response-dark"
               options={editorOptions}
             />

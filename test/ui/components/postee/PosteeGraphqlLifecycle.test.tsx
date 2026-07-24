@@ -162,9 +162,6 @@ const makeLayer = (options: {
   const response: PreparedResponse = {
     status: StatusCode(200),
     statusText: "OK",
-    headers: {},
-    bodyText: introspectionJson,
-    bodyDecodeError: null,
     headerEntries: [],
     body: ResponseBody.Decoded({ bytes: new TextEncoder().encode(introspectionJson) }),
     duration: Duration.millis(1),
