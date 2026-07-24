@@ -27,6 +27,8 @@ import type {
   PosteeCollection,
   PosteeEnvironment,
   PosteeEnvironmentVariable,
+  PosteeGraphqlRequest,
+  PosteeGraphqlSchemaSnapshot,
   PosteeHistoryEntry,
   PosteeRequest,
   PosteeRequestBody,
@@ -76,6 +78,8 @@ export type {
   PosteeCollection,
   PosteeEnvironment,
   PosteeEnvironmentVariable,
+  PosteeGraphqlRequest,
+  PosteeGraphqlSchemaSnapshot,
   PosteeHistoryEntry,
   PosteeRequest,
   PosteeRequestBody,
@@ -125,3 +129,12 @@ export {
 } from "./http-method-policy";
 
 export { type GraphqlDraft, type GraphqlDraftIssue, type GraphqlPreparation, prepareGraphqlDraft } from "./graphql";
+
+export {
+  fingerprintGraphqlSchemaContext,
+  type GraphqlSchemaContext,
+  GraphqlSchemaError,
+  type GraphqlSchemaErrorCategory,
+  loadGraphqlSchemaSnapshot,
+  refreshGraphqlSchema,
+} from "./graphql-schema";
