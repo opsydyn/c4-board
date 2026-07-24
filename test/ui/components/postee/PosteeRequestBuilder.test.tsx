@@ -243,6 +243,11 @@ const createProps = (
   selectedRequest: firstDraft.request,
   selectedRequestDraft: firstDraft,
   requestDraftSave: idleSave,
+  graphqlSchemaState: {
+    status: "NoSchema",
+    snapshot: null,
+    error: null,
+  },
   isInitialising: false,
   isRunning: false,
   canRunRequest: true,
@@ -256,6 +261,7 @@ const createProps = (
   onCreateEnvironment: vi.fn(),
   onEnvironmentChange: vi.fn(),
   onVariablesChange: vi.fn(),
+  onRefreshGraphqlSchema: vi.fn(),
   ...overrides,
 });
 
@@ -428,6 +434,21 @@ describe("PosteeRequestBuilder durable request details", () => {
     expect(screen.getByLabelText("GraphQL document")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("GraphQL variables")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("GraphQL operation")).toBeDisabled();
+  });
+
+  it("refreshes a saved GraphQL schema without making the authoring draft dirty", async () => {
+    const user = userEvent.setup();
+    const onRefreshGraphqlSchema = vi.fn();
+    renderBuilder({
+      selectedRequest: selectedOperationGraphqlDraft.request,
+      selectedRequestDraft: selectedOperationGraphqlDraft,
+      onRefreshGraphqlSchema,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Refresh GraphQL schema" }));
+
+    expect(onRefreshGraphqlSchema).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
 
   it("uses the Send predicate for the GraphQL keyboard shortcut", () => {
@@ -1007,6 +1028,11 @@ describe("PosteeRequestBuilder durable request details", () => {
           requestsByCollection: { "collection-1": [firstDraft.request] },
           requestDrafts: { "request-1": firstDraft },
           requestDraftSave: idleSave,
+          graphqlSchema: {
+            status: "NoSchema",
+            snapshot: null,
+            error: null,
+          },
           activeCollectionId: "collection-1",
           activeRequestId: "request-1",
           activeEnvironmentId: null,

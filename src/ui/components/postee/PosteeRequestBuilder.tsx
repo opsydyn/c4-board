@@ -13,12 +13,14 @@ import type { PosteeEnvironment, PosteeEnvironmentVariable, PosteeRequest } from
 import { evaluateRequestSemantics, type PosteeRequestDraft, prepareGraphqlDraft } from "@/core/effects/postee";
 import { bodyModeToSumType, HTTP_METHODS, type HttpMethod, type RequestBodyMode } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
-import type { RequestDraftSaveState } from "@/ui/machines/postee.machine";
+import type { GraphqlSchemaState, RequestDraftSaveState } from "@/ui/machines/postee.machine";
 import {
+  ArrowClockwiseIcon,
   CheckCircleIcon as CheckCircle,
   SpinnerGapIcon as SpinnerGap,
   WarningIcon as Warning,
 } from "@phosphor-icons/react";
+import { buildClientSchema, type GraphQLSchema, type IntrospectionQuery } from "graphql";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
@@ -73,6 +75,7 @@ export interface PosteeRequestBuilderProps {
   selectedRequest: PosteeRequest | null;
   selectedRequestDraft: PosteeRequestDraft | null;
   requestDraftSave: RequestDraftSaveState;
+  graphqlSchemaState: GraphqlSchemaState;
 
   // Request execution state
   isInitialising: boolean;
@@ -96,6 +99,7 @@ export interface PosteeRequestBuilderProps {
   onCreateEnvironment: (name: string) => void;
   onEnvironmentChange: (environmentId: string) => void;
   onVariablesChange: (variables: PosteeEnvironmentVariable[]) => void;
+  onRefreshGraphqlSchema: () => void;
 }
 
 interface PendingRequestDraftSave {
@@ -125,8 +129,6 @@ interface RequestEditorPresentationInput {
 interface RequestEditorPresentation extends RequestEditorLocalState {
   readonly synchronized: boolean;
 }
-
-export type GraphqlSchemaUiState = "NoSchema" | "Cached" | "Stale" | "Refreshing" | "Unavailable";
 
 const GRAPHQL_BODY_MODES: ReadonlyArray<RequestBodyMode> = ["json", "raw", "form", "graphql"];
 
@@ -191,6 +193,7 @@ export function PosteeRequestBuilder({
   selectedRequest,
   selectedRequestDraft,
   requestDraftSave,
+  graphqlSchemaState,
   isInitialising,
   isRunning,
   canRunRequest,
@@ -206,6 +209,7 @@ export function PosteeRequestBuilder({
   onCreateEnvironment,
   onEnvironmentChange,
   onVariablesChange,
+  onRefreshGraphqlSchema,
 }: PosteeRequestBuilderProps) {
   const methodOptions: ReadonlyArray<HttpMethod> = HTTP_METHODS;
 
@@ -441,6 +445,14 @@ export function PosteeRequestBuilder({
       })
       : null
   ), [graphqlDocument, graphqlOperationName, graphqlVariables, isGraphqlBody]);
+  const graphqlSchema = useMemo<GraphQLSchema | null>(() => {
+    if (graphqlSchemaState.snapshot === null) return null;
+    try {
+      return buildClientSchema(JSON.parse(graphqlSchemaState.snapshot.introspection_json) as IntrospectionQuery);
+    } catch {
+      return null;
+    }
+  }, [graphqlSchemaState.snapshot]);
   const semanticBodyMode = bodyWasEdited
     ? "json"
     : editorPresentation.requestBodyMode;
@@ -618,7 +630,22 @@ export function PosteeRequestBuilder({
     : canRunRequest
     ? "Send request (Cmd+Enter)"
     : "Save request first";
-  const graphqlSchemaUiState: GraphqlSchemaUiState = "NoSchema";
+  const canRefreshGraphqlSchema = isGraphqlBody
+    && !visibleHasUnsavedChanges
+    && isEditorSynchronized
+    && !isRunning
+    && graphqlSchemaState.status !== "Refreshing";
+  const graphqlSchemaStatusText = graphqlSchemaState.error
+    ? graphqlSchemaState.error
+    : graphqlSchemaState.status === "Cached"
+    ? "Cached schema"
+    : graphqlSchemaState.status === "Stale"
+    ? "Cached schema is stale"
+    : graphqlSchemaState.status === "Refreshing"
+    ? "Refreshing schema"
+    : graphqlSchemaState.status === "Unavailable"
+    ? "Schema unavailable"
+    : "No cached schema";
 
   return (
     <>
@@ -802,14 +829,27 @@ export function PosteeRequestBuilder({
                     <div className={styles.graphqlEditorSection}>
                       <div className={styles.graphqlEditorHeading}>
                         <span>Document</span>
-                        <span className={styles.graphqlSchemaStatus} role="status" aria-live="polite">
-                          {graphqlSchemaUiState === "NoSchema" ? "Schema unavailable" : graphqlSchemaUiState}
-                        </span>
+                        <div className={styles.graphqlSchemaControls}>
+                          <span className={styles.graphqlSchemaStatus} role="status" aria-live="polite">
+                            {graphqlSchemaStatusText}
+                          </span>
+                          <Tooltip content="Refresh GraphQL schema">
+                            <button
+                              type="button"
+                              className={styles.graphqlSchemaRefreshButton}
+                              onClick={onRefreshGraphqlSchema}
+                              disabled={!canRefreshGraphqlSchema}
+                              aria-label="Refresh GraphQL schema"
+                            >
+                              <ArrowClockwiseIcon size={14} weight="bold" aria-hidden="true" />
+                            </button>
+                          </Tooltip>
+                        </div>
                       </div>
                       <MonacoGraphqlEditor
                         value={graphqlDocument}
                         onChange={handleGraphqlDocumentChange}
-                        schema={null}
+                        schema={graphqlSchema}
                         readOnly={!isEditorSynchronized || isRunning}
                         height="300px"
                       />

@@ -44,6 +44,7 @@ export function PosteeWorkspace() {
     requestsByCollection,
     requestDrafts,
     requestDraftSave,
+    graphqlSchema,
     activeCollectionId,
     activeRequestId,
     activeEnvironmentId,
@@ -237,6 +238,10 @@ export function PosteeWorkspace() {
     if (!selectedRequest || state.matches({ ready: "running" })) return;
     send({ type: "RUN_REQUEST" });
   }, [selectedRequest, state, send]);
+
+  const handleRefreshGraphqlSchema = useCallback(() => {
+    send({ type: "REFRESH_GRAPHQL_SCHEMA" } satisfies PosteeEvent);
+  }, [send]);
 
   const handleCancelRequest = useCallback(() => {
     if (!state.matches({ ready: "running" })) return;
@@ -464,6 +469,7 @@ export function PosteeWorkspace() {
           selectedRequest={selectedRequest}
           selectedRequestDraft={selectedRequestDraft}
           requestDraftSave={requestDraftSave}
+          graphqlSchemaState={graphqlSchema}
           isInitialising={isInitialising}
           isRunning={isRunning}
           canRunRequest={canRunRequest}
@@ -479,6 +485,7 @@ export function PosteeWorkspace() {
           onCreateEnvironment={handleCreateEnvironment}
           onEnvironmentChange={handleEnvironmentChange}
           onVariablesChange={handleVariablesChange}
+          onRefreshGraphqlSchema={handleRefreshGraphqlSchema}
         />
 
         {isResponsePanelOpen && (

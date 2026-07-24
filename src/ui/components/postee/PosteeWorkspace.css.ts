@@ -751,6 +751,35 @@ export const graphqlSchemaStatus = style({
   color: theme.color.foreground.tertiary,
 });
 
+export const graphqlSchemaControls = style({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+});
+
+export const graphqlSchemaRefreshButton = style({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  transition: theme.transition.fast,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "transparent",
+  cursor: "pointer",
+  padding: theme.spacing["1"],
+  color: theme.color.foreground.secondary,
+
+  selectors: {
+    "&:hover:not(:disabled)": {
+      borderColor: theme.color.border.focus,
+      color: theme.color.foreground.primary,
+    },
+    "&:disabled": {
+      opacity: theme.opacity.disabled,
+      cursor: "not-allowed",
+    },
+  },
+});
+
 export const graphqlOperationField = style({
   display: "flex",
   flexDirection: "column",

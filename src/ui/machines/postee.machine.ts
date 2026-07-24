@@ -14,12 +14,14 @@ import type { DoneActorEvent, ErrorActorEvent } from "xstate";
 import { DatabaseService } from "../../core/effects/database.base";
 import { DatabaseServiceLive } from "../../core/effects/database.runtime";
 import {
+  loadGraphqlSchemaSnapshot,
   loadPosteeRequestDraft,
   type PosteeCollection,
   PosteeCollections,
   type PosteeEnvironment,
   PosteeEnvironments,
   type PosteeEnvironmentVariable,
+  type PosteeGraphqlSchemaSnapshot,
   PosteeHistory,
   type PosteeHistoryEntry,
   type PosteeRequest,
@@ -27,6 +29,7 @@ import {
   PosteeRequests,
   preparePosteeDraftBody,
   preparePosteeDraftHeaders,
+  refreshGraphqlSchema,
   savePosteeRequestDraft,
 } from "../../core/effects/postee";
 import {
@@ -36,7 +39,9 @@ import {
   type PreparedRequest,
   type PreparedResponse,
   prepareRequest,
+  resolveTemplate,
 } from "../../core/effects/postee/http-client";
+import type { EffectiveRequestHeader } from "../../core/effects/postee/http-method-policy";
 import { deriveRequestStatuses, type RequestStatus } from "../../core/effects/postee/status-derivation";
 import {
   type CollectionId,
@@ -74,12 +79,21 @@ export interface RequestDraftSaveState {
   readonly revision: number;
 }
 
+export type GraphqlSchemaUiState = "NoSchema" | "Cached" | "Stale" | "Refreshing" | "Unavailable";
+
+export interface GraphqlSchemaState {
+  readonly status: GraphqlSchemaUiState;
+  readonly snapshot: PosteeGraphqlSchemaSnapshot | null;
+  readonly error: string | null;
+}
+
 export interface PosteeContext {
   collections: PosteeCollection[];
   requestsByCollection: Record<string, PosteeRequest[]>;
   requestDrafts: Record<string, PosteeRequestDraft>;
   pendingRequestDraft: PosteeRequestDraft | null;
   requestDraftSave: RequestDraftSaveState;
+  graphqlSchema: GraphqlSchemaState;
   environments: PosteeEnvironment[];
   variablesByEnvironment: Record<string, PosteeEnvironmentVariable[]>;
   activeCollectionId: CollectionId | null;
@@ -108,6 +122,7 @@ export type PosteeEvent =
   | { type: "RUN_REQUEST" }
   | { type: "RUN_CANCEL" }
   | { type: "REFRESH_HISTORY" }
+  | { type: "REFRESH_GRAPHQL_SCHEMA" }
   | { type: "SAVE_REQUEST_DRAFT"; draft: PosteeRequestDraft }
   | { type: "SET_BASELINE_RESPONSE" } // Set current response as baseline for diff
   | { type: "CLEAR_BASELINE_RESPONSE" } // Clear baseline
@@ -196,6 +211,10 @@ type SaveRequestDraftDoneEvent = DoneActorEvent<PosteeRequestDraft, "saveRequest
 type SaveRequestDraftErrorEvent = ErrorActorEvent<unknown, "saveRequestDraft">;
 type RunRequestDoneEvent = DoneActorEvent<RunRequestResult, "runRequest">;
 type RunRequestErrorEvent = ErrorActorEvent<unknown, "runRequest">;
+type LoadGraphqlSchemaDoneEvent = DoneActorEvent<PosteeGraphqlSchemaSnapshot | null, "loadGraphqlSchema">;
+type LoadGraphqlSchemaErrorEvent = ErrorActorEvent<unknown, "loadGraphqlSchema">;
+type RefreshGraphqlSchemaDoneEvent = DoneActorEvent<PosteeGraphqlSchemaSnapshot, "refreshGraphqlSchema">;
+type RefreshGraphqlSchemaErrorEvent = ErrorActorEvent<unknown, "refreshGraphqlSchema">;
 
 type PosteeMachineEvent =
   | PosteeEvent
@@ -203,7 +222,11 @@ type PosteeMachineEvent =
   | SaveRequestDraftDoneEvent
   | SaveRequestDraftErrorEvent
   | RunRequestDoneEvent
-  | RunRequestErrorEvent;
+  | RunRequestErrorEvent
+  | LoadGraphqlSchemaDoneEvent
+  | LoadGraphqlSchemaErrorEvent
+  | RefreshGraphqlSchemaDoneEvent
+  | RefreshGraphqlSchemaErrorEvent;
 
 // =============================================================================
 // Helpers
@@ -233,6 +256,37 @@ const initialRequestDraftSave = (): RequestDraftSaveState => ({
   error: null,
   revision: 0,
 });
+
+const initialGraphqlSchema = (): GraphqlSchemaState => ({
+  status: "NoSchema",
+  snapshot: null,
+  error: null,
+});
+
+const graphqlSchemaContext = (context: PosteeContext) => {
+  const requestId = context.activeRequestId as unknown as string | null;
+  const draft = requestId ? context.requestDrafts[requestId] : null;
+  if (!draft || draft.body.mode !== "graphql" || draft.graphql === null) {
+    return null;
+  }
+
+  const variables = context.activeEnvironmentId
+    ? context.variablesByEnvironment[context.activeEnvironmentId as unknown as string] ?? []
+    : [];
+  const environment = { variables };
+  const headers: ReadonlyArray<EffectiveRequestHeader> = draft.headers
+    .filter((header) => header.enabled)
+    .map((header) => ({
+      key: resolveTemplate(header.key, environment),
+      value: resolveTemplate(header.value, environment),
+    }))
+    .filter((header) => header.key.trim().length > 0);
+
+  return {
+    endpointUrl: resolveTemplate(draft.request.url, environment),
+    headers,
+  };
+};
 
 const defaultRequestDraft = (request: PosteeRequest): PosteeRequestDraft => ({
   request,
@@ -355,6 +409,32 @@ const posteeWorkspaceSetup = setup({
       );
     }),
 
+    loadGraphqlSchema: fromPromise<
+      PosteeGraphqlSchemaSnapshot | null,
+      { layer: WorkspaceLayer; context: PosteeContext }
+    >(async ({ input }) => {
+      const schemaContext = graphqlSchemaContext(input.context);
+      if (schemaContext === null) return null;
+      return runLayeredEffect(
+        input.layer,
+        loadGraphqlSchemaSnapshot(schemaContext),
+      );
+    }),
+
+    refreshGraphqlSchema: fromPromise<
+      PosteeGraphqlSchemaSnapshot,
+      { layer: WorkspaceLayer; context: PosteeContext }
+    >(async ({ input }) => {
+      const schemaContext = graphqlSchemaContext(input.context);
+      if (schemaContext === null) {
+        throw new Error("No saved GraphQL request is selected");
+      }
+      return runLayeredEffect(
+        input.layer,
+        refreshGraphqlSchema(schemaContext),
+      );
+    }),
+
     runRequest: fromPromise<
       RunRequestResult,
       {
@@ -468,6 +548,7 @@ const posteeWorkspaceSetup = setup({
   },
   guards: {
     hasActiveRequest: ({ context }) => context.activeRequestId !== null,
+    hasActiveGraphqlRequest: ({ context }) => graphqlSchemaContext(context) !== null,
   },
   actions: {
     createCollection: assign(({ context, event }) => {
@@ -910,6 +991,83 @@ const posteeWorkspaceSetup = setup({
         },
       };
     }),
+    startGraphqlSchemaLoad: assign({
+      graphqlSchema: () => ({
+        status: "Refreshing",
+        snapshot: null,
+        error: null,
+      }),
+    }),
+    publishLoadedGraphqlSchema: assign(({ context, event }) => {
+      if (event.type !== "xstate.done.actor.loadGraphqlSchema") {
+        return context;
+      }
+      return {
+        ...context,
+        graphqlSchema: event.output === null
+          ? initialGraphqlSchema()
+          : {
+            status: "Cached" as const,
+            snapshot: event.output,
+            error: null,
+          },
+      };
+    }),
+    failGraphqlSchemaLoad: assign(({ context, event }) => {
+      if (event.type !== "xstate.error.actor.loadGraphqlSchema") {
+        return context;
+      }
+      return {
+        ...context,
+        graphqlSchema: {
+          status: "Unavailable" as const,
+          snapshot: null,
+          error: "Unable to load the cached GraphQL schema.",
+        },
+      };
+    }),
+    startGraphqlSchemaRefresh: assign(({ context }) => ({
+      ...context,
+      graphqlSchema: {
+        status: "Refreshing" as const,
+        snapshot: context.graphqlSchema.snapshot,
+        error: null,
+      },
+    })),
+    publishRefreshedGraphqlSchema: assign(({ context, event }) => {
+      if (event.type !== "xstate.done.actor.refreshGraphqlSchema") {
+        return context;
+      }
+      return {
+        ...context,
+        graphqlSchema: {
+          status: "Cached" as const,
+          snapshot: event.output,
+          error: null,
+        },
+      };
+    }),
+    failGraphqlSchemaRefresh: assign(({ context, event }) => {
+      if (event.type !== "xstate.error.actor.refreshGraphqlSchema") {
+        return context;
+      }
+      return {
+        ...context,
+        graphqlSchema: {
+          status: context.graphqlSchema.snapshot === null ? "Unavailable" as const : "Stale" as const,
+          snapshot: context.graphqlSchema.snapshot,
+          error: "Unable to refresh the GraphQL schema.",
+        },
+      };
+    }),
+    rejectGraphqlSchemaRefresh: assign(({ context }) => ({
+      ...context,
+      graphqlSchema: {
+        status: context.graphqlSchema.snapshot === null ? "Unavailable" as const : "Stale" as const,
+        snapshot: context.graphqlSchema.snapshot,
+        error: "Select a saved GraphQL request before refreshing its schema.",
+      },
+    })),
     markRunnerIdle: assign({
       runner: () => initialRunner(),
     }),
@@ -1252,7 +1410,7 @@ const initialisingState = posteeWorkspaceSetup.createStateConfig({
     src: "loadWorkspace",
     input: ({ context }) => ({ layer: context.layer }),
     onDone: {
-      target: "ready",
+      target: "ready.loadingGraphqlSchema",
       actions: ["assignWorkspace", "deriveRequestStatuses", "markReady", "deriveWorkspaceState"],
     },
     onError: {
@@ -1286,17 +1444,30 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
           target: "savingDraft",
           actions: "stageRequestDraft",
         },
+        REFRESH_GRAPHQL_SCHEMA: [
+          {
+            guard: "hasActiveGraphqlRequest",
+            target: "refreshingGraphqlSchema",
+            actions: "startGraphqlSchemaRefresh",
+          },
+          {
+            actions: "rejectGraphqlSchemaRefresh",
+          },
+        ],
         RUN_REQUEST: {
           target: "running",
           guard: "hasActiveRequest",
         },
         SELECT_COLLECTION: {
+          target: "loadingGraphqlSchema",
           actions: ["selectCollection", "deriveWorkspaceState"],
         },
         SELECT_REQUEST: {
+          target: "loadingGraphqlSchema",
           actions: ["selectRequest", "deriveWorkspaceState"],
         },
         SELECT_ENVIRONMENT: {
+          target: "loadingGraphqlSchema",
           actions: "selectEnvironment",
         },
         CREATE_ENVIRONMENT: {
@@ -1326,7 +1497,7 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
           draft: context.pendingRequestDraft,
         }),
         onDone: {
-          target: "idle",
+          target: "loadingGraphqlSchema",
           actions: ["publishSavedRequestDraft", "deriveWorkspaceState"],
         },
         onError: {
@@ -1342,6 +1513,68 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         },
         SELECT_COLLECTION: {
           actions: ["selectCollection", "deriveWorkspaceState"],
+        },
+      },
+    },
+    loadingGraphqlSchema: {
+      entry: "startGraphqlSchemaLoad",
+      invoke: {
+        id: "loadGraphqlSchema",
+        src: "loadGraphqlSchema",
+        input: ({ context }) => ({
+          layer: context.layer,
+          context,
+        }),
+        onDone: {
+          target: "idle",
+          actions: "publishLoadedGraphqlSchema",
+        },
+        onError: {
+          target: "idle",
+          actions: "failGraphqlSchemaLoad",
+        },
+      },
+      on: {
+        SAVE_REQUEST_DRAFT: {
+          target: "savingDraft",
+          actions: "stageRequestDraft",
+        },
+        RUN_REQUEST: {
+          target: "running",
+          guard: "hasActiveRequest",
+        },
+        SELECT_COLLECTION: {
+          target: "loadingGraphqlSchema",
+          reenter: true,
+          actions: ["selectCollection", "deriveWorkspaceState"],
+        },
+        SELECT_REQUEST: {
+          target: "loadingGraphqlSchema",
+          reenter: true,
+          actions: ["selectRequest", "deriveWorkspaceState"],
+        },
+        SELECT_ENVIRONMENT: {
+          target: "loadingGraphqlSchema",
+          reenter: true,
+          actions: "selectEnvironment",
+        },
+      },
+    },
+    refreshingGraphqlSchema: {
+      invoke: {
+        id: "refreshGraphqlSchema",
+        src: "refreshGraphqlSchema",
+        input: ({ context }) => ({
+          layer: context.layer,
+          context,
+        }),
+        onDone: {
+          target: "idle",
+          actions: "publishRefreshedGraphqlSchema",
+        },
+        onError: {
+          target: "idle",
+          actions: "failGraphqlSchemaRefresh",
         },
       },
     },
@@ -1457,6 +1690,7 @@ export const createPosteeWorkspaceMachine = (options?: {
       requestDrafts: {},
       pendingRequestDraft: null,
       requestDraftSave: initialRequestDraftSave(),
+      graphqlSchema: initialGraphqlSchema(),
       environments: [],
       variablesByEnvironment: {},
       activeCollectionId: null,

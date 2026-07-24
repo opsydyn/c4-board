@@ -430,7 +430,19 @@ its standalone workflow.
 These capabilities follow a stable REST domain model, portable format, and
 verification runner:
 
-- [ ] GraphQL requests, variables, schema loading, and operation selection.
+### GraphQL
+
+- [x] Author, persist, execute, and load-test GraphQL-over-HTTP POST requests.
+- [x] Edit GraphQL documents and JSON variables with operation selection for
+      multi-operation documents.
+- [x] Refresh authenticated schema introspection explicitly and retain the
+      matching local snapshot for offline reuse.
+- [x] Provide syntax highlighting, schema diagnostics, completion, and hover
+      information without making schema availability a Send requirement.
+- [ ] Support GraphQL-over-HTTP GET requests.
+- [ ] Support subscriptions, WebSocket transports, batching, uploads, persisted
+      queries, retries, schema import, federation, or portable schema exports.
+- [ ] Add automatic schema refresh.
 - [ ] WebSocket and Server-Sent Events sessions.
 - [ ] gRPC requests and reflection.
 - [ ] client certificates, proxy profiles, and advanced transport diagnostics.
