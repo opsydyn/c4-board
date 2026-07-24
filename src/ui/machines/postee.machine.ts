@@ -16,6 +16,8 @@ import { DatabaseServiceLive } from "../../core/effects/database.runtime";
 import {
   loadGraphqlSchemaSnapshot,
   loadPosteeRequestDraft,
+  loadPosteeScratchDrafts,
+  newPosteeScratchDraft,
   type PosteeCollection,
   PosteeCollections,
   type PosteeEnvironment,
@@ -27,10 +29,12 @@ import {
   type PosteeRequest,
   type PosteeRequestDraft,
   PosteeRequests,
+  type PosteeScratchDraft,
   preparePosteeDraftBody,
   preparePosteeDraftHeaders,
   refreshGraphqlSchema,
   savePosteeRequestDraft,
+  savePosteeScratchDraft,
 } from "../../core/effects/postee";
 import {
   HttpClient,
@@ -87,10 +91,19 @@ export interface GraphqlSchemaState {
   readonly error: string | null;
 }
 
+export type PosteeEditorTarget =
+  | { readonly kind: "scratch"; readonly scratchId: string }
+  | { readonly kind: "saved"; readonly requestId: RequestId }
+  | null;
+
 export interface PosteeContext {
   collections: PosteeCollection[];
   requestsByCollection: Record<string, PosteeRequest[]>;
   requestDrafts: Record<string, PosteeRequestDraft>;
+  scratchDrafts: Record<string, PosteeScratchDraft>;
+  openScratchIds: string[];
+  closedScratchIds: string[];
+  activeEditor: PosteeEditorTarget;
   pendingRequestDraft: PosteeRequestDraft | null;
   requestDraftSave: RequestDraftSaveState;
   graphqlSchema: GraphqlSchemaState;
@@ -192,6 +205,10 @@ export interface LoadWorkspaceResult {
   collections: PosteeCollection[];
   requestMap: Record<string, PosteeRequest[]>;
   requestDrafts: Record<string, PosteeRequestDraft>;
+  scratchDrafts: Record<string, PosteeScratchDraft>;
+  openScratchIds: string[];
+  closedScratchIds: string[];
+  activeEditor: PosteeEditorTarget;
   environments: PosteeEnvironment[];
   variables: Record<string, PosteeEnvironmentVariable[]>;
   history: PosteeHistoryEntry[];
@@ -357,9 +374,20 @@ const posteeWorkspaceSetup = setup({
           );
 
           const history = yield* PosteeHistory.list(50);
+          const recoveredScratchDrafts = yield* loadPosteeScratchDrafts();
+          const freshScratch = newPosteeScratchDraft({
+            id: nanoid(),
+            tabOrder: 0,
+            now: Date.now(),
+          });
+          yield* savePosteeScratchDraft(freshScratch);
 
           const requestDrafts = Object.fromEntries(requestDraftEntries);
           const variables = Object.fromEntries(variableEntries);
+          const scratchDrafts = Object.fromEntries([
+            ...recoveredScratchDrafts.map((draft) => [draft.id, { ...draft, isOpen: false }] as const),
+            [freshScratch.id, freshScratch] as const,
+          ]);
 
           // Brand IDs from database strings
           const firstCollectionId = collections[0]?.id;
@@ -382,6 +410,10 @@ const posteeWorkspaceSetup = setup({
             collections,
             requestMap,
             requestDrafts,
+            scratchDrafts,
+            openScratchIds: [freshScratch.id],
+            closedScratchIds: recoveredScratchDrafts.map((draft) => draft.id),
+            activeEditor: { kind: "scratch", scratchId: freshScratch.id },
             environments,
             variables,
             history,
@@ -908,6 +940,10 @@ const posteeWorkspaceSetup = setup({
         collections,
         requestMap,
         requestDrafts,
+        scratchDrafts,
+        openScratchIds,
+        closedScratchIds,
+        activeEditor,
         environments,
         variables,
         history,
@@ -921,6 +957,10 @@ const posteeWorkspaceSetup = setup({
         collections,
         requestsByCollection: requestMap,
         requestDrafts,
+        scratchDrafts,
+        openScratchIds,
+        closedScratchIds,
+        activeEditor,
         environments,
         variablesByEnvironment: variables,
         history,
@@ -1688,6 +1728,10 @@ export const createPosteeWorkspaceMachine = (options?: {
       collections: [],
       requestsByCollection: {},
       requestDrafts: {},
+      scratchDrafts: {},
+      openScratchIds: [],
+      closedScratchIds: [],
+      activeEditor: null,
       pendingRequestDraft: null,
       requestDraftSave: initialRequestDraftSave(),
       graphqlSchema: initialGraphqlSchema(),
