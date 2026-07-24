@@ -15,6 +15,7 @@ interface SelectProps<T extends string> {
   onChange: (value: T) => void;
   className?: string;
   disabled?: boolean;
+  ariaLabel?: string;
 }
 
 export function Select<T extends string>({
@@ -23,6 +24,7 @@ export function Select<T extends string>({
   onChange,
   className,
   disabled = false,
+  ariaLabel,
 }: SelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -82,6 +84,7 @@ export function Select<T extends string>({
         disabled={disabled}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
+        aria-label={ariaLabel}
       >
         <span>{value}</span>
         <CaretDownIcon size={16} weight="bold" />

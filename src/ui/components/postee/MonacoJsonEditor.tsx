@@ -9,14 +9,14 @@
  * - Custom actions (Copy JSON Path, Format, etc.)
  */
 
-import Editor, { loader, type Monaco } from "@monaco-editor/react";
+import Editor, { type Monaco } from "@monaco-editor/react";
 import { CaretDownIcon, CaretRightIcon, CopySimpleIcon, TextAlignLeftIcon } from "@phosphor-icons/react";
 import type { editor, languages } from "monaco-editor";
 import { useCallback, useRef } from "react";
+import { configurePosteeMonaco } from "./monaco-loader";
 import { actionBar, actionButton, monacoEditorContainer, monacoEditorWrapper } from "./MonacoJsonEditor.css";
 
-const baseUrl = (import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
-loader.config({ paths: { vs: `${baseUrl}monaco/vs` } });
+configurePosteeMonaco();
 
 /**
  * Get JSON path at cursor position (e.g., "data.user.email")
@@ -115,6 +115,7 @@ interface MonacoJsonEditorProps {
   readOnly?: boolean;
   height?: string;
   placeholder?: string;
+  ariaLabel?: string;
 }
 
 export function MonacoJsonEditor({
@@ -123,6 +124,7 @@ export function MonacoJsonEditor({
   readOnly = false,
   height = "300px",
   placeholder = "{}",
+  ariaLabel = "Request body",
 }: MonacoJsonEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
@@ -708,6 +710,7 @@ export function MonacoJsonEditor({
               localityBonus: true,
               shareSuggestSelections: true,
             },
+            ariaLabel,
           }}
         />
       </div>

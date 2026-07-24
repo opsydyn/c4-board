@@ -44,13 +44,34 @@ vi.mock("@/ui/components/postee/MonacoJsonEditor", () => ({
     value,
     onChange,
     readOnly,
+    ariaLabel = "Request body",
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    readOnly?: boolean;
+    ariaLabel?: string;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      readOnly={readOnly}
+    />
+  ),
+}));
+
+vi.mock("@/ui/components/postee/MonacoGraphqlEditor", () => ({
+  MonacoGraphqlEditor: ({
+    value,
+    onChange,
+    readOnly,
   }: {
     value: string;
     onChange: (value: string) => void;
     readOnly?: boolean;
   }) => (
     <textarea
-      aria-label="Request body"
+      aria-label="GraphQL document"
       value={value}
       onChange={(event) => onChange(event.target.value)}
       readOnly={readOnly}
@@ -178,6 +199,36 @@ const rawQueryDraft = makeQueryDraft({
   headers: [],
 });
 
+const multiOperationGraphqlDraft: PosteeRequestDraft = {
+  request: {
+    ...firstDraft.request,
+    id: "request-graphql",
+    name: "GraphQL operations",
+    method: "POST",
+  },
+  headers: [],
+  body: {
+    request_id: "request-graphql",
+    mode: "graphql",
+    raw: null,
+    form_values: null,
+  },
+  graphql: {
+    request_id: "request-graphql",
+    document: "query Systems { systems { id } }\nquery People { people { id } }",
+    variables_json: "{\n  \"limit\": 10\n}",
+    operation_name: null,
+  },
+};
+
+const selectedOperationGraphqlDraft: PosteeRequestDraft = {
+  ...multiOperationGraphqlDraft,
+  graphql: {
+    ...multiOperationGraphqlDraft.graphql!,
+    operation_name: "Systems",
+  },
+};
+
 const idleSave: RequestDraftSaveState = {
   status: "idle",
   requestId: null,
@@ -302,6 +353,93 @@ describe("PosteeRequestBuilder durable request details", () => {
 
     await user.click(screen.getByRole("button", { name: "POST" }));
     expect(screen.getByRole("option", { name: "QUERY" })).toBeInTheDocument();
+  });
+
+  it("renders durable GraphQL document and variables editors", () => {
+    renderBuilder({
+      selectedRequest: multiOperationGraphqlDraft.request,
+      selectedRequestDraft: multiOperationGraphqlDraft,
+    });
+
+    expect(screen.getByLabelText("GraphQL document")).toHaveValue(
+      multiOperationGraphqlDraft.graphql!.document,
+    );
+    expect(screen.getByLabelText("GraphQL variables")).toHaveValue(
+      multiOperationGraphqlDraft.graphql!.variables_json,
+    );
+  });
+
+  it("blocks Send but keeps Save available for an ambiguous GraphQL operation", async () => {
+    const user = userEvent.setup();
+    renderBuilder({
+      selectedRequest: multiOperationGraphqlDraft.request,
+      selectedRequestDraft: multiOperationGraphqlDraft,
+    });
+
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "GraphQL requires an operation selection.",
+    );
+
+    await user.type(screen.getByLabelText("GraphQL variables"), " ");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("enables Send for a persisted selected GraphQL operation", () => {
+    renderBuilder({
+      selectedRequest: selectedOperationGraphqlDraft.request,
+      selectedRequestDraft: selectedOperationGraphqlDraft,
+    });
+
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  });
+
+  it("persists the selected GraphQL operation after editing an ambiguous draft", async () => {
+    const user = userEvent.setup();
+    const onSaveRequestDraft = vi.fn();
+    renderBuilder({
+      selectedRequest: multiOperationGraphqlDraft.request,
+      selectedRequestDraft: multiOperationGraphqlDraft,
+      onSaveRequestDraft,
+    });
+
+    await user.selectOptions(screen.getByLabelText("GraphQL operation"), "People");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSaveRequestDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ mode: "graphql", raw: null }),
+        graphql: expect.objectContaining({
+          document: multiOperationGraphqlDraft.graphql!.document,
+          variables_json: multiOperationGraphqlDraft.graphql!.variables_json,
+          operation_name: "People",
+        }),
+      }),
+    );
+  });
+
+  it("locks GraphQL authoring controls while a request is running", () => {
+    renderBuilder({
+      selectedRequest: selectedOperationGraphqlDraft.request,
+      selectedRequestDraft: selectedOperationGraphqlDraft,
+      isRunning: true,
+    });
+
+    expect(screen.getByLabelText("GraphQL document")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("GraphQL variables")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("GraphQL operation")).toBeDisabled();
+  });
+
+  it("uses the Send predicate for the GraphQL keyboard shortcut", () => {
+    const onRunRequest = vi.fn();
+    renderBuilder({
+      selectedRequest: multiOperationGraphqlDraft.request,
+      selectedRequestDraft: multiOperationGraphqlDraft,
+      onRunRequest,
+    });
+
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    expect(onRunRequest).not.toHaveBeenCalled();
   });
 
   it("allows a saved QUERY JSON draft to send", async () => {

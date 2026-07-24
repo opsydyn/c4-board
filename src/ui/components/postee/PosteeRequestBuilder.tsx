@@ -10,7 +10,7 @@
  */
 
 import type { PosteeEnvironment, PosteeEnvironmentVariable, PosteeRequest } from "@/core/effects/database.postee";
-import { evaluateRequestSemantics, type PosteeRequestDraft } from "@/core/effects/postee";
+import { evaluateRequestSemantics, type PosteeRequestDraft, prepareGraphqlDraft } from "@/core/effects/postee";
 import { bodyModeToSumType, HTTP_METHODS, type HttpMethod, type RequestBodyMode } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
 import type { RequestDraftSaveState } from "@/ui/machines/postee.machine";
@@ -23,6 +23,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 import { type Header, HeadersEditor } from "./HeadersEditor";
+import { MonacoGraphqlEditor } from "./MonacoGraphqlEditor";
 import { MonacoJsonEditor } from "./MonacoJsonEditor";
 import { Select } from "./Select";
 import { TabBar } from "./TabBar";
@@ -125,6 +126,10 @@ interface RequestEditorPresentation extends RequestEditorLocalState {
   readonly synchronized: boolean;
 }
 
+export type GraphqlSchemaUiState = "NoSchema" | "Cached" | "Stale" | "Refreshing" | "Unavailable";
+
+const GRAPHQL_BODY_MODES: ReadonlyArray<RequestBodyMode> = ["json", "raw", "form", "graphql"];
+
 export const deriveRequestEditorPresentation = ({
   selectedRequest,
   selectedRequestDraft,
@@ -214,6 +219,9 @@ export function PosteeRequestBuilder({
   const [requestHeaders, setRequestHeaders] = useState<Header[]>([]);
   const [requestBody, setRequestBody] = useState<string>("{}");
   const [requestBodyMode, setRequestBodyMode] = useState("json");
+  const [graphqlDocument, setGraphqlDocument] = useState("");
+  const [graphqlVariables, setGraphqlVariables] = useState("{}");
+  const [graphqlOperationName, setGraphqlOperationName] = useState<string | null>(null);
   const [bodyWasEdited, setBodyWasEdited] = useState(false);
   const [hydratedRequestId, setHydratedRequestId] = useState<string | null>(null);
   const [pendingSave, setPendingSave] = useState<PendingRequestDraftSave | null>(null);
@@ -253,6 +261,9 @@ export function PosteeRequestBuilder({
     setRequestHeaders(draft.headers.map((header) => ({ ...header })));
     setRequestBody(draft.body.raw ?? "");
     setRequestBodyMode(draft.body.mode);
+    setGraphqlDocument(draft.graphql?.document ?? "");
+    setGraphqlVariables(draft.graphql?.variables_json ?? "{}");
+    setGraphqlOperationName(draft.graphql?.operation_name ?? null);
     setBodyWasEdited(false);
     setHasUnsavedChanges(false);
     setHydratedRequestId(draft.request.id);
@@ -266,6 +277,9 @@ export function PosteeRequestBuilder({
       setRequestHeaders([]);
       setRequestBody("{}");
       setRequestBodyMode("json");
+      setGraphqlDocument("");
+      setGraphqlVariables("{}");
+      setGraphqlOperationName(null);
       setBodyWasEdited(false);
       setHasUnsavedChanges(false);
       setHydratedRequestId(null);
@@ -282,6 +296,9 @@ export function PosteeRequestBuilder({
         setRequestHeaders([]);
         setRequestBody("{}");
         setRequestBodyMode("json");
+        setGraphqlDocument("");
+        setGraphqlVariables("{}");
+        setGraphqlOperationName(null);
         setBodyWasEdited(false);
         setHasUnsavedChanges(false);
       }
@@ -368,6 +385,37 @@ export function PosteeRequestBuilder({
     markDirty();
   }, [isEditorSynchronized, isRunning, markDirty]);
 
+  const handleBodyModeChange = useCallback((mode: RequestBodyMode) => {
+    if (isRunning || !isEditorSynchronized) return;
+    setRequestBodyMode(mode);
+    setBodyWasEdited(false);
+    if (mode === "graphql") {
+      setGraphqlDocument((document) => document || "query { }");
+      setGraphqlVariables((variables) => variables || "{}");
+      setGraphqlOperationName(null);
+    }
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
+
+  const handleGraphqlDocumentChange = useCallback((document: string) => {
+    if (isRunning || !isEditorSynchronized) return;
+    setGraphqlDocument(document);
+    setGraphqlOperationName(null);
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
+
+  const handleGraphqlVariablesChange = useCallback((variables: string) => {
+    if (isRunning || !isEditorSynchronized) return;
+    setGraphqlVariables(variables);
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
+
+  const handleGraphqlOperationChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    if (isRunning || !isEditorSynchronized) return;
+    setGraphqlOperationName(event.target.value || null);
+    markDirty();
+  }, [isEditorSynchronized, isRunning, markDirty]);
+
   const activeSaveRequestId = requestDraftSave.status === "saving"
     ? requestDraftSave.requestId
     : pendingSave?.requestId ?? null;
@@ -383,6 +431,16 @@ export function PosteeRequestBuilder({
       && activeSaveRequestId !== selectedRequest.id,
   );
   const visibleHasUnsavedChanges = isEditorSynchronized && hasUnsavedChanges;
+  const isGraphqlBody = editorPresentation.requestBodyMode === "graphql";
+  const graphqlPreparation = useMemo(() => (
+    isGraphqlBody
+      ? prepareGraphqlDraft({
+        document: graphqlDocument,
+        variablesJson: graphqlVariables,
+        operationName: graphqlOperationName,
+      })
+      : null
+  ), [graphqlDocument, graphqlOperationName, graphqlVariables, isGraphqlBody]);
   const semanticBodyMode = bodyWasEdited
     ? "json"
     : editorPresentation.requestBodyMode;
@@ -391,13 +449,17 @@ export function PosteeRequestBuilder({
     editorPresentation.requestBody,
     selectedRequestDraft?.body.form_values ?? null,
   );
-  const requestSemanticsIssue = evaluateRequestSemantics(
-    editorPresentation.requestMethod as HttpMethod,
-    editorPresentation.requestHeaders
-      .filter((header) => header.enabled)
-      .map(({ key, value }) => ({ key, value })),
-    semanticBody,
-  );
+  const requestSemanticsIssue = isGraphqlBody
+    ? editorPresentation.requestMethod !== "POST"
+      ? "GraphQL requests require POST."
+      : graphqlPreparation?.issue ?? null
+    : evaluateRequestSemantics(
+      editorPresentation.requestMethod as HttpMethod,
+      editorPresentation.requestHeaders
+        .filter((header) => header.enabled)
+        .map(({ key, value }) => ({ key, value })),
+      semanticBody,
+    );
   const canSendRequest = canRunRequest
     && requestSemanticsIssue === null
     && !hasUnsavedChanges
@@ -435,11 +497,16 @@ export function PosteeRequestBuilder({
         headers: requestHeaders,
         body: {
           ...selectedRequestDraft.body,
-          mode: bodyWasEdited ? "json" : requestBodyMode,
-          raw: requestBody,
+          mode: requestBodyMode === "graphql" ? "graphql" : bodyWasEdited ? "json" : requestBodyMode,
+          raw: requestBodyMode === "graphql" ? null : requestBody,
         },
-        graphql: requestBodyMode === "graphql" && !bodyWasEdited
-          ? selectedRequestDraft.graphql
+        graphql: requestBodyMode === "graphql"
+          ? {
+            request_id: selectedRequest.id,
+            document: graphqlDocument,
+            variables_json: graphqlVariables,
+            operation_name: graphqlOperationName,
+          }
           : null,
       });
     } else {
@@ -450,6 +517,9 @@ export function PosteeRequestBuilder({
   }, [
     activeCollectionId,
     bodyWasEdited,
+    graphqlDocument,
+    graphqlOperationName,
+    graphqlVariables,
     isAnySaveActive,
     isEditorSynchronized,
     isRunning,
@@ -543,9 +613,12 @@ export function PosteeRequestBuilder({
     ? "This request is saving. Send is temporarily unavailable."
     : !isEditorSynchronized
     ? "Request details are synchronising. Send is temporarily unavailable."
+    : requestSemanticsIssue
+    ? requestSemanticsIssue
     : canRunRequest
     ? "Send request (Cmd+Enter)"
     : "Save request first";
+  const graphqlSchemaUiState: GraphqlSchemaUiState = "NoSchema";
 
   return (
     <>
@@ -714,13 +787,74 @@ export function PosteeRequestBuilder({
             onTabChange={(tab) => setActiveTab(tab as "Body" | "Headers" | "Environment")}
           >
             <TabPanel id="Body" className={styles.tabContent}>
-              <MonacoJsonEditor
-                value={editorPresentation.requestBody}
-                onChange={handleBodyChange}
-                readOnly={!isEditorSynchronized || isRunning}
-                height="300px"
-                placeholder="{}"
-              />
+              <div className={styles.requestBarRow}>
+                <Select
+                  value={editorPresentation.requestBodyMode as RequestBodyMode}
+                  options={GRAPHQL_BODY_MODES}
+                  onChange={handleBodyModeChange}
+                  disabled={!isEditorSynchronized || isRunning}
+                  ariaLabel="Request body mode"
+                />
+              </div>
+              {isGraphqlBody
+                ? (
+                  <div className={styles.graphqlEditorLayout}>
+                    <div className={styles.graphqlEditorSection}>
+                      <div className={styles.graphqlEditorHeading}>
+                        <span>Document</span>
+                        <span className={styles.graphqlSchemaStatus} role="status" aria-live="polite">
+                          {graphqlSchemaUiState === "NoSchema" ? "Schema unavailable" : graphqlSchemaUiState}
+                        </span>
+                      </div>
+                      <MonacoGraphqlEditor
+                        value={graphqlDocument}
+                        onChange={handleGraphqlDocumentChange}
+                        schema={null}
+                        readOnly={!isEditorSynchronized || isRunning}
+                        height="300px"
+                      />
+                    </div>
+                    <div className={styles.graphqlEditorSection}>
+                      <div className={styles.graphqlEditorHeading}>
+                        Variables
+                      </div>
+                      <MonacoJsonEditor
+                        value={graphqlVariables}
+                        onChange={handleGraphqlVariablesChange}
+                        readOnly={!isEditorSynchronized || isRunning}
+                        height="180px"
+                        placeholder="{}"
+                        ariaLabel="GraphQL variables"
+                      />
+                    </div>
+                    {graphqlPreparation !== null && graphqlPreparation.operationNames.length > 1 && (
+                      <label className={styles.graphqlOperationField}>
+                        <span>Operation</span>
+                        <select
+                          className={styles.textInput}
+                          value={graphqlOperationName ?? ""}
+                          onChange={handleGraphqlOperationChange}
+                          disabled={!isEditorSynchronized || isRunning}
+                          aria-label="GraphQL operation"
+                        >
+                          <option value="">Select operation</option>
+                          {graphqlPreparation.operationNames.map((operationName) => (
+                            <option key={operationName} value={operationName}>{operationName}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                )
+                : (
+                  <MonacoJsonEditor
+                    value={editorPresentation.requestBody}
+                    onChange={handleBodyChange}
+                    readOnly={!isEditorSynchronized || isRunning}
+                    height="300px"
+                    placeholder="{}"
+                  />
+                )}
             </TabPanel>
             <TabPanel id="Headers" className={styles.tabContent}>
               <HeadersEditor

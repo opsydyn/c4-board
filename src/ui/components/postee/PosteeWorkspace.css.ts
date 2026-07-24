@@ -722,6 +722,47 @@ export const tabContent = style({
   minHeight: "200px",
 });
 
+export const graphqlEditorLayout = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["4"],
+  marginTop: theme.spacing["4"],
+});
+
+export const graphqlEditorSection = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+});
+
+export const graphqlEditorHeading = style({
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const graphqlSchemaStatus = style({
+  color: theme.color.foreground.tertiary,
+});
+
+export const graphqlOperationField = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  maxWidth: "320px",
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
 export const responseTabContent = style({
   display: "flex",
   flexDirection: "column",
