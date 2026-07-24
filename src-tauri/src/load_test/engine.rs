@@ -306,4 +306,23 @@ mod tests {
         let engine = LoadTestEngine::new(config);
         assert!(engine.is_err());
     }
+
+    #[test]
+    fn build_request_plan_accepts_query_content() {
+        let config = LoadTestConfig {
+            url: "https://example.com/feed".to_string(),
+            method: "QUERY".to_string(),
+            headers: vec![("content-type".to_string(), "application/json".to_string())],
+            body: Some(r#"{\"q\":\"opsy\"}"#.to_string()),
+            duration_secs: 1,
+            concurrency: 1,
+            rps_limit: None,
+            timeout_ms: 5_000,
+        };
+
+        let plan = LoadTestEngine::build_request_plan(&config).expect("QUERY plan should be valid");
+
+        assert_eq!(plan.method.as_str(), "QUERY");
+        assert_eq!(plan.body.as_deref(), Some(r#"{\"q\":\"opsy\"}"#.as_bytes()));
+    }
 }

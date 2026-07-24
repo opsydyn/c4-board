@@ -7,7 +7,8 @@
  * - History: Execution history table with response inspection
  */
 
-import type { PosteeHistoryEntry, PosteeRequest } from "@/core/effects/database.postee";
+import type { PosteeHistoryEntry } from "@/core/effects/database.postee";
+import type { PosteeRequestDraft } from "@/core/effects/postee";
 import type { PreparedResponse } from "@/core/effects/postee/http-client";
 import { CaretRightIcon, PlayIcon, SpinnerGapIcon as SpinnerGap, WarningIcon } from "@phosphor-icons/react";
 import { useCallback, useMemo, useState } from "react";
@@ -29,7 +30,7 @@ export interface PosteeResponsePanelProps {
   activeTab: "Execution" | "LoadTest" | "History";
 
   // Request state
-  selectedRequest: PosteeRequest | null;
+  selectedRequestDraft: PosteeRequestDraft | null;
   isRunning: boolean;
 
   // Response state
@@ -58,7 +59,7 @@ export function PosteeResponsePanel({
   isOpen,
   onToggleOpen,
   activeTab,
-  selectedRequest,
+  selectedRequestDraft,
   isRunning,
   lastResponse,
   lastError,
@@ -256,14 +257,9 @@ export function PosteeResponsePanel({
 
       {activeTab === "LoadTest" && (
         <div className={styles.responseTabContent}>
-          {selectedRequest && (
+          {selectedRequestDraft && (
             <LoadTestPanel
-              request={{
-                id: selectedRequest.id,
-                name: selectedRequest.name,
-                method: selectedRequest.method,
-                url: selectedRequest.url,
-              }}
+              requestDraft={selectedRequestDraft}
               sirenEnabledDefault={sirenEnabledDefault}
               masterAudioEnabled={masterAudioEnabled}
               masterVolume={masterVolume}

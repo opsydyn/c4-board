@@ -1,6 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type EventCallback, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Data, Effect } from "effect";
+import {
+  completeContentTypeHeaders,
+  evaluateRequestSemantics,
+  type RequestSemanticsIssue,
+  serializeRequestBody,
+} from "./http-method-policy";
+import type { PosteeRequestDraft } from "./request-draft";
+import { bodyModeToSumType, type HttpMethod, type RequestBodyMode } from "./types";
 
 const hasTauriInjection = (): boolean => {
   if (typeof window === "undefined") {
@@ -81,7 +89,7 @@ const requireTauriRuntime = async (): Promise<void> => {
 
 export interface LoadTestConfigInput {
   url: string;
-  method?: string;
+  method: string;
   headers?: Array<{ key: string; value: string }>;
   body?: string | null;
   durationSecs?: number;
@@ -89,6 +97,42 @@ export interface LoadTestConfigInput {
   rpsLimit?: number | null;
   timeoutMs?: number;
 }
+
+export type LoadTestRequestPayload =
+  | {
+    readonly _tag: "Valid";
+    readonly method: string;
+    readonly headers: ReadonlyArray<{ readonly key: string; readonly value: string }>;
+    readonly body: string | null;
+  }
+  | {
+    readonly _tag: "Invalid";
+    readonly message: RequestSemanticsIssue;
+  };
+
+export const buildLoadTestRequestPayload = (
+  method: HttpMethod,
+  draft: PosteeRequestDraft,
+): LoadTestRequestPayload => {
+  const body = bodyModeToSumType(
+    draft.body.mode as RequestBodyMode,
+    draft.body.raw,
+    draft.body.form_values,
+  );
+  const headers = draft.headers
+    .filter((header) => header.enabled)
+    .map(({ key, value }) => ({ key, value }));
+  const issue = evaluateRequestSemantics(method, headers, body);
+
+  return issue
+    ? { _tag: "Invalid", message: issue }
+    : {
+      _tag: "Valid",
+      method,
+      headers: completeContentTypeHeaders(headers, body),
+      body: serializeRequestBody(body),
+    };
+};
 
 export interface LoadTestProgress {
   elapsed_ms: number;
@@ -123,7 +167,7 @@ const toLoadTestRuntimeError = (cause: unknown, fallbackMessage: string): LoadTe
 
 const toBackendConfig = (input: LoadTestConfigInput) => ({
   url: input.url,
-  method: input.method ?? "GET",
+  method: input.method,
   headers: input.headers?.map(({ key, value }) => [key, value] as [string, string])
     ?? [],
   body: input.body ?? null,

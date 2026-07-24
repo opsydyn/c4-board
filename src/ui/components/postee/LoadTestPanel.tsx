@@ -1,4 +1,6 @@
-import type { LoadTestProgress } from "@/core/effects/postee";
+import type { PosteeRequestDraft } from "@/core/effects/postee";
+import { buildLoadTestRequestPayload, type LoadTestProgress } from "@/core/effects/postee/load-test";
+import { HTTP_METHODS, type HttpMethod } from "@/core/effects/postee/types";
 import { WarningOctagonIcon } from "@phosphor-icons/react";
 import { GlyphCircle } from "@visx/glyph";
 import { Group } from "@visx/group";
@@ -36,24 +38,10 @@ import {
 import { Select } from "./Select";
 import { useLoadTest } from "./useLoadTest";
 
-const methodOptions = [
-  "GET",
-  "POST",
-  "PUT",
-  "PATCH",
-  "DELETE",
-  "HEAD",
-  "OPTIONS",
-  "TRACE",
-] as const;
+const methodOptions = HTTP_METHODS;
 
 interface LoadTestPanelProps {
-  request?: {
-    id: string;
-    name: string;
-    method: string;
-    url: string;
-  };
+  requestDraft: PosteeRequestDraft;
   sirenEnabledDefault?: boolean;
   masterAudioEnabled?: boolean;
   masterVolume?: number;
@@ -593,7 +581,7 @@ const SuccessFailureStacked = ({ samples }: { samples: LoadTestProgress[] }) => 
 };
 
 export function LoadTestPanel({
-  request,
+  requestDraft,
   sirenEnabledDefault = true,
   masterAudioEnabled = true,
   masterVolume = 0.8,
@@ -610,10 +598,10 @@ export function LoadTestPanel({
     reset,
   } = useLoadTest();
 
-  const [targetMethod, setTargetMethod] = useState<string>(
-    request?.method ?? "GET",
+  const [targetMethod, setTargetMethod] = useState<HttpMethod>(
+    requestDraft.request.method as HttpMethod,
   );
-  const [targetUrl, setTargetUrl] = useState<string>(request?.url ?? "");
+  const [targetUrl, setTargetUrl] = useState<string>(requestDraft.request.url);
   const [durationSecs, setDurationSecs] = useState<string>("30");
   const [concurrency, setConcurrency] = useState<string>("10");
   const [rpsLimit, setRpsLimit] = useState<string>("");
@@ -702,18 +690,19 @@ export function LoadTestPanel({
   }, [getSirenLfo, getSirenOscillator, masterAudioEnabled, primeSirenAudio]);
 
   useEffect(() => {
-    if (request) {
-      setTargetMethod(request.method);
-      setTargetUrl(request.url);
-    } else {
-      setTargetUrl("");
-    }
-  }, [request]);
+    setTargetMethod(requestDraft.request.method as HttpMethod);
+    setTargetUrl(requestDraft.request.url);
+  }, [requestDraft]);
+
+  const payload = useMemo(
+    () => buildLoadTestRequestPayload(targetMethod, requestDraft),
+    [requestDraft, targetMethod],
+  );
 
   const handleStart = useCallback(
     async (event: SubmitEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (!targetUrl.trim()) {
+      if (payload._tag === "Invalid" || !targetUrl.trim()) {
         return;
       }
 
@@ -726,7 +715,9 @@ export function LoadTestPanel({
 
       await start({
         url: targetUrl.trim(),
-        method: targetMethod,
+        method: payload.method,
+        headers: [...payload.headers],
+        body: payload.body,
         durationSecs: Number.isFinite(parsedDuration)
           ? Math.max(parsedDuration, 1)
           : 30,
@@ -746,10 +737,10 @@ export function LoadTestPanel({
       durationSecs,
       rpsLimit,
       start,
-      targetMethod,
       targetUrl,
       timeoutMs,
       primeSirenAudio,
+      payload,
     ],
   );
 
@@ -906,7 +897,7 @@ export function LoadTestPanel({
           <button
             className={submitButton}
             type="submit"
-            disabled={status === "running" || !targetUrl.trim() || isDetecting}
+            disabled={status === "running" || !targetUrl.trim() || isDetecting || payload._tag === "Invalid"}
           >
             {status === "running" ? "Load In Progress…" : "Initiate Load Test"}
           </button>
@@ -952,6 +943,19 @@ export function LoadTestPanel({
           </span>
         </div>
       </form>
+
+      {payload._tag === "Invalid" && (
+        <div
+          role="alert"
+          style={{
+            marginTop: "0.75rem",
+            color: "var(--status-critical, #ff7373)",
+            fontSize: "0.9rem",
+          }}
+        >
+          {payload.message}
+        </div>
+      )}
 
       {error && (
         <div

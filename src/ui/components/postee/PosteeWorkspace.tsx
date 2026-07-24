@@ -361,7 +361,7 @@ export function PosteeWorkspace() {
       isOpen={isResponsePanelOpen}
       onToggleOpen={handleToggleResponse}
       activeTab={activeResponseTab}
-      selectedRequest={selectedRequest}
+      selectedRequestDraft={selectedRequestDraft}
       isRunning={isRunning}
       lastResponse={lastResponse}
       lastError={lastError}
