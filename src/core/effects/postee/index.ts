@@ -123,3 +123,5 @@ export {
   type RequestSemanticsIssue,
   serializeRequestBody,
 } from "./http-method-policy";
+
+export { type GraphqlDraft, type GraphqlDraftIssue, type GraphqlPreparation, prepareGraphqlDraft } from "./graphql";
