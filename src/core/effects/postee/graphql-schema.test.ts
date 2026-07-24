@@ -38,6 +38,7 @@ const response = (bodyText: string, status = 200): PreparedResponse => ({
   statusText: status === 200 ? "OK" : "Bad Request",
   headers: {},
   bodyText,
+  bodyDecodeError: null,
   duration: durationFromMillis(5),
   rawSize: Bytes(new TextEncoder().encode(bodyText).byteLength),
 });

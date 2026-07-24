@@ -42,6 +42,18 @@ export interface PreparedResponse {
   readonly statusText: string;
   readonly headers: Record<string, string>;
   readonly bodyText: string;
+  /**
+   * Why the body could not be decoded, or `null` when it decoded cleanly.
+   *
+   * A response that reached the status line is delivered even when its body is
+   * unreadable — status, headers, and timing are real information and must not be
+   * discarded. `bodyText` is empty in that case, so this field is the only way to
+   * tell "the server sent nothing" apart from "we could not read what it sent".
+   *
+   * Interim shim per ADR-010: superseded in Phase 2 by a tagged `ResponseBody`
+   * that carries the raw bytes.
+   */
+  readonly bodyDecodeError: string | null;
   readonly duration: TimeDuration;
   readonly rawSize: Bytes;
 }
@@ -269,6 +281,27 @@ export const toRequestInit = (request: PreparedRequest): RequestInit => {
     : { method: request.method, headers };
 };
 
+const renderCause = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
+
+interface DecodedBody {
+  readonly text: string;
+  readonly decodeError: string | null;
+  readonly size: number;
+}
+
+/**
+ * Reads the response body without ever rejecting.
+ *
+ * Decoding is attempted separately from the transport so a failure here cannot
+ * reach the request's `.catch` and take the whole response — status, headers, and
+ * timing included — down with it (ADR-010).
+ */
+const readResponseBody = (response: { readonly text: () => Promise<string> }): Promise<DecodedBody> =>
+  response.text().then(
+    (text) => ({ text, decodeError: null, size: new TextEncoder().encode(text).byteLength }),
+    (cause: unknown) => ({ text: "", decodeError: renderCause(cause), size: 0 }),
+  );
+
 const responseHeadersToRecord = (headers: Headers): Record<string, string> => {
   const result: Record<string, string> = {};
   headers.forEach((value, key) => {
@@ -321,17 +354,17 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
 
       TauriFetch(request.url, init)
         .then(async (response) => {
+          const body = await readResponseBody(response);
           const durationMs = performance.now() - started;
-          const bodyText = await response.text();
-          const rawSize = new TextEncoder().encode(bodyText).byteLength;
 
           const payload: PreparedResponse = {
             status: StatusCodeBrand(response.status),
             statusText: response.statusText,
             headers: responseHeadersToRecord(response.headers),
-            bodyText,
+            bodyText: body.text,
+            bodyDecodeError: body.decodeError,
             duration: durationFromMillis(Math.round(durationMs)),
-            rawSize: BytesBrand(rawSize),
+            rawSize: BytesBrand(body.size),
           };
 
           cleanup();
@@ -390,7 +423,9 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
             ),
             Match.orElse(() =>
               HttpClientError({
-                message: "Failed to perform HTTP request",
+                // `cause` serialises to {} when it is an Error, so the detail has
+                // to live in the message or it is invisible to the user.
+                message: `Failed to perform HTTP request: ${renderCause(cause)}`,
                 cause,
                 request: {
                   method: request.method,

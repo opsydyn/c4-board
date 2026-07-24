@@ -303,11 +303,11 @@ panel and GraphQL introspection so decoding policy lives in exactly one place.
 
 | Metric | Before | After | Status |
 | ------ | ------ | ----- | ------ |
-| Response preserved on body decode failure | No | Yes | Proposed |
-| Transport vs decode distinguishable by type | No | Yes | Proposed |
-| Error message names the cause | No (`{}`) | Yes | Proposed |
-| Repeated headers preserved | No | Yes | Proposed |
-| `rawSize` accurate for binary | No | Yes | Proposed |
+| Response preserved on body decode failure | No | Yes | **Phase 1 shipped** |
+| Error message names the cause | No (`{}`) | Yes | **Phase 1 shipped** |
+| Transport vs decode distinguishable by type | No | Yes | Proposed (Phase 2) |
+| Repeated headers preserved | No | Yes | Proposed (Phase 2) |
+| `rawSize` accurate for binary | No | Yes | Proposed (Phase 2) |
 
 ## References
 
@@ -336,3 +336,12 @@ this ADR addresses: one message for two unrelated events, with the distinguishin
 ### Updates
 
 - 2026-07-24: Initial draft.
+- 2026-07-24: **Phase 1 implemented.** The body is now read by a helper that never
+  rejects, so a decode failure can no longer reach the transport `.catch` and take
+  the response with it; `HttpClientError` renders its cause into the message.
+  `PreparedResponse` gains `bodyDecodeError: string | null` as the interim
+  representation — made required rather than optional, since an ignorable field is
+  the defect Alternative 2 was rejected for. Phase 2 replaces it with the tagged
+  `ResponseBody`. Note the decode error is not yet surfaced in the response panel;
+  that is Phase 3, so today a failed decode shows an empty body with the failure
+  visible only to callers reading the field.

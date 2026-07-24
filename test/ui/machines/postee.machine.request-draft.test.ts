@@ -168,6 +168,7 @@ const makeLayer = (options?: {
     statusText: "OK",
     headers: {},
     bodyText: "{}",
+    bodyDecodeError: null,
     duration: Duration.millis(5),
     rawSize: Bytes(2),
   };

@@ -163,6 +163,7 @@ const makeLayer = (options: {
     statusText: "OK",
     headers: {},
     bodyText: introspectionJson,
+    bodyDecodeError: null,
     duration: Duration.millis(1),
     rawSize: Bytes(introspectionJson.length),
   };

@@ -156,6 +156,7 @@ describe("Postee scratch workspace machine", () => {
       statusText: "OK",
       headers: {},
       bodyText: "{\"healthy\":true}",
+      bodyDecodeError: null,
       duration: Duration.millis(5),
       rawSize: Bytes(16),
     };
