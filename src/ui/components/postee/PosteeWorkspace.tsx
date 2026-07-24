@@ -50,6 +50,7 @@ export function PosteeWorkspace() {
     openScratchIds = [],
     closedScratchIds = [],
     activeEditor = null,
+    scratchPromotion = { status: "idle" as const, scratchId: null, collectionId: null, error: null },
     graphqlSchema,
     activeCollectionId,
     activeRequestId,
@@ -116,6 +117,12 @@ export function PosteeWorkspace() {
       setActiveResponseTab("Execution");
     }
   }, [lastResponse, lastError]);
+
+  useEffect(() => {
+    if (isSaveScratchDialogOpen && activeScratchDraft === null && scratchPromotion.status === "idle") {
+      setIsSaveScratchDialogOpen(false);
+    }
+  }, [activeScratchDraft, isSaveScratchDialogOpen, scratchPromotion.status]);
 
   // UI toggle callbacks
   const handleToggleSidebar = useCallback(() => {
@@ -284,7 +291,6 @@ export function PosteeWorkspace() {
         requestId: RequestIdBrand(nanoid()),
       } satisfies PosteeEvent,
     );
-    setIsSaveScratchDialogOpen(false);
   }, [activeScratchDraft, send]);
 
   const handleRunRequest = useCallback(() => {
@@ -568,6 +574,8 @@ export function PosteeWorkspace() {
         <SaveScratchDialog
           isOpen={isSaveScratchDialogOpen}
           collections={collections}
+          error={scratchPromotion.status === "error" ? scratchPromotion.error : null}
+          isSaving={scratchPromotion.status === "promoting"}
           onClose={() => setIsSaveScratchDialogOpen(false)}
           onConfirm={handlePromoteScratch}
         />

@@ -44,6 +44,17 @@ export const description = style({
   fontSize: theme.typography.size.sm,
 });
 
+export const error = style({
+  clipPath: theme.clipPath.sm,
+  margin: 0,
+  border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
+  backgroundColor: "rgba(255, 107, 107, 0.1)",
+  padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  color: theme.color.status.critical,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
 export const collectionList = style({
   display: "flex",
   flexDirection: "column",

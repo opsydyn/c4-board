@@ -1,4 +1,4 @@
-import { DatabaseService } from "@/core/effects/database.base";
+import { DatabaseError, DatabaseService } from "@/core/effects/database.base";
 import type { PosteeScratchDraftRow } from "@/core/effects/database.postee";
 import {
   makeHttpClientTestLayer,
@@ -31,7 +31,7 @@ const recoveredScratch: PosteeScratchDraftRow = {
   updated_at: 1,
 };
 
-const databaseLayer = Layer.succeed(DatabaseService, {
+const databaseService = {
   query: <T>(sql: string) => {
     if (sql.includes("postee_collections")) {
       return Effect.succeed([{
@@ -50,10 +50,21 @@ const databaseLayer = Layer.succeed(DatabaseService, {
   },
   execute: () => Effect.void,
   transaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
-});
+};
+
+const databaseLayer = Layer.succeed(DatabaseService, databaseService);
 
 const layer = Layer.merge(
   databaseLayer,
+  makeHttpClientTestLayer(() => Effect.die("Unexpected HTTP request")),
+);
+
+const failingPromotionLayer = Layer.merge(
+  Layer.succeed(DatabaseService, {
+    ...databaseService,
+    transaction: <A, E, R>(_effect: Effect.Effect<A, E, R>): Effect.Effect<A, E | DatabaseError, R> =>
+      Effect.fail(new DatabaseError({ message: "Promotion failed" })),
+  }),
   makeHttpClientTestLayer(() => Effect.die("Unexpected HTTP request")),
 );
 
@@ -210,6 +221,29 @@ describe("Postee scratch workspace machine", () => {
     });
     expect(actor.getSnapshot().context.requestsByCollection["collection-1"])
       .toEqual(expect.arrayContaining([expect.objectContaining({ id: "request-promoted" })]));
+    actor.stop();
+  });
+
+  it("retains a scratch when promotion fails", async () => {
+    const actor = createActor(createPosteeWorkspaceMachine({ layer: failingPromotionLayer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    const target = actor.getSnapshot().context.activeEditor;
+    if (target?.kind !== "scratch") throw new Error("Expected a scratch editor");
+    actor.send({
+      type: "PROMOTE_SCRATCH",
+      scratchId: target.scratchId,
+      collectionId: CollectionId("collection-1"),
+      requestId: RequestId("request-failed"),
+    });
+
+    await waitFor(actor, (snapshot) => snapshot.context.scratchPromotion.status === "error");
+
+    expect(actor.getSnapshot().context.activeEditor).toEqual(target);
+    expect(actor.getSnapshot().context.scratchDrafts[target.scratchId]).toBeDefined();
+    expect(actor.getSnapshot().context.requestsByCollection["collection-1"] ?? []).not
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: "request-failed" })]));
     actor.stop();
   });
 });

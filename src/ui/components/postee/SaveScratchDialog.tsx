@@ -6,6 +6,8 @@ import * as styles from "./SaveScratchDialog.css";
 export interface SaveScratchDialogProps {
   readonly isOpen: boolean;
   readonly collections: ReadonlyArray<PosteeCollection>;
+  readonly error?: string | null;
+  readonly isSaving?: boolean;
   readonly onClose: () => void;
   readonly onConfirm: (collectionId: string) => void;
 }
@@ -13,6 +15,8 @@ export interface SaveScratchDialogProps {
 export function SaveScratchDialog({
   isOpen,
   collections,
+  error = null,
+  isSaving = false,
   onClose,
   onConfirm,
 }: SaveScratchDialogProps) {
@@ -44,6 +48,7 @@ export function SaveScratchDialog({
         <Dialog className={styles.dialog} aria-label="Save request">
           <Heading slot="title" className={styles.title}>Save request</Heading>
           <p className={styles.description}>Choose where to keep this request.</p>
+          {error !== null && <p className={styles.error} role="alert">{error}</p>}
           <ListBox
             aria-label="Collection"
             selectionMode="single"
@@ -65,9 +70,9 @@ export function SaveScratchDialog({
             <Button
               className={styles.primaryButton}
               onPress={handleConfirm}
-              isDisabled={collectionId === null}
+              isDisabled={collectionId === null || isSaving}
             >
-              Save request
+              {isSaving ? "Saving..." : "Save request"}
             </Button>
           </div>
         </Dialog>

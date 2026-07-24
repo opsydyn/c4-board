@@ -55,4 +55,18 @@ describe("SaveScratchDialog", () => {
 
     expect(screen.getByRole("button", { name: "Save request" })).toBeDisabled();
   });
+
+  it("shows a retryable promotion error without closing", () => {
+    render(
+      <SaveScratchDialog
+        isOpen
+        collections={collections}
+        error="Unable to save scratch request. Try again."
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to save scratch request. Try again.");
+  });
 });
