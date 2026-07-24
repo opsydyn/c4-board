@@ -1,4 +1,5 @@
 import * as S from "effect/Schema";
+import { HTTP_METHODS } from "./types";
 
 const NonEmptyString = S.String.pipe(S.minLength(1));
 const NullableString = S.optional(S.Union(S.String, S.Null));
@@ -7,15 +8,7 @@ const NullableString = S.optional(S.Union(S.String, S.Null));
 // HTTP
 // =============================================================================
 
-export const HttpMethodSchema = S.Union(
-  S.Literal("GET" as const),
-  S.Literal("POST" as const),
-  S.Literal("PUT" as const),
-  S.Literal("PATCH" as const),
-  S.Literal("DELETE" as const),
-  S.Literal("HEAD" as const),
-  S.Literal("OPTIONS" as const),
-);
+export const HttpMethodSchema = S.Literal(...HTTP_METHODS);
 
 export type HttpMethod = S.Schema.Type<typeof HttpMethodSchema>;
 

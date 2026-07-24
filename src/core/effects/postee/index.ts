@@ -111,3 +111,15 @@ export {
   type LoadTestProgress,
   startLoadTest,
 } from "./load-test";
+
+export {
+  completeContentTypeHeaders,
+  type EffectiveRequestHeader,
+  evaluateRequestSemantics,
+  getHttpMethodPolicy,
+  hasRequestContent,
+  type HttpMethodPolicy,
+  type RequestContent,
+  type RequestSemanticsIssue,
+  serializeRequestBody,
+} from "./http-method-policy";

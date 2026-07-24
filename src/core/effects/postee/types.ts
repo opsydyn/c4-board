@@ -84,10 +84,9 @@ export const PlanHash = Brand.nominal<PlanHash>();
 // =============================================================================
 
 /**
- * Valid HTTP methods
- * Using Schema.Literal ensures only these values are accepted
+ * Canonical HTTP methods supported by Postee.
  */
-export const HttpMethodSchema = Schema.Literal(
+export const HTTP_METHODS = [
   "GET",
   "POST",
   "PUT",
@@ -96,7 +95,14 @@ export const HttpMethodSchema = Schema.Literal(
   "HEAD",
   "OPTIONS",
   "TRACE",
-);
+  "QUERY",
+] as const;
+
+/**
+ * Valid HTTP methods
+ * Using Schema.Literal ensures only these values are accepted
+ */
+export const HttpMethodSchema = Schema.Literal(...HTTP_METHODS);
 export type HttpMethod = Schema.Schema.Type<typeof HttpMethodSchema>;
 
 /**

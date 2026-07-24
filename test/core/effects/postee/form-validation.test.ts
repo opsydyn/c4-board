@@ -96,4 +96,16 @@ describe("validateRequestForm", () => {
       method: "GET",
     });
   });
+
+  it("normalizes and accepts QUERY", async () => {
+    const result = await Effect.runPromise(
+      validateRequestForm({
+        name: "Search systems",
+        url: "https://example.com/systems",
+        method: " query ",
+      }),
+    );
+
+    expect(result.method).toBe("QUERY");
+  });
 });

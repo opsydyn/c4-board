@@ -1,4 +1,5 @@
 import { Data, Effect, Option, pipe, Schema } from "effect";
+import { HTTP_METHODS, isHttpMethod } from "./types";
 
 /**
  * Validated request form data
@@ -17,19 +18,6 @@ export interface RequestFormData {
   readonly url: string;
   readonly method: string;
 }
-
-/**
- * Valid HTTP methods for REST API requests
- */
-const VALID_HTTP_METHODS = [
-  "GET",
-  "POST",
-  "PUT",
-  "PATCH",
-  "DELETE",
-  "HEAD",
-  "OPTIONS",
-] as const;
 
 /**
  * Pure function: Attempts to parse a string into a URL
@@ -73,15 +61,9 @@ const RequestFormSchema = Schema.Struct({
   ),
   method: pipe(
     Schema.String,
-    Schema.filter(
-      (s) =>
-        VALID_HTTP_METHODS.includes(
-          s.trim().toUpperCase() as (typeof VALID_HTTP_METHODS)[number],
-        ),
-      {
-        message: () => `HTTP method must be one of: ${VALID_HTTP_METHODS.join(", ")}`,
-      },
-    ),
+    Schema.filter((value) => isHttpMethod(value.trim().toUpperCase()), {
+      message: () => `HTTP method must be one of: ${HTTP_METHODS.join(", ")}`,
+    }),
   ),
 });
 
