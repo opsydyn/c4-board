@@ -767,8 +767,14 @@ const posteeWorkspaceSetup = setup({
       }
 
       const draft = { ...event.draft, updatedAt: Date.now() };
-      runLayeredEffect(context.layer, savePosteeScratchDraft(draft)).catch(() => {
-        // Scratch remains available in memory when durable persistence fails.
+      runLayeredEffect(context.layer, savePosteeScratchDraft(draft)).catch((cause: unknown) => {
+        // The scratch stays usable in memory, but a silent failure here means the
+        // draft is quietly lost on reload — report it rather than swallowing it.
+        console.error("[postee][scratch] Failed to persist scratch draft:", {
+          scratchId: draft.id,
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        });
       });
 
       return {
