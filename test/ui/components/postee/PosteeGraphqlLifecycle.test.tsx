@@ -20,6 +20,7 @@ import { Duration, Effect, Layer } from "effect";
 import { buildSchema, getIntrospectionQuery, graphqlSync } from "graphql";
 import { describe, expect, it } from "vitest";
 import { createActor, waitFor } from "xstate";
+import { ResponseBody } from "@/core/effects/postee/response-body";
 
 const collection: PosteeCollection = {
   id: "collection-graphql",
@@ -164,6 +165,8 @@ const makeLayer = (options: {
     headers: {},
     bodyText: introspectionJson,
     bodyDecodeError: null,
+    headerEntries: [],
+    body: ResponseBody.Decoded({ bytes: new TextEncoder().encode(introspectionJson) }),
     duration: Duration.millis(1),
     rawSize: Bytes(introspectionJson.length),
   };

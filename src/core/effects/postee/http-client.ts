@@ -1,5 +1,6 @@
 import { fetch as TauriFetch } from "@tauri-apps/plugin-http";
-import { Context, Data, Duration, Effect, Layer, Match } from "effect";
+import { Context, Data, Duration, Effect, Layer, Match, Option } from "effect";
+import { contentTypeCharset, decodeBodyText, ResponseBody, responseBodySize } from "./response-body";
 import {
   evaluateRequestSemantics,
   getEffectiveRequestContent,
@@ -40,7 +41,22 @@ export interface PreparedRequest {
 export interface PreparedResponse {
   readonly status: StatusCode;
   readonly statusText: string;
+  /**
+   * Repeated field lines collapse here — `Set-Cookie` in particular keeps only the
+   * last value. Prefer `headerEntries`; this remains for callers not yet migrated
+   * and is removed in ADR-010 Phase 4.
+   */
   readonly headers: Record<string, string>;
+  /** Every field line as received, repeats included. */
+  readonly headerEntries: ReadonlyArray<readonly [string, string]>;
+  /** The body as received, with its own success or failure state. */
+  readonly body: ResponseBody;
+  /**
+   * The body decoded as text, or `""` when it is not text.
+   *
+   * Interim shim per ADR-010: read `body` and decode via `decodeBodyText` instead.
+   * Removed in Phase 4.
+   */
   readonly bodyText: string;
   /**
    * Why the body could not be decoded, or `null` when it decoded cleanly.
@@ -283,24 +299,54 @@ export const toRequestInit = (request: PreparedRequest): RequestInit => {
 
 const renderCause = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
 
-interface DecodedBody {
-  readonly text: string;
-  readonly decodeError: string | null;
-  readonly size: number;
-}
+/**
+ * Reads the response body as bytes without ever rejecting.
+ *
+ * Reading is kept separate from the transport so a failure here cannot reach the
+ * request's `.catch` and take the whole response — status, headers, and timing
+ * included — down with it (ADR-010). Bytes rather than text: what the server sent
+ * is preserved, and whether it is text is decided afterwards, by the core.
+ */
+const readResponseBody = (response: { readonly arrayBuffer: () => Promise<ArrayBuffer> }): Promise<ResponseBody> =>
+  response.arrayBuffer().then(
+    (buffer) => ResponseBody.Decoded({ bytes: new Uint8Array(buffer) }),
+    (cause: unknown) =>
+      ResponseBody.DecodeFailure({
+        // Nothing usable arrived; a driver that surfaces partial bytes can supply
+        // them here without any other change.
+        partial: Option.none(),
+        message: renderCause(cause),
+        cause,
+      }),
+  );
 
 /**
- * Reads the response body without ever rejecting.
+ * Why the body is not available as text, or `null` when it is.
  *
- * Decoding is attempted separately from the transport so a failure here cannot
- * reach the request's `.catch` and take the whole response — status, headers, and
- * timing included — down with it (ADR-010).
+ * Distinguishes "the body never arrived" from "the bytes arrived but are not text
+ * in the declared charset" — different problems with different remedies.
  */
-const readResponseBody = (response: { readonly text: () => Promise<string> }): Promise<DecodedBody> =>
-  response.text().then(
-    (text) => ({ text, decodeError: null, size: new TextEncoder().encode(text).byteLength }),
-    (cause: unknown) => ({ text: "", decodeError: renderCause(cause), size: 0 }),
-  );
+const describeBodyTextFailure = (
+  body: ResponseBody,
+  decodedText: Option.Option<string>,
+  contentType: string | null,
+): string | null =>
+  ResponseBody.$match(body, {
+    DecodeFailure: ({ message }) => message,
+    Decoded: () =>
+      Option.isSome(decodedText)
+        ? null
+        : `Response body is not valid ${contentTypeCharset(contentType)} text`,
+  });
+
+/** Preserves repeated field lines; `Set-Cookie` is the one that matters in practice. */
+const responseHeadersToEntries = (headers: Headers): ReadonlyArray<readonly [string, string]> => {
+  const entries: Array<readonly [string, string]> = [];
+  headers.forEach((value, key) => {
+    entries.push([key, value] as const);
+  });
+  return entries;
+};
 
 const responseHeadersToRecord = (headers: Headers): Record<string, string> => {
   const result: Record<string, string> = {};
@@ -356,15 +402,20 @@ export const HttpClientLive = Layer.sync(HttpClient, () => {
         .then(async (response) => {
           const body = await readResponseBody(response);
           const durationMs = performance.now() - started;
+          const contentType = response.headers.get("content-type");
+          // Decode once; both shim fields are derived from the same result.
+          const decodedText = decodeBodyText(body, contentType);
 
           const payload: PreparedResponse = {
             status: StatusCodeBrand(response.status),
             statusText: response.statusText,
             headers: responseHeadersToRecord(response.headers),
-            bodyText: body.text,
-            bodyDecodeError: body.decodeError,
+            headerEntries: responseHeadersToEntries(response.headers),
+            body,
+            bodyText: Option.getOrElse(decodedText, () => ""),
+            bodyDecodeError: describeBodyTextFailure(body, decodedText, contentType),
             duration: durationFromMillis(Math.round(durationMs)),
-            rawSize: BytesBrand(body.size),
+            rawSize: BytesBrand(responseBodySize(body)),
           };
 
           cleanup();

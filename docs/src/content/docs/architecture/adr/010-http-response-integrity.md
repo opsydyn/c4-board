@@ -305,9 +305,10 @@ panel and GraphQL introspection so decoding policy lives in exactly one place.
 | ------ | ------ | ----- | ------ |
 | Response preserved on body decode failure | No | Yes | **Phase 1 shipped** |
 | Error message names the cause | No (`{}`) | Yes | **Phase 1 shipped** |
-| Transport vs decode distinguishable by type | No | Yes | Proposed (Phase 2) |
-| Repeated headers preserved | No | Yes | Proposed (Phase 2) |
-| `rawSize` accurate for binary | No | Yes | Proposed (Phase 2) |
+| Transport vs decode distinguishable by type | No | Yes | **Phase 2 shipped** |
+| Repeated `Set-Cookie` preserved | No | Yes | **Phase 2 shipped** |
+| `rawSize` accurate for binary | No | Yes | **Phase 2 shipped** |
+| Decode failure visible in the UI | No | Yes | Proposed (Phase 3) |
 
 ## References
 
@@ -345,3 +346,23 @@ this ADR addresses: one message for two unrelated events, with the distinguishin
   `ResponseBody`. Note the decode error is not yet surfaced in the response panel;
   that is Phase 3, so today a failed decode shows an empty body with the failure
   visible only to callers reading the field.
+- 2026-07-24: **Phase 2 implemented.** `ResponseBody` and `decodeBodyText` live in
+  a new pure module, `src/core/effects/postee/response-body.ts`; the client now
+  reads `arrayBuffer()` and decodes afterwards, so binary payloads survive and
+  `rawSize` is measured from the bytes received. `PreparedResponse` gains `body`
+  and `headerEntries` **additively** — `headers`, `bodyText`, and `bodyDecodeError`
+  remain as shims so no consumer had to change, and Phase 4 removes them.
+
+  Two corrections to this ADR's original claims, from measuring rather than
+  assuming:
+
+  1. Tuple headers rescue **`Set-Cookie` specifically**. `Headers` already yields
+     repeated `Set-Cookie` as separate entries per the Fetch spec, so the loss was
+     entirely in our `Record` fold (`result[key] = value` keeps only the last).
+     Other repeated fields are combined by `Headers` into one comma-joined value
+     before we ever see them — that is spec-correct, and tuples neither fix nor
+     worsen it. The earlier wording implied all repeated headers were recoverable.
+  2. Decoding is **strict** (`TextDecoder` with `fatal: true`), so invalid bytes
+     yield `None` rather than U+FFFD. This is what makes "not text" reportable at
+     all; `response.text()` would have silently substituted replacement characters
+     and the distinction would have been unobservable.

@@ -10,6 +10,7 @@ import { createPosteeWorkspaceMachine } from "@/ui/machines/postee.machine";
 import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { createActor, waitFor } from "xstate";
+import { ResponseBody } from "@/core/effects/postee/response-body";
 
 const recoveredScratch: PosteeScratchDraftRow = {
   id: "scratch-recovered",
@@ -157,6 +158,8 @@ describe("Postee scratch workspace machine", () => {
       headers: {},
       bodyText: "{\"healthy\":true}",
       bodyDecodeError: null,
+      headerEntries: [],
+      body: ResponseBody.Decoded({ bytes: new TextEncoder().encode("{\"healthy\":true}") }),
       duration: Duration.millis(5),
       rawSize: Bytes(16),
     };

@@ -12,6 +12,7 @@ import { createPosteeWorkspaceMachine } from "@/ui/machines/postee.machine";
 import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { createActor, SimulatedClock, waitFor } from "xstate";
+import { ResponseBody } from "@/core/effects/postee/response-body";
 
 const collection: PosteeCollection = {
   id: "collection-1",
@@ -169,6 +170,8 @@ const makeLayer = (options?: {
     headers: {},
     bodyText: "{}",
     bodyDecodeError: null,
+    headerEntries: [],
+    body: ResponseBody.Decoded({ bytes: new TextEncoder().encode("{}") }),
     duration: Duration.millis(5),
     rawSize: Bytes(2),
   };

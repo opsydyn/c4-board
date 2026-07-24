@@ -17,6 +17,7 @@ import {
   type PreparedResponse,
 } from "./http-client";
 import { Bytes, durationFromMillis, StatusCode } from "./types";
+import { ResponseBody } from "./response-body";
 
 const schema = buildSchema(`
   type Query { viewer: Viewer }
@@ -39,6 +40,8 @@ const response = (bodyText: string, status = 200): PreparedResponse => ({
   headers: {},
   bodyText,
   bodyDecodeError: null,
+  headerEntries: [],
+  body: ResponseBody.Decoded({ bytes: new TextEncoder().encode(bodyText) }),
   duration: durationFromMillis(5),
   rawSize: Bytes(new TextEncoder().encode(bodyText).byteLength),
 });
