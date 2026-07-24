@@ -64,6 +64,23 @@ describe("HTTP QUERY method policy", () => {
     ).toBe("q=foo&limit=10");
   });
 
+  it("infers form content type and accepts a non-empty QUERY", () => {
+    const body = RequestBody.Form({ entries: [["q", "foo"]] });
+
+    expect(evaluateRequestSemantics("QUERY", [], body)).toBeNull();
+    expect(completeContentTypeHeaders([], body)).toEqual([
+      { key: "content-type", value: "application/x-www-form-urlencoded" },
+    ]);
+  });
+
+  it("accepts raw QUERY content with a case-insensitive explicit Content-Type", () => {
+    const headers = [{ key: "cOnTeNt-TyPe", value: "application/sql" }];
+    const body = RequestBody.Raw({ content: "select * from systems" });
+
+    expect(evaluateRequestSemantics("QUERY", headers, body)).toBeNull();
+    expect(completeContentTypeHeaders(headers, body)).toEqual(headers);
+  });
+
   it("applies QUERY content semantics to prepared bodies", () => {
     expect(
       evaluateRequestSemantics("QUERY", [], PreparedBody.Json({ content: "" })),
