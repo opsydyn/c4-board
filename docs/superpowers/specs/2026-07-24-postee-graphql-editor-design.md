@@ -22,8 +22,10 @@ existing save, run, history, and load-test paths.
 Add GraphQL as a first-class persisted request-body mode. A GraphQL request is
 executed as GraphQL-over-HTTP `POST` only in the first release.
 
-The editor uses Monaco with `monaco-graphql` and `graphql-language-service` for
-GraphQL syntax highlighting, diagnostics, and schema-backed completion.
+The editor uses Monaco with a small Postee adapter over
+`graphql-language-service` for GraphQL syntax highlighting, diagnostics, and
+schema-backed completion. `monaco-graphql` is not used because its declared
+Monaco peer range ends below the application's Monaco 0.55 runtime.
 `graphql` supplies document parsing, validation, standard introspection-query
 generation, and client-schema construction.
 
@@ -147,10 +149,11 @@ Choosing `GraphQL` in the existing Body control renders a GraphQL workbench:
    refresh icon invokes introspection explicitly.
 
 The GraphQL Monaco integration uses the application's existing Monaco loader
-and asset path. A single app-scoped language-service adapter registers the
-GraphQL mode and worker once, then updates per-model schema configuration when
-the active snapshot changes. It must dispose model-specific resources when the
-editor or request changes.
+and asset path. A single app-scoped adapter registers the GraphQL tokenizer and
+completion, hover, and marker providers once, then reads the current schema by
+model URI when the active snapshot changes. Language-service work is debounced
+on the active model and all provider registrations and model state are disposed
+when the editor unmounts.
 
 An absent, stale, forbidden, or offline schema never disables syntax
 highlighting or manual authoring. It disables only schema-derived completion and
@@ -206,7 +209,7 @@ document, variables, and operation identity.
 - React tests for mode switching, keyboard Send gating, operation selection,
   schema states, explicit refresh, and manual fallback without a snapshot.
 - Monaco integration tests for language registration, schema update, and
-  disposal behaviour. Unit tests must not pretend to prove worker loading.
+  disposal behaviour.
 - Rust tests for the existing load-test request plan accepting the derived
   GraphQL `POST` body unchanged.
 
@@ -216,8 +219,8 @@ document, variables, and operation identity.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml --all --check`.
 - `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`.
 - `cargo test --manifest-path src-tauri/Cargo.toml`.
-- Fresh Tauri development verification that Monaco GraphQL worker assets load,
-  syntax highlighting renders, authenticated refresh succeeds against a test
+- Fresh Tauri development verification that Monaco GraphQL syntax highlighting
+  renders, authenticated refresh succeeds against a test
   endpoint, and a cached snapshot remains usable offline.
 
 ## Acceptance Criteria
@@ -236,6 +239,5 @@ document, variables, and operation identity.
    execution.
 7. GraphQL execution, history, and load testing retain the derived effective
    HTTP request without changing it to a generic REST body mode.
-8. The new Monaco worker and all existing Postee workflows pass fresh automated
-   and manual desktop verification.
-
+8. The new Monaco language adapter and all existing Postee workflows pass fresh
+   automated and manual desktop verification.

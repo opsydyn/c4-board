@@ -6,7 +6,7 @@
 
 **Architecture:** Persist GraphQL authoring data beside a Postee request, then derive the standard JSON HTTP envelope before the existing HTTP, history, and load-test boundaries. An Effect schema service uses the resolved endpoint and enabled headers for explicit introspection; it caches successful schema snapshots locally by endpoint plus a non-reversible context digest.
 
-**Tech Stack:** Bun, Astro, React 19, Effect, XState 5, SQLite/Tauri, Monaco 0.55, `graphql`, `monaco-graphql`, `graphql-language-service`, Vitest, Rust.
+**Tech Stack:** Bun, Astro, React 19, Effect, XState 5, SQLite/Tauri, Monaco 0.55, `graphql`, `graphql-language-service`, Vitest, Rust.
 
 ## Global Constraints
 
@@ -51,7 +51,7 @@ export const prepareGraphqlDraft: (draft: GraphqlDraft) => {
 
 - [ ] Write failing tests for a valid derived envelope; empty, invalid, and non-object variables; multi-operation selection; stale operation name.
 - [ ] Run `bun run test:run src/core/effects/postee/graphql.test.ts`; expect module-not-found RED.
-- [ ] Add `graphql`, `monaco-graphql`, and `graphql-language-service` with Bun. Implement `prepareGraphqlDraft` using `parse` and operation definitions; emit JSON keys in order `query`, optional `variables`, optional `operationName`.
+- [ ] Add `graphql` and `graphql-language-service` with Bun. Implement `prepareGraphqlDraft` using `parse` and operation definitions; emit JSON keys in order `query`, optional `variables`, optional `operationName`.
 - [ ] Make the valid test assert exact `RequestBody.Json` and exact protocol headers. Rerun the focused suite; expect GREEN.
 - [ ] Run `bun run build`; expect Astro check/build with zero errors.
 - [ ] Commit `feat: add Postee GraphQL draft preparation`.
@@ -138,7 +138,7 @@ type GraphqlSchemaUiState = "NoSchema" | "Cached" | "Stale" | "Refreshing" | "Un
 
 - [ ] Write RED component tests: GraphQL mode renders labelled Document and Variables Monaco editors; multi-operation draft disables Send but enables Save; operation selection enables Send; no schema retains syntax editor/manual Send; `Cmd/Ctrl+Enter` uses exactly the Send predicate.
 - [ ] Run `bun run test:run test/ui/components/postee/MonacoGraphqlEditor.test.tsx test/ui/components/postee/PosteeRequestBuilder.test.tsx`; expect RED.
-- [ ] Extract only shared Monaco loader configuration from the JSON editor. Register `monaco-graphql` and its Vite worker once app-wide; expose per-model schema update/disposal functions.
+- [ ] Extract only shared Monaco loader configuration from the JSON editor. Add one Postee adapter over `graphql-language-service` that registers Monaco tokenisation, completion, hover, and marker providers once; use per-model schema lookup and dispose all registrations/model state on unmount. Do not add a Monaco worker or downgrade Monaco 0.55 to satisfy `monaco-graphql`.
 - [ ] Add GraphQL body mode with compact Document, Variables, Operation, Schema status, and labelled Refresh Schema icon controls. Hide operation control for exactly one operation. Use `aria-live="polite"` for refresh status/errors.
 - [ ] Add tests for request switching, running read-only state, cached/offline state, explicit refresh loading/failure, and non-blocking schema diagnostics.
 - [ ] Rerun focused component suites; expect GREEN.
@@ -156,7 +156,7 @@ type GraphqlSchemaUiState = "NoSchema" | "Cached" | "Stale" | "Refreshing" | "Un
 - [ ] Update roadmap only after GREEN: mark POST GraphQL authoring, variables, operations, authenticated explicit introspection, offline snapshots, syntax highlighting, and completion delivered. Keep GET, subscriptions, persisted queries, uploads, batching, automatic refresh, schema import, federation, retries, and portability unchecked.
 - [ ] Run focused lifecycle/machine tests; expect GREEN.
 - [ ] Run all release commands: `bun run lint`; `bun run test:run`; `bun run build`; `bun run knip`; `cargo fmt --manifest-path src-tauri/Cargo.toml --all --check`; `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`; `cargo test --manifest-path src-tauri/Cargo.toml`; `git diff --check "$(git merge-base main HEAD)" HEAD`.
-- [ ] Run `bun tauri dev` and manually verify worker loading, authenticated explicit refresh, offline completion from matching cache, context mismatch isolation, derived POST history, load-test payload parity, and secret redaction.
+- [ ] Run `bun tauri dev` and manually verify syntax highlighting, authenticated explicit refresh, offline completion from matching cache, context mismatch isolation, derived POST history, load-test payload parity, and secret redaction.
 - [ ] Commit `feat: refresh and reuse Postee GraphQL schemas`; make a separate docs-only validation commit only if the manual acceptance evidence changes tracked docs.
 
 ## Plan Self-Review
