@@ -33,6 +33,7 @@ Each ADR follows this structure:
 | [ADR-007](./007-azure-graph-sync.md)             | Azure Resource Graph Sync for Dynamic C4 Infrastructure Diagrams | Proposed | 2026-02-12 |
 | [ADR-008](./008-rig-agent-platform-orchestration.md) | Rig Agent Platform Orchestration for OPY Net                 | Proposed | 2026-02-15 |
 | [ADR-009](./009-varlock-environment-governance.md) | Adopt Varlock for Environment Governance                    | Accepted | 2026-07-23 |
+| [ADR-010](./010-http-response-integrity.md)      | HTTP Response Integrity — Never Discard a Response on Body Decode Failure | Proposed | 2026-07-24 |
 
 ## Contributing
 
