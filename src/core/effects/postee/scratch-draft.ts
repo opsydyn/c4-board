@@ -108,6 +108,29 @@ export const newPosteeScratchDraft = (input: {
   updatedAt: input.now,
 });
 
+/**
+ * Whether a draft still matches a freshly created one.
+ *
+ * A scratch is opened and persisted on every launch, so an untouched draft is
+ * indistinguishable from one worth keeping — which is how "Reopen drafts" fills
+ * with identical `Untitled request` entries. Identity, tab position, open state,
+ * and timestamps are excluded: they change without the user authoring anything.
+ */
+export const isPristinePosteeScratchDraft = (draft: PosteeScratchDraft): boolean => {
+  const reference = newPosteeScratchDraft({ id: draft.id, tabOrder: draft.tabOrder, now: draft.createdAt });
+  return draft.name === reference.name
+    && draft.method === reference.method
+    && draft.url === reference.url
+    && draft.description === reference.description
+    && draft.headers.length === 0
+    && draft.body.mode === reference.body.mode
+    // A body that was cleared persists as null; both mean "nothing authored".
+    && (draft.body.raw === null || draft.body.raw === reference.body.raw)
+    && draft.body.form_values === reference.body.form_values
+    && draft.graphql === null
+    && draft.environmentId === reference.environmentId;
+};
+
 export const loadPosteeScratchDrafts = (openOnly?: boolean) =>
   Effect.map(listPosteeScratchDrafts(openOnly), (rows) => rows.map(deserialisePosteeScratchDraft));
 

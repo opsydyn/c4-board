@@ -105,6 +105,7 @@ export {
   closePosteeScratchDraft,
   deserialisePosteeScratchDraft,
   discardPosteeScratchDraft,
+  isPristinePosteeScratchDraft,
   loadPosteeScratchDrafts,
   newPosteeScratchDraft,
   type PosteeScratchDraft,

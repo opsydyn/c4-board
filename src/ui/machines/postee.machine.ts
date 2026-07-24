@@ -15,6 +15,8 @@ import { DatabaseService } from "../../core/effects/database.base";
 import { DatabaseServiceLive } from "../../core/effects/database.runtime";
 import {
   closePosteeScratchDraft,
+  discardPosteeScratchDraft,
+  isPristinePosteeScratchDraft,
   loadGraphqlSchemaSnapshot,
   loadPosteeRequestDraft,
   loadPosteeScratchDrafts,
@@ -322,6 +324,17 @@ const initialGraphqlSchema = (): GraphqlSchemaState => ({
   error: null,
 });
 
+/**
+ * Splits recovered drafts into untouched and authored, preserving order so the
+ * oldest untouched draft is the one adopted rather than an arbitrary survivor.
+ */
+const partitionScratchDrafts = (
+  drafts: ReadonlyArray<PosteeScratchDraft>,
+): readonly [ReadonlyArray<PosteeScratchDraft>, ReadonlyArray<PosteeScratchDraft>] => [
+  drafts.filter(isPristinePosteeScratchDraft),
+  drafts.filter((draft) => !isPristinePosteeScratchDraft(draft)),
+];
+
 const activeScratchDraft = (context: PosteeContext): PosteeScratchDraft | null =>
   context.activeEditor?.kind === "scratch"
     ? context.scratchDrafts[context.activeEditor.scratchId] ?? null
@@ -434,17 +447,30 @@ const posteeWorkspaceSetup = setup({
 
           const history = yield* PosteeHistory.list(50);
           const recoveredScratchDrafts = yield* loadPosteeScratchDrafts();
-          const freshScratch = newPosteeScratchDraft({
-            id: nanoid(),
-            tabOrder: 0,
-            now: Date.now(),
-          });
-          yield* savePosteeScratchDraft(freshScratch);
+
+          // A scratch is opened on every launch, so creating a new one each time
+          // left an identical `Untitled request` behind per restart until the
+          // reopen list was unusable. Adopt an untouched draft when one exists,
+          // and reclaim the surplus — authored drafts are never touched.
+          const [pristineDrafts, authoredDrafts] = partitionScratchDrafts(recoveredScratchDrafts);
+          const [adoptedScratch, ...surplusScratchDrafts] = pristineDrafts;
+
+          const freshScratch = adoptedScratch
+            ? { ...adoptedScratch, isOpen: true }
+            : newPosteeScratchDraft({ id: nanoid(), tabOrder: 0, now: Date.now() });
+          if (!adoptedScratch) {
+            yield* savePosteeScratchDraft(freshScratch);
+          }
+          yield* Effect.forEach(
+            surplusScratchDrafts,
+            (draft) => discardPosteeScratchDraft(draft.id),
+            { discard: true },
+          );
 
           const requestDrafts = Object.fromEntries(requestDraftEntries);
           const variables = Object.fromEntries(variableEntries);
           const scratchDrafts = Object.fromEntries([
-            ...recoveredScratchDrafts.map((draft) => [draft.id, { ...draft, isOpen: false }] as const),
+            ...authoredDrafts.map((draft) => [draft.id, { ...draft, isOpen: false }] as const),
             [freshScratch.id, freshScratch] as const,
           ]);
 
