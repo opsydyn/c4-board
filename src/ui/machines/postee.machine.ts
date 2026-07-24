@@ -14,6 +14,7 @@ import type { DoneActorEvent, ErrorActorEvent } from "xstate";
 import { DatabaseService } from "../../core/effects/database.base";
 import { DatabaseServiceLive } from "../../core/effects/database.runtime";
 import {
+  closePosteeScratchDraft,
   loadGraphqlSchemaSnapshot,
   loadPosteeRequestDraft,
   loadPosteeScratchDrafts,
@@ -33,6 +34,7 @@ import {
   preparePosteeDraftBody,
   preparePosteeDraftHeaders,
   refreshGraphqlSchema,
+  reopenPosteeScratchDraft,
   savePosteeRequestDraft,
   savePosteeScratchDraft,
 } from "../../core/effects/postee";
@@ -130,6 +132,8 @@ export interface PosteeContext {
 export type PosteeEvent =
   | { type: "REFRESH" }
   | { type: "CREATE_SCRATCH" }
+  | { type: "CLOSE_SCRATCH"; scratchId: string }
+  | { type: "REOPEN_SCRATCH"; scratchId: string }
   | { type: "SELECT_COLLECTION"; collectionId: CollectionId }
   | { type: "SELECT_REQUEST"; requestId: RequestId }
   | { type: "SELECT_ENVIRONMENT"; environmentId: EnvironmentId | null }
@@ -604,6 +608,42 @@ const posteeWorkspaceSetup = setup({
         },
         openScratchIds: [...context.openScratchIds, scratch.id],
         activeEditor: { kind: "scratch", scratchId: scratch.id },
+        runner: initialRunner(),
+      };
+    }),
+    closeScratch: assign(({ context, event }) => {
+      if (event.type !== "CLOSE_SCRATCH" || !context.openScratchIds.includes(event.scratchId)) {
+        return context;
+      }
+
+      runLayeredEffect(context.layer, closePosteeScratchDraft(event.scratchId)).catch(() => {
+        // Scratch remains in memory when durable persistence fails.
+      });
+
+      return {
+        ...context,
+        openScratchIds: context.openScratchIds.filter((id) => id !== event.scratchId),
+        closedScratchIds: [...context.closedScratchIds.filter((id) => id !== event.scratchId), event.scratchId],
+        activeEditor: context.activeEditor?.kind === "scratch" && context.activeEditor.scratchId === event.scratchId
+          ? null
+          : context.activeEditor,
+        runner: initialRunner(),
+      };
+    }),
+    reopenScratch: assign(({ context, event }) => {
+      if (event.type !== "REOPEN_SCRATCH" || !context.closedScratchIds.includes(event.scratchId)) {
+        return context;
+      }
+
+      runLayeredEffect(context.layer, reopenPosteeScratchDraft(event.scratchId)).catch(() => {
+        // Scratch remains reopenable in memory when durable persistence fails.
+      });
+
+      return {
+        ...context,
+        openScratchIds: [...context.openScratchIds, event.scratchId],
+        closedScratchIds: context.closedScratchIds.filter((id) => id !== event.scratchId),
+        activeEditor: { kind: "scratch", scratchId: event.scratchId },
         runner: initialRunner(),
       };
     }),
@@ -1491,6 +1531,12 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
       on: {
         CREATE_SCRATCH: {
           actions: "createScratch",
+        },
+        CLOSE_SCRATCH: {
+          actions: "closeScratch",
+        },
+        REOPEN_SCRATCH: {
+          actions: "reopenScratch",
         },
         CREATE_COLLECTION: {
           actions: "createCollection",

@@ -63,4 +63,23 @@ describe("Postee scratch workspace machine", () => {
     expect(actor.getSnapshot().context.activeEditor).not.toEqual({ kind: "scratch", scratchId: firstScratchId });
     actor.stop();
   });
+
+  it("closes a scratch into the reopenable set and restores it on demand", async () => {
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    const scratchId = actor.getSnapshot().context.activeEditor?.kind === "scratch"
+      ? actor.getSnapshot().context.activeEditor.scratchId
+      : "";
+    actor.send({ type: "CLOSE_SCRATCH", scratchId });
+    expect(actor.getSnapshot().context.openScratchIds).not.toContain(scratchId);
+    expect(actor.getSnapshot().context.closedScratchIds).toContain(scratchId);
+
+    actor.send({ type: "REOPEN_SCRATCH", scratchId });
+    expect(actor.getSnapshot().context.openScratchIds).toContain(scratchId);
+    expect(actor.getSnapshot().context.closedScratchIds).not.toContain(scratchId);
+    expect(actor.getSnapshot().context.activeEditor).toEqual({ kind: "scratch", scratchId });
+    actor.stop();
+  });
 });
