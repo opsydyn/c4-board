@@ -1,13 +1,15 @@
-import { describe, expect, it } from "vitest";
-import * as loadTest from "./load-test";
+import { Effect } from "effect";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildLoadTestRequestPayload, startLoadTest } from "./load-test";
 import type { PosteeRequestDraft } from "./request-draft";
 
-const buildLoadTestRequestPayload = (loadTest as {
-  buildLoadTestRequestPayload: (
-    method: "QUERY",
-    draft: PosteeRequestDraft,
-  ) => unknown;
-}).buildLoadTestRequestPayload;
+const { invokeMock } = vi.hoisted(() => ({
+  invokeMock: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+}));
 
 const queryJsonDraft: PosteeRequestDraft = {
   request: {
@@ -40,6 +42,53 @@ const rawQueryDraft: PosteeRequestDraft = {
   },
 };
 
+const formQueryDraft: PosteeRequestDraft = {
+  ...queryJsonDraft,
+  body: {
+    ...queryJsonDraft.body,
+    mode: "form",
+    raw: null,
+    form_values: JSON.stringify([
+      { key: "q", value: "opsy" },
+      { key: "disabled", value: "ignored", enabled: false },
+    ]),
+  },
+};
+
+const rawQueryWithContentTypeDraft: PosteeRequestDraft = {
+  ...rawQueryDraft,
+  headers: [{
+    id: "content-type",
+    key: "Content-Type",
+    value: "application/sql",
+    enabled: true,
+  }],
+};
+
+const tauriWindow = window as typeof window & {
+  __TAURI_INTERNALS__?: unknown;
+};
+
+const startPayload = async (draft: PosteeRequestDraft) => {
+  const payload = buildLoadTestRequestPayload("QUERY", draft);
+  if (payload._tag === "Invalid") {
+    throw new Error(payload.message);
+  }
+
+  await Effect.runPromise(
+    startLoadTest({
+      url: draft.request.url,
+      method: payload.method,
+      headers: [...payload.headers],
+      body: payload.body,
+    }),
+  );
+};
+
+afterEach(() => {
+  delete tauriWindow.__TAURI_INTERNALS__;
+});
+
 describe("buildLoadTestRequestPayload", () => {
   it("builds a QUERY load-test payload with generated JSON media type", () => {
     expect(buildLoadTestRequestPayload("QUERY", queryJsonDraft)).toEqual({
@@ -57,6 +106,46 @@ describe("buildLoadTestRequestPayload", () => {
     expect(buildLoadTestRequestPayload("QUERY", rawQueryDraft)).toEqual({
       _tag: "Invalid",
       message: "QUERY requires a Content-Type for its request content.",
+    });
+  });
+
+  it("invokes the native runner with a form QUERY payload", async () => {
+    tauriWindow.__TAURI_INTERNALS__ = {};
+    invokeMock.mockResolvedValue(undefined);
+
+    await startPayload(formQueryDraft);
+
+    expect(invokeMock).toHaveBeenCalledWith("start_load_test", {
+      config: {
+        url: "https://example.com/feed",
+        method: "QUERY",
+        headers: [["content-type", "application/x-www-form-urlencoded"]],
+        body: "q=opsy",
+        duration_secs: 10,
+        concurrency: 10,
+        rps_limit: null,
+        timeout_ms: 30_000,
+      },
+    });
+  });
+
+  it("invokes the native runner with an explicit raw QUERY Content-Type", async () => {
+    tauriWindow.__TAURI_INTERNALS__ = {};
+    invokeMock.mockResolvedValue(undefined);
+
+    await startPayload(rawQueryWithContentTypeDraft);
+
+    expect(invokeMock).toHaveBeenCalledWith("start_load_test", {
+      config: {
+        url: "https://example.com/feed",
+        method: "QUERY",
+        headers: [["Content-Type", "application/sql"]],
+        body: "select * from systems",
+        duration_secs: 10,
+        concurrency: 10,
+        rps_limit: null,
+        timeout_ms: 30_000,
+      },
     });
   });
 });

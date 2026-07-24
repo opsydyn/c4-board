@@ -25,7 +25,6 @@ import { createPosteeWorkspaceMachine, type PosteeEvent } from "../../machines/p
 import { InlineEditor } from "../nodes/InlineEditor";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 import { type Header, HeadersEditor } from "./HeadersEditor";
-import { LoadTestPanel } from "./LoadTestPanel";
 import { MonacoJsonEditor } from "./MonacoJsonEditor";
 import { PosteeHistoryTable } from "./PosteeHistoryTable";
 import { ResponseViewer } from "./ResponseViewer";
@@ -746,16 +745,6 @@ export function PosteeWorkspace() {
           )}
         </TabPanel>
         <TabPanel id="LoadTest" className={styles.responseTabContent}>
-          {selectedRequest && (
-            <LoadTestPanel
-              request={{
-                id: selectedRequest.id,
-                name: selectedRequest.name,
-                method: selectedRequest.method,
-                url: selectedRequest.url,
-              }}
-            />
-          )}
         </TabPanel>
         <TabPanel id="History" className={styles.responseTabContent}>
           <h2 className={styles.sectionTitle}>Execution History</h2>
