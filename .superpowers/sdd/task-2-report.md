@@ -53,3 +53,8 @@ passed with no whitespace errors.
 
 - Verification is intentionally focused on the Task 2 suites and targeted lint;
   the full repository test suite and desktop integration were not run.
+
+## Build Typing Fix
+
+Added an explicit `Exit.isFailure` guard in `http-client.test.ts` so TypeScript
+narrows `exit.cause` without changing the test's failure assertion.

@@ -72,6 +72,9 @@ describe("prepareRequest", () => {
     );
 
     expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) {
+      throw new Error("Expected prepareRequest to fail");
+    }
     expect(Cause.pretty(exit.cause)).toContain(message);
   });
 });
