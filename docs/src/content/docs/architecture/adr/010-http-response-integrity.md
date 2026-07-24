@@ -4,7 +4,7 @@ title: "ADR-010: HTTP Response Integrity — Never Discard a Response on Body De
 
 # ADR-010: HTTP Response Integrity — Never Discard a Response on Body Decode Failure
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-24
 **Deciders**: Alan P Currie
 **Technical Story**: A `TRACE` request to `https://httpbin.org/anything?search=red+bmw` surfaced as
@@ -386,3 +386,8 @@ this ADR addresses: one message for two unrelated events, with the distinguishin
      imported nowhere, so migrating it would add churn and imply it is live. It
      compiles against the Phase 1/2 shims and should be deleted rather than
      migrated.
+- 2026-07-24: **Accepted.** Phases 1–3 are implemented and verified. Phase 4 —
+  removing the `headers`, `bodyText`, and `bodyDecodeError` shims once consumers
+  read `body` and `headerEntries` directly — remains outstanding and is tracked
+  here rather than in a separate ADR, since it changes no decision, only finishes
+  this one.
