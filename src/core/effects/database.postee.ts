@@ -56,6 +56,26 @@ export interface PosteeGraphqlSchemaSnapshot {
   last_used_at: number;
 }
 
+export interface PosteeScratchDraftRow {
+  id: string;
+  name: string;
+  method: string;
+  url: string;
+  description: string | null;
+  headers_json: string;
+  body_mode: string;
+  body_raw: string | null;
+  form_values: string | null;
+  graphql_document: string | null;
+  graphql_variables_json: string | null;
+  graphql_operation_name: string | null;
+  environment_id: string | null;
+  tab_order: number;
+  is_open: 0 | 1;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface PosteeEnvironment {
   id: string;
   name: string;
@@ -89,6 +109,82 @@ export interface PosteeHistoryEntry {
   error_message: string | null;
   executed_at: number;
 }
+
+export const listPosteeScratchDrafts = (openOnly?: boolean) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    return yield* service.query<PosteeScratchDraftRow>(
+      `SELECT * FROM postee_scratch_drafts
+       ${openOnly === undefined ? "" : "WHERE is_open = ?"}
+       ORDER BY is_open DESC, tab_order ASC, updated_at DESC`,
+      openOnly === undefined ? [] : [openOnly ? 1 : 0],
+    );
+  });
+
+export const upsertPosteeScratchDraft = (draft: PosteeScratchDraftRow) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(
+      `INSERT INTO postee_scratch_drafts (
+        id, name, method, url, description, headers_json, body_mode, body_raw,
+        form_values, graphql_document, graphql_variables_json, graphql_operation_name,
+        environment_id, tab_order, is_open, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        method = excluded.method,
+        url = excluded.url,
+        description = excluded.description,
+        headers_json = excluded.headers_json,
+        body_mode = excluded.body_mode,
+        body_raw = excluded.body_raw,
+        form_values = excluded.form_values,
+        graphql_document = excluded.graphql_document,
+        graphql_variables_json = excluded.graphql_variables_json,
+        graphql_operation_name = excluded.graphql_operation_name,
+        environment_id = excluded.environment_id,
+        tab_order = excluded.tab_order,
+        is_open = excluded.is_open,
+        updated_at = excluded.updated_at`,
+      [
+        draft.id,
+        draft.name,
+        draft.method,
+        draft.url,
+        draft.description,
+        draft.headers_json,
+        draft.body_mode,
+        draft.body_raw,
+        draft.form_values,
+        draft.graphql_document,
+        draft.graphql_variables_json,
+        draft.graphql_operation_name,
+        draft.environment_id,
+        draft.tab_order,
+        draft.is_open,
+        draft.created_at,
+        draft.updated_at,
+      ],
+    );
+    return draft;
+  });
+
+export const setPosteeScratchDraftOpen = (id: string, isOpen: boolean) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const updatedAt = Date.now();
+    yield* service.execute(
+      `UPDATE postee_scratch_drafts SET is_open = ?, updated_at = ? WHERE id = ?`,
+      [isOpen ? 1 : 0, updatedAt, id],
+    );
+    return updatedAt;
+  });
+
+export const deletePosteeScratchDraft = (id: string) =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    yield* service.execute(`DELETE FROM postee_scratch_drafts WHERE id = ?`, [id]);
+  });
 
 // Collections
 

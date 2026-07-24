@@ -7,6 +7,7 @@ import {
   deletePosteeCollections,
   deletePosteeEnvironment,
   deletePosteeRequest,
+  deletePosteeScratchDraft,
   getPosteeGraphqlRequest,
   getPosteeRequest,
   getPosteeRequestBody,
@@ -17,12 +18,15 @@ import {
   listPosteeHistory,
   listPosteeRequestHeaders,
   listPosteeRequests,
+  listPosteeScratchDrafts,
   replacePosteeRequestHeaders,
+  setPosteeScratchDraftOpen,
   updatePosteeCollection,
   updatePosteeEnvironment,
   updatePosteeRequest,
   upsertPosteeEnvironmentVariables,
   upsertPosteeRequestBody,
+  upsertPosteeScratchDraft,
 } from "../database";
 import type {
   PosteeCollection,
@@ -34,6 +38,7 @@ import type {
   PosteeRequest,
   PosteeRequestBody,
   PosteeRequestHeader,
+  PosteeScratchDraftRow,
 } from "../database";
 
 export const PosteeCollections = {
@@ -76,6 +81,13 @@ export const PosteeHistory = {
   clear: () => clearPosteeHistory(),
 };
 
+export const PosteeScratchDrafts = {
+  list: (openOnly?: boolean) => listPosteeScratchDrafts(openOnly),
+  save: upsertPosteeScratchDraft,
+  setOpen: setPosteeScratchDraftOpen,
+  remove: deletePosteeScratchDraft,
+};
+
 export type {
   PosteeCollection,
   PosteeEnvironment,
@@ -86,6 +98,7 @@ export type {
   PosteeRequest,
   PosteeRequestBody,
   PosteeRequestHeader,
+  PosteeScratchDraftRow,
 };
 
 export {
