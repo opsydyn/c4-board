@@ -33,6 +33,7 @@ import {
   type PosteeScratchDraft,
   preparePosteeDraftBody,
   preparePosteeDraftHeaders,
+  promotePosteeScratchDraft,
   refreshGraphqlSchema,
   reopenPosteeScratchDraft,
   savePosteeRequestDraft,
@@ -85,6 +86,13 @@ export interface RequestDraftSaveState {
   readonly revision: number;
 }
 
+export interface ScratchPromotionState {
+  readonly status: "idle" | "promoting" | "error";
+  readonly scratchId: string | null;
+  readonly collectionId: CollectionId | null;
+  readonly error: string | null;
+}
+
 export type GraphqlSchemaUiState = "NoSchema" | "Cached" | "Stale" | "Refreshing" | "Unavailable";
 
 export interface GraphqlSchemaState {
@@ -106,6 +114,12 @@ export interface PosteeContext {
   openScratchIds: string[];
   closedScratchIds: string[];
   activeEditor: PosteeEditorTarget;
+  pendingScratchPromotion: {
+    readonly scratchId: string;
+    readonly collectionId: CollectionId;
+    readonly requestId: RequestId;
+  } | null;
+  scratchPromotion: ScratchPromotionState;
   pendingRequestDraft: PosteeRequestDraft | null;
   requestDraftSave: RequestDraftSaveState;
   graphqlSchema: GraphqlSchemaState;
@@ -135,6 +149,7 @@ export type PosteeEvent =
   | { type: "CLOSE_SCRATCH"; scratchId: string }
   | { type: "REOPEN_SCRATCH"; scratchId: string }
   | { type: "UPDATE_SCRATCH_DRAFT"; draft: PosteeScratchDraft }
+  | { type: "PROMOTE_SCRATCH"; scratchId: string; collectionId: CollectionId; requestId: RequestId }
   | { type: "SELECT_COLLECTION"; collectionId: CollectionId }
   | { type: "SELECT_REQUEST"; requestId: RequestId }
   | { type: "SELECT_ENVIRONMENT"; environmentId: EnvironmentId | null }
@@ -230,6 +245,13 @@ export interface RunRequestResult {
   historyEntry: PosteeHistoryEntry;
 }
 
+interface PromoteScratchResult {
+  readonly scratchId: string;
+  readonly collectionId: CollectionId;
+  readonly requestId: RequestId;
+  readonly draft: PosteeRequestDraft;
+}
+
 type LoadWorkspaceDoneEvent = DoneActorEvent<LoadWorkspaceResult, "loadWorkspace">;
 type SaveRequestDraftDoneEvent = DoneActorEvent<PosteeRequestDraft, "saveRequestDraft">;
 type SaveRequestDraftErrorEvent = ErrorActorEvent<unknown, "saveRequestDraft">;
@@ -279,6 +301,13 @@ const initialRequestDraftSave = (): RequestDraftSaveState => ({
   requestId: null,
   error: null,
   revision: 0,
+});
+
+const initialScratchPromotion = (): ScratchPromotionState => ({
+  status: "idle",
+  scratchId: null,
+  collectionId: null,
+  error: null,
 });
 
 const initialGraphqlSchema = (): GraphqlSchemaState => ({
@@ -629,6 +658,29 @@ const posteeWorkspaceSetup = setup({
 
       return runLayeredEffect(layer, requestEffect);
     }),
+
+    promoteScratch: fromPromise<
+      PromoteScratchResult,
+      { layer: WorkspaceLayer; context: PosteeContext }
+    >(async ({ input }) => {
+      const pending = input.context.pendingScratchPromotion;
+      if (!pending) {
+        throw new Error("No scratch promotion is pending");
+      }
+      const scratch = input.context.scratchDrafts[pending.scratchId];
+      if (!scratch) {
+        throw new Error("Scratch draft is no longer available");
+      }
+      const draft = await runLayeredEffect(
+        input.layer,
+        promotePosteeScratchDraft({
+          scratch,
+          collectionId: pending.collectionId as unknown as string,
+          requestId: pending.requestId as unknown as string,
+        }),
+      );
+      return { ...pending, draft };
+    }),
   },
   guards: {
     hasActiveRequest: ({ context }) => activeExecutionRequestId(context) !== null,
@@ -709,6 +761,68 @@ const posteeWorkspaceSetup = setup({
         scratchDrafts: {
           ...context.scratchDrafts,
           [draft.id]: draft,
+        },
+      };
+    }),
+    stageScratchPromotion: assign(({ context, event }) => {
+      if (event.type !== "PROMOTE_SCRATCH" || !context.scratchDrafts[event.scratchId]) {
+        return context;
+      }
+      return {
+        ...context,
+        pendingScratchPromotion: {
+          scratchId: event.scratchId,
+          collectionId: event.collectionId,
+          requestId: event.requestId,
+        },
+        scratchPromotion: {
+          status: "promoting" as const,
+          scratchId: event.scratchId,
+          collectionId: event.collectionId,
+          error: null,
+        },
+      };
+    }),
+    publishPromotedScratch: assign(({ context, event }) => {
+      if (event.type !== "xstate.done.actor.promoteScratch") {
+        return context;
+      }
+      const { scratchId, collectionId, requestId, draft } = event.output;
+      const { [scratchId]: _discarded, ...scratchDrafts } = context.scratchDrafts;
+      const collectionKey = collectionId as unknown as string;
+      return {
+        ...context,
+        scratchDrafts,
+        openScratchIds: context.openScratchIds.filter((id) => id !== scratchId),
+        closedScratchIds: context.closedScratchIds.filter((id) => id !== scratchId),
+        pendingScratchPromotion: null,
+        scratchPromotion: initialScratchPromotion(),
+        requestDrafts: {
+          ...context.requestDrafts,
+          [requestId]: draft,
+        },
+        requestsByCollection: {
+          ...context.requestsByCollection,
+          [collectionKey]: [
+            draft.request,
+            ...(context.requestsByCollection[collectionKey] ?? []),
+          ],
+        },
+        activeCollectionId: collectionId,
+        activeRequestId: requestId,
+        activeEditor: { kind: "saved" as const, requestId },
+      };
+    }),
+    failScratchPromotion: assign(({ context, event }) => {
+      if (event.type !== "xstate.error.actor.promoteScratch") {
+        return context;
+      }
+      return {
+        ...context,
+        scratchPromotion: {
+          ...context.scratchPromotion,
+          status: "error" as const,
+          error: "Unable to save scratch request. Try again.",
         },
       };
     }),
@@ -1616,6 +1730,10 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         UPDATE_SCRATCH_DRAFT: {
           actions: "updateScratchDraft",
         },
+        PROMOTE_SCRATCH: {
+          target: "promotingScratch",
+          actions: "stageScratchPromotion",
+        },
         CREATE_COLLECTION: {
           actions: "createCollection",
         },
@@ -1704,6 +1822,24 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         },
         SELECT_COLLECTION: {
           actions: ["selectCollection", "deriveWorkspaceState"],
+        },
+      },
+    },
+    promotingScratch: {
+      invoke: {
+        id: "promoteScratch",
+        src: "promoteScratch",
+        input: ({ context }) => ({
+          layer: context.layer,
+          context,
+        }),
+        onDone: {
+          target: "idle",
+          actions: ["publishPromotedScratch", "deriveWorkspaceState"],
+        },
+        onError: {
+          target: "idle",
+          actions: "failScratchPromotion",
         },
       },
     },
@@ -1883,6 +2019,8 @@ export const createPosteeWorkspaceMachine = (options?: {
       openScratchIds: [],
       closedScratchIds: [],
       activeEditor: null,
+      pendingScratchPromotion: null,
+      scratchPromotion: initialScratchPromotion(),
       pendingRequestDraft: null,
       requestDraftSave: initialRequestDraftSave(),
       graphqlSchema: initialGraphqlSchema(),

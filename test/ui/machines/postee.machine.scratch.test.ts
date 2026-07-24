@@ -5,7 +5,7 @@ import {
   type PreparedRequest,
   type PreparedResponse,
 } from "@/core/effects/postee/http-client";
-import { Bytes, StatusCode } from "@/core/effects/postee/types";
+import { Bytes, CollectionId, RequestId, StatusCode } from "@/core/effects/postee/types";
 import { createPosteeWorkspaceMachine } from "@/ui/machines/postee.machine";
 import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
@@ -33,6 +33,16 @@ const recoveredScratch: PosteeScratchDraftRow = {
 
 const layer = Layer.succeed(DatabaseService, {
   query: <T>(sql: string) => {
+    if (sql.includes("postee_collections")) {
+      return Effect.succeed([{
+        id: "collection-1",
+        name: "Examples",
+        description: null,
+        sort_order: 0,
+        created_at: 1,
+        updated_at: 1,
+      }] as T[]);
+    }
     if (sql.includes("postee_scratch_drafts")) {
       return Effect.succeed([recoveredScratch] as T[]);
     }
@@ -147,6 +157,41 @@ describe("Postee scratch workspace machine", () => {
       request_id: null,
       response_status: 200,
     });
+    actor.stop();
+  });
+
+  it("promotes a scratch into the selected collection and selects the saved request", async () => {
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    const target = actor.getSnapshot().context.activeEditor;
+    if (target?.kind !== "scratch") throw new Error("Expected a scratch editor");
+    const scratch = actor.getSnapshot().context.scratchDrafts[target.scratchId]!;
+    actor.send({
+      type: "PROMOTE_SCRATCH",
+      scratchId: scratch.id,
+      collectionId: CollectionId("collection-1"),
+      requestId: RequestId("request-promoted"),
+    });
+
+    await waitFor(
+      actor,
+      (snapshot) => snapshot.context.activeEditor?.kind === "saved",
+    );
+
+    expect(actor.getSnapshot().context.activeEditor).toEqual({
+      kind: "saved",
+      requestId: "request-promoted",
+    });
+    expect(actor.getSnapshot().context.scratchDrafts[scratch.id]).toBeUndefined();
+    expect(actor.getSnapshot().context.openScratchIds).not.toContain(scratch.id);
+    expect(actor.getSnapshot().context.requestDrafts["request-promoted"]?.request).toMatchObject({
+      collection_id: "collection-1",
+      name: scratch.name,
+    });
+    expect(actor.getSnapshot().context.requestsByCollection["collection-1"])
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: "request-promoted" })]));
     actor.stop();
   });
 });
