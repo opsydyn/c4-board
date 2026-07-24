@@ -10,8 +10,8 @@
  */
 
 import type { PosteeEnvironment, PosteeEnvironmentVariable, PosteeRequest } from "@/core/effects/database.postee";
-import type { PosteeRequestDraft } from "@/core/effects/postee";
-import type { HttpMethod } from "@/core/effects/postee/types";
+import { evaluateRequestSemantics, type PosteeRequestDraft } from "@/core/effects/postee";
+import { bodyModeToSumType, HTTP_METHODS, type HttpMethod, type RequestBodyMode } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
 import type { RequestDraftSaveState } from "@/ui/machines/postee.machine";
 import {
@@ -202,16 +202,7 @@ export function PosteeRequestBuilder({
   onEnvironmentChange,
   onVariablesChange,
 }: PosteeRequestBuilderProps) {
-  const methodOptions: HttpMethod[] = [
-    "GET",
-    "POST",
-    "PUT",
-    "PATCH",
-    "DELETE",
-    "HEAD",
-    "OPTIONS",
-    "TRACE",
-  ];
+  const methodOptions: ReadonlyArray<HttpMethod> = HTTP_METHODS;
 
   // Unified request bar state (handles both create and edit modes)
   const [requestUrl, setRequestUrl] = useState("");
@@ -392,6 +383,27 @@ export function PosteeRequestBuilder({
       && activeSaveRequestId !== selectedRequest.id,
   );
   const visibleHasUnsavedChanges = isEditorSynchronized && hasUnsavedChanges;
+  const semanticBodyMode = bodyWasEdited
+    ? "json"
+    : editorPresentation.requestBodyMode;
+  const semanticBody = bodyModeToSumType(
+    semanticBodyMode as RequestBodyMode,
+    editorPresentation.requestBody,
+    selectedRequestDraft?.body.form_values ?? null,
+  );
+  const requestSemanticsIssue = evaluateRequestSemantics(
+    editorPresentation.requestMethod as HttpMethod,
+    editorPresentation.requestHeaders
+      .filter((header) => header.enabled)
+      .map(({ key, value }) => ({ key, value })),
+    semanticBody,
+  );
+  const canSendRequest = canRunRequest
+    && requestSemanticsIssue === null
+    && !hasUnsavedChanges
+    && isEditorSynchronized
+    && !isAnySaveActive
+    && !isRunning;
 
   // Save action (create new or update existing)
   const handleSave = useCallback(() => {
@@ -473,13 +485,7 @@ export function PosteeRequestBuilder({
       // Cmd/Ctrl + Enter: Send request
       if (modKey && event.key === "Enter") {
         event.preventDefault();
-        if (
-          canRunRequest
-          && !isRunning
-          && !hasUnsavedChanges
-          && !isAnySaveActive
-          && isEditorSynchronized
-        ) {
+        if (canSendRequest) {
           onRunRequest();
         }
         return;
@@ -506,7 +512,7 @@ export function PosteeRequestBuilder({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     activeCollectionId,
-    canRunRequest,
+    canSendRequest,
     handleSave,
     hasUnsavedChanges,
     isAnySaveActive,
@@ -608,7 +614,7 @@ export function PosteeRequestBuilder({
                       type="button"
                       className={styles.runButton}
                       onClick={onRunRequest}
-                      disabled={!canRunRequest || isAnySaveActive || !isEditorSynchronized}
+                      disabled={!canSendRequest}
                       title={sendCommandDescription}
                     >
                       Send
@@ -649,6 +655,13 @@ export function PosteeRequestBuilder({
                 Use: {urlValidation.suggestion}
               </button>
             )}
+          </div>
+        )}
+
+        {requestSemanticsIssue && (
+          <div className={styles.validationError} role="alert">
+            <Warning size={14} weight="bold" />
+            <span>{requestSemanticsIssue}</span>
           </div>
         )}
 

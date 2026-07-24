@@ -138,6 +138,42 @@ const committedFirstDraft: PosteeRequestDraft = {
   },
 };
 
+const makeQueryDraft = ({
+  mode,
+  raw,
+  headers,
+}: {
+  readonly mode: PosteeRequestDraft["body"]["mode"];
+  readonly raw: string;
+  readonly headers: PosteeRequestDraft["headers"];
+}): PosteeRequestDraft => ({
+  request: {
+    ...firstDraft.request,
+    id: "request-query",
+    name: "QUERY request",
+    method: "QUERY",
+  },
+  headers,
+  body: {
+    request_id: "request-query",
+    mode,
+    raw,
+    form_values: null,
+  },
+});
+
+const queryJsonDraft = makeQueryDraft({
+  mode: "json",
+  raw: "{\"query\":\"systems\"}",
+  headers: [],
+});
+
+const rawQueryDraft = makeQueryDraft({
+  mode: "raw",
+  raw: "select * from systems",
+  headers: [],
+});
+
 const idleSave: RequestDraftSaveState = {
   status: "idle",
   requestId: null,
@@ -254,6 +290,57 @@ describe("PosteeRequestBuilder durable request details", () => {
     expect(screen.getByLabelText("Header name")).toHaveValue("Accept");
     expect(screen.getByLabelText("Header value")).toHaveValue("application/json");
     expect(screen.getByRole("checkbox")).toBeChecked();
+  });
+
+  it("offers QUERY in the request method selector", async () => {
+    const user = userEvent.setup();
+    renderBuilder();
+
+    await user.click(screen.getByRole("button", { name: "POST" }));
+    expect(screen.getByRole("option", { name: "QUERY" })).toBeInTheDocument();
+  });
+
+  it("allows a saved QUERY JSON draft to send", async () => {
+    const user = userEvent.setup();
+    const onRunRequest = vi.fn();
+    renderBuilder({
+      selectedRequest: queryJsonDraft.request,
+      selectedRequestDraft: queryJsonDraft,
+      onRunRequest,
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onRunRequest).toHaveBeenCalledOnce();
+  });
+
+  it("blocks a raw QUERY draft until Content-Type is enabled", () => {
+    const rawDraft = makeQueryDraft({
+      mode: "raw",
+      raw: "select * from systems",
+      headers: [],
+    });
+    renderBuilder({
+      selectedRequest: rawDraft.request,
+      selectedRequestDraft: rawDraft,
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "QUERY requires a Content-Type for its request content.",
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  it("blocks the keyboard Send shortcut for an invalid QUERY", () => {
+    const onRunRequest = vi.fn();
+    renderBuilder({
+      selectedRequest: rawQueryDraft.request,
+      selectedRequestDraft: rawQueryDraft,
+      onRunRequest,
+    });
+
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true, metaKey: true });
+    expect(onRunRequest).not.toHaveBeenCalled();
   });
 
   it("replaces every request field and body mode when selection changes", async () => {
