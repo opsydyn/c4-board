@@ -63,8 +63,9 @@ Introduce a local workspace-draft record that is separate from
 - lifecycle metadata required to restore the editor; and
 - created and updated timestamps.
 
-Workspace tab persistence records order and whether a tab references a saved
-request or a scratch draft. It does not duplicate request domain data.
+Workspace scratch-tab persistence records order, open/closed state, and the
+scratch draft it references. Saved-request tabs are deferred and existing saved
+request selection remains owned by the collection navigator in this slice.
 
 Draft values retain templates such as `{{token}}`; resolved environment values
 exist only for request execution and must never be persisted in a scratch record
