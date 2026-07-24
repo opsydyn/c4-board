@@ -16,6 +16,11 @@ if (typeof globalThis !== "undefined" && !("ResizeObserver" in globalThis)) {
   Object.assign(globalThis, { ResizeObserver: StubResizeObserver });
 }
 
+// Monaco's clipboard contribution probes this at import time; jsdom omits it.
+if (typeof document !== "undefined" && typeof document.queryCommandSupported !== "function") {
+  Object.assign(document, { queryCommandSupported: () => false });
+}
+
 afterEach(() => {
   vi.clearAllMocks();
   cleanup();

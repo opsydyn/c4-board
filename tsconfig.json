@@ -29,25 +29,29 @@
     "rewriteRelativeImportExtensions": true,
     "declarationMap": true,
     "sourceMap": true,
-    "baseUrl": ".",
+    // No "baseUrl": with moduleResolution "Bundler", "paths" resolve relative to
+    // this file. Setting baseUrl makes Astro's config-alias plugin register a
+    // catch-all alias that tries to stat every bare specifier — including the
+    // `url(data:image/svg+xml;...)` values in monaco-editor's CSS, which fails
+    // the build with ENAMETOOLONG.
     "paths": {
       "@/ui/*": [
-        "src/ui/*"
+        "./src/ui/*"
       ],
       "@/core/*": [
-        "src/core/*"
+        "./src/core/*"
       ],
       "@/schema/*": [
-        "src/core/schema/*"
+        "./src/core/schema/*"
       ],
       "@ui/*": [
-        "src/ui/*"
+        "./src/ui/*"
       ],
       "@core/*": [
-        "src/core/*"
+        "./src/core/*"
       ],
       "@schema/*": [
-        "src/core/schema/*"
+        "./src/core/schema/*"
       ]
     },
     "downlevelIteration": true,

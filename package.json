@@ -108,7 +108,6 @@
     "typescript-eslint": "^8.63.0",
     "varlock": "1.13.0",
     "vite": "8.1.4",
-    "vite-plugin-static-copy": "^4.1.1",
     "vitest": "^4.1.10",
     "yaml": "2.9.0"
   }

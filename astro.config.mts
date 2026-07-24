@@ -1,7 +1,6 @@
 import react from "@astrojs/react";
 import { vanillaExtractPlugin } from "@vanilla-extract/vite-plugin";
 import { defineConfig } from "astro/config";
-import { viteStaticCopy } from "vite-plugin-static-copy";
 
 type AstroViteConfig = NonNullable<Parameters<typeof defineConfig>[0]["vite"]>;
 type AstroVitePlugins = Exclude<AstroViteConfig["plugins"], undefined>;
@@ -9,14 +8,6 @@ type AstroVitePlugins = Exclude<AstroViteConfig["plugins"], undefined>;
 const astroVitePlugins = [
   // Astro bundles its own Vite types; these plugins are runtime-compatible.
   vanillaExtractPlugin(),
-  viteStaticCopy({
-    targets: [
-      {
-        src: "node_modules/monaco-editor/min/vs",
-        dest: "monaco",
-      },
-    ],
-  }),
 ] as unknown as AstroVitePlugins;
 
 const isDevCommand = process.argv.includes("dev");
