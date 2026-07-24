@@ -224,6 +224,7 @@ export interface LoadWorkspaceResult {
 }
 
 export interface RunRequestResult {
+  requestId: RequestId | null;
   response: PreparedResponse;
   prepared: PreparedRequest;
   historyEntry: PosteeHistoryEntry;
@@ -285,6 +286,23 @@ const initialGraphqlSchema = (): GraphqlSchemaState => ({
   snapshot: null,
   error: null,
 });
+
+const activeScratchDraft = (context: PosteeContext): PosteeScratchDraft | null =>
+  context.activeEditor?.kind === "scratch"
+    ? context.scratchDrafts[context.activeEditor.scratchId] ?? null
+    : null;
+
+const activeSavedRequestId = (context: PosteeContext): RequestId | null =>
+  context.activeEditor?.kind === "scratch"
+    ? null
+    : context.activeEditor?.kind === "saved"
+    ? context.activeEditor.requestId
+    : context.activeRequestId;
+
+const activeExecutionRequestId = (context: PosteeContext): RequestId | null => {
+  const scratch = activeScratchDraft(context);
+  return scratch ? RequestIdBrand(scratch.id) : activeSavedRequestId(context);
+};
 
 const graphqlSchemaContext = (context: PosteeContext) => {
   const requestId = context.activeRequestId as unknown as string | null;
@@ -481,25 +499,51 @@ const posteeWorkspaceSetup = setup({
       }
     >(async ({ input }) => {
       const { layer, context } = input;
-      const requestId = context.activeRequestId;
-      if (!requestId) {
+      const scratch = activeScratchDraft(context);
+      const savedRequestId = activeSavedRequestId(context);
+      if (!scratch && !savedRequestId) {
         throw new Error("No active request selected");
       }
 
-      const environmentId = context.activeEnvironmentId;
+      const environmentId = scratch?.environmentId
+        ? EnvironmentIdBrand(scratch.environmentId)
+        : context.activeEnvironmentId;
 
       const requestEffect = Effect.gen(function*() {
-        // Convert branded ID to string for database lookup
-        const requestIdString = requestId as unknown as string;
-
-        const request = yield* PosteeRequests.get(requestIdString);
+        const request = scratch
+          ? {
+            id: scratch.id,
+            collection_id: "",
+            name: scratch.name,
+            method: scratch.method,
+            url: scratch.url,
+            description: scratch.description,
+            favorite: 0,
+            sort_order: scratch.tabOrder,
+            created_at: scratch.createdAt,
+            updated_at: scratch.updatedAt,
+          }
+          : yield* PosteeRequests.get(savedRequestId as unknown as string);
         if (!request) {
-          throw new Error(`Request ${requestId} not found`);
+          throw new Error(`Request ${savedRequestId} not found`);
         }
 
-        const headers = yield* PosteeRequests.listHeaders(requestIdString);
-        const body = yield* PosteeRequests.getBody(requestIdString);
-        const graphql = yield* PosteeRequests.getGraphql(requestIdString);
+        const headers = scratch
+          ? scratch.headers.map((header, index) => ({
+            id: index,
+            request_id: scratch.id,
+            key: header.key,
+            value: header.value,
+            is_enabled: header.enabled ? 1 : 0,
+            sort_order: index,
+          }))
+          : yield* PosteeRequests.listHeaders(savedRequestId as unknown as string);
+        const body = scratch
+          ? { ...scratch.body, request_id: scratch.id }
+          : yield* PosteeRequests.getBody(savedRequestId as unknown as string);
+        const graphql = scratch
+          ? scratch.graphql === null ? null : { ...scratch.graphql, request_id: scratch.id }
+          : yield* PosteeRequests.getGraphql(savedRequestId as unknown as string);
 
         // Lookup variables by environment (need string key for Record)
         const variables = (environmentId
@@ -508,12 +552,14 @@ const posteeWorkspaceSetup = setup({
 
         const draft: PosteeRequestDraft = {
           request,
-          headers: headers.map((header) => ({
-            id: String(header.id),
-            key: header.key,
-            value: header.value ?? "",
-            enabled: header.is_enabled === 1,
-          })),
+          headers: scratch
+            ? scratch.headers
+            : headers.map((header) => ({
+              id: String(header.id),
+              key: header.key,
+              value: header.value ?? "",
+              enabled: header.is_enabled === 1,
+            })),
           body: body ?? {
             request_id: request.id,
             mode: "raw",
@@ -551,7 +597,7 @@ const posteeWorkspaceSetup = setup({
 
         const historyEntry: PosteeHistoryEntry = {
           id: historyId,
-          request_id: request.id,
+          request_id: savedRequestId as unknown as string ?? null,
           request_snapshot: JSON.stringify(
             {
               request,
@@ -578,14 +624,14 @@ const posteeWorkspaceSetup = setup({
 
         yield* PosteeHistory.record(historyEntry);
 
-        return { prepared, response, historyEntry };
+        return { requestId: savedRequestId, prepared, response, historyEntry };
       });
 
       return runLayeredEffect(layer, requestEffect);
     }),
   },
   guards: {
-    hasActiveRequest: ({ context }) => context.activeRequestId !== null,
+    hasActiveRequest: ({ context }) => activeExecutionRequestId(context) !== null,
     hasActiveGraphqlRequest: ({ context }) => graphqlSchemaContext(context) !== null,
   },
   actions: {
@@ -821,10 +867,19 @@ const posteeWorkspaceSetup = setup({
         const firstRequestId = nextRequests[0]?.id;
         return firstRequestId ? RequestIdBrand(firstRequestId) : null;
       },
+      activeEditor: ({ context, event }) => {
+        if (event.type !== "SELECT_COLLECTION") return context.activeEditor;
+        const firstRequest = context.requestsByCollection[event.collectionId as unknown as string]?.[0];
+        return firstRequest ? { kind: "saved" as const, requestId: RequestIdBrand(firstRequest.id) } : null;
+      },
       runner: () => initialRunner(),
     }),
     selectRequest: assign({
       activeRequestId: ({ event }) => event.type === "SELECT_REQUEST" ? event.requestId : null,
+      activeEditor: ({ context, event }) =>
+        event.type === "SELECT_REQUEST"
+          ? { kind: "saved" as const, requestId: event.requestId }
+          : context.activeEditor,
       runner: () => initialRunner(),
     }),
     selectEnvironment: assign({
@@ -958,6 +1013,7 @@ const posteeWorkspaceSetup = setup({
         },
         activeCollectionId: event.payload.collectionId,
         activeRequestId: event.payload.id,
+        activeEditor: { kind: "saved" as const, requestId: event.payload.id },
       };
     }),
     updateRequestMetadata: assign(({ context, event }) => {
@@ -1012,6 +1068,7 @@ const posteeWorkspaceSetup = setup({
           ) ?? [],
         },
         activeRequestId: event.payload.id,
+        activeEditor: { kind: "saved" as const, requestId: event.payload.id },
       };
     }),
     assignWorkspace: assign(({ context, event }) => {
@@ -1198,7 +1255,7 @@ const posteeWorkspaceSetup = setup({
       runner: ({ context }) => ({
         ...context.runner,
         status: "running" as const,
-        requestId: context.activeRequestId,
+        requestId: activeSavedRequestId(context),
         error: null,
         startedAt: Date.now(),
       }),
@@ -1264,10 +1321,10 @@ const posteeWorkspaceSetup = setup({
         if (event.type !== "xstate.done.actor.runRequest") {
           return context.runner;
         }
-        const { response, prepared } = event.output;
+        const { response, requestId } = event.output;
         return {
           status: "success" as const,
-          requestId: prepared.id,
+          requestId,
           response,
           baselineResponse: context.runner.baselineResponse, // Preserve baseline
           error: null,
@@ -1313,7 +1370,7 @@ const posteeWorkspaceSetup = setup({
         })();
         return {
           status: "error" as const,
-          requestId: context.activeRequestId,
+          requestId: activeSavedRequestId(context),
           response: null,
           baselineResponse: context.runner.baselineResponse, // Preserve baseline
           error: errorText,
@@ -1327,8 +1384,14 @@ const posteeWorkspaceSetup = setup({
           return context.history;
         }
 
-        const requestId = context.activeRequestId;
-        if (!requestId) {
+        const scratch = activeScratchDraft(context);
+        const requestId = activeSavedRequestId(context);
+        const request = scratch ?? (requestId
+          ? Object.values(context.requestsByCollection)
+            .flat()
+            .find((candidate) => candidate.id === requestId)
+          : null);
+        if (!request) {
           return context.history;
         }
 
@@ -1356,17 +1419,10 @@ const posteeWorkspaceSetup = setup({
           }
         })();
 
-        // Find the request details
-        const request = Object.values(context.requestsByCollection)
-          .flat()
-          .find((r) => r.id === requestId);
-
-        if (!request) {
-          return context.history;
-        }
-
         // Get current environment variables
-        const environmentId = context.activeEnvironmentId;
+        const environmentId = scratch?.environmentId
+          ? EnvironmentIdBrand(scratch.environmentId)
+          : context.activeEnvironmentId;
         const variables = environmentId
           ? context.variablesByEnvironment[environmentId as unknown as string] ?? []
           : [];
@@ -1379,7 +1435,7 @@ const posteeWorkspaceSetup = setup({
         // Create history entry for the error
         const historyEntry: PosteeHistoryEntry = {
           id: nanoid(),
-          request_id: request.id,
+          request_id: requestId as unknown as string ?? null,
           request_snapshot: JSON.stringify(
             {
               request,
@@ -1409,7 +1465,7 @@ const posteeWorkspaceSetup = setup({
       },
     }),
     abortInFlight: ({ context }) => {
-      const requestId = context.activeRequestId;
+      const requestId = activeExecutionRequestId(context);
       if (!requestId) {
         return;
       }

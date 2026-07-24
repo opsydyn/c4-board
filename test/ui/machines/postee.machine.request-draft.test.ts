@@ -281,6 +281,8 @@ describe("Postee machine request drafts", () => {
     const actor = createActor(createPosteeWorkspaceMachine({ layer }));
     actor.start();
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+    actor.send({ type: "SELECT_REQUEST", requestId: RequestId("request-1") });
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
 
     actor.send({ type: "RUN_REQUEST" });
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "success" }));
@@ -325,6 +327,8 @@ describe("Postee machine request drafts", () => {
     const { layer, recorder } = makeLayer({ draft: graphqlDraft });
     const actor = createActor(createPosteeWorkspaceMachine({ layer }));
     actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+    actor.send({ type: "SELECT_REQUEST", requestId: RequestId("request-1") });
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
 
     actor.send({ type: "RUN_REQUEST" });
@@ -378,6 +382,8 @@ describe("Postee machine request drafts", () => {
     const { layer, recorder } = makeLayer({ draft: graphqlDraft });
     const actor = createActor(createPosteeWorkspaceMachine({ layer }));
     actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+    actor.send({ type: "SELECT_REQUEST", requestId: RequestId("request-1") });
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
 
     actor.send({ type: "RUN_REQUEST" });
@@ -495,6 +501,8 @@ describe("Postee machine request drafts", () => {
     const actor = createActor(createPosteeWorkspaceMachine({ layer }), { clock });
     actor.start();
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+    actor.send({ type: "SELECT_REQUEST", requestId: RequestId("request-1") });
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
 
     actor.send({ type: "RUN_REQUEST" });
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "success" }));
@@ -516,6 +524,8 @@ describe("Postee machine request drafts", () => {
     const { layer } = makeLayer({ httpFailure: true });
     const actor = createActor(createPosteeWorkspaceMachine({ layer }));
     actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+    actor.send({ type: "SELECT_REQUEST", requestId: RequestId("request-1") });
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
 
     actor.send({ type: "RUN_REQUEST" });

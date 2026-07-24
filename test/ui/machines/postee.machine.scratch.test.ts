@@ -1,7 +1,13 @@
 import { DatabaseService } from "@/core/effects/database.base";
 import type { PosteeScratchDraftRow } from "@/core/effects/database.postee";
+import {
+  makeHttpClientTestLayer,
+  type PreparedRequest,
+  type PreparedResponse,
+} from "@/core/effects/postee/http-client";
+import { Bytes, StatusCode } from "@/core/effects/postee/types";
 import { createPosteeWorkspaceMachine } from "@/ui/machines/postee.machine";
-import { Effect, Layer } from "effect";
+import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { createActor, waitFor } from "xstate";
 
@@ -100,6 +106,46 @@ describe("Postee scratch workspace machine", () => {
     expect(actor.getSnapshot().context.scratchDrafts[target.scratchId]).toMatchObject({
       method: "POST",
       url: "https://api.example.test/users",
+    });
+    actor.stop();
+  });
+
+  it("executes an active scratch and records history without a saved request id", async () => {
+    let capturedRequest: PreparedRequest | undefined;
+    const response: PreparedResponse = {
+      status: StatusCode(200),
+      statusText: "OK",
+      headers: {},
+      bodyText: "{\"healthy\":true}",
+      duration: Duration.millis(5),
+      rawSize: Bytes(16),
+    };
+    const executionLayer = Layer.merge(
+      layer,
+      makeHttpClientTestLayer((prepared) => {
+        capturedRequest = prepared;
+        return Effect.succeed(response);
+      }),
+    );
+    const actor = createActor(createPosteeWorkspaceMachine({ layer: executionLayer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    const target = actor.getSnapshot().context.activeEditor;
+    if (target?.kind !== "scratch") throw new Error("Expected a scratch editor");
+    const draft = actor.getSnapshot().context.scratchDrafts[target.scratchId]!;
+    actor.send({
+      type: "UPDATE_SCRATCH_DRAFT",
+      draft: { ...draft, url: "https://api.example.test/health" },
+    });
+    actor.send({ type: "RUN_REQUEST" });
+
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "success" }));
+
+    expect(capturedRequest?.url).toBe("https://api.example.test/health");
+    expect(actor.getSnapshot().context.history[0]).toMatchObject({
+      request_id: null,
+      response_status: 200,
     });
     actor.stop();
   });
