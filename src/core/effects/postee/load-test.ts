@@ -1,12 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type EventCallback, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Data, Effect } from "effect";
-import {
-  completeContentTypeHeaders,
-  evaluateRequestSemantics,
-  type RequestSemanticsIssue,
-  serializeRequestBody,
-} from "./http-method-policy";
+import { evaluateRequestSemantics, getEffectiveRequestPayload, type RequestSemanticsIssue } from "./http-method-policy";
 import type { PosteeRequestDraft } from "./request-draft";
 import { bodyModeToSumType, type HttpMethod, type RequestBodyMode } from "./types";
 
@@ -123,14 +118,15 @@ export const buildLoadTestRequestPayload = (
     .filter((header) => header.enabled)
     .map(({ key, value }) => ({ key, value }));
   const issue = evaluateRequestSemantics(method, headers, body);
+  const payload = getEffectiveRequestPayload(method, headers, body);
 
   return issue
     ? { _tag: "Invalid", message: issue }
     : {
       _tag: "Valid",
       method,
-      headers: completeContentTypeHeaders(headers, body),
-      body: serializeRequestBody(body),
+      headers: payload.headers,
+      body: payload.body,
     };
 };
 

@@ -314,6 +314,23 @@ describe("PosteeRequestBuilder durable request details", () => {
     expect(onRunRequest).toHaveBeenCalledOnce();
   });
 
+  it("blocks a whitespace-only QUERY JSON draft before Send", () => {
+    const whitespaceQueryDraft = makeQueryDraft({
+      mode: "json",
+      raw: " \n\t ",
+      headers: [],
+    });
+    renderBuilder({
+      selectedRequest: whitespaceQueryDraft.request,
+      selectedRequestDraft: whitespaceQueryDraft,
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "QUERY requires request content.",
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
   it("blocks a raw QUERY draft until Content-Type is enabled", () => {
     const rawDraft = makeQueryDraft({
       mode: "raw",

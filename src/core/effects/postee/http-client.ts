@@ -1,10 +1,11 @@
 import { fetch as TauriFetch } from "@tauri-apps/plugin-http";
 import { Context, Data, Duration, Effect, Layer, Match } from "effect";
 import {
-  completeContentTypeHeaders,
   evaluateRequestSemantics,
-  getHttpMethodPolicy,
-  serializeRequestBody,
+  getEffectiveRequestContent,
+  getEffectiveRequestPayload,
+  hasRequestContent,
+  normalizeRequestContent,
 } from "./http-method-policy";
 import type { EnvironmentVariable, RequestHeader } from "./schema";
 import {
@@ -178,10 +179,12 @@ export const prepareRequest = (
       Match.when({ _tag: "Json" }, ({ content }) =>
         Effect.gen(function*() {
           const resolved = resolveTemplate(content, params.env);
+          const normalizedBody = normalizeRequestContent(
+            RequestBody.Json({ content: resolved }),
+          );
 
-          // Empty JSON is okay
-          if (resolved.trim().length === 0) {
-            return RequestBody.Json({ content: "" });
+          if (!hasRequestContent(normalizedBody)) {
+            return normalizedBody;
           }
 
           // Validate JSON syntax
@@ -198,7 +201,7 @@ export const prepareRequest = (
               }),
           });
 
-          return RequestBody.Json({ content: resolved });
+          return normalizedBody;
         })),
       // Form body - resolve each entry
       Match.when({ _tag: "Form" }, ({ entries }) =>
@@ -229,14 +232,19 @@ export const prepareRequest = (
       );
     }
 
-    const effectiveHeaders = completeContentTypeHeaders(headers, body);
+    const effectivePayload = getEffectiveRequestPayload(
+      params.method,
+      headers,
+      body,
+    );
+    const effectiveBody = getEffectiveRequestContent(params.method, body);
 
     return {
       id: params.id,
       method: params.method,
       url,
-      headers: effectiveHeaders,
-      body,
+      headers: effectivePayload.headers,
+      body: effectiveBody,
       timeout,
     };
   });
@@ -246,16 +254,18 @@ export const prepareRequest = (
 // =============================================================================
 
 export const toRequestInit = (request: PreparedRequest): RequestInit => {
-  const headers = request.headers.reduce(
+  const payload = getEffectiveRequestPayload(
+    request.method,
+    request.headers,
+    request.body,
+  );
+  const headers = payload.headers.reduce(
     (record, header) => ({ ...record, [header.key]: header.value }),
     {} as Record<string, string>,
   );
-  const body = serializeRequestBody(request.body);
-  const methodAllowsBody = getHttpMethodPolicy(request.method).content
-    !== "forbidden";
 
-  return body !== null && body.length > 0 && methodAllowsBody
-    ? { method: request.method, headers, body }
+  return payload.body !== null
+    ? { method: request.method, headers, body: payload.body }
     : { method: request.method, headers };
 };
 

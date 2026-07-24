@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   completeContentTypeHeaders,
   evaluateRequestSemantics,
+  getEffectiveRequestPayload,
   getHttpMethodPolicy,
   serializeRequestBody,
 } from "./http-method-policy";
@@ -54,6 +55,21 @@ describe("HTTP QUERY method policy", () => {
     ]);
   });
 
+  it("replaces blank mixed-case Content-Type headers with one inferred JSON type", () => {
+    expect(
+      completeContentTypeHeaders(
+        [
+          { key: "Accept", value: "application/json" },
+          { key: "cOnTeNt-TyPe", value: "   " },
+        ],
+        RequestBody.Json({ content: "{}" }),
+      ),
+    ).toEqual([
+      { key: "Accept", value: "application/json" },
+      { key: "content-type", value: "application/json; charset=utf-8" },
+    ]);
+  });
+
   it("serializes enabled form entries in stable order", () => {
     expect(
       serializeRequestBody(
@@ -90,4 +106,20 @@ describe("HTTP QUERY method policy", () => {
     ).toEqual([]);
     expect(serializeRequestBody(PreparedBody.Json({ content: "" }))).toBeNull();
   });
+
+  it.each(["GET", "HEAD", "TRACE"] as const)(
+    "omits content from the effective %s payload",
+    (method) => {
+      expect(
+        getEffectiveRequestPayload(
+          method,
+          [],
+          RequestBody.Json({ content: "{\"q\":\"opsy\"}" }),
+        ),
+      ).toEqual({
+        headers: [],
+        body: null,
+      });
+    },
+  );
 });

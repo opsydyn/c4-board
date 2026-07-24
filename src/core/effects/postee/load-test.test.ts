@@ -65,6 +65,16 @@ const rawQueryWithContentTypeDraft: PosteeRequestDraft = {
   }],
 };
 
+const blankContentTypeQueryDraft: PosteeRequestDraft = {
+  ...queryJsonDraft,
+  headers: [{
+    id: "blank-content-type",
+    key: "cOnTeNt-TyPe",
+    value: "  ",
+    enabled: true,
+  }],
+};
+
 const tauriWindow = window as typeof window & {
   __TAURI_INTERNALS__?: unknown;
 };
@@ -108,6 +118,35 @@ describe("buildLoadTestRequestPayload", () => {
       message: "QUERY requires a Content-Type for its request content.",
     });
   });
+
+  it("replaces a blank mixed-case Content-Type with the inferred QUERY JSON type", () => {
+    expect(buildLoadTestRequestPayload("QUERY", blankContentTypeQueryDraft)).toEqual({
+      _tag: "Valid",
+      method: "QUERY",
+      headers: [{
+        key: "content-type",
+        value: "application/json; charset=utf-8",
+      }],
+      body: "{\"q\":\"opsy\"}",
+    });
+  });
+
+  it.each(["GET", "HEAD", "TRACE"] as const)(
+    "omits a JSON body and inferred Content-Type from the %s load-test payload",
+    (method) => {
+      expect(
+        buildLoadTestRequestPayload(method, {
+          ...queryJsonDraft,
+          request: { ...queryJsonDraft.request, method },
+        }),
+      ).toEqual({
+        _tag: "Valid",
+        method,
+        headers: [],
+        body: null,
+      });
+    },
+  );
 
   it("invokes the native runner with a form QUERY payload", async () => {
     tauriWindow.__TAURI_INTERNALS__ = {};

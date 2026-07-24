@@ -45,7 +45,6 @@ export default defineConfig({
       // does not invalidate the optimizer and strand the island hydration request.
       include: [
         "@copilotkit/react-core",
-        "@effect/typeclass",
         "@monaco-editor/loader",
         "@monaco-editor/react",
         "@tauri-apps/api/core",
