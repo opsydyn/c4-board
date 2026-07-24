@@ -102,7 +102,21 @@ export type {
 };
 
 export {
+  closePosteeScratchDraft,
+  deserialisePosteeScratchDraft,
+  discardPosteeScratchDraft,
+  loadPosteeScratchDrafts,
+  newPosteeScratchDraft,
+  type PosteeScratchDraft,
+  promotePosteeScratchDraft,
+  reopenPosteeScratchDraft,
+  savePosteeScratchDraft,
+  serialisePosteeScratchDraft,
+} from "./scratch-draft";
+
+export {
   loadPosteeRequestDraft,
+  persistPosteeRequestDraftInTransaction,
   type PosteeDraftHeader,
   type PosteeRequestDraft,
   preparePosteeDraftBody,

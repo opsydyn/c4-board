@@ -120,41 +120,42 @@ export const savePosteeRequestDraft = (
 ): Effect.Effect<PosteeRequestDraft, DatabaseError, DatabaseService> =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
+    return yield* service.transaction(persistPosteeRequestDraftInTransaction(draft));
+  });
+
+export const persistPosteeRequestDraftInTransaction = (
+  draft: PosteeRequestDraft,
+): Effect.Effect<PosteeRequestDraft, DatabaseError, DatabaseService> =>
+  Effect.gen(function*() {
     const acceptedHeaders = draft.headers.filter(
       (header) => header.key.trim().length > 0,
     );
-    const persistedHeaders = acceptedHeaders
-      .map((header, sortOrder) => ({
-        request_id: draft.request.id,
-        key: header.key,
-        value: header.value,
-        is_enabled: header.enabled ? 1 : 0,
-        sort_order: sortOrder,
-      }));
+    const persistedHeaders = acceptedHeaders.map((header, sortOrder) => ({
+      request_id: draft.request.id,
+      key: header.key,
+      value: header.value,
+      is_enabled: header.enabled ? 1 : 0,
+      sort_order: sortOrder,
+    }));
     const body = { ...draft.body, request_id: draft.request.id };
+    const request = yield* updatePosteeRequest(draft.request);
+    yield* replacePosteeRequestHeaders(draft.request.id, persistedHeaders);
+    yield* upsertPosteeRequestBody(body);
+    if (body.mode === "graphql" && draft.graphql !== null) {
+      yield* upsertPosteeGraphqlRequest({
+        ...draft.graphql,
+        request_id: draft.request.id,
+      });
+    } else {
+      yield* deletePosteeGraphqlRequest(draft.request.id);
+    }
 
-    return yield* service.transaction(
-      Effect.gen(function*() {
-        const request = yield* updatePosteeRequest(draft.request);
-        yield* replacePosteeRequestHeaders(draft.request.id, persistedHeaders);
-        yield* upsertPosteeRequestBody(body);
-        if (body.mode === "graphql" && draft.graphql !== null) {
-          yield* upsertPosteeGraphqlRequest({
-            ...draft.graphql,
-            request_id: draft.request.id,
-          });
-        } else {
-          yield* deletePosteeGraphqlRequest(draft.request.id);
-        }
-
-        return {
-          request,
-          headers: acceptedHeaders,
-          body,
-          graphql: body.mode === "graphql" && draft.graphql !== null
-            ? { ...draft.graphql, request_id: draft.request.id }
-            : null,
-        };
-      }),
-    );
+    return {
+      request,
+      headers: acceptedHeaders,
+      body,
+      graphql: body.mode === "graphql" && draft.graphql !== null
+        ? { ...draft.graphql, request_id: draft.request.id }
+        : null,
+    };
   });

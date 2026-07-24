@@ -1,0 +1,155 @@
+import { Effect } from "effect";
+import {
+  createPosteeRequest,
+  deletePosteeScratchDraft,
+  listPosteeScratchDrafts,
+  type PosteeGraphqlRequest,
+  type PosteeRequestBody,
+  type PosteeScratchDraftRow,
+  setPosteeScratchDraftOpen,
+  upsertPosteeScratchDraft,
+} from "../database";
+import { type DatabaseError, DatabaseService } from "../database.base";
+import {
+  persistPosteeRequestDraftInTransaction,
+  type PosteeDraftHeader,
+  type PosteeRequestDraft,
+} from "./request-draft";
+import type { HttpMethod } from "./types";
+
+export interface PosteeScratchDraft {
+  readonly id: string;
+  readonly name: string;
+  readonly method: HttpMethod;
+  readonly url: string;
+  readonly description: string | null;
+  readonly headers: ReadonlyArray<PosteeDraftHeader>;
+  readonly body: Omit<PosteeRequestBody, "request_id">;
+  readonly graphql: Omit<PosteeGraphqlRequest, "request_id"> | null;
+  readonly environmentId: string | null;
+  readonly tabOrder: number;
+  readonly isOpen: boolean;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
+const parseHeaders = (headersJson: string): ReadonlyArray<PosteeDraftHeader> => {
+  try {
+    const value: unknown = JSON.parse(headersJson);
+    return Array.isArray(value) ? value as ReadonlyArray<PosteeDraftHeader> : [];
+  } catch {
+    return [];
+  }
+};
+
+export const serialisePosteeScratchDraft = (draft: PosteeScratchDraft): PosteeScratchDraftRow => ({
+  id: draft.id,
+  name: draft.name,
+  method: draft.method,
+  url: draft.url,
+  description: draft.description,
+  headers_json: JSON.stringify(draft.headers),
+  body_mode: draft.body.mode,
+  body_raw: draft.body.raw,
+  form_values: draft.body.form_values,
+  graphql_document: draft.graphql?.document ?? null,
+  graphql_variables_json: draft.graphql?.variables_json ?? null,
+  graphql_operation_name: draft.graphql?.operation_name ?? null,
+  environment_id: draft.environmentId,
+  tab_order: draft.tabOrder,
+  is_open: draft.isOpen ? 1 : 0,
+  created_at: draft.createdAt,
+  updated_at: draft.updatedAt,
+});
+
+export const deserialisePosteeScratchDraft = (row: PosteeScratchDraftRow): PosteeScratchDraft => ({
+  id: row.id,
+  name: row.name,
+  method: row.method as HttpMethod,
+  url: row.url,
+  description: row.description,
+  headers: parseHeaders(row.headers_json),
+  body: {
+    mode: row.body_mode,
+    raw: row.body_raw,
+    form_values: row.form_values,
+  },
+  graphql: row.graphql_document === null
+    ? null
+    : {
+      document: row.graphql_document,
+      variables_json: row.graphql_variables_json ?? "{}",
+      operation_name: row.graphql_operation_name,
+    },
+  environmentId: row.environment_id,
+  tabOrder: row.tab_order,
+  isOpen: row.is_open === 1,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const newPosteeScratchDraft = (input: {
+  readonly id: string;
+  readonly tabOrder: number;
+  readonly now: number;
+}): PosteeScratchDraft => ({
+  id: input.id,
+  name: "Untitled request",
+  method: "GET",
+  url: "",
+  description: null,
+  headers: [],
+  body: { mode: "json", raw: "{}", form_values: null },
+  graphql: null,
+  environmentId: null,
+  tabOrder: input.tabOrder,
+  isOpen: true,
+  createdAt: input.now,
+  updatedAt: input.now,
+});
+
+export const loadPosteeScratchDrafts = (openOnly?: boolean) =>
+  Effect.map(listPosteeScratchDrafts(openOnly), (rows) => rows.map(deserialisePosteeScratchDraft));
+
+export const savePosteeScratchDraft = (draft: PosteeScratchDraft) =>
+  Effect.map(upsertPosteeScratchDraft(serialisePosteeScratchDraft(draft)), deserialisePosteeScratchDraft);
+
+export const closePosteeScratchDraft = (id: string) => setPosteeScratchDraftOpen(id, false);
+
+export const reopenPosteeScratchDraft = (id: string) => setPosteeScratchDraftOpen(id, true);
+
+export const discardPosteeScratchDraft = (id: string) => deletePosteeScratchDraft(id);
+
+export const promotePosteeScratchDraft = (input: {
+  readonly scratch: PosteeScratchDraft;
+  readonly collectionId: string;
+  readonly requestId: string;
+}): Effect.Effect<PosteeRequestDraft, DatabaseError, DatabaseService> =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    return yield* service.transaction(
+      Effect.gen(function*() {
+        const request = yield* createPosteeRequest({
+          id: input.requestId,
+          collection_id: input.collectionId,
+          name: input.scratch.name,
+          method: input.scratch.method,
+          url: input.scratch.url,
+          description: input.scratch.description,
+          favorite: 0,
+          sort_order: 0,
+        });
+        const draft: PosteeRequestDraft = {
+          request,
+          headers: input.scratch.headers,
+          body: { ...input.scratch.body, request_id: request.id },
+          graphql: input.scratch.graphql === null
+            ? null
+            : { ...input.scratch.graphql, request_id: request.id },
+        };
+        const saved = yield* persistPosteeRequestDraftInTransaction(draft);
+        yield* deletePosteeScratchDraft(input.scratch.id);
+        return saved;
+      }),
+    );
+  });
