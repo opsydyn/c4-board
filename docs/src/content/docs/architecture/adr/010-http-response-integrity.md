@@ -308,7 +308,7 @@ panel and GraphQL introspection so decoding policy lives in exactly one place.
 | Transport vs decode distinguishable by type | No | Yes | **Phase 2 shipped** |
 | Repeated `Set-Cookie` preserved | No | Yes | **Phase 2 shipped** |
 | `rawSize` accurate for binary | No | Yes | **Phase 2 shipped** |
-| Decode failure visible in the UI | No | Yes | Proposed (Phase 3) |
+| Decode failure visible in the UI | No | Yes | **Phase 3 shipped** |
 
 ## References
 
@@ -366,3 +366,23 @@ this ADR addresses: one message for two unrelated events, with the distinguishin
      yield `None` rather than U+FFFD. This is what makes "not text" reportable at
      all; `response.text()` would have silently substituted replacement characters
      and the distinction would have been unobservable.
+- 2026-07-24: **Phase 3 implemented.** The response panel replaces the body editor
+  with an explanation when the body did not decode, so an unreadable body is no
+  longer indistinguishable from an empty one; status, headers, and size stay
+  visible alongside it. GraphQL introspection reports an undecodable body as such
+  instead of "not valid JSON", which would send the reader hunting a syntax error
+  that does not exist. History stores every header line, so a repeated
+  `Set-Cookie` survives into the saved response.
+
+  Two scope decisions worth recording:
+
+  1. **History does not record the decode reason.** The obvious home is
+     `error_message`, but `deriveRequestStatuses` treats any non-null
+     `error_message` as `RequestStatus.Error`, which would relabel a successful
+     `200` as failed. The body is stored as `NULL` — accurate, since no text
+     arrived — and the reason is deliberately withheld until there is a field that
+     does not corrupt status derivation.
+  2. **The legacy `PosteeWorkspace.original.tsx` was left alone.** It is dead code,
+     imported nowhere, so migrating it would add churn and imply it is live. It
+     compiles against the Phase 1/2 shims and should be deleted rather than
+     migrated.

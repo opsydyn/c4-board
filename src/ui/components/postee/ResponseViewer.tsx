@@ -31,6 +31,7 @@ import {
   baselineButton,
   baselineButtonActive,
   clearButton,
+  decodeFailureNotice,
   responseViewerContainer,
   responseViewerContent,
   responseViewerHeader,
@@ -39,6 +40,14 @@ import {
 
 interface ResponseViewerProps {
   body: string;
+  /**
+   * Why the body is not available as text, or `null`/absent when it is.
+   *
+   * When set, the body editor is replaced by an explanation: an empty editor is
+   * indistinguishable from a genuinely empty response, and presenting one as the
+   * other is exactly the silent misreporting ADR-010 removes.
+   */
+  bodyDecodeError?: string | null;
   headers?: Record<string, string> | string;
   status?: number;
   statusText?: string;
@@ -55,6 +64,7 @@ interface ResponseViewerProps {
 
 export function ResponseViewer({
   body,
+  bodyDecodeError = null,
   headers,
   status,
   statusText,
@@ -546,7 +556,18 @@ export function ResponseViewer({
           )}
         </div>
 
-        {showBody && (
+        {showBody && bodyDecodeError !== null && (
+          <div className={decodeFailureNotice} role="status">
+            <strong>Response body could not be decoded.</strong>
+            <p>{bodyDecodeError}</p>
+            <p>
+              The status line and headers above are what the server actually sent; only the body is
+              unreadable.
+            </p>
+          </div>
+        )}
+
+        {showBody && bodyDecodeError === null && (
           <>
             {/* Search Box - only show for JSON and not in diff mode */}
             {isJson && !showDiff && (

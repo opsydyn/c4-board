@@ -127,3 +127,25 @@ export const clearButton = style({
     },
   },
 });
+
+/**
+ * Shown in place of the body editor when the response body could not be decoded.
+ * Deliberately not styled as an error: the request itself succeeded — only the
+ * body is unreadable (ADR-010).
+ */
+export const decodeFailureNotice = style({
+  "@layer": {
+    [componentsLayer]: {
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing["2"],
+      clipPath: theme.clipPath.sm,
+      border: `1px dashed ${theme.color.status.caution}`,
+      backgroundColor: theme.color.background.surface,
+      padding: theme.spacing["4"],
+      color: theme.color.foreground.secondary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.sm,
+    },
+  },
+});

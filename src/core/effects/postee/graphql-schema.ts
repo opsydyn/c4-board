@@ -180,6 +180,14 @@ export const refreshGraphqlSchema = (
       return yield* Effect.fail(schemaError("Transport", "Unable to refresh the GraphQL schema."));
     }
 
+    // A body that never decoded is not "invalid JSON" — saying so would send the
+    // reader looking for a syntax error that isn't there (ADR-010).
+    if (response.bodyDecodeError !== null) {
+      return yield* Effect.fail(
+        schemaError("Response", `The GraphQL schema response body could not be decoded: ${response.bodyDecodeError}`),
+      );
+    }
+
     const introspection = yield* parseIntrospection(response.bodyText);
     const snapshot: PosteeGraphqlSchemaSnapshot = {
       id: globalThis.crypto.randomUUID(),

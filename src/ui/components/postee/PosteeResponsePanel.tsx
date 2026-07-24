@@ -237,6 +237,7 @@ export function PosteeResponsePanel({
           {lastResponse && !isRunning && (
             <ResponseViewer
               body={lastResponse.bodyText}
+              bodyDecodeError={lastResponse.bodyDecodeError}
               headers={lastResponse.headers}
               status={lastResponse.status}
               statusText={lastResponse.statusText}

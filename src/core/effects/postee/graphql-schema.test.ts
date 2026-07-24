@@ -186,6 +186,25 @@ describe("GraphQL schema snapshots", () => {
     expect(Exit.isFailure(exit) ? JSON.stringify(exit.cause) : "").not.toContain("secret-value");
   });
 
+  it("reports an undecodable body as such rather than as invalid JSON", async () => {
+    const { layer } = makeDatabaseLayer();
+    const undecodable: PreparedResponse = {
+      ...response(""),
+      bodyDecodeError: "Response body is not valid utf-8 text",
+    };
+
+    const exit = await Effect.runPromiseExit(
+      refreshGraphqlSchema(context).pipe(
+        Effect.provide(Layer.merge(layer, makeHttpClientTestLayer(() => Effect.succeed(undecodable)))),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    const cause = Exit.isFailure(exit) ? JSON.stringify(exit.cause) : "";
+    expect(cause).toContain("could not be decoded");
+    expect(cause).not.toContain("not valid JSON");
+  });
+
   it("does not send or persist when introspection is disabled", async () => {
     const { layer, recorder } = makeDatabaseLayer();
     let sends = 0;

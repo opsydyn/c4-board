@@ -651,7 +651,8 @@ const posteeWorkspaceSetup = setup({
           response_time_ms: durationToMillis(response.duration),
           response_size_bytes: response.rawSize,
           response_body: response.bodyText, // ✅ Save response body as JSON
-          response_headers: JSON.stringify(response.headers), // ✅ Save headers as JSON
+          // Every field line, repeats included — a Record keeps only the last Set-Cookie.
+          response_headers: JSON.stringify(response.headerEntries),
           error_message: null,
           executed_at: Date.now(),
         };
