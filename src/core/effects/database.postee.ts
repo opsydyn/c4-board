@@ -1,5 +1,22 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { DatabaseService } from "./database.base";
+
+const parseJson = Option.liftThrowable((text: string) => JSON.parse(text) as unknown);
+
+/**
+ * Prepares a value for a column bound through `json(?)`.
+ *
+ * SQLite raises "malformed JSON" for anything `json()` cannot parse, which aborts
+ * the whole statement. Response bodies are not always JSON — HTML error pages,
+ * plain text, and empty bodies are all normal — so a body is passed through when
+ * it already parses, encoded as a JSON string when it does not, and treated as
+ * absent when blank. That keeps the payload readable without letting an
+ * unremarkable response fail the write.
+ */
+const toJsonColumnValue = (text: string | null): string | null => {
+  if (text === null || text.trim() === "") return null;
+  return Option.isSome(parseJson(text)) ? text : JSON.stringify(text);
+};
 
 export interface PosteeCollection {
   id: string;
@@ -544,8 +561,8 @@ export const insertPosteeHistory = (entry: PosteeHistoryEntry) =>
         entry.response_status ?? null,
         entry.response_time_ms ?? null,
         entry.response_size_bytes ?? null,
-        entry.response_body ?? null,
-        entry.response_headers ?? null,
+        toJsonColumnValue(entry.response_body ?? null),
+        toJsonColumnValue(entry.response_headers ?? null),
         entry.error_message ?? null,
         entry.executed_at,
       ],

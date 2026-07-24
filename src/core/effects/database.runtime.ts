@@ -181,7 +181,9 @@ const wrapExecuteError = (
 ): Effect.Effect<void, DatabaseError> =>
   effect.pipe(
     Effect.mapError(
-      (error) => new DatabaseError({ message: "Execute failed", cause: error }),
+      // Carry the underlying SQLite text into the message: `cause` is not shown
+      // in the UI, so a bare "Execute failed" hides which constraint tripped.
+      (error) => new DatabaseError({ message: `Execute failed: ${error.message}`, cause: error }),
     ),
   );
 
@@ -190,7 +192,7 @@ const wrapQueryError = <T>(
 ): Effect.Effect<T[], DatabaseError> =>
   effect.pipe(
     Effect.mapError(
-      (error) => new DatabaseError({ message: "Query failed", cause: error }),
+      (error) => new DatabaseError({ message: `Query failed: ${error.message}`, cause: error }),
     ),
   );
 
