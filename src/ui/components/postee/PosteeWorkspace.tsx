@@ -14,6 +14,7 @@ import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMachine } from "@xstate/react";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { resolveActiveRequestDraft } from "@/core/effects/postee/active-request-draft";
 import { ToggleButton } from "react-aria-components";
 import {
   CollectionId as CollectionIdBrand,
@@ -94,9 +95,13 @@ export function PosteeWorkspace() {
   const activeSavedRequest = activeEditor?.kind === "saved" || !hasActiveEditorState
     ? selectedRequest
     : null;
-  const selectedRequestDraft = activeSavedRequest
-    ? requestDrafts[activeSavedRequest.id] ?? null
-    : null;
+  // Falls back to the active scratch, so anything gated on a draft — the load test
+  // panel in particular — works without a saved request.
+  const selectedRequestDraft = resolveActiveRequestDraft(
+    activeSavedRequest,
+    requestDrafts,
+    activeScratchDraft,
+  );
 
   const currentEnvironmentId = activeEnvironmentId
     ? (activeEnvironmentId as unknown as string)
@@ -497,12 +502,16 @@ export function PosteeWorkspace() {
                 Response
               </ToggleButton>
             </Tooltip>
-            <Tooltip content={selectedRequest ? "View load testing panel" : "Select a request first"}>
+            <Tooltip
+              content={selectedRequestDraft ? "View load testing panel" : "Select or start a request first"}
+            >
               <ToggleButton
                 isSelected={activeResponseTab === "LoadTest"}
                 onChange={handleLoadTestToggle}
                 className={layoutStyles.collapseToggle}
-                isDisabled={!selectedRequest}
+                // A scratch is a request too — gating on a saved one left this
+                // permanently disabled in a workspace with no collections.
+                isDisabled={selectedRequestDraft === null}
                 aria-label="Open load test panel"
               >
                 <CaretRightIcon size={16} weight="bold" />

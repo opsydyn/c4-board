@@ -30,6 +30,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 import { type Header, HeadersEditor } from "./HeadersEditor";
+import { scratchAsRequest, scratchAsRequestDraft } from "@/core/effects/postee/scratch-draft";
 import { MonacoGraphqlEditor } from "./MonacoGraphqlEditor";
 import { MonacoJsonEditor } from "./MonacoJsonEditor";
 import { Select } from "./Select";
@@ -195,26 +196,6 @@ export const deriveRequestEditorPresentation = ({
 
   return { ...local, synchronized };
 };
-
-const scratchAsRequest = (scratch: PosteeScratchDraft): PosteeRequest => ({
-  id: scratch.id,
-  collection_id: "",
-  name: scratch.name,
-  method: scratch.method,
-  url: scratch.url,
-  description: scratch.description,
-  favorite: 0,
-  sort_order: scratch.tabOrder,
-  created_at: scratch.createdAt,
-  updated_at: scratch.updatedAt,
-});
-
-const scratchAsRequestDraft = (scratch: PosteeScratchDraft): PosteeRequestDraft => ({
-  request: scratchAsRequest(scratch),
-  headers: scratch.headers,
-  body: { ...scratch.body, request_id: scratch.id },
-  graphql: scratch.graphql === null ? null : { ...scratch.graphql, request_id: scratch.id },
-});
 
 export function PosteeRequestBuilder({
   activeCollectionId,

@@ -4,6 +4,7 @@ import {
   deletePosteeScratchDraft,
   listPosteeScratchDrafts,
   type PosteeGraphqlRequest,
+  type PosteeRequest,
   type PosteeRequestBody,
   type PosteeScratchDraftRow,
   setPosteeScratchDraftOpen,
@@ -176,3 +177,31 @@ export const promotePosteeScratchDraft = (input: {
       }),
     );
   });
+
+/**
+ * Presents a scratch as a saved request.
+ *
+ * A scratch has no collection and no persisted request row, so `collection_id` is
+ * empty and its own id stands in — enough for anything that reads a request
+ * without needing it to exist in `postee_requests`.
+ */
+export const scratchAsRequest = (scratch: PosteeScratchDraft): PosteeRequest => ({
+  id: scratch.id,
+  collection_id: "",
+  name: scratch.name,
+  method: scratch.method,
+  url: scratch.url,
+  description: scratch.description,
+  favorite: 0,
+  sort_order: scratch.tabOrder,
+  created_at: scratch.createdAt,
+  updated_at: scratch.updatedAt,
+});
+
+/** Presents a scratch as a request draft, so both kinds of editor share one shape. */
+export const scratchAsRequestDraft = (scratch: PosteeScratchDraft): PosteeRequestDraft => ({
+  request: scratchAsRequest(scratch),
+  headers: scratch.headers,
+  body: { ...scratch.body, request_id: scratch.id },
+  graphql: scratch.graphql === null ? null : { ...scratch.graphql, request_id: scratch.id },
+});
