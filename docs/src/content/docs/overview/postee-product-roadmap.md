@@ -238,6 +238,18 @@ professional REST client.
 - [ ] Add a local cookie jar with clear domain and expiry visibility.
 - [ ] Make redirect, certificate, proxy, and timeout policy explicit.
 
+### 2.4 HTTP QUERY ([RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html))
+
+- [x] Author, persist, execute, replay, and inspect HTTP QUERY requests.
+- [x] Require query content and an effective Content-Type before execution.
+- [x] Preserve QUERY method, headers, and body in native load testing.
+- [x] Classify QUERY as safe and idempotent without silently retrying it.
+- [ ] Parse `Accept-Query` structured fields and expose supported media types.
+- [ ] Define QUERY redirect handling for 301, 302, 303, 307, and 308.
+- [ ] Evaluate content-aware QUERY cache keys and equivalent-resource links.
+- [ ] Add a governed retry policy that uses safe/idempotent metadata.
+- [ ] Add browser CORS and intermediary compatibility diagnostics.
+
 ### Acceptance Gate
 
 1. A saved request round-trips every supported authoring field.
@@ -246,6 +258,8 @@ professional REST client.
 4. Secret values are redacted from logs, history, exports, and diagnostics.
 5. Request previews show the effective method, URL, headers, and body before
    execution.
+6. RFC-valid QUERY requests preserve content and media type across authoring,
+   execution, history, replay, and load testing.
 
 ## Workstream 3: Collections, Navigation, and Portability
 
@@ -554,4 +568,3 @@ Postee reaches its first credible-alternative milestone when:
    generates comparable evidence.
 7. Existing Postee data migrates without silent loss.
 8. C4 and OPY integrations are useful differentiators but remain optional.
-
