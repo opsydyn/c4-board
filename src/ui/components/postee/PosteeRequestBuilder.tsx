@@ -10,7 +10,12 @@
  */
 
 import type { PosteeEnvironment, PosteeEnvironmentVariable, PosteeRequest } from "@/core/effects/database.postee";
-import { evaluateRequestSemantics, type PosteeRequestDraft, prepareGraphqlDraft } from "@/core/effects/postee";
+import {
+  evaluateRequestSemantics,
+  type PosteeRequestDraft,
+  type PosteeScratchDraft,
+  prepareGraphqlDraft,
+} from "@/core/effects/postee";
 import { bodyModeToSumType, HTTP_METHODS, type HttpMethod, type RequestBodyMode } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
 import type { GraphqlSchemaState, RequestDraftSaveState } from "@/ui/machines/postee.machine";
@@ -74,6 +79,7 @@ export interface PosteeRequestBuilderProps {
   // Request state
   selectedRequest: PosteeRequest | null;
   selectedRequestDraft: PosteeRequestDraft | null;
+  activeScratchDraft: PosteeScratchDraft | null;
   requestDraftSave: RequestDraftSaveState;
   graphqlSchemaState: GraphqlSchemaState;
 
@@ -94,6 +100,8 @@ export interface PosteeRequestBuilderProps {
   // Callbacks
   onCreateRequest: (method: HttpMethod, name: string, url: string) => void;
   onSaveRequestDraft: (draft: PosteeRequestDraft) => void;
+  onScratchDraftChange: (draft: PosteeScratchDraft) => void;
+  onSaveScratch: () => void;
   onRunRequest: () => void;
   onCancelRequest: () => void;
   onCreateEnvironment: (name: string) => void;
@@ -188,10 +196,31 @@ export const deriveRequestEditorPresentation = ({
   return { ...local, synchronized };
 };
 
+const scratchAsRequest = (scratch: PosteeScratchDraft): PosteeRequest => ({
+  id: scratch.id,
+  collection_id: "",
+  name: scratch.name,
+  method: scratch.method,
+  url: scratch.url,
+  description: scratch.description,
+  favorite: 0,
+  sort_order: scratch.tabOrder,
+  created_at: scratch.createdAt,
+  updated_at: scratch.updatedAt,
+});
+
+const scratchAsRequestDraft = (scratch: PosteeScratchDraft): PosteeRequestDraft => ({
+  request: scratchAsRequest(scratch),
+  headers: scratch.headers,
+  body: { ...scratch.body, request_id: scratch.id },
+  graphql: scratch.graphql === null ? null : { ...scratch.graphql, request_id: scratch.id },
+});
+
 export function PosteeRequestBuilder({
   activeCollectionId,
-  selectedRequest,
-  selectedRequestDraft,
+  selectedRequest: selectedSavedRequest,
+  selectedRequestDraft: selectedSavedRequestDraft,
+  activeScratchDraft = null,
   requestDraftSave,
   graphqlSchemaState,
   isInitialising,
@@ -204,6 +233,8 @@ export function PosteeRequestBuilder({
   currentVariables,
   onCreateRequest,
   onSaveRequestDraft,
+  onScratchDraftChange = () => undefined,
+  onSaveScratch = () => undefined,
   onRunRequest,
   onCancelRequest,
   onCreateEnvironment,
@@ -212,6 +243,15 @@ export function PosteeRequestBuilder({
   onRefreshGraphqlSchema,
 }: PosteeRequestBuilderProps) {
   const methodOptions: ReadonlyArray<HttpMethod> = HTTP_METHODS;
+  const isScratch = activeScratchDraft !== null;
+  const selectedRequest = useMemo(
+    () => activeScratchDraft ? scratchAsRequest(activeScratchDraft) : selectedSavedRequest,
+    [activeScratchDraft, selectedSavedRequest],
+  );
+  const selectedRequestDraft = useMemo(
+    () => activeScratchDraft ? scratchAsRequestDraft(activeScratchDraft) : selectedSavedRequestDraft,
+    [activeScratchDraft, selectedSavedRequestDraft],
+  );
 
   // Unified request bar state (handles both create and edit modes)
   const [requestUrl, setRequestUrl] = useState("");
@@ -230,6 +270,52 @@ export function PosteeRequestBuilder({
   const [hydratedRequestId, setHydratedRequestId] = useState<string | null>(null);
   const [pendingSave, setPendingSave] = useState<PendingRequestDraftSave | null>(null);
   const editVersionsRef = useRef<Record<string, number>>({});
+
+  const publishScratchDraft = useCallback((next: {
+    readonly url?: string;
+    readonly method?: HttpMethod;
+    readonly headers?: ReadonlyArray<Header>;
+    readonly body?: string;
+    readonly bodyMode?: RequestBodyMode;
+    readonly graphqlDocument?: string;
+    readonly graphqlVariables?: string;
+    readonly graphqlOperationName?: string | null;
+  }) => {
+    if (activeScratchDraft === null) return;
+    const bodyMode = next.bodyMode ?? requestBodyMode as RequestBodyMode;
+    const nextGraphqlDocument = next.graphqlDocument ?? graphqlDocument;
+    const nextGraphqlVariables = next.graphqlVariables ?? graphqlVariables;
+    const nextGraphqlOperationName = next.graphqlOperationName ?? graphqlOperationName;
+    onScratchDraftChange({
+      ...activeScratchDraft,
+      method: next.method ?? requestMethod,
+      url: next.url ?? requestUrl,
+      headers: next.headers ?? requestHeaders,
+      body: {
+        ...activeScratchDraft.body,
+        mode: bodyMode,
+        raw: bodyMode === "graphql" ? null : next.body ?? requestBody,
+      },
+      graphql: bodyMode === "graphql"
+        ? {
+          document: nextGraphqlDocument,
+          variables_json: nextGraphqlVariables,
+          operation_name: nextGraphqlOperationName,
+        }
+        : null,
+    });
+  }, [
+    activeScratchDraft,
+    graphqlDocument,
+    graphqlOperationName,
+    graphqlVariables,
+    onScratchDraftChange,
+    requestBody,
+    requestBodyMode,
+    requestHeaders,
+    requestMethod,
+    requestUrl,
+  ]);
 
   // Environment creation state
   const [newEnvironmentName, setNewEnvironmentName] = useState("");
@@ -368,57 +454,75 @@ export function PosteeRequestBuilder({
     if (isRunning || !isEditorSynchronized) return;
     setRequestUrl(newUrl);
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+    publishScratchDraft({ url: newUrl });
+  }, [isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const handleMethodChange = useCallback((newMethod: HttpMethod) => {
     if (isRunning || !isEditorSynchronized) return;
     setRequestMethod(newMethod);
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+    publishScratchDraft({ method: newMethod });
+  }, [isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const handleHeadersChange = useCallback((headers: Header[]) => {
     if (isRunning || !isEditorSynchronized) return;
     setRequestHeaders(headers);
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+    publishScratchDraft({ headers });
+  }, [isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const handleBodyChange = useCallback((body: string) => {
     if (isRunning || !isEditorSynchronized) return;
     setRequestBody(body);
     setBodyWasEdited(true);
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+    publishScratchDraft({ body });
+  }, [isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const handleBodyModeChange = useCallback((mode: RequestBodyMode) => {
     if (isRunning || !isEditorSynchronized) return;
     setRequestBodyMode(mode);
     setBodyWasEdited(false);
     if (mode === "graphql") {
-      setGraphqlDocument((document) => document || "query { }");
-      setGraphqlVariables((variables) => variables || "{}");
+      const nextDocument = graphqlDocument || "query { }";
+      const nextVariables = graphqlVariables || "{}";
+      setGraphqlDocument(nextDocument);
+      setGraphqlVariables(nextVariables);
       setGraphqlOperationName(null);
+      publishScratchDraft({
+        bodyMode: mode,
+        graphqlDocument: nextDocument,
+        graphqlVariables: nextVariables,
+        graphqlOperationName: null,
+      });
+    } else {
+      publishScratchDraft({ bodyMode: mode });
     }
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+  }, [graphqlDocument, graphqlVariables, isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const handleGraphqlDocumentChange = useCallback((document: string) => {
     if (isRunning || !isEditorSynchronized) return;
     setGraphqlDocument(document);
     setGraphqlOperationName(null);
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+    publishScratchDraft({ graphqlDocument: document, graphqlOperationName: null });
+  }, [isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const handleGraphqlVariablesChange = useCallback((variables: string) => {
     if (isRunning || !isEditorSynchronized) return;
     setGraphqlVariables(variables);
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+    publishScratchDraft({ graphqlVariables: variables });
+  }, [isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const handleGraphqlOperationChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
     if (isRunning || !isEditorSynchronized) return;
-    setGraphqlOperationName(event.target.value || null);
+    const operationName = event.target.value || null;
+    setGraphqlOperationName(operationName);
     markDirty();
-  }, [isEditorSynchronized, isRunning, markDirty]);
+    publishScratchDraft({ graphqlOperationName: operationName });
+  }, [isEditorSynchronized, isRunning, markDirty, publishScratchDraft]);
 
   const activeSaveRequestId = requestDraftSave.status === "saving"
     ? requestDraftSave.requestId
@@ -474,7 +578,7 @@ export function PosteeRequestBuilder({
     );
   const canSendRequest = canRunRequest
     && requestSemanticsIssue === null
-    && !hasUnsavedChanges
+    && (isScratch || !hasUnsavedChanges)
     && isEditorSynchronized
     && !isAnySaveActive
     && !isRunning;
@@ -482,6 +586,11 @@ export function PosteeRequestBuilder({
   // Save action (create new or update existing)
   const handleSave = useCallback(() => {
     const trimmedUrl = requestUrl.trim();
+    if (isScratch) {
+      if (!trimmedUrl || isRunning) return;
+      onSaveScratch();
+      return;
+    }
     if (
       !trimmedUrl
       || !activeCollectionId
@@ -534,8 +643,10 @@ export function PosteeRequestBuilder({
     graphqlVariables,
     isAnySaveActive,
     isEditorSynchronized,
+    isScratch,
     isRunning,
     onCreateRequest,
+    onSaveScratch,
     onSaveRequestDraft,
     requestBody,
     requestBodyMode,
@@ -582,7 +693,7 @@ export function PosteeRequestBuilder({
         if (
           hasUnsavedChanges
           && requestUrl.trim()
-          && activeCollectionId
+          && (isScratch || activeCollectionId)
           && !isAnySaveActive
           && isEditorSynchronized
           && !isRunning
@@ -602,6 +713,7 @@ export function PosteeRequestBuilder({
     hasUnsavedChanges,
     isAnySaveActive,
     isEditorSynchronized,
+    isScratch,
     isRunning,
     onRunRequest,
     requestUrl,
@@ -616,6 +728,8 @@ export function PosteeRequestBuilder({
     ? "Request is running. Save is temporarily unavailable."
     : !isEditorSynchronized
     ? "Request details are synchronising. Save is temporarily unavailable."
+    : isScratch
+    ? "Choose a collection to save this request (Cmd+S)"
     : selectedRequest
     ? "Save changes (Cmd+S)"
     : "Save as new request (Cmd+S)";
@@ -629,7 +743,7 @@ export function PosteeRequestBuilder({
     ? requestSemanticsIssue
     : canRunRequest
     ? "Send request (Cmd+Enter)"
-    : "Save request first";
+    : "Select a request first";
   const canRefreshGraphqlSchema = isGraphqlBody
     && !visibleHasUnsavedChanges
     && isEditorSynchronized
@@ -656,20 +770,20 @@ export function PosteeRequestBuilder({
             value={editorPresentation.requestMethod as HttpMethod}
             options={methodOptions}
             onChange={handleMethodChange}
-            disabled={!activeCollectionId || isInitialising || !isEditorSynchronized || isRunning}
+            disabled={(!activeCollectionId && !isScratch) || isInitialising || !isEditorSynchronized || isRunning}
           />
           <div className={styles.urlInputWrapper}>
             <input
               className={styles.requestUrlInput}
               type="text"
-              placeholder={!activeCollectionId
+              placeholder={!activeCollectionId && !isScratch
                 ? "Select a collection first..."
                 : selectedRequest
                 ? "Enter request URL"
                 : "Enter URL and Save to create new request"}
               value={editorPresentation.requestUrl}
               onChange={(e) => handleUrlChange(e.target.value)}
-              disabled={!activeCollectionId || isInitialising || !isEditorSynchronized || isRunning}
+              disabled={(!activeCollectionId && !isScratch) || isInitialising || !isEditorSynchronized || isRunning}
               aria-label="Request URL"
               data-validation={urlValidation._tag.toLowerCase()}
             />
@@ -678,25 +792,25 @@ export function PosteeRequestBuilder({
             )}
             {urlValidation._tag === "Invalid" && <Warning size={16} weight="bold" className={styles.urlInvalidIcon} />}
           </div>
-          {visibleHasUnsavedChanges && (
+          {(visibleHasUnsavedChanges || isScratch) && (
             <Tooltip content={saveCommandDescription}>
               <button
                 type="button"
                 className={styles.saveButton}
                 onClick={handleSave}
                 disabled={!editorPresentation.requestUrl.trim()
-                  || !activeCollectionId
-                  || isAnySaveActive
+                  || (!isScratch && !activeCollectionId)
+                  || (!isScratch && isAnySaveActive)
                   || !isEditorSynchronized
                   || isRunning
-                  || Boolean(selectedRequest && !selectedRequestDraft)}
+                  || Boolean(!isScratch && selectedRequest && !selectedRequestDraft)}
                 title={saveCommandDescription}
               >
                 {isMatchingSave ? "Saving..." : "Save"}
               </button>
             </Tooltip>
           )}
-          {selectedRequest && (!visibleHasUnsavedChanges || isRunning) && (
+          {selectedRequest && (isScratch || !visibleHasUnsavedChanges || isRunning) && (
             <div className={styles.actionRow}>
               {isRunning
                 ? (
@@ -775,7 +889,7 @@ export function PosteeRequestBuilder({
           </div>
         )}
 
-        {!activeCollectionId && (
+        {!activeCollectionId && !isScratch && (
           <div className={styles.emptyState}>
             <strong>Select a collection</strong>
             <span>
@@ -784,7 +898,7 @@ export function PosteeRequestBuilder({
           </div>
         )}
 
-        {isInitialising && activeCollectionId && (
+        {isInitialising && (activeCollectionId || isScratch) && (
           <div className={styles.emptyState}>
             <strong>Loading workspace…</strong>
             <span>Fetching collections, requests, and environments.</span>
@@ -792,7 +906,7 @@ export function PosteeRequestBuilder({
         )}
 
         {!isInitialising
-          && activeCollectionId
+          && (activeCollectionId || isScratch)
           && !selectedRequest
           && editorPresentation.requestUrl.trim() === ""
           && (

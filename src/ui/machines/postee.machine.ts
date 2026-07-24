@@ -146,6 +146,7 @@ export interface PosteeContext {
 export type PosteeEvent =
   | { type: "REFRESH" }
   | { type: "CREATE_SCRATCH" }
+  | { type: "SELECT_SCRATCH"; scratchId: string }
   | { type: "CLOSE_SCRATCH"; scratchId: string }
   | { type: "REOPEN_SCRATCH"; scratchId: string }
   | { type: "UPDATE_SCRATCH_DRAFT"; draft: PosteeScratchDraft }
@@ -257,6 +258,8 @@ type SaveRequestDraftDoneEvent = DoneActorEvent<PosteeRequestDraft, "saveRequest
 type SaveRequestDraftErrorEvent = ErrorActorEvent<unknown, "saveRequestDraft">;
 type RunRequestDoneEvent = DoneActorEvent<RunRequestResult, "runRequest">;
 type RunRequestErrorEvent = ErrorActorEvent<unknown, "runRequest">;
+type PromoteScratchDoneEvent = DoneActorEvent<PromoteScratchResult, "promoteScratch">;
+type PromoteScratchErrorEvent = ErrorActorEvent<unknown, "promoteScratch">;
 type LoadGraphqlSchemaDoneEvent = DoneActorEvent<PosteeGraphqlSchemaSnapshot | null, "loadGraphqlSchema">;
 type LoadGraphqlSchemaErrorEvent = ErrorActorEvent<unknown, "loadGraphqlSchema">;
 type RefreshGraphqlSchemaDoneEvent = DoneActorEvent<PosteeGraphqlSchemaSnapshot, "refreshGraphqlSchema">;
@@ -269,6 +272,8 @@ type PosteeMachineEvent =
   | SaveRequestDraftErrorEvent
   | RunRequestDoneEvent
   | RunRequestErrorEvent
+  | PromoteScratchDoneEvent
+  | PromoteScratchErrorEvent
   | LoadGraphqlSchemaDoneEvent
   | LoadGraphqlSchemaErrorEvent
   | RefreshGraphqlSchemaDoneEvent
@@ -707,6 +712,16 @@ const posteeWorkspaceSetup = setup({
         },
         openScratchIds: [...context.openScratchIds, scratch.id],
         activeEditor: { kind: "scratch", scratchId: scratch.id },
+        runner: initialRunner(),
+      };
+    }),
+    selectScratch: assign(({ context, event }) => {
+      if (event.type !== "SELECT_SCRATCH" || !context.openScratchIds.includes(event.scratchId)) {
+        return context;
+      }
+      return {
+        ...context,
+        activeEditor: { kind: "scratch" as const, scratchId: event.scratchId },
         runner: initialRunner(),
       };
     }),
@@ -1720,6 +1735,9 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
       on: {
         CREATE_SCRATCH: {
           actions: "createScratch",
+        },
+        SELECT_SCRATCH: {
+          actions: "selectScratch",
         },
         CLOSE_SCRATCH: {
           actions: "closeScratch",

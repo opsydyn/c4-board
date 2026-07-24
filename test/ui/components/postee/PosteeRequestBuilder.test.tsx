@@ -1,4 +1,5 @@
 import type { PosteeRequestDraft } from "@/core/effects/postee";
+import type { PosteeScratchDraft } from "@/core/effects/postee/scratch-draft";
 import { RequestId } from "@/core/effects/postee/types";
 import { HeadersEditor } from "@/ui/components/postee/HeadersEditor";
 import {
@@ -236,6 +237,22 @@ const idleSave: RequestDraftSaveState = {
   revision: 0,
 };
 
+const scratchDraft: PosteeScratchDraft = {
+  id: "scratch-1",
+  name: "Untitled request",
+  method: "GET",
+  url: "",
+  description: null,
+  headers: [],
+  body: { mode: "json", raw: "{}", form_values: null },
+  graphql: null,
+  environmentId: null,
+  tabOrder: 0,
+  isOpen: true,
+  createdAt: 1,
+  updatedAt: 1,
+};
+
 const createProps = (
   overrides: Partial<PosteeRequestBuilderProps> = {},
 ): PosteeRequestBuilderProps => ({
@@ -262,6 +279,9 @@ const createProps = (
   onEnvironmentChange: vi.fn(),
   onVariablesChange: vi.fn(),
   onRefreshGraphqlSchema: vi.fn(),
+  activeScratchDraft: null,
+  onScratchDraftChange: vi.fn(),
+  onSaveScratch: vi.fn(),
   ...overrides,
 });
 
@@ -284,6 +304,35 @@ const renderBuilder = (
 };
 
 describe("PosteeRequestBuilder durable request details", () => {
+  it("edits, sends, and saves an active scratch without a collection", async () => {
+    const user = userEvent.setup();
+    const onScratchDraftChange = vi.fn();
+    const onRunRequest = vi.fn();
+    const onSaveScratch = vi.fn();
+    renderBuilder({
+      activeCollectionId: null,
+      selectedRequest: null,
+      selectedRequestDraft: null,
+      activeScratchDraft: scratchDraft,
+      onScratchDraftChange,
+      onRunRequest,
+      onSaveScratch,
+    });
+
+    const url = screen.getByLabelText("Request URL");
+    expect(url).not.toBeDisabled();
+    await user.type(url, "https://api.example.test/health");
+    expect(onScratchDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      id: "scratch-1",
+      url: "https://api.example.test/health",
+    }));
+
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(onRunRequest).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSaveScratch).toHaveBeenCalledOnce();
+  });
+
   it("derives confirmed presentation and blocks commands before editor synchronisation", () => {
     const switching = deriveRequestEditorPresentation({
       selectedRequest: secondDraft.request,

@@ -31,7 +31,7 @@ const recoveredScratch: PosteeScratchDraftRow = {
   updated_at: 1,
 };
 
-const layer = Layer.succeed(DatabaseService, {
+const databaseLayer = Layer.succeed(DatabaseService, {
   query: <T>(sql: string) => {
     if (sql.includes("postee_collections")) {
       return Effect.succeed([{
@@ -52,6 +52,11 @@ const layer = Layer.succeed(DatabaseService, {
   transaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
 });
 
+const layer = Layer.merge(
+  databaseLayer,
+  makeHttpClientTestLayer(() => Effect.die("Unexpected HTTP request")),
+);
+
 describe("Postee scratch workspace machine", () => {
   it("opens a fresh scratch while retaining recovered drafts for reopening", async () => {
     const actor = createActor(createPosteeWorkspaceMachine({ layer }));
@@ -69,9 +74,8 @@ describe("Postee scratch workspace machine", () => {
     actor.start();
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
 
-    const firstScratchId = actor.getSnapshot().context.activeEditor?.kind === "scratch"
-      ? actor.getSnapshot().context.activeEditor.scratchId
-      : null;
+    const firstTarget = actor.getSnapshot().context.activeEditor;
+    const firstScratchId = firstTarget?.kind === "scratch" ? firstTarget.scratchId : null;
     actor.send({ type: "CREATE_SCRATCH" });
 
     expect(actor.getSnapshot().context.openScratchIds).toHaveLength(2);
@@ -80,14 +84,28 @@ describe("Postee scratch workspace machine", () => {
     actor.stop();
   });
 
+  it("selects an existing open scratch without mutating its authored state", async () => {
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    const firstTarget = actor.getSnapshot().context.activeEditor;
+    if (firstTarget?.kind !== "scratch") throw new Error("Expected a scratch editor");
+    actor.send({ type: "CREATE_SCRATCH" });
+    actor.send({ type: "SELECT_SCRATCH", scratchId: firstTarget.scratchId });
+
+    expect(actor.getSnapshot().context.activeEditor).toEqual(firstTarget);
+    expect(actor.getSnapshot().context.scratchDrafts[firstTarget.scratchId]).toBeDefined();
+    actor.stop();
+  });
+
   it("closes a scratch into the reopenable set and restores it on demand", async () => {
     const actor = createActor(createPosteeWorkspaceMachine({ layer }));
     actor.start();
     await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
 
-    const scratchId = actor.getSnapshot().context.activeEditor?.kind === "scratch"
-      ? actor.getSnapshot().context.activeEditor.scratchId
-      : "";
+    const activeEditor = actor.getSnapshot().context.activeEditor;
+    const scratchId = activeEditor?.kind === "scratch" ? activeEditor.scratchId : "";
     actor.send({ type: "CLOSE_SCRATCH", scratchId });
     expect(actor.getSnapshot().context.openScratchIds).not.toContain(scratchId);
     expect(actor.getSnapshot().context.closedScratchIds).toContain(scratchId);
@@ -131,7 +149,7 @@ describe("Postee scratch workspace machine", () => {
       rawSize: Bytes(16),
     };
     const executionLayer = Layer.merge(
-      layer,
+      databaseLayer,
       makeHttpClientTestLayer((prepared) => {
         capturedRequest = prepared;
         return Effect.succeed(response);

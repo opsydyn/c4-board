@@ -9,7 +9,7 @@
  */
 
 import type { PosteeCollection, PosteeRequest } from "@/core/effects/database.postee";
-import type { PosteeRequestDraft } from "@/core/effects/postee";
+import type { PosteeRequestDraft, PosteeScratchDraft } from "@/core/effects/postee";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMachine } from "@xstate/react";
 import { nanoid } from "nanoid";
@@ -27,6 +27,8 @@ import { createPosteeWorkspaceMachine, type PosteeEvent } from "../../machines/p
 import { PosteeRequestBuilder } from "./PosteeRequestBuilder";
 import { PosteeResponsePanel } from "./PosteeResponsePanel";
 import { PosteeSidebar } from "./PosteeSidebar";
+import { SaveScratchDialog } from "./SaveScratchDialog";
+import { ScratchTabStrip } from "./ScratchTabStrip";
 import { Tooltip } from "./Tooltip";
 
 import * as layoutStyles from "../styles.css";
@@ -44,6 +46,10 @@ export function PosteeWorkspace() {
     requestsByCollection,
     requestDrafts,
     requestDraftSave,
+    scratchDrafts = {},
+    openScratchIds = [],
+    closedScratchIds = [],
+    activeEditor = null,
     graphqlSchema,
     activeCollectionId,
     activeRequestId,
@@ -62,6 +68,7 @@ export function PosteeWorkspace() {
 
   // Active response tab state (local UI state, not in machine)
   const [activeResponseTab, setActiveResponseTab] = useState<"Execution" | "LoadTest" | "History">("Execution");
+  const [isSaveScratchDialogOpen, setIsSaveScratchDialogOpen] = useState(false);
 
   // Extract derived workspace state from machine
   const {
@@ -79,8 +86,15 @@ export function PosteeWorkspace() {
   // Additional derived state (not in machine)
   const lastResponse = runner.response;
   const lastResponseDurationMs = lastResponse ? durationToMillis(lastResponse.duration) : null;
-  const selectedRequestDraft = selectedRequest
-    ? requestDrafts[selectedRequest.id] ?? null
+  const activeScratchDraft = activeEditor?.kind === "scratch"
+    ? scratchDrafts[activeEditor.scratchId] ?? null
+    : null;
+  const hasActiveEditorState = "activeEditor" in state.context;
+  const activeSavedRequest = activeEditor?.kind === "saved" || !hasActiveEditorState
+    ? selectedRequest
+    : null;
+  const selectedRequestDraft = activeSavedRequest
+    ? requestDrafts[activeSavedRequest.id] ?? null
     : null;
 
   const currentEnvironmentId = activeEnvironmentId
@@ -234,10 +248,49 @@ export function PosteeWorkspace() {
     [send],
   );
 
+  const handleScratchDraftChange = useCallback((draft: PosteeScratchDraft) => {
+    send({ type: "UPDATE_SCRATCH_DRAFT", draft } satisfies PosteeEvent);
+  }, [send]);
+
+  const handleCreateScratch = useCallback(() => {
+    send({ type: "CREATE_SCRATCH" } satisfies PosteeEvent);
+  }, [send]);
+
+  const handleSelectScratch = useCallback((scratchId: string) => {
+    send({ type: "SELECT_SCRATCH", scratchId } satisfies PosteeEvent);
+  }, [send]);
+
+  const handleCloseScratch = useCallback((scratchId: string) => {
+    send({ type: "CLOSE_SCRATCH", scratchId } satisfies PosteeEvent);
+  }, [send]);
+
+  const handleReopenScratch = useCallback((scratchId: string) => {
+    send({ type: "REOPEN_SCRATCH", scratchId } satisfies PosteeEvent);
+  }, [send]);
+
+  const handleSaveScratch = useCallback(() => {
+    if (activeScratchDraft !== null) {
+      setIsSaveScratchDialogOpen(true);
+    }
+  }, [activeScratchDraft]);
+
+  const handlePromoteScratch = useCallback((collectionId: string) => {
+    if (activeScratchDraft === null) return;
+    send(
+      {
+        type: "PROMOTE_SCRATCH",
+        scratchId: activeScratchDraft.id,
+        collectionId: CollectionIdBrand(collectionId),
+        requestId: RequestIdBrand(nanoid()),
+      } satisfies PosteeEvent,
+    );
+    setIsSaveScratchDialogOpen(false);
+  }, [activeScratchDraft, send]);
+
   const handleRunRequest = useCallback(() => {
-    if (!selectedRequest || state.matches({ ready: "running" })) return;
+    if ((activeScratchDraft === null && activeSavedRequest === null) || state.matches({ ready: "running" })) return;
     send({ type: "RUN_REQUEST" });
-  }, [selectedRequest, state, send]);
+  }, [activeSavedRequest, activeScratchDraft, state, send]);
 
   const handleRefreshGraphqlSchema = useCallback(() => {
     send({ type: "REFRESH_GRAPHQL_SCHEMA" } satisfies PosteeEvent);
@@ -464,15 +517,37 @@ export function PosteeWorkspace() {
           </div>
         </header>
 
+        <div className={styles.scratchBar}>
+          <ScratchTabStrip
+            tabs={openScratchIds.map((id) => ({
+              id,
+              label: scratchDrafts[id]?.name ?? "Untitled request",
+              dirty: false,
+            }))}
+            activeId={activeEditor?.kind === "scratch" ? activeEditor.scratchId : null}
+            reopenable={closedScratchIds.map((id) => ({
+              id,
+              label: scratchDrafts[id]?.name ?? "Untitled request",
+            }))}
+            onSelect={handleSelectScratch}
+            onClose={handleCloseScratch}
+            onReopen={handleReopenScratch}
+          />
+          <button type="button" className={styles.newScratchButton} onClick={handleCreateScratch}>
+            New request
+          </button>
+        </div>
+
         <PosteeRequestBuilder
-          activeCollectionId={activeCollectionKey}
-          selectedRequest={selectedRequest}
+          activeCollectionId={activeScratchDraft === null ? activeCollectionKey : null}
+          selectedRequest={activeSavedRequest}
           selectedRequestDraft={selectedRequestDraft}
+          activeScratchDraft={activeScratchDraft}
           requestDraftSave={requestDraftSave}
           graphqlSchemaState={graphqlSchema}
           isInitialising={isInitialising}
           isRunning={isRunning}
-          canRunRequest={canRunRequest}
+          canRunRequest={activeScratchDraft !== null || canRunRequest}
           lastResponseStatus={lastResponse?.status}
           lastResponseDurationMs={lastResponseDurationMs}
           environments={environments}
@@ -480,12 +555,21 @@ export function PosteeWorkspace() {
           currentVariables={currentVariables}
           onCreateRequest={handleCreateRequest}
           onSaveRequestDraft={handleSaveRequestDraft}
+          onScratchDraftChange={handleScratchDraftChange}
+          onSaveScratch={handleSaveScratch}
           onRunRequest={handleRunRequest}
           onCancelRequest={handleCancelRequest}
           onCreateEnvironment={handleCreateEnvironment}
           onEnvironmentChange={handleEnvironmentChange}
           onVariablesChange={handleVariablesChange}
           onRefreshGraphqlSchema={handleRefreshGraphqlSchema}
+        />
+
+        <SaveScratchDialog
+          isOpen={isSaveScratchDialogOpen}
+          collections={collections}
+          onClose={() => setIsSaveScratchDialogOpen(false)}
+          onConfirm={handlePromoteScratch}
         />
 
         {isResponsePanelOpen && (

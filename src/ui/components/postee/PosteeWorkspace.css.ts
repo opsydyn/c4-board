@@ -338,6 +338,33 @@ export const mainHeaderActions = style({
   marginLeft: "auto",
 });
 
+export const scratchBar = style({
+  display: "flex",
+  alignItems: "center",
+  gap: theme.spacing["2"],
+  minWidth: 0,
+});
+
+export const newScratchButton = style({
+  flex: "0 0 auto",
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
+  background: "transparent",
+  cursor: "pointer",
+  padding: `0 ${theme.spacing["2"]}`,
+  height: "30px",
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  selectors: {
+    "&:hover": {
+      backgroundColor: "rgba(24, 40, 32, 0.9)",
+    },
+  },
+});
+
 export const statusPill = style({
   clipPath: theme.clipPath.sm,
   backgroundColor: "rgba(25, 89, 63, 0.4)",
