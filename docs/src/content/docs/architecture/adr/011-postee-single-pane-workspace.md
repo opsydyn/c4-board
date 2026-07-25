@@ -283,3 +283,20 @@ one that was already built, and delete the stacked variant that replaced it".
   Percentage height on Monaco collapses to zero whenever an ancestor lacks a
   definite height, and that failure is invisible until it is in front of a user —
   a clamp adapts to the shell without ever being able to collapse.
+- 2026-07-25: **Phase 5 (harness) implemented.** `PosteeWorkspace` now accepts an
+  optional layer, defaulting to the live one. That single change is what made the
+  component testable at all: it previously built its own machine against live
+  services, so nothing could render it, and that is precisely how a Load Test
+  button that could never open reached a user.
+
+  The harness asserts **reachability rather than appearance** — jsdom has no layout
+  engine, so "can the user get to it" is the answerable question. It was validated
+  by reintroducing the load-test regression and confirming two tests fail, rather
+  than by observing that it passes today.
+
+  **Still outstanding: moving layout state into the machine.** `isResponsePanelOpen`,
+  `activeResponseTab`, `isHistoryDrawerOpen`, and the pane ratio remain React
+  `useState`, which is the boolean-flag pattern CLAUDE.md rejects. The harness now
+  covers the behaviour those flags produce, so the refactor can be done against a
+  green suite instead of blind — but it is a separate change and this ADR should
+  not be marked complete until it lands.

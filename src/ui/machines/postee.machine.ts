@@ -67,7 +67,7 @@ import { type DerivedUIState, deriveUIState, type UIStateInput } from "../../cor
 import { type DerivedWorkspaceState, deriveWorkspaceState } from "../../core/effects/postee/workspace-state";
 
 type WorkspaceEnv = DatabaseService | HttpClient;
-type WorkspaceLayer = Layer.Layer<WorkspaceEnv, never, never>;
+export type WorkspaceLayer = Layer.Layer<WorkspaceEnv, never, never>;
 
 // =============================================================================
 // Types

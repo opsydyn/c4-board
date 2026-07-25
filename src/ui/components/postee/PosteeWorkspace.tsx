@@ -26,7 +26,7 @@ import {
   RequestId as RequestIdBrand,
 } from "../../../core/effects/postee/types";
 import { useAppSettings } from "../../../core/effects/useAppSettings";
-import { createPosteeWorkspaceMachine, type PosteeEvent } from "../../machines/postee.machine";
+import { createPosteeWorkspaceMachine, type PosteeEvent, type WorkspaceLayer } from "../../machines/postee.machine";
 import { PosteeRequestBuilder } from "./PosteeRequestBuilder";
 import { PosteeResponsePanel } from "./PosteeResponsePanel";
 import { PosteeSidebar } from "./PosteeSidebar";
@@ -41,8 +41,18 @@ const NAVIGATION_OVERLAY_MIN_DURATION_MS = 220;
 
 const PANE_RATIO_KEY = "postee:pane-ratio";
 
-export function PosteeWorkspace() {
-  const machine = useMemo(() => createPosteeWorkspaceMachine(), []);
+export interface PosteeWorkspaceProps {
+  /**
+   * Services the workspace runs against. Defaults to the live layer; supplied by
+   * tests so the workspace can be rendered at all — hard-wiring it here was why
+   * nothing covered this component, and why a load test panel that could never
+   * open reached a user (ADR-011 Phase 5).
+   */
+  readonly layer?: WorkspaceLayer;
+}
+
+export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
+  const machine = useMemo(() => createPosteeWorkspaceMachine(layer ? { layer } : undefined), [layer]);
   const [state, send] = useMachine(machine);
   const { settings: appSettings } = useAppSettings();
 
