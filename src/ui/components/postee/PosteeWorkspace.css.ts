@@ -1,12 +1,22 @@
 import { globalStyle, keyframes, style } from "@vanilla-extract/css";
 import { theme } from "../../../styles/theme.css";
 
+/**
+ * The workspace is an instrument panel, not a document: it fills the viewport
+ * exactly and never scrolls itself. Designated regions inside it scroll instead.
+ *
+ * `height` rather than `minHeight` is the whole point — `minHeight` lets the grid
+ * grow past the viewport, and once it does no amount of inner overflow discipline
+ * can stop the page scrolling. `dvh` because the Tauri webview reports a dynamic
+ * viewport (ADR-011).
+ */
 export const workspace = style({
   display: "grid",
   gridTemplateRows: "1fr",
   gridTemplateColumns: "minmax(260px, 320px) 1fr",
   backgroundColor: theme.color.background.base,
-  minHeight: "100vh",
+  height: "100dvh",
+  overflow: "hidden",
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.sans,
 });
@@ -20,6 +30,8 @@ export const sidebar = style({
   borderRight: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "rgba(8, 14, 11, 0.96)",
   padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
+  // Without this the sidebar cannot shrink below its content and pushes the shell.
+  minHeight: 0,
   overflowY: "auto",
 });
 
@@ -312,6 +324,9 @@ export const mainColumn = style({
   gap: theme.spacing["4"],
   padding: `${theme.spacing["5"]} ${theme.spacing["6"]}`,
   minWidth: 0,
+  // Pairs with the fixed-height shell: this is the region that scrolls, so it has
+  // to be allowed to shrink to the track it was given.
+  minHeight: 0,
   overflowY: "auto",
 });
 
