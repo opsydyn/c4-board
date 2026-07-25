@@ -310,3 +310,23 @@ is. Anything relying on the model's cooperation should be treated as unimplement
   The saved-request input type takes headers in the shape callers actually hold,
   values included. A boundary that requires pre-cleaned input is not a boundary; it
   should receive the real thing and emit only what is safe.
+- 2026-07-25: **Phase 3 implemented.** `rig_agent_propose_postee_request` extracts a
+  request proposal against a `JsonSchema` type, and `proposalToScratchDraft` turns
+  it into a scratch draft. Nothing writes to the database on either side of the
+  boundary — accepting a proposal is the operator opening a tab.
+
+  The sanitize/validate split from the C4 planner carries over cleanly, and the
+  distinction turns out to be meaningful here: a GraphQL proposal that arrives as
+  `GET` is *repairable*, so it is coerced to `POST` with a warning saying so, while
+  a GraphQL proposal with no document is *not*, and is rejected. Same for a body on
+  a `GET` — dropped with a warning rather than refused.
+
+  The preamble tells the model what it was not given: environment variables are
+  referenced as `{{KEY}}` placeholders, a credential is never to be invented, and
+  the prompt context ends with an explicit list of what the boundary withheld.
+  Instructing the model is not a control — the boundary is — but a model that knows
+  a value was withheld asks for it rather than hallucinating one.
+
+  One integration detail worth recording: a proposal draft must not look pristine,
+  or the sprawl reclaimer added earlier would delete it on the next launch. There is
+  a test asserting exactly that.

@@ -18,6 +18,11 @@ const MAX_TEMPERATURE: f64 = 2.0;
 const MIN_MAX_TOKENS: u64 = 64;
 const MAX_MAX_TOKENS: u64 = 32_768;
 const MAX_REVIEW_LIST_ITEMS: usize = 8;
+const MAX_PROPOSAL_HEADERS: usize = 24;
+const POSTEE_METHODS: [&str; 9] = [
+    "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "QUERY",
+];
+const POSTEE_BODY_MODES: [&str; 4] = ["raw", "json", "form", "graphql"];
 const OPENAI_API_KEY_SETTING_KEY: &str = "openAiApiKey";
 const OPENAI_KEY_ENV_KEYS: [&str; 2] = ["OPSYDYN_OPENAI_API_KEY", "OPENAI_API_KEY"];
 const KEY_RESOLUTION_ORDER: [&str; 3] = ["keychain", "settings-db", "env"];
@@ -1052,6 +1057,260 @@ fn execute_rig_postee_read_tool(
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeProposalHeader {
+    pub key: String,
+    pub value: String,
+}
+
+/// A proposed request. Extracted against this schema rather than parsed from text,
+/// and never applied — it lands as a scratch draft for the operator to accept,
+/// edit, or discard (ADR-012).
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeRequestProposalPayload {
+    pub summary: String,
+    pub rationale: String,
+    pub warnings: Vec<String>,
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<RigPosteeProposalHeader>,
+    pub body_mode: String,
+    pub body: Option<String>,
+    pub graphql_document: Option<String>,
+    pub graphql_variables_json: Option<String>,
+    pub graphql_operation_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeProposeRequest {
+    pub description: String,
+    pub context: RigPosteeContext,
+    pub model: Option<String>,
+    pub max_tokens: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeProposeResponse {
+    #[serde(flatten)]
+    pub proposal: RigPosteeRequestProposalPayload,
+    pub provider: String,
+    pub model: String,
+    pub usage: RigUsageMetadata,
+    pub responded_at_ms: i64,
+}
+
+fn build_postee_request_preamble() -> &'static str {
+    "You are OPY Net, a proposal-only HTTP request author for the Postee API client.
+Convert the operator's intent into a single concrete HTTP request draft.
+Ground every field in the supplied context: prefer endpoints, header names, and environment variable keys that already appear there.
+Reference environment variables by their {{KEY}} placeholder. You are never given their values and must never guess one.
+Never invent a credential. If a request needs an Authorization header, use a {{PLACEHOLDER}} and record it in warnings.
+When a GraphQL schema summary is supplied, use only root fields listed in it; if the operation you need is absent, say so in warnings instead of inventing a field.
+GraphQL operations must use POST with bodyMode 'graphql' and a document in graphqlDocument.
+Use bodyMode 'json' for JSON payloads, 'raw' for other text, 'form' for form encoding, and omit the body entirely for GET and HEAD.
+Use warnings for assumptions, guessed paths, missing context, or anything the operator should check before sending.
+Treat this as preview mode only. Nothing is sent and nothing is saved; the draft is handed to the operator to review."
+}
+
+fn build_postee_request_prompt(description: &str) -> String {
+    format!(
+        "Draft one HTTP request from the operator description below.\n\
+         Return only the structured fields requested by the extraction schema.\n\
+         \n\
+         Operator description:\n\
+         {}",
+        description.trim()
+    )
+}
+
+/// Renders the redacted context as prompt text.
+///
+/// Mirrors `build_c4_board_summary_context`. Only names appear — header names,
+/// variable keys, schema root fields — because only names crossed the boundary.
+fn build_postee_context_text(context: &RigPosteeContext) -> String {
+    let mut sections = Vec::new();
+
+    let header_keys = context
+        .request
+        .headers
+        .iter()
+        .map(|header| header.key.clone())
+        .collect::<Vec<_>>()
+        .join(", ");
+    sections.push(format!(
+        "Active request:\n- name: {}\n- method: {}\n- url: {}\n- body mode: {}\n- header names: {}",
+        context.request.name,
+        context.request.method,
+        context.request.url,
+        context.request.body_mode,
+        if header_keys.is_empty() { "(none)".to_string() } else { header_keys }
+    ));
+
+    if let Some(environment) = context.environment.as_ref() {
+        sections.push(format!(
+            "Environment '{}' variables (keys only, values withheld):\n{}",
+            environment.name,
+            environment
+                .variable_keys
+                .iter()
+                .map(|key| format!("- {{{{{key}}}}}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+
+    if !context.collections.is_empty() {
+        let lines = context
+            .collections
+            .iter()
+            .flat_map(|collection| {
+                collection.requests.iter().map(move |request| {
+                    format!(
+                        "- [{}] {} {} {}",
+                        collection.name, request.method, request.url, request.name
+                    )
+                })
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!("Saved requests:\n{lines}"));
+    }
+
+    if let Some(schema) = context.graphql_schema.as_ref() {
+        sections.push(format!(
+            "GraphQL schema at {} (cached):\n- query fields: {}\n- mutation fields: {}",
+            schema.endpoint_url,
+            schema.query_fields.join(", "),
+            schema.mutation_fields.join(", ")
+        ));
+    }
+
+    if !context.withheld.is_empty() {
+        sections.push(format!(
+            "Withheld from you deliberately: {}. Do not guess at them.",
+            context.withheld.join(", ")
+        ));
+    }
+
+    sections.join("\n\n")
+}
+
+/// Normalizes what can be repaired and records the repair as a warning.
+///
+/// Follows the same split as the C4 planner: recoverable problems become warnings
+/// here, and only what cannot be repaired reaches `validate_postee_request_proposal`.
+fn sanitize_postee_request_proposal(
+    mut proposal: RigPosteeRequestProposalPayload,
+) -> RigPosteeRequestProposalPayload {
+    proposal.summary = proposal.summary.trim().to_string();
+    proposal.rationale = proposal.rationale.trim().to_string();
+    proposal.name = proposal.name.trim().to_string();
+    proposal.url = proposal.url.trim().to_string();
+    proposal.method = proposal.method.trim().to_uppercase();
+    proposal.body_mode = proposal.body_mode.trim().to_lowercase();
+    proposal.warnings = proposal
+        .warnings
+        .into_iter()
+        .filter_map(|warning| normalize_secret(&warning))
+        .collect();
+
+    if proposal.name.is_empty() {
+        proposal.name = "Untitled request".to_string();
+    }
+
+    let mut headers = Vec::with_capacity(proposal.headers.len());
+    for header in proposal.headers.into_iter() {
+        let key = header.key.trim().to_string();
+        if key.is_empty() {
+            proposal
+                .warnings
+                .push("Dropped a proposed header with an empty name.".to_string());
+            continue;
+        }
+        headers.push(RigPosteeProposalHeader {
+            key,
+            value: header.value.trim().to_string(),
+        });
+    }
+    proposal.headers = headers;
+
+    proposal.body = normalize_optional_content(proposal.body.take());
+    proposal.graphql_document = normalize_optional_content(proposal.graphql_document.take());
+    proposal.graphql_variables_json =
+        normalize_optional_content(proposal.graphql_variables_json.take());
+    proposal.graphql_operation_name =
+        normalize_optional_content(proposal.graphql_operation_name.take());
+
+    if proposal.body_mode == "graphql" {
+        // The client only sends GraphQL over POST, so a mismatch is repairable
+        // rather than fatal — but the operator should know it was changed.
+        if proposal.method != "POST" {
+            proposal.warnings.push(format!(
+                "Changed method from {} to POST because GraphQL requests must use POST.",
+                proposal.method
+            ));
+            proposal.method = "POST".to_string();
+        }
+        if proposal.graphql_variables_json.is_none() {
+            proposal.graphql_variables_json = Some("{}".to_string());
+        }
+        proposal.body = None;
+    }
+
+    if matches!(proposal.method.as_str(), "GET" | "HEAD") && proposal.body.is_some() {
+        proposal
+            .warnings
+            .push(format!("Dropped the body: {} requests do not carry one.", proposal.method));
+        proposal.body = None;
+    }
+
+    proposal
+}
+
+fn validate_postee_request_proposal(
+    proposal: &RigPosteeRequestProposalPayload,
+) -> Result<(), String> {
+    if proposal.summary.is_empty() {
+        return Err("Proposal summary cannot be empty.".to_string());
+    }
+
+    if proposal.rationale.is_empty() {
+        return Err("Proposal rationale cannot be empty.".to_string());
+    }
+
+    if !POSTEE_METHODS.contains(&proposal.method.as_str()) {
+        return Err(format!("Proposal uses an unsupported method '{}'.", proposal.method));
+    }
+
+    if !POSTEE_BODY_MODES.contains(&proposal.body_mode.as_str()) {
+        return Err(format!(
+            "Proposal uses an unsupported body mode '{}'.",
+            proposal.body_mode
+        ));
+    }
+
+    if proposal.url.is_empty() {
+        return Err("Proposal must include a request URL.".to_string());
+    }
+
+    if proposal.headers.len() > MAX_PROPOSAL_HEADERS {
+        return Err(format!(
+            "Proposal exceeds the maximum supported header count ({MAX_PROPOSAL_HEADERS})."
+        ));
+    }
+
+    if proposal.body_mode == "graphql" && proposal.graphql_document.is_none() {
+        return Err("A GraphQL proposal must include an operation document.".to_string());
+    }
+
+    Ok(())
+}
+
 fn normalize_read_tool_lookup_id(
     tool: RigReadToolName,
     field_name: &str,
@@ -1579,6 +1838,56 @@ pub async fn rig_agent_run_read_tool(
 }
 
 #[tauri::command]
+pub async fn rig_agent_propose_postee_request(
+    state: State<'_, AppDb>,
+    input: RigPosteeProposeRequest,
+) -> Result<RigPosteeProposeResponse, String> {
+    let RigPosteeProposeRequest {
+        description,
+        context,
+        model,
+        max_tokens,
+    } = input;
+
+    let description = description.trim();
+    if description.is_empty() {
+        return Err("Request proposal description cannot be empty.".to_string());
+    }
+
+    let prompt_text = build_postee_request_prompt(description);
+    let model = resolve_model(model);
+    let max_tokens = resolve_max_tokens(max_tokens);
+    let context_text = build_postee_context_text(&context);
+
+    let secret = resolve_openai_secret(&state).await?.ok_or_else(|| {
+        "Rig agent requires an OpenAI key. Add one in Settings > AI Agent or set OPSYDYN_OPENAI_API_KEY / OPENAI_API_KEY.".to_string()
+    })?;
+
+    let output = extract_openai::<RigPosteeRequestProposalPayload>(
+        &secret.value,
+        &model,
+        build_postee_request_preamble(),
+        max_tokens,
+        Some(context_text.as_str()),
+        1,
+        &prompt_text,
+    )
+    .await
+    .map_err(|error| map_runtime_error("rig_agent_propose_postee_request", error))?;
+
+    let proposal = sanitize_postee_request_proposal(output.data);
+    validate_postee_request_proposal(&proposal)?;
+
+    Ok(RigPosteeProposeResponse {
+        proposal,
+        provider: "openai".to_string(),
+        model,
+        usage: output.usage,
+        responded_at_ms: now_unix_ms(),
+    })
+}
+
+#[tauri::command]
 pub async fn rig_agent_run_postee_read_tool(
     input: RigPosteeReadToolRequest,
 ) -> Result<RigPosteeReadToolResponse, String> {
@@ -1867,6 +2176,110 @@ mod tests {
             }),
             withheld: vec!["header values".to_string()],
         }
+    }
+
+    fn proposal_fixture() -> RigPosteeRequestProposalPayload {
+        RigPosteeRequestProposalPayload {
+            summary: " Fetch systems ".to_string(),
+            rationale: " Grounded in the cached schema ".to_string(),
+            warnings: vec!["  ".to_string(), " assumed page size ".to_string()],
+            name: "  ".to_string(),
+            method: " post ".to_string(),
+            url: " https://api.example.test/graphql ".to_string(),
+            headers: vec![
+                RigPosteeProposalHeader {
+                    key: "  ".to_string(),
+                    value: "dropped".to_string(),
+                },
+                RigPosteeProposalHeader {
+                    key: " Authorization ".to_string(),
+                    value: " Bearer {{API_TOKEN}} ".to_string(),
+                },
+            ],
+            body_mode: " JSON ".to_string(),
+            body: Some(" {\"a\":1} ".to_string()),
+            graphql_document: None,
+            graphql_variables_json: None,
+            graphql_operation_name: None,
+        }
+    }
+
+    #[test]
+    fn postee_proposal_sanitizer_normalizes_and_reports_repairs() {
+        let proposal = sanitize_postee_request_proposal(proposal_fixture());
+
+        assert_eq!(proposal.method, "POST");
+        assert_eq!(proposal.body_mode, "json");
+        assert_eq!(proposal.url, "https://api.example.test/graphql");
+        assert_eq!(proposal.name, "Untitled request");
+        assert_eq!(proposal.headers.len(), 1);
+        assert_eq!(proposal.headers[0].key, "Authorization");
+        // The empty-name header is dropped, and the drop is reported rather than silent.
+        assert!(proposal
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("empty name")));
+        assert!(validate_postee_request_proposal(&proposal).is_ok());
+    }
+
+    #[test]
+    fn postee_proposal_coerces_graphql_to_post_and_says_so() {
+        let mut input = proposal_fixture();
+        input.method = "GET".to_string();
+        input.body_mode = "graphql".to_string();
+        input.graphql_document = Some("query { systems { id } }".to_string());
+
+        let proposal = sanitize_postee_request_proposal(input);
+
+        assert_eq!(proposal.method, "POST");
+        assert_eq!(proposal.graphql_variables_json.as_deref(), Some("{}"));
+        // A GraphQL draft carries its document, never a raw body.
+        assert_eq!(proposal.body, None);
+        assert!(proposal
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("must use POST")));
+    }
+
+    #[test]
+    fn postee_proposal_drops_a_body_from_a_get() {
+        let mut input = proposal_fixture();
+        input.method = "GET".to_string();
+
+        let proposal = sanitize_postee_request_proposal(input);
+
+        assert_eq!(proposal.body, None);
+        assert!(proposal
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("do not carry one")));
+    }
+
+    #[test]
+    fn postee_proposal_rejects_what_cannot_be_repaired() {
+        let mut unsupported = sanitize_postee_request_proposal(proposal_fixture());
+        unsupported.method = "TELEPORT".to_string();
+        assert!(validate_postee_request_proposal(&unsupported).is_err());
+
+        let mut no_url = sanitize_postee_request_proposal(proposal_fixture());
+        no_url.url = String::new();
+        assert!(validate_postee_request_proposal(&no_url).is_err());
+
+        let mut graphql_without_document = sanitize_postee_request_proposal(proposal_fixture());
+        graphql_without_document.body_mode = "graphql".to_string();
+        graphql_without_document.graphql_document = None;
+        assert!(validate_postee_request_proposal(&graphql_without_document).is_err());
+    }
+
+    #[test]
+    fn postee_context_text_names_variables_without_values() {
+        let text = build_postee_context_text(&postee_context_fixture());
+
+        assert!(text.contains("{{API_TOKEN}}"));
+        assert!(text.contains("header names: Authorization, Accept"));
+        assert!(text.contains("query fields: account, systems"));
+        // The prompt must state what was withheld so the model does not fill it in.
+        assert!(text.contains("Withheld from you deliberately"));
     }
 
     #[test]
