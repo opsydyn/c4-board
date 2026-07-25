@@ -16,8 +16,12 @@ import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveActiveRequestDraft } from "@/core/effects/postee/active-request-draft";
 import { parsePaneRatio, workspaceTemplateColumns } from "@/core/effects/postee/workspace-panes";
+import { type PosteeRequestProposal, proposalToScratchDraft } from "@/core/effects/postee/agent-proposal";
+import { buildPosteeAgentContext } from "@/core/effects/postee/agent-redaction";
+import { proposePosteeRequest } from "@/core/effects/postee/agent-runtime";
 import { ToggleButton } from "react-aria-components";
 import { PaneDivider } from "./PaneDivider";
+import { PosteeAgentDrawer } from "./PosteeAgentDrawer";
 import {
   CollectionId as CollectionIdBrand,
   durationToMillis,
@@ -98,6 +102,7 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
   });
   const isResponsePanelOpen = uiState.matches({ responsePane: "open" });
   const isHistoryDrawerOpen = uiState.matches({ historyDrawer: "open" });
+  const isAgentDrawerOpen = uiState.matches({ agentDrawer: "open" });
   const activeResponseTab = uiState.matches({ responseTab: "loadTest" }) ? "LoadTest" as const : "Execution" as const;
   const paneRatio = uiState.context.paneRatio;
   const setPaneRatio = useCallback((ratio: number) => sendUi({ type: "SET_PANE_RATIO", ratio }), [sendUi]);
@@ -186,6 +191,54 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
     sendUi({ type: selected ? "OPEN_HISTORY" : "CLOSE_HISTORY" });
   }, [sendUi]);
   const handleCloseHistory = useCallback(() => sendUi({ type: "CLOSE_HISTORY" }), [sendUi]);
+  const handleOpenAgent = useCallback(() => sendUi({ type: "OPEN_AGENT" }), [sendUi]);
+  const handleCloseAgent = useCallback(() => sendUi({ type: "CLOSE_AGENT" }), [sendUi]);
+
+  // The agent proposes; accepting is the operator opening a tab (ADR-012).
+  const handleAcceptProposal = useCallback((proposal: PosteeRequestProposal) => {
+    const draft = proposalToScratchDraft(proposal, {
+      id: nanoid(),
+      tabOrder: openScratchIds.length,
+      now: Date.now(),
+    });
+    send({ type: "CREATE_SCRATCH" } satisfies PosteeEvent);
+    send({ type: "UPDATE_SCRATCH_DRAFT", draft } satisfies PosteeEvent);
+    sendUi({ type: "CLOSE_AGENT" });
+  }, [openScratchIds.length, send, sendUi]);
+
+  const handleProposeRequest = useCallback(
+    async (input: { readonly description: string; readonly includeBodies: boolean }) => {
+      const agentContext = buildPosteeAgentContext(
+        {
+          request: {
+            name: activeScratchDraft?.name ?? "",
+            method: activeScratchDraft?.method ?? "GET",
+            url: activeScratchDraft?.url ?? "",
+            headers: activeScratchDraft?.headers ?? [],
+            bodyMode: activeScratchDraft?.body.mode ?? "json",
+            body: activeScratchDraft?.body.raw ?? null,
+          },
+          history: history.map((entry) => ({
+            id: entry.id,
+            requestName: entry.request_id ?? "",
+            method: "",
+            url: "",
+            status: entry.response_status,
+            durationMs: entry.response_time_ms,
+            sizeBytes: entry.response_size_bytes,
+            errorMessage: entry.error_message,
+            executedAt: entry.executed_at,
+            body: entry.response_body,
+          })),
+        },
+        // strict is the default everywhere; bodies are the only per-run choice.
+        { mode: "strict", includeHeaderValues: false, includeBodies: input.includeBodies },
+      );
+
+      return proposePosteeRequest({ description: input.description, context: agentContext });
+    },
+    [activeScratchDraft, history],
+  );
 
   // Sidebar handlers
   const handleCreateCollection = useCallback(
@@ -548,6 +601,17 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
                 Load Test
               </ToggleButton>
             </Tooltip>
+            <Tooltip content="Ask OPY to draft a request">
+              <ToggleButton
+                isSelected={isAgentDrawerOpen}
+                onChange={(selected) => (selected ? handleOpenAgent() : handleCloseAgent())}
+                className={layoutStyles.collapseToggle}
+                aria-label="Open OPY request author"
+              >
+                <CaretRightIcon size={16} weight="bold" />
+                OPY
+              </ToggleButton>
+            </Tooltip>
             <Tooltip content="View execution history">
               <ToggleButton
                 isSelected={isHistoryDrawerOpen}
@@ -608,6 +672,13 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
           onEnvironmentChange={handleEnvironmentChange}
           onVariablesChange={handleVariablesChange}
           onRefreshGraphqlSchema={handleRefreshGraphqlSchema}
+        />
+
+        <PosteeAgentDrawer
+          isOpen={isAgentDrawerOpen}
+          onClose={handleCloseAgent}
+          onPropose={handleProposeRequest}
+          onAcceptProposal={handleAcceptProposal}
         />
 
         <SaveScratchDialog

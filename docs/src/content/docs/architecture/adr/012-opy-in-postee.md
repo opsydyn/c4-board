@@ -210,10 +210,10 @@ looks right.
 
 | Metric | Before | After | Status |
 | ------ | ------ | ----- | ------ |
-| Postee context reachable by OPY | None | Typed read tools | Proposed |
-| Credentials in assembled context | Unprotected by design | Structurally excluded | Proposed |
-| Agent-authored requests | None | Scratch drafts, human-approved | Proposed |
-| Agent stacks in the codebase | 1 | 1 | Proposed |
+| Postee context reachable by OPY | None | Typed read tools | **Shipped** |
+| Credentials in assembled context | Unprotected by design | Structurally excluded | **Shipped** |
+| Agent-authored requests | None | Scratch drafts, human-approved | **Shipped** |
+| Agent stacks in the codebase | 1 | 1 | **Shipped** |
 
 ## References
 
@@ -348,3 +348,20 @@ is. Anything relying on the model's cooperation should be treated as unimplement
   A note on process: one edit in this phase silently did nothing because the anchor
   text omitted a `Default` in a derive, and it was only caught by the compiler. Every
   scripted edit in this codebase should assert its replacement count.
+- 2026-07-25: **Phase 5 implemented — this ADR is fully realised.** `PosteeAgentDrawer`
+  puts the agent behind the same overlay surface as history, and `agentDrawer` joins
+  the parallel regions in `posteeUiMachine`, so asking the agent something costs
+  neither the request nor the response on screen.
+
+  Egress consent lives next to the submit control rather than in settings. A choice
+  about sending response bodies to a third party should be made where it is made,
+  and defaults off every time the drawer opens.
+
+  The interaction is proposal-then-accept throughout: the drawer shows the summary,
+  the rationale, and every warning the sanitizer recorded, and only "Open as draft"
+  turns it into a scratch tab. Nothing in the UI path writes to the database.
+
+  The compiler caught the one real gap — the drawer was wired with no control to
+  open it, surfacing as an unused `handleOpenAgent`. The workspace harness now
+  asserts the drawer is reachable from the toolbar, which is the check that would
+  have caught it without the compiler's help.

@@ -66,6 +66,22 @@ describe("posteeUiMachine", () => {
     actor.stop();
   });
 
+  it("opens the agent without disturbing history or the response", () => {
+    const actor = start();
+    actor.send({ type: "OPEN_HISTORY" });
+
+    actor.send({ type: "OPEN_AGENT" });
+
+    // Three overlapping surfaces, none of which negotiates with the others.
+    expect(actor.getSnapshot().matches({ agentDrawer: "open" })).toBe(true);
+    expect(actor.getSnapshot().matches({ historyDrawer: "open" })).toBe(true);
+    expect(actor.getSnapshot().matches({ responsePane: "open" })).toBe(true);
+
+    actor.send({ type: "CLOSE_AGENT" });
+    expect(actor.getSnapshot().matches({ agentDrawer: "closed" })).toBe(true);
+    actor.stop();
+  });
+
   it("carries the pane ratio and clamps whatever it is given", () => {
     const actor = start({ paneRatio: 0.62 });
     expect(actor.getSnapshot().context.paneRatio).toBeCloseTo(0.62);

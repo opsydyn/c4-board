@@ -30,6 +30,8 @@ export type PosteeUiEvent =
   | { type: "SELECT_RESPONSE_TAB"; tab: ResponseTab }
   | { type: "OPEN_HISTORY" }
   | { type: "CLOSE_HISTORY" }
+  | { type: "OPEN_AGENT" }
+  | { type: "CLOSE_AGENT" }
   | { type: "SET_PANE_RATIO"; ratio: number };
 
 export const posteeUiMachine = setup({
@@ -73,6 +75,15 @@ export const posteeUiMachine = setup({
         // History overlays, so it never has to negotiate with the response pane.
         closed: { on: { OPEN_HISTORY: "open" } },
         open: { on: { CLOSE_HISTORY: "closed" } },
+      },
+    },
+    agentDrawer: {
+      initial: "closed",
+      states: {
+        // Same reasoning as history: asking the agent something must not cost the
+        // request or response the operator is looking at.
+        closed: { on: { OPEN_AGENT: "open" } },
+        open: { on: { CLOSE_AGENT: "closed" } },
       },
     },
   },

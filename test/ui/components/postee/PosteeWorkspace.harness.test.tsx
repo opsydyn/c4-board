@@ -105,6 +105,31 @@ describe("PosteeWorkspace", () => {
     expect(screen.getByLabelText("Request URL")).toBeInTheDocument();
   });
 
+  it("makes the OPY request author reachable", async () => {
+    const user = userEvent.setup();
+    await renderWorkspace();
+
+    expect(screen.queryByRole("dialog", { name: /opy/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open OPY request author" }));
+
+    const drawer = await screen.findByRole("dialog", { name: /opy/i });
+    expect(drawer).toBeInTheDocument();
+    expect(screen.getByLabelText(/describe the request/i)).toBeInTheDocument();
+    // Egress consent is visible at the point of use, not buried in settings.
+    expect(screen.getByRole("checkbox", { name: /response bodies/i })).not.toBeChecked();
+  });
+
+  it("keeps the request visible while the agent drawer is open", async () => {
+    const user = userEvent.setup();
+    await renderWorkspace();
+
+    await user.click(screen.getByRole("button", { name: "Open OPY request author" }));
+    await screen.findByRole("dialog", { name: /opy/i });
+
+    expect(screen.getByLabelText("Request URL")).toBeInTheDocument();
+  });
+
   it("exposes the pane divider as a keyboard-operable separator", async () => {
     await renderWorkspace();
 
