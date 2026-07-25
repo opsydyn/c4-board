@@ -546,6 +546,8 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
           requestStatuses={requestStatuses}
           activeCollectionId={activeCollectionId}
           activeRequestId={activeRequestId}
+          isAgentOpen={isAgentDrawerOpen}
+          onToggleAgent={isAgentDrawerOpen ? handleCloseAgent : handleOpenAgent}
           onCreateCollection={handleCreateCollection}
           onSelectCollection={handleSelectCollection}
           onSelectRequest={handleSelectRequest}
@@ -599,17 +601,6 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
               >
                 <CaretRightIcon size={16} weight="bold" />
                 Load Test
-              </ToggleButton>
-            </Tooltip>
-            <Tooltip content="Ask OPY to draft a request">
-              <ToggleButton
-                isSelected={isAgentDrawerOpen}
-                onChange={(selected) => (selected ? handleOpenAgent() : handleCloseAgent())}
-                className={layoutStyles.collapseToggle}
-                aria-label="Open OPY request author"
-              >
-                <CaretRightIcon size={16} weight="bold" />
-                OPY
               </ToggleButton>
             </Tooltip>
             <Tooltip content="View execution history">

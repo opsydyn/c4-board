@@ -17,6 +17,7 @@ import {
   FileIcon,
   FolderIcon,
   GearSixIcon,
+  RobotIcon,
   PencilLineIcon,
   TrashSimpleIcon,
 } from "@phosphor-icons/react";
@@ -50,6 +51,9 @@ export interface PosteeSidebarProps {
   onToggleSidebar: () => void;
   onNavigateToBoard?: () => void;
   onNavigateToSettings?: () => void;
+  /** Mirrors the board's OPY control, so both apps toggle it the same way. */
+  isAgentOpen?: boolean;
+  onToggleAgent?: () => void;
 }
 
 export function PosteeSidebar({
@@ -65,6 +69,8 @@ export function PosteeSidebar({
   onToggleSidebar,
   onNavigateToBoard,
   onNavigateToSettings,
+  isAgentOpen = false,
+  onToggleAgent,
 }: PosteeSidebarProps) {
   const [newCollectionName, setNewCollectionName] = useState("");
   const [expandedKeys, setExpandedKeys] = useState<Set<Key> | "all">(
@@ -221,7 +227,22 @@ export function PosteeSidebar({
             <span>V1.0.0</span>
           </span>
         </span>
-        {onNavigateToSettings
+        <span className={layoutStyles.sidebarBrandActions}>
+          {onToggleAgent && (
+            <button
+              type="button"
+              className={`${layoutStyles.sidebarBrandAction} ${
+                isAgentOpen ? layoutStyles.sidebarBrandActionActive : ""
+              }`}
+              aria-label={isAgentOpen ? "Hide OPY Net assistant panel" : "Show OPY Net assistant panel"}
+              aria-pressed={isAgentOpen}
+              title={isAgentOpen ? "Hide OPY Net assistant panel" : "Show OPY Net assistant panel"}
+              onClick={onToggleAgent}
+            >
+              <RobotIcon size={16} weight="duotone" />
+            </button>
+          )}
+          {onNavigateToSettings
           ? (
             <a
               className={layoutStyles.sidebarBrandAction}
@@ -246,6 +267,7 @@ export function PosteeSidebar({
               <GearSixIcon size={16} weight="duotone" />
             </a>
           )}
+        </span>
       </div>
       <p className={layoutStyles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>
       <nav className={layoutStyles.sidebarQuickActions} aria-label="Workspace shortcuts">

@@ -105,13 +105,13 @@ describe("PosteeWorkspace", () => {
     expect(screen.getByLabelText("Request URL")).toBeInTheDocument();
   });
 
-  it("makes the OPY request author reachable", async () => {
+  it("makes the OPY request author reachable from the brand controls", async () => {
     const user = userEvent.setup();
     await renderWorkspace();
 
     expect(screen.queryByRole("dialog", { name: /opy/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Open OPY request author" }));
+    await user.click(screen.getByRole("button", { name: /show opy net assistant/i }));
 
     const drawer = await screen.findByRole("dialog", { name: /opy/i });
     expect(drawer).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("PosteeWorkspace", () => {
     const user = userEvent.setup();
     await renderWorkspace();
 
-    await user.click(screen.getByRole("button", { name: "Open OPY request author" }));
+    await user.click(screen.getByRole("button", { name: /show opy net assistant/i }));
     await screen.findByRole("dialog", { name: /opy/i });
 
     expect(screen.getByLabelText("Request URL")).toBeInTheDocument();
