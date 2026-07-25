@@ -247,6 +247,7 @@ export function PosteeRequestBuilder({
   const [graphqlDocument, setGraphqlDocument] = useState("");
   const [graphqlVariables, setGraphqlVariables] = useState("{}");
   const [graphqlOperationName, setGraphqlOperationName] = useState<string | null>(null);
+  const [graphqlTab, setGraphqlTab] = useState<"Document" | "Variables">("Document");
   const [bodyWasEdited, setBodyWasEdited] = useState(false);
   const [hydratedRequestId, setHydratedRequestId] = useState<string | null>(null);
   const [pendingSave, setPendingSave] = useState<PendingRequestDraftSave | null>(null);
@@ -921,9 +922,19 @@ export function PosteeRequestBuilder({
               {isGraphqlBody
                 ? (
                   <div className={styles.graphqlEditorLayout}>
-                    <div className={styles.graphqlEditorSection}>
+                    {/*
+                      Document and variables were stacked, which pushed variables off
+                      the bottom of a fixed-height pane. Tabs keep both reachable
+                      without the shell scrolling (ADR-011).
+                    */}
+                    <TabBar
+                      tabs={["Document", "Variables"]}
+                      activeTab={graphqlTab}
+                      onTabChange={(next) => setGraphqlTab(next as "Document" | "Variables")}
+                    >
+                    <TabPanel id="Document" className={styles.graphqlEditorSection}>
                       <div className={styles.graphqlEditorHeading}>
-                        <span>Document</span>
+                        <span>Schema</span>
                         <div className={styles.graphqlSchemaControls}>
                           <span className={styles.graphqlSchemaStatus} role="status" aria-live="polite">
                             {graphqlSchemaStatusText}
@@ -948,20 +959,18 @@ export function PosteeRequestBuilder({
                         readOnly={!isEditorSynchronized || isRunning}
                         height="clamp(180px, 42vh, 620px)"
                       />
-                    </div>
-                    <div className={styles.graphqlEditorSection}>
-                      <div className={styles.graphqlEditorHeading}>
-                        Variables
-                      </div>
+                    </TabPanel>
+                    <TabPanel id="Variables" className={styles.graphqlEditorSection}>
                       <MonacoJsonEditor
                         value={graphqlVariables}
                         onChange={handleGraphqlVariablesChange}
                         readOnly={!isEditorSynchronized || isRunning}
-                        height="clamp(120px, 18vh, 280px)"
+                        height="clamp(180px, 42vh, 620px)"
                         placeholder="{}"
                         ariaLabel="GraphQL variables"
                       />
-                    </div>
+                    </TabPanel>
+                    </TabBar>
                     {graphqlPreparation !== null && graphqlPreparation.operationNames.length > 1 && (
                       <label className={styles.graphqlOperationField}>
                         <span>Operation</span>

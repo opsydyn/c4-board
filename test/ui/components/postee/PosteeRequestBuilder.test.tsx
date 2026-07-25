@@ -410,7 +410,8 @@ describe("PosteeRequestBuilder durable request details", () => {
     expect(screen.getByRole("option", { name: "QUERY" })).toBeInTheDocument();
   });
 
-  it("renders durable GraphQL document and variables editors", () => {
+  it("opens on the GraphQL document, with variables a tab away", async () => {
+    const user = userEvent.setup();
     renderBuilder({
       selectedRequest: multiOperationGraphqlDraft.request,
       selectedRequestDraft: multiOperationGraphqlDraft,
@@ -419,8 +420,30 @@ describe("PosteeRequestBuilder durable request details", () => {
     expect(screen.getByLabelText("GraphQL document")).toHaveValue(
       multiOperationGraphqlDraft.graphql!.document,
     );
+    // Stacking both editors pushed variables off the bottom of a fixed-height pane.
+    expect(screen.queryByLabelText("GraphQL variables")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Variables" }));
+
     expect(screen.getByLabelText("GraphQL variables")).toHaveValue(
       multiOperationGraphqlDraft.graphql!.variables_json,
+    );
+    expect(screen.queryByLabelText("GraphQL document")).not.toBeInTheDocument();
+  });
+
+  it("keeps edits to both GraphQL editors when switching between them", async () => {
+    const user = userEvent.setup();
+    renderBuilder({
+      selectedRequest: multiOperationGraphqlDraft.request,
+      selectedRequestDraft: multiOperationGraphqlDraft,
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Variables" }));
+    await user.click(screen.getByRole("tab", { name: "Document" }));
+
+    // A tab that forgets what you typed is worse than a scrollbar.
+    expect(screen.getByLabelText("GraphQL document")).toHaveValue(
+      multiOperationGraphqlDraft.graphql!.document,
     );
   });
 
@@ -436,6 +459,7 @@ describe("PosteeRequestBuilder durable request details", () => {
       "GraphQL requires an operation selection.",
     );
 
+    await user.click(screen.getByRole("tab", { name: "Variables" }));
     await user.type(screen.getByLabelText("GraphQL variables"), " ");
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
@@ -473,7 +497,8 @@ describe("PosteeRequestBuilder durable request details", () => {
     );
   });
 
-  it("locks GraphQL authoring controls while a request is running", () => {
+  it("locks GraphQL authoring controls while a request is running", async () => {
+    const user = userEvent.setup();
     renderBuilder({
       selectedRequest: selectedOperationGraphqlDraft.request,
       selectedRequestDraft: selectedOperationGraphqlDraft,
@@ -481,8 +506,11 @@ describe("PosteeRequestBuilder durable request details", () => {
     });
 
     expect(screen.getByLabelText("GraphQL document")).toHaveAttribute("readonly");
-    expect(screen.getByLabelText("GraphQL variables")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("GraphQL operation")).toBeDisabled();
+
+    // The lock has to hold on the tab that is not on screen when a run starts.
+    await user.click(screen.getByRole("tab", { name: "Variables" }));
+    expect(screen.getByLabelText("GraphQL variables")).toHaveAttribute("readonly");
   });
 
   it("refreshes a saved GraphQL schema without making the authoring draft dirty", async () => {

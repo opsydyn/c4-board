@@ -319,3 +319,14 @@ one that was already built, and delete the stacked variant that replaced it".
   rather than an `if` in a click handler, so no future caller can forget it.
 
   This ADR is fully implemented.
+- 2026-07-25: **GraphQL variables moved behind a tab.** Document and variables were
+  stacked, which is fine in a scrolling page and wrong in a fixed-height pane: at
+  half width the variables editor fell off the bottom, and the only way to reach it
+  was the scroll this ADR removed.
+
+  Tabs are the right tool because the two are alternatives rather than a sequence —
+  you author one at a time. Both editors now take the same height, so switching does
+  not move the pane.
+
+  Generalising: any surface that stacks two full-height editors in one pane will hit
+  this. Sequence within a pane is a scroll; alternatives within a pane are tabs.
