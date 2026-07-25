@@ -118,6 +118,35 @@ persists scratch drafts on every keystroke and the board autosaves. What genuine
 interrupted is **work in flight** — a running load test, an in-flight request, an agent run. Restart
 readiness is therefore a predicate over active operations, not over dirty buffers.
 
+### The repository must be public for any of this to work
+
+Discovered while starting Phase 1, and not accounted for anywhere above: **`opsydyn/c4-board` is a
+private repository**, and the updater fetches its endpoint with no GitHub credentials. Every URL the
+design depends on returns 404 to an unauthenticated client:
+
+```
+GET https://github.com/opsydyn/c4-board/releases/latest/download/...  -> 404
+GET https://api.github.com/repos/opsydyn/c4-board/releases/latest     -> 404
+```
+
+An installed app is an unauthenticated client. Signing the artifacts, generating `latest.json` and
+shipping the updater plugin would all succeed, and every update check in the field would still fail.
+
+Four ways out were considered; **the repository becomes public**.
+
+| Option | Why not |
+| ------ | ------- |
+| **Public repository** (chosen) | Works exactly as designed — no second host, no extra upload step, no endpoint change, nothing to keep in sync. Publishes the source, which is a business decision rather than a technical one. |
+| Separate public releases repo | Keeps the source private, but adds a cross-repo upload and a second place for the release to be half-published. |
+| Object storage behind a CDN | Most control, and independent of GitHub. Costs money, needs bucket credentials in CI, and more to get wrong. |
+| Embed a read-only token | Rejected. A token shipped in a desktop binary is extractable by anyone who installs it, and it would grant read access to the private source. |
+
+**Precondition.** Before the switch, the history was scanned for committed credentials: no key
+material, no `.env`, no certificate or token patterns across all 465 commits — the only matches were
+a deliberately fake `sk-proj-rig-runtime-secret` test fixture and HTML `id` attributes containing
+`task-history`. The Azure credentials reference is placeholders. Flipping visibility publishes all
+history, so this check is a precondition of the decision, not a formality.
+
 ### Release ordering must change
 
 The updater endpoint is `releases/latest/download/latest.json`. For that to be true rather than
@@ -232,6 +261,11 @@ a bad release, which matters most on the release that broke something.
 1. **Phase 1 — Signed artifacts.** Generate the updater keypair, add CI secrets, set
    `createUpdaterArtifacts`, flip `includeUpdaterJson` to `true`. Verify a release produces `.sig`
    files and `latest.json`. No app changes; nothing consumes it yet.
+
+   **Phase 1a — repository visibility.** Make the repository public and verify
+   `releases/latest/download/latest.json` returns 200 to an unauthenticated client. Ordering is
+   deliberate: until this is true, every later phase is untestable end to end, and a green Phase 1
+   proves only that the files exist somewhere nobody can read. The history scan above is the gate.
 2. **Phase 2 — Release ordering.** `git_release_draft = true`, publish after every platform job
    succeeds. Verify `releases/latest` never resolves to an assetless release.
 3. **Phase 3 — Plugins and permissions.** Add `tauri-plugin-updater` and `tauri-plugin-process`,
@@ -283,6 +317,7 @@ signature failure. Integration tests use an injected fake service; nothing in th
 | `releases/latest` without assets | ~25 min per release | Never | Proposed |
 | Installing a new version | Manual download and reinstall | In-app, user-confirmed | Proposed |
 | Platforms with a verified update path | 0 | macOS, Windows, Linux AppImage | Proposed |
+| `latest.json` reachable unauthenticated | 404 (private repo) | 200 | Proposed (Phase 1a) |
 | macOS builds openable without a Gatekeeper workaround | No | Yes | Proposed (Phase 0) |
 
 ## References
