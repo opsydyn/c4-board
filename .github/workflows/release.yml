@@ -17,8 +17,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Set to true once Apple signing credentials are stored in repo secrets.
-  APPLE_SIGNING_ENABLED: "false"
+  # Developer ID signing and notarisation. macOS is the primary platform, and the
+  # updater replaces the .app in place — an unsigned replacement is refused by
+  # Gatekeeper and leaves the user with an app that will not open (ADR-013 Phase 0).
+  APPLE_SIGNING_ENABLED: "true"
 
 jobs:
   release-gate:
