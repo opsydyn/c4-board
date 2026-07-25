@@ -125,6 +125,40 @@ usually-true, the release must not be published until its assets exist. release-
 `git_release_draft = true`, and `build-release-assets` publishes the release once every platform job
 has uploaded. This also matches the existing intent of the `resolve-existing-release` job.
 
+### Apple signing
+
+Not a mechanical prerequisite of the updater — Tauri's own minisign signature is separate from
+Apple's and is required regardless. It is a practical one, for three reasons: Apple Silicon refuses
+unsigned binaries, the updater replaces the `.app` in place so a rejected replacement leaves the user
+with an app that will not open, and users of unsigned builds are already working around Gatekeeper by
+hand today.
+
+The pipeline for it is already written. `release.yml` contains a validation step, a secret-export
+step, and certificate handling, all gated behind a single line: `APPLE_SIGNING_ENABLED: "false"`.
+Enabling it needs secrets, not code:
+
+| Secret | What it is |
+| ------ | ---------- |
+| `APPLE_CERTIFICATE` | Developer ID **Application** certificate exported as `.p12`, base64-encoded |
+| `APPLE_CERTIFICATE_PASSWORD` | the password used when exporting that `.p12` |
+| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Name (TEAMID)` |
+| `APPLE_TEAM_ID` | the ten-character team identifier |
+
+Plus notarisation credentials, and the workflow accepts either form:
+
+| Option | Secrets |
+| ------ | ------- |
+| App Store Connect API key *(preferred)* | `APPLE_API_KEY` (key id), `APPLE_API_ISSUER` (issuer uuid), `APPLE_API_KEY_P8` (the key file's contents) |
+| Apple ID | `APPLE_ID`, `APPLE_PASSWORD` (an app-specific password, not the account password) |
+
+The API key form is preferred because it is scoped, revocable, and does not tie releases to one
+person's Apple ID.
+
+Two things to check rather than assume when enabling this: `tauri.conf.json` has **no `bundle.macOS`
+section**, so there are no explicit entitlements or minimum system version, and the certificate must
+be Developer ID **Application** — a Developer ID Installer or Mac App Distribution certificate will
+validate and then fail to produce a distributable build.
+
 ### Platform honesty
 
 The UI reports what the running install can actually do:
@@ -134,7 +168,7 @@ The UI reports what the running install can actually do:
 | Windows (NSIS/MSI) | Yes | SmartScreen warnings without Authenticode |
 | Linux AppImage | Yes | — |
 | Linux deb/rpm | **No** | system package manager owns the install |
-| macOS | **Not until signed** | Developer ID + notarisation required first |
+| macOS | Yes, after Phase 0 | Developer ID + notarisation — a precondition, not a follow-up |
 
 Where updates are unavailable, the settings panel links to the release page instead of offering a
 button that cannot work.
@@ -190,6 +224,11 @@ a bad release, which matters most on the release that broke something.
 
 ## Migration Plan
 
+0. **Phase 0 — Apple Developer ID signing.** Enable the signing path that already exists in
+   `release.yml`, and prove it before anything depends on it: a `.dmg` from CI opens on a Mac that
+   did not build it, without a right-click-Open or a quarantine strip. macOS is the primary platform
+   and the updater replaces the `.app` in place, so an unsigned replacement leaves a user with an app
+   that will not launch. See **Apple signing** below for exactly what this needs.
 1. **Phase 1 — Signed artifacts.** Generate the updater keypair, add CI secrets, set
    `createUpdaterArtifacts`, flip `includeUpdaterJson` to `true`. Verify a release produces `.sig`
    files and `latest.json`. No app changes; nothing consumes it yet.
@@ -243,7 +282,8 @@ signature failure. Integration tests use an injected fake service; nothing in th
 | `latest.json` on the release | Absent | Present | Proposed |
 | `releases/latest` without assets | ~25 min per release | Never | Proposed |
 | Installing a new version | Manual download and reinstall | In-app, user-confirmed | Proposed |
-| Platforms with a verified update path | 0 | Windows + AppImage, macOS after signing | Proposed |
+| Platforms with a verified update path | 0 | macOS, Windows, Linux AppImage | Proposed |
+| macOS builds openable without a Gatekeeper workaround | No | Yes | Proposed (Phase 0) |
 
 ## References
 
@@ -256,8 +296,8 @@ signature failure. Integration tests use an injected fake service; nothing in th
 
 ## Follow-Up ADRs
 
-- ADR-NNN: Apple Developer ID signing and notarisation — a prerequisite for macOS updates, and worth
-  deciding on its own terms rather than inside this one.
+- ADR-NNN: Windows Authenticode signing, which removes SmartScreen warnings but is not a
+  precondition for updates the way Apple signing is.
 - ADR-NNN: Release channels, if a beta channel is ever wanted.
 
 ---
@@ -277,3 +317,21 @@ that are painful to reproduce.
 ### Updates
 
 - 2026-07-25: Initial draft.
+- 2026-07-25: **Apple signing promoted to Phase 0.** macOS is the primary platform for this app's
+  users, so a design that ships updates everywhere else and defers macOS has the priority backwards.
+
+  Asked whether signing is strictly needed: no, not by the updater. Tauri's minisign signature is
+  separate from Apple's and is required either way. But the updater replaces the `.app` in place, and
+  a replacement macOS refuses to run leaves the user with an application that will not open — a worse
+  outcome than never offering the update. On Apple Silicon the binary must be signed at all. And users
+  of the current unsigned builds are already working around Gatekeeper by hand, so the problem exists
+  today and auto-update would repeat it once per release.
+
+  Reading `release.yml` properly changed the estimate: the signing path is already written —
+  validation, secret export, certificate handling, and notarisation accepting either an App Store
+  Connect API key or an Apple ID. It is gated behind one line, `APPLE_SIGNING_ENABLED: "false"`.
+  Enabling it is secrets and a flag, not implementation, so treating it as a separate follow-up ADR
+  was overhead rather than caution.
+
+  Phase 0 is provable on its own terms and before any updater work depends on it: a `.dmg` built by
+  CI opens on a Mac that did not build it, with no right-click-Open and no quarantine strip.
