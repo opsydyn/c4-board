@@ -945,7 +945,9 @@ pub struct RigPosteeResponseLookupResult {
 
 fn execute_postee_history_lookup_tool(context: &RigPosteeContext) -> RigPosteeHistoryLookupResult {
     let mut entries = context.history.clone();
-    entries.sort_by(|left, right| right.executed_at.cmp(&left.executed_at));
+    // Newest first. sort_by_key with Reverse rather than a comparator: clippy's
+    // unnecessary_sort_by rejects the latter, and CI runs a newer clippy than local.
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.executed_at));
 
     let failure_count = entries
         .iter()
