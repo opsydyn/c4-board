@@ -1,26 +1,18 @@
 {
   "managedBy": "github-actions/release-plz",
   "purpose": "Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
-  "base": "17db199fac794ae69720fbbc002a80abd6ce440e",
-  "head": "7335f9d658439d4d1e7144e67ca4fc3e81bfb88a",
+  "base": "6feaa71b701d9d27795e450b894dd2dcb2959beb",
+  "head": "547100bd2f011f1459b88162435253b78bcf4220",
   "paths": [
-    "src/core/effects/postee/active-request-draft.ts",
-    "src/core/effects/postee/index.ts",
-    "src/core/effects/postee/scratch-draft.ts",
-    "src/core/effects/postee/workspace-panes.ts",
+    "src/core/effects/canvas-workspace-tracks.ts",
+    "src/ui/components/C4CanvasContainer.tsx",
+    "src/ui/components/OpyDrawer.css.ts",
+    "src/ui/components/OpyDrawer.test.tsx",
+    "src/ui/components/OpyDrawer.tsx",
     "src/ui/components/postee/Drawer.css.ts",
-    "src/ui/components/postee/Drawer.tsx",
-    "src/ui/components/postee/LoadTestPanel.tsx",
-    "src/ui/components/postee/MonacoGraphqlEditor.tsx",
-    "src/ui/components/postee/MonacoJsonEditor.tsx",
-    "src/ui/components/postee/PaneDivider.css.ts",
-    "src/ui/components/postee/PaneDivider.tsx",
-    "src/ui/components/postee/PosteeRequestBuilder.tsx",
-    "src/ui/components/postee/PosteeResponsePanel.tsx",
-    "src/ui/components/postee/PosteeWorkspace.css.ts",
-    "src/ui/components/postee/PosteeWorkspace.tsx",
-    "src/ui/components/postee/ResponseViewer.tsx",
-    "src/ui/machines/postee-ui.machine.ts",
-    "src/ui/machines/postee.machine.ts"
+    "src/ui/components/postee/PosteeAgentDrawer.css.ts",
+    "src/ui/components/postee/PosteeAgentDrawer.tsx",
+    "src/ui/components/settings/SettingsPanel.tsx",
+    "src/ui/components/styles.css.ts"
   ]
 }
