@@ -12,8 +12,11 @@
  * from.
  */
 
+import { Option } from "effect";
 import type { PosteeEnvironmentVariable } from "../database.postee";
 import type { RedactionMode } from "../settings.types";
+
+const parseJson = Option.liftThrowable((text: string) => JSON.parse(text) as unknown);
 
 export interface PosteeRedactionPolicy {
   readonly mode: RedactionMode;
@@ -32,8 +35,33 @@ export interface PosteeAgentRequestInput {
   readonly body: string | null;
 }
 
+export interface PosteeAgentSavedRequestInput {
+  readonly name: string;
+  readonly method: string;
+  readonly url: string;
+  /**
+   * The same header shape the active request uses, values included. The boundary's
+   * job is not to be handed pre-cleaned input — it is to receive what callers
+   * actually hold and emit only names.
+   */
+  readonly headers: ReadonlyArray<PosteeAgentRequestInput["headers"][number]>;
+}
+
+export interface PosteeAgentCollectionInput {
+  readonly name: string;
+  readonly requests: ReadonlyArray<PosteeAgentSavedRequestInput>;
+}
+
+export interface PosteeAgentGraphqlSchemaInput {
+  readonly endpointUrl: string;
+  readonly capturedAt: number;
+  readonly introspectionJson: string;
+}
+
 export interface PosteeAgentContextInput {
   readonly request: PosteeAgentRequestInput;
+  readonly collections?: ReadonlyArray<PosteeAgentCollectionInput>;
+  readonly graphqlSchema?: PosteeAgentGraphqlSchemaInput;
   readonly environment?: {
     readonly name: string;
     readonly variables: ReadonlyArray<PosteeEnvironmentVariable>;
@@ -55,6 +83,17 @@ export interface PosteeAgentContext {
     readonly bodyMode: string;
     readonly body: string | null;
   };
+  readonly collections: ReadonlyArray<{
+    readonly name: string;
+    readonly requests: ReadonlyArray<{
+      readonly name: string;
+      readonly method: string;
+      readonly url: string;
+      /** Header names only — a saved request is never the one opted into. */
+      readonly headerKeys: ReadonlyArray<string>;
+    }>;
+  }>;
+  readonly graphqlSchema: PosteeGraphqlSchemaSummary | null;
   readonly environment: {
     readonly name: string;
     /** Keys only. An agent can reason about `{{API_TOKEN}}` without its value. */
@@ -95,6 +134,67 @@ const redactUrl = (url: string, mode: RedactionMode): string => {
   const names = Array.from(parsed.searchParams.keys());
   const query = names.map((name) => `${name}=`).join("&");
   return query.length > 0 ? `${parsed.origin}${parsed.pathname}?${query}` : `${parsed.origin}${parsed.pathname}`;
+};
+
+export interface PosteeGraphqlSchemaSummary {
+  readonly endpointUrl: string;
+  readonly capturedAt: number;
+  readonly queryFields: ReadonlyArray<string>;
+  readonly mutationFields: ReadonlyArray<string>;
+  readonly typeNames: ReadonlyArray<string>;
+}
+
+interface IntrospectionType {
+  readonly kind?: string;
+  readonly name?: string;
+  readonly fields?: ReadonlyArray<{ readonly name?: string }> | null;
+}
+
+/** GraphQL's own meta types — noise for authoring, and always present. */
+const isMetaType = (name: string): boolean => name.startsWith("__");
+
+const fieldNamesOf = (types: ReadonlyArray<IntrospectionType>, typeName: string | undefined) => {
+  if (!typeName) return [];
+  const match = types.find((type) => type.name === typeName);
+  return (match?.fields ?? [])
+    .map((field) => field.name)
+    .filter((name): name is string => typeof name === "string")
+    .sort();
+};
+
+/**
+ * Reduces a cached introspection result to what authoring an operation needs.
+ *
+ * A full introspection payload is enormous and mostly machine plumbing; the root
+ * field names and type names are the part a model can actually use. Returns `null`
+ * rather than a partial summary when the payload cannot be understood, so callers
+ * never present guesswork as schema.
+ */
+export const summariseGraphqlSchema = (
+  introspectionJson: string,
+): Omit<PosteeGraphqlSchemaSummary, "endpointUrl" | "capturedAt"> | null => {
+  const parsed = Option.isSome(parseJson(introspectionJson)) ? JSON.parse(introspectionJson) : null;
+  if (parsed === null || typeof parsed !== "object") return null;
+
+  const root = (parsed as { data?: unknown }).data ?? parsed;
+  const schema = (root as { __schema?: unknown }).__schema;
+  if (!schema || typeof schema !== "object") return null;
+
+  const typed = schema as {
+    queryType?: { name?: string };
+    mutationType?: { name?: string } | null;
+    types?: ReadonlyArray<IntrospectionType>;
+  };
+  const types = typed.types ?? [];
+
+  return {
+    queryFields: fieldNamesOf(types, typed.queryType?.name),
+    mutationFields: fieldNamesOf(types, typed.mutationType?.name ?? undefined),
+    typeNames: types
+      .map((type) => type.name)
+      .filter((name): name is string => typeof name === "string" && !isMetaType(name))
+      .sort(),
+  };
 };
 
 export const buildPosteeAgentContext = (
@@ -141,7 +241,32 @@ export const buildPosteeAgentContext = (
     withheld.push("response body");
   }
 
+  const collections = (input.collections ?? []).map((collection) => ({
+    name: collection.name,
+    requests: collection.requests.map((request) => ({
+      name: request.name,
+      method: request.method,
+      // Saved requests are redacted regardless of `includeHeaderValues`: opting
+      // into the request you are looking at must not opt into every other one.
+      url: redactUrl(request.url, policy.mode),
+      headerKeys: request.headers.map((header) => header.key),
+    })),
+  }));
+
+  const schemaSummary = input.graphqlSchema
+    ? summariseGraphqlSchema(input.graphqlSchema.introspectionJson)
+    : null;
+  const graphqlSchema = input.graphqlSchema && schemaSummary
+    ? {
+      endpointUrl: redactUrl(input.graphqlSchema.endpointUrl, policy.mode),
+      capturedAt: input.graphqlSchema.capturedAt,
+      ...schemaSummary,
+    }
+    : null;
+
   return {
+    collections,
+    graphqlSchema,
     request: {
       name: input.request.name,
       method: input.request.method,

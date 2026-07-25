@@ -769,8 +769,42 @@ pub struct RigPosteeContextResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextSavedRequest {
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    /// Header names only; saved requests never carry values across this boundary.
+    pub header_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextCollection {
+    pub name: String,
+    pub requests: Vec<RigPosteeContextSavedRequest>,
+}
+
+/// A cached introspection result, already reduced to root fields and type names.
+/// The raw payload never crosses this boundary — it is enormous and mostly
+/// machine plumbing.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextGraphqlSchema {
+    pub endpoint_url: String,
+    pub captured_at: i64,
+    pub query_fields: Vec<String>,
+    pub mutation_fields: Vec<String>,
+    pub type_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RigPosteeContext {
     pub request: RigPosteeContextRequest,
+    #[serde(default)]
+    pub collections: Vec<RigPosteeContextCollection>,
+    #[serde(default)]
+    pub graphql_schema: Option<RigPosteeContextGraphqlSchema>,
     pub environment: Option<RigPosteeContextEnvironment>,
     pub last_response: Option<RigPosteeContextResponse>,
     /// What the redaction boundary withheld, so the agent can say so rather than
@@ -784,6 +818,8 @@ pub enum RigPosteeReadToolName {
     ActiveRequest,
     EnvironmentKeys,
     LastResponseSummary,
+    CollectionSummary,
+    GraphqlSchemaLookup,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
@@ -834,6 +870,66 @@ pub struct RigPosteeLastResponseResult {
     pub duration_ms: Option<i64>,
     pub size_bytes: Option<i64>,
     pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeCollectionSummaryResult {
+    pub collection_count: i64,
+    pub request_count: i64,
+    pub collections: Vec<RigPosteeContextCollection>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeGraphqlSchemaResult {
+    pub has_schema: bool,
+    pub endpoint_url: Option<String>,
+    pub captured_at: Option<i64>,
+    pub query_fields: Vec<String>,
+    pub mutation_fields: Vec<String>,
+    pub type_names: Vec<String>,
+}
+
+fn execute_postee_collection_summary_tool(
+    context: &RigPosteeContext,
+) -> RigPosteeCollectionSummaryResult {
+    let mut collections = context.collections.clone();
+    collections.sort_by(|left, right| left.name.cmp(&right.name));
+
+    let request_count = collections
+        .iter()
+        .map(|collection| collection.requests.len() as i64)
+        .sum();
+
+    RigPosteeCollectionSummaryResult {
+        collection_count: collections.len() as i64,
+        request_count,
+        collections,
+    }
+}
+
+fn execute_postee_graphql_schema_tool(context: &RigPosteeContext) -> RigPosteeGraphqlSchemaResult {
+    match context.graphql_schema.as_ref() {
+        Some(schema) => RigPosteeGraphqlSchemaResult {
+            has_schema: true,
+            endpoint_url: Some(schema.endpoint_url.clone()),
+            captured_at: Some(schema.captured_at),
+            query_fields: schema.query_fields.clone(),
+            mutation_fields: schema.mutation_fields.clone(),
+            type_names: schema.type_names.clone(),
+        },
+        // No cached schema is a fact worth stating plainly: it tells the agent to
+        // ask for a refresh rather than invent field names.
+        None => RigPosteeGraphqlSchemaResult {
+            has_schema: false,
+            endpoint_url: None,
+            captured_at: None,
+            query_fields: Vec::new(),
+            mutation_fields: Vec::new(),
+            type_names: Vec::new(),
+        },
+    }
 }
 
 fn execute_postee_active_request_tool(context: &RigPosteeContext) -> RigPosteeActiveRequestResult {
@@ -936,6 +1032,22 @@ fn execute_rig_postee_read_tool(
             let value = serde_json::to_value(result)
                 .map_err(|error| format!("Unable to serialize lastResponseSummary result: {error}"))?;
             Ok(serialize(RigPosteeReadToolName::LastResponseSummary, value))
+        }
+        RigPosteeReadToolName::CollectionSummary => {
+            serde_json::from_value::<RigPosteeEmptyInput>(input.input)
+                .map_err(|error| format!("Invalid collectionSummary input payload: {error}"))?;
+            let result = execute_postee_collection_summary_tool(&input.context);
+            let value = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize collectionSummary result: {error}"))?;
+            Ok(serialize(RigPosteeReadToolName::CollectionSummary, value))
+        }
+        RigPosteeReadToolName::GraphqlSchemaLookup => {
+            serde_json::from_value::<RigPosteeEmptyInput>(input.input)
+                .map_err(|error| format!("Invalid graphqlSchemaLookup input payload: {error}"))?;
+            let result = execute_postee_graphql_schema_tool(&input.context);
+            let value = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize graphqlSchemaLookup result: {error}"))?;
+            Ok(serialize(RigPosteeReadToolName::GraphqlSchemaLookup, value))
         }
     }
 }
@@ -1737,8 +1849,54 @@ mod tests {
                 size_bytes: 512,
                 body: None,
             }),
+            collections: vec![RigPosteeContextCollection {
+                name: "Accounts".to_string(),
+                requests: vec![RigPosteeContextSavedRequest {
+                    name: "List accounts".to_string(),
+                    method: "GET".to_string(),
+                    url: "https://api.example.test/accounts".to_string(),
+                    header_keys: vec!["Authorization".to_string()],
+                }],
+            }],
+            graphql_schema: Some(RigPosteeContextGraphqlSchema {
+                endpoint_url: "https://api.example.test/graphql".to_string(),
+                captured_at: 1_700_000_000_000,
+                query_fields: vec!["account".to_string(), "systems".to_string()],
+                mutation_fields: vec!["createAccount".to_string()],
+                type_names: vec!["Account".to_string()],
+            }),
             withheld: vec!["header values".to_string()],
         }
+    }
+
+    #[test]
+    fn postee_collection_tool_counts_requests_across_collections() {
+        let result = execute_postee_collection_summary_tool(&postee_context_fixture());
+
+        assert_eq!(result.collection_count, 1);
+        assert_eq!(result.request_count, 1);
+        assert_eq!(result.collections[0].requests[0].header_keys, vec!["Authorization"]);
+    }
+
+    #[test]
+    fn postee_graphql_tool_exposes_root_fields() {
+        let result = execute_postee_graphql_schema_tool(&postee_context_fixture());
+
+        assert!(result.has_schema);
+        assert_eq!(result.query_fields, vec!["account", "systems"]);
+        assert_eq!(result.mutation_fields, vec!["createAccount"]);
+    }
+
+    #[test]
+    fn postee_graphql_tool_says_so_when_no_schema_is_cached() {
+        let mut context = postee_context_fixture();
+        context.graphql_schema = None;
+
+        let result = execute_postee_graphql_schema_tool(&context);
+
+        // Saying "no schema" is what stops the model inventing field names.
+        assert!(!result.has_schema);
+        assert!(result.query_fields.is_empty());
     }
 
     #[test]

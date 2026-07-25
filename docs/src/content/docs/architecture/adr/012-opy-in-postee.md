@@ -290,3 +290,23 @@ is. Anything relying on the model's cooperation should be treated as unimplement
   disabled by design (`keychain_supported_in_runtime`), so the OpenAI key resolves
   from the `app_settings` table instead. That is a development-only fallback, but it
   means the key sits in SQLite during development.
+- 2026-07-25: **Phase 2b implemented.** Workspace scope: collections and the cached
+  GraphQL schema, plus the `collectionSummary` and `graphqlSchemaLookup` tools the
+  original plan named.
+
+  Collections turned out to be a leak surface the Phase 1 boundary did not cover:
+  every saved request carries its own URL and headers, so redacting only the active
+  request would have emitted credentials for every other one. Saved request headers
+  are therefore name-only **regardless of `includeHeaderValues`** — opting into the
+  request you are looking at must not opt into the rest of the workspace.
+
+  Introspection is summarised rather than forwarded. A cached payload is enormous
+  and mostly machine plumbing; root field names and type names are the part that
+  helps author an operation. `summariseGraphqlSchema` returns `null` rather than a
+  partial summary when it cannot understand the payload, so a caller never presents
+  guesswork as schema, and `graphqlSchemaLookup` states plainly when no schema is
+  cached — which is what stops a model inventing field names.
+
+  The saved-request input type takes headers in the shape callers actually hold,
+  values included. A boundary that requires pre-cleaned input is not a boundary; it
+  should receive the real thing and emit only what is safe.
