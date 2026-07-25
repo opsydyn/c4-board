@@ -244,3 +244,23 @@ is. Anything relying on the model's cooperation should be treated as unimplement
 - 2026-07-25: **Accepted.** Phase 1 (the redaction boundary) is the next step; no tool
   ships before it. `ai_agent.rs` is to be read in full before Phase 2 so the tool
   contracts match what exists rather than what this ADR assumed.
+- 2026-07-25: **Phase 1 implemented.** `postee/agent-redaction.ts` assembles agent
+  context with the rules applied at the boundary. No tool exists yet, which is the
+  intended order — the tools will have nowhere to leak from.
+
+  Two decisions taken while building it:
+
+  1. **Environment values have no policy flag.** Header values and bodies are
+     opt-in, but variable values are never emitted in any mode. A flag would
+     eventually be set, and an environment value has no legitimate reason to reach
+     a model provider — the keys carry the useful information, since an agent can
+     reason about `{{API_TOKEN}}` without knowing what it stands for.
+  2. **A URL that will not parse is truncated at `?` rather than passed through.**
+     Failing to parse must not mean failing open, and a malformed URL is exactly
+     where a hand-pasted token tends to be.
+
+  The tests are adversarial rather than example-based: a distinct secret is planted
+  in every field that could carry one, and the assertion is that none appears
+  anywhere in the serialised context. Validated by planting three real leaks —
+  emitting environment values, passing the URL through, and failing open on an
+  unparseable URL — and confirming each is caught and named.
