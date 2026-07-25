@@ -226,7 +226,21 @@ jobs:
         run: |
           set -euo pipefail
           release_tag="$(jq -r '.[0].tag' <<<"${RELEASES}")"
-          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" --jq '.id')"
+          # The release is created as a draft (ADR-013 Phase 2), and
+          # /releases/tags/{tag} only finds published releases, so list and filter.
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq "[.[] | select(.tag_name == \"${release_tag}\")] | first | .id")"
+          if [[ -z "${release_id}" || "${release_id}" == "null" ]]; then
+            echo "::error::No release found for tag ${release_tag}"
+            exit 1
+          fi
+          # build-release-assets checks this tag out. A draft GitHub release does
+          # not itself create a tag, so if release-plz ever stopped pushing one the
+          # matrix would fail four times over with an opaque checkout error.
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${release_tag}" >/dev/null; then
+            echo "::error::Release ${release_tag} exists but its git tag was never pushed"
+            exit 1
+          fi
           echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
           echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
           echo "Released ${release_tag} via GitHub release ${release_id}"
@@ -237,7 +251,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     permissions:
-      contents: read
+      # Listing drafts requires push access, not merely read.
+      contents: write
     outputs:
       release_id: ${{ steps.meta.outputs.release_id }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
@@ -250,7 +265,14 @@ jobs:
         run: |
           set -euo pipefail
           release_tag="${{ inputs.release_tag }}"
-          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" --jq '.id')"
+          # Drafts are invisible to /releases/tags/{tag}, and a re-run targets a
+          # release that has not been published yet by design.
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq "[.[] | select(.tag_name == \"${release_tag}\")] | first | .id")"
+          if [[ -z "${release_id}" || "${release_id}" == "null" ]]; then
+            echo "::error::No release found for tag ${release_tag}"
+            exit 1
+          fi
           echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
           echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
           echo "Resolved ${release_tag} to GitHub release ${release_id}"
@@ -428,3 +450,45 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           tauriScript: bun tauri
           includeUpdaterJson: false
+
+  publish-release:
+    name: Publish release
+    # ADR-013 Phase 2. The release is created as a draft and becomes visible only
+    # here, once every platform in the matrix has uploaded. `result` is success
+    # only when all legs are, so a single platform failure leaves the release a
+    # draft rather than publishing a partial one — which is what shipped as v0.0.8.
+    if: ${{ always() && github.repository_owner == 'opsydyn' && needs.build-release-assets.result == 'success' }}
+    needs:
+      - release-plz-release
+      - resolve-existing-release
+      - build-release-assets
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      RELEASE_ID: ${{ needs.release-plz-release.outputs.release_id != '' && needs.release-plz-release.outputs.release_id || needs.resolve-existing-release.outputs.release_id }}
+      RELEASE_TAG: ${{ needs.release-plz-release.outputs.release_tag != '' && needs.release-plz-release.outputs.release_tag || needs.resolve-existing-release.outputs.release_tag }}
+    steps:
+      - name: Publish the release now every platform has uploaded
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${RELEASE_ID:-}" ]]; then
+            echo "::error::No release id to publish"
+            exit 1
+          fi
+
+          assets="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --jq 'length')"
+          if [[ "${assets}" -eq 0 ]]; then
+            echo "::error::Refusing to publish ${RELEASE_TAG} with no assets"
+            exit 1
+          fi
+
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft=false --jq '.html_url'
+
+          echo "Published ${RELEASE_TAG} with ${assets} asset(s)." >> "$GITHUB_STEP_SUMMARY"

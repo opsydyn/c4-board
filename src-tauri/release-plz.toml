@@ -8,6 +8,12 @@ git_only = true
 publish = false
 publish_no_verify = true
 release_always = true
+# ADR-013 Phase 2. The updater reads releases/latest/download/latest.json, so a
+# release must not exist publicly until its assets do. v0.0.8 was published with
+# zero assets for ~15 minutes and then permanently without either macOS bundle,
+# because the build ran after publication. The Release workflow clears the draft
+# flag once every platform job has uploaded.
+git_release_draft = true
 # Generate release notes from the commit history. This was off, so v0.0.6 was
 # published with an empty body despite carrying 115 commits. 119 of the 123
 # commits in that range were conventional, so generated notes are worth having.
