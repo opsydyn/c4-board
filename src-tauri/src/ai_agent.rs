@@ -804,8 +804,26 @@ pub struct RigPosteeContextGraphqlSchema {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextHistoryEntry {
+    pub id: String,
+    pub request_name: String,
+    pub method: String,
+    pub url: String,
+    pub status: Option<i64>,
+    pub duration_ms: Option<i64>,
+    pub size_bytes: Option<i64>,
+    /// URLs inside the message are redacted upstream; the failure survives.
+    pub error_message: Option<String>,
+    pub executed_at: i64,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct RigPosteeContext {
     pub request: RigPosteeContextRequest,
+    #[serde(default)]
+    pub history: Vec<RigPosteeContextHistoryEntry>,
     #[serde(default)]
     pub collections: Vec<RigPosteeContextCollection>,
     #[serde(default)]
@@ -825,11 +843,19 @@ pub enum RigPosteeReadToolName {
     LastResponseSummary,
     CollectionSummary,
     GraphqlSchemaLookup,
+    HistoryLookup,
+    ResponseLookup,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RigPosteeEmptyInput {}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeResponseLookupInput {
+    pub history_id: String,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -894,6 +920,90 @@ pub struct RigPosteeGraphqlSchemaResult {
     pub query_fields: Vec<String>,
     pub mutation_fields: Vec<String>,
     pub type_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeHistoryLookupResult {
+    pub entry_count: i64,
+    pub failure_count: i64,
+    pub entries: Vec<RigPosteeContextHistoryEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeResponseLookupResult {
+    pub found: bool,
+    pub status: Option<i64>,
+    pub error_message: Option<String>,
+    pub body: Option<String>,
+    /// False when the operator has not consented to bodies leaving the machine.
+    pub body_available: bool,
+    /// Why a body is absent, so the agent can ask rather than assume none exists.
+    pub body_unavailable_reason: Option<String>,
+}
+
+fn execute_postee_history_lookup_tool(context: &RigPosteeContext) -> RigPosteeHistoryLookupResult {
+    let mut entries = context.history.clone();
+    entries.sort_by(|left, right| right.executed_at.cmp(&left.executed_at));
+
+    let failure_count = entries
+        .iter()
+        .filter(|entry| entry.error_message.is_some() || entry.status.is_some_and(|status| status >= 400))
+        .count() as i64;
+
+    RigPosteeHistoryLookupResult {
+        entry_count: entries.len() as i64,
+        failure_count,
+        entries,
+    }
+}
+
+fn execute_postee_response_lookup_tool(
+    input: RigPosteeResponseLookupInput,
+    context: &RigPosteeContext,
+) -> Result<RigPosteeResponseLookupResult, String> {
+    let history_id = normalize_secret(&input.history_id)
+        .ok_or_else(|| "responseLookup requires a non-empty historyId.".to_string())?;
+
+    let entry = context
+        .history
+        .iter()
+        .find(|entry| entry.id == history_id);
+
+    let Some(entry) = entry else {
+        return Ok(RigPosteeResponseLookupResult {
+            found: false,
+            status: None,
+            error_message: None,
+            body: None,
+            body_available: false,
+            body_unavailable_reason: Some(format!("No history entry with id '{history_id}'.")),
+        });
+    };
+
+    // A withheld body and an empty body are different facts, and conflating them
+    // would let the agent report "the response was empty" when it simply was not
+    // allowed to look.
+    let (body_available, body_unavailable_reason) = match entry.body.as_ref() {
+        Some(_) => (true, None),
+        None => (
+            false,
+            Some(
+                "Response bodies are withheld unless the operator consents for this run."
+                    .to_string(),
+            ),
+        ),
+    };
+
+    Ok(RigPosteeResponseLookupResult {
+        found: true,
+        status: entry.status,
+        error_message: entry.error_message.clone(),
+        body: entry.body.clone(),
+        body_available,
+        body_unavailable_reason,
+    })
 }
 
 fn execute_postee_collection_summary_tool(
@@ -1045,6 +1155,22 @@ fn execute_rig_postee_read_tool(
             let value = serde_json::to_value(result)
                 .map_err(|error| format!("Unable to serialize collectionSummary result: {error}"))?;
             Ok(serialize(RigPosteeReadToolName::CollectionSummary, value))
+        }
+        RigPosteeReadToolName::HistoryLookup => {
+            serde_json::from_value::<RigPosteeEmptyInput>(input.input)
+                .map_err(|error| format!("Invalid historyLookup input payload: {error}"))?;
+            let result = execute_postee_history_lookup_tool(&input.context);
+            let value = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize historyLookup result: {error}"))?;
+            Ok(serialize(RigPosteeReadToolName::HistoryLookup, value))
+        }
+        RigPosteeReadToolName::ResponseLookup => {
+            let decoded = serde_json::from_value::<RigPosteeResponseLookupInput>(input.input)
+                .map_err(|error| format!("Invalid responseLookup input payload: {error}"))?;
+            let result = execute_postee_response_lookup_tool(decoded, &input.context)?;
+            let value = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize responseLookup result: {error}"))?;
+            Ok(serialize(RigPosteeReadToolName::ResponseLookup, value))
         }
         RigPosteeReadToolName::GraphqlSchemaLookup => {
             serde_json::from_value::<RigPosteeEmptyInput>(input.input)
@@ -2158,6 +2284,32 @@ mod tests {
                 size_bytes: 512,
                 body: None,
             }),
+            history: vec![
+                RigPosteeContextHistoryEntry {
+                    id: "hist-1".to_string(),
+                    request_name: "List accounts".to_string(),
+                    method: "GET".to_string(),
+                    url: "https://api.example.test/accounts".to_string(),
+                    status: Some(500),
+                    duration_ms: Some(412),
+                    size_bytes: Some(88),
+                    error_message: None,
+                    executed_at: 1_700_000_000_000,
+                    body: None,
+                },
+                RigPosteeContextHistoryEntry {
+                    id: "hist-2".to_string(),
+                    request_name: "Ok call".to_string(),
+                    method: "GET".to_string(),
+                    url: "https://api.example.test/ok".to_string(),
+                    status: Some(200),
+                    duration_ms: Some(30),
+                    size_bytes: Some(12),
+                    error_message: None,
+                    executed_at: 1_700_000_001_000,
+                    body: Some("{\"ok\":true}".to_string()),
+                },
+            ],
             collections: vec![RigPosteeContextCollection {
                 name: "Accounts".to_string(),
                 requests: vec![RigPosteeContextSavedRequest {
@@ -2280,6 +2432,74 @@ mod tests {
         assert!(text.contains("query fields: account, systems"));
         // The prompt must state what was withheld so the model does not fill it in.
         assert!(text.contains("Withheld from you deliberately"));
+    }
+
+    #[test]
+    fn postee_history_tool_orders_newest_first_and_counts_failures() {
+        let result = execute_postee_history_lookup_tool(&postee_context_fixture());
+
+        assert_eq!(result.entry_count, 2);
+        assert_eq!(result.failure_count, 1);
+        assert_eq!(result.entries[0].id, "hist-2");
+    }
+
+    #[test]
+    fn postee_response_tool_distinguishes_withheld_from_empty() {
+        let result = execute_postee_response_lookup_tool(
+            RigPosteeResponseLookupInput {
+                history_id: "hist-1".to_string(),
+            },
+            &postee_context_fixture(),
+        )
+        .expect("lookup should succeed");
+
+        assert!(result.found);
+        assert_eq!(result.status, Some(500));
+        assert!(!result.body_available);
+        // Reporting "the response was empty" when it was withheld would be a lie.
+        assert!(result
+            .body_unavailable_reason
+            .expect("a reason")
+            .contains("consents"));
+    }
+
+    #[test]
+    fn postee_response_tool_returns_a_consented_body() {
+        let result = execute_postee_response_lookup_tool(
+            RigPosteeResponseLookupInput {
+                history_id: "hist-2".to_string(),
+            },
+            &postee_context_fixture(),
+        )
+        .expect("lookup should succeed");
+
+        assert!(result.body_available);
+        assert_eq!(result.body.as_deref(), Some("{\"ok\":true}"));
+    }
+
+    #[test]
+    fn postee_response_tool_reports_an_unknown_entry_rather_than_failing() {
+        let result = execute_postee_response_lookup_tool(
+            RigPosteeResponseLookupInput {
+                history_id: "nope".to_string(),
+            },
+            &postee_context_fixture(),
+        )
+        .expect("lookup should succeed");
+
+        assert!(!result.found);
+        assert!(result.body_unavailable_reason.expect("a reason").contains("No history entry"));
+    }
+
+    #[test]
+    fn postee_response_tool_rejects_an_empty_history_id() {
+        assert!(execute_postee_response_lookup_tool(
+            RigPosteeResponseLookupInput {
+                history_id: "   ".to_string(),
+            },
+            &postee_context_fixture(),
+        )
+        .is_err());
     }
 
     #[test]

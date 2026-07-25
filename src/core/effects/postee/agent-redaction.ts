@@ -58,8 +58,22 @@ export interface PosteeAgentGraphqlSchemaInput {
   readonly introspectionJson: string;
 }
 
+export interface PosteeAgentHistoryInput {
+  readonly id: string;
+  readonly requestName: string;
+  readonly method: string;
+  readonly url: string;
+  readonly status: number | null;
+  readonly durationMs: number | null;
+  readonly sizeBytes: number | null;
+  readonly errorMessage: string | null;
+  readonly executedAt: number;
+  readonly body: string | null;
+}
+
 export interface PosteeAgentContextInput {
   readonly request: PosteeAgentRequestInput;
+  readonly history?: ReadonlyArray<PosteeAgentHistoryInput>;
   readonly collections?: ReadonlyArray<PosteeAgentCollectionInput>;
   readonly graphqlSchema?: PosteeAgentGraphqlSchemaInput;
   readonly environment?: {
@@ -83,6 +97,18 @@ export interface PosteeAgentContext {
     readonly bodyMode: string;
     readonly body: string | null;
   };
+  readonly history: ReadonlyArray<{
+    readonly id: string;
+    readonly requestName: string;
+    readonly method: string;
+    readonly url: string;
+    readonly status: number | null;
+    readonly durationMs: number | null;
+    readonly sizeBytes: number | null;
+    readonly errorMessage: string | null;
+    readonly executedAt: number;
+    readonly body: string | null;
+  }>;
   readonly collections: ReadonlyArray<{
     readonly name: string;
     readonly requests: ReadonlyArray<{
@@ -197,6 +223,26 @@ export const summariseGraphqlSchema = (
   };
 };
 
+/** Matches an absolute URL inside free text, up to the first whitespace or bracket. */
+const URL_IN_TEXT = /https?:\/\/[^\s)<>"']+/g;
+
+/**
+ * Redacts URLs embedded in an error message.
+ *
+ * The HTTP client writes messages like "error sending request for url
+ * (https://host/v1?access_token=…)", and that string is stored in history. The
+ * diagnostic value is the failure, not the credential in the URI — so the URL is
+ * put through the same redaction as any other, in place.
+ */
+export const redactErrorMessage = (
+  message: string | null | undefined,
+  mode: RedactionMode,
+): string | null => {
+  if (message === null || message === undefined) return null;
+  if (mode === "off") return message;
+  return message.replace(URL_IN_TEXT, (url) => redactUrl(url, mode));
+};
+
 export const buildPosteeAgentContext = (
   input: PosteeAgentContextInput,
   policy: PosteeRedactionPolicy,
@@ -241,6 +287,22 @@ export const buildPosteeAgentContext = (
     withheld.push("response body");
   }
 
+  const history = (input.history ?? []).map((entry) => ({
+    id: entry.id,
+    requestName: entry.requestName,
+    method: entry.method,
+    url: redactUrl(entry.url, policy.mode),
+    status: entry.status,
+    durationMs: entry.durationMs,
+    sizeBytes: entry.sizeBytes,
+    errorMessage: redactErrorMessage(entry.errorMessage, policy.mode),
+    executedAt: entry.executedAt,
+    body: policy.includeBodies ? entry.body : null,
+  }));
+  if (history.some((entry) => entry.body === null) && !policy.includeBodies) {
+    withheld.push("history bodies");
+  }
+
   const collections = (input.collections ?? []).map((collection) => ({
     name: collection.name,
     requests: collection.requests.map((request) => ({
@@ -265,6 +327,7 @@ export const buildPosteeAgentContext = (
     : null;
 
   return {
+    history,
     collections,
     graphqlSchema,
     request: {

@@ -330,3 +330,21 @@ is. Anything relying on the model's cooperation should be treated as unimplement
   One integration detail worth recording: a proposal draft must not look pristine,
   or the sprawl reclaimer added earlier would delete it on the next launch. There is
   a test asserting exactly that.
+- 2026-07-25: **Phase 4 implemented.** `historyLookup` and `responseLookup`, plus a
+  leak surface the earlier phases did not have.
+
+  **Error messages embed URLs.** The HTTP client writes
+  `"Failed to perform HTTP request: error sending request for url (https://host/v1?access_token=…)"`,
+  and that string is stored in history verbatim. A boundary that redacted request
+  URLs but not error text would have handed the credential straight back. URLs
+  inside messages are now redacted in place, keeping the diagnosis and dropping the
+  query string.
+
+  `responseLookup` distinguishes **withheld** from **empty**. Returning `null` for
+  both would let the agent report "the response was empty" when it simply was not
+  allowed to look — so an absent body carries a reason, and the agent can ask for
+  consent rather than assume.
+
+  A note on process: one edit in this phase silently did nothing because the anchor
+  text omitted a `Default` in a derive, and it was only caught by the compiler. Every
+  scripted edit in this codebase should assert its replacement count.
