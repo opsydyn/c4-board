@@ -73,7 +73,8 @@ export function PosteeWorkspace() {
   const { isSidebarOpen, showDiff } = uiFlags;
 
   // Active response tab state (local UI state, not in machine)
-  const [activeResponseTab, setActiveResponseTab] = useState<"Execution" | "LoadTest" | "History">("Execution");
+  const [activeResponseTab, setActiveResponseTab] = useState<"Execution" | "LoadTest">("Execution");
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [isSaveScratchDialogOpen, setIsSaveScratchDialogOpen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   // A layout preference, not workspace data — it belongs to this machine, not the
@@ -167,15 +168,11 @@ export function PosteeWorkspace() {
     [isResponsePanelOpen],
   );
 
-  const handleHistoryToggle = useCallback(
-    (selected: boolean) => {
-      if (!isResponsePanelOpen) {
-        setIsResponsePanelOpen(true);
-      }
-      setActiveResponseTab(selected ? "History" : "Execution");
-    },
-    [isResponsePanelOpen],
-  );
+  // History overlays now, so opening it no longer disturbs the response pane.
+  const handleHistoryToggle = useCallback((selected: boolean) => {
+    setIsHistoryDrawerOpen(selected);
+  }, []);
+  const handleCloseHistory = useCallback(() => setIsHistoryDrawerOpen(false), []);
 
   // Sidebar handlers
   const handleCreateCollection = useCallback(
@@ -447,6 +444,8 @@ export function PosteeWorkspace() {
       isOpen={isResponsePanelOpen}
       onToggleOpen={handleToggleResponse}
       activeTab={activeResponseTab}
+      isHistoryOpen={isHistoryDrawerOpen}
+      onCloseHistory={handleCloseHistory}
       selectedRequestDraft={selectedRequestDraft}
       isRunning={isRunning}
       lastResponse={lastResponse}
@@ -538,7 +537,7 @@ export function PosteeWorkspace() {
             </Tooltip>
             <Tooltip content="View execution history">
               <ToggleButton
-                isSelected={activeResponseTab === "History"}
+                isSelected={isHistoryDrawerOpen}
                 onChange={handleHistoryToggle}
                 className={layoutStyles.collapseToggle}
                 aria-label="Open history panel"

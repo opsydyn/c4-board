@@ -248,3 +248,22 @@ one that was already built, and delete the stacked variant that replaced it".
 - 2026-07-25: Initial draft.
 - 2026-07-25: **Accepted.** Phase 1 (fixed-height shell) implemented; Phases 2-5 proceed as
   written.
+- 2026-07-25: **Phases 2 and 3 implemented.** The response is a peer track with a
+  draggable divider; history overlays as a drawer. Two deviations from this ADR's
+  implementation sketch, both deliberate:
+
+  1. **The divider is a `separator`, not `react-rnd`.** A split handle has to be
+     operable from the keyboard, and the pointer half is only a position mapped to
+     a ratio, which `workspace-panes.ts` already owns. Adding a drag library would
+     have supplied the easy half and skipped the accessible one.
+  2. **The drawer is built on React Aria's modal primitives** rather than a new
+     shell extracted from `OpyDrawer`. `OpyDrawer` is a docked grid child carrying
+     diagram-specific chrome; the surface needed here overlays and needs focus
+     containment, Escape, and scroll locking — all of which `SaveScratchDialog`
+     already gets from `ModalOverlay`. Extracting from `OpyDrawer` would have meant
+     reimplementing those.
+
+  The pane ratio is clamped to 20/80 wherever it enters: a pane collapsed to zero
+  takes its own drag handle with it. Grid tracks use `minmax(0, …)` rather than
+  bare `fr`, since a track's automatic minimum is its content and a wide response
+  would otherwise push the shell past the viewport, undoing Phase 1.

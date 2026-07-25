@@ -15,6 +15,7 @@ import { CaretRightIcon, PlayIcon, SpinnerGapIcon as SpinnerGap, WarningIcon } f
 import { Option } from "effect";
 import { useCallback, useMemo, useState } from "react";
 import { ToggleButton } from "react-aria-components";
+import { Drawer } from "./Drawer";
 import { LoadTestPanel } from "./LoadTestPanel";
 import { PosteeHistoryTable } from "./PosteeHistoryTable";
 import { ResponseViewer } from "./ResponseViewer";
@@ -26,10 +27,12 @@ import { baselineButton, baselineButtonActive } from "./ResponseViewer.css";
 export interface PosteeResponsePanelProps {
   // Panel state
   isOpen: boolean;
+  isHistoryOpen: boolean;
+  onCloseHistory: () => void;
   onToggleOpen: () => void;
 
   // Tab state
-  activeTab: "Execution" | "LoadTest" | "History";
+  activeTab: "Execution" | "LoadTest";
 
   // Request state
   selectedRequestDraft: PosteeRequestDraft | null;
@@ -59,6 +62,8 @@ export interface PosteeResponsePanelProps {
 
 export function PosteeResponsePanel({
   isOpen,
+  isHistoryOpen,
+  onCloseHistory,
   onToggleOpen,
   activeTab,
   selectedRequestDraft,
@@ -265,10 +270,10 @@ export function PosteeResponsePanel({
         </div>
       )}
 
-      {activeTab === "History" && (
+      {/* History overlays rather than taking pane width from the response (ADR-011). */}
+      <Drawer isOpen={isHistoryOpen} title="Execution History" onClose={onCloseHistory}>
         <div className={styles.responseTabContent}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-            <h2 className={styles.sectionTitle}>Execution History</h2>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "16px" }}>
             <button
               type="button"
               className={compareMode ? baselineButtonActive : baselineButton}
@@ -369,7 +374,7 @@ export function PosteeResponsePanel({
             </div>
           )}
         </div>
-      )}
+      </Drawer>
     </>
   );
 }

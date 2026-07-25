@@ -65,4 +65,15 @@ describe("workspace layout invariants", () => {
   it("lets the response pane shrink to its track", () => {
     expect(styleBlock("responseColumn")).toContain("minHeight: 0");
   });
+
+  it("keeps history off the response tabs", () => {
+    // History as a third tab meant reading it cost you the response; it overlays
+    // as a drawer instead (ADR-011 Phase 3).
+    const panel = readFileSync(
+      resolve(__dirname, "../../../../src/ui/components/postee/PosteeResponsePanel.tsx"),
+      "utf8",
+    );
+    expect(panel).toContain('activeTab: "Execution" | "LoadTest";');
+    expect(panel).not.toContain('activeTab === "History"');
+  });
 });
