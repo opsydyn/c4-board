@@ -4,7 +4,7 @@ title: "ADR-012: OPY in Postee — Agent-Assisted Request Authoring"
 
 # ADR-012: OPY in Postee — Agent-Assisted Request Authoring
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-25
 **Deciders**: Alan P Currie
 **Technical Story**: OPY exists as a Rig-backed agent over the C4 board (ADR-008). Postee is the other
@@ -241,3 +241,6 @@ is. Anything relying on the model's cooperation should be treated as unimplement
 ### Updates
 
 - 2026-07-25: Initial draft.
+- 2026-07-25: **Accepted.** Phase 1 (the redaction boundary) is the next step; no tool
+  ships before it. `ai_agent.rs` is to be read in full before Phase 2 so the tool
+  contracts match what exists rather than what this ADR assumed.
