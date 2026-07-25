@@ -145,6 +145,13 @@ export const drawerContent = style([
   {
     "@layer": {
       [componentsLayer]: {
+        display: "flex",
+        // Fills the column rather than sizing to its content. As a bottom drawer
+        // this row was content-height, so nothing inside had a height to fill;
+        // the panel's chat pane consequently sat at its 14rem floor with the
+        // rest of the drawer empty below it.
+        flex: 1,
+        flexDirection: "column",
         minHeight: 0,
         overflow: "auto",
       },

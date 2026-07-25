@@ -39,35 +39,44 @@ export const drawerDialog = style({
   },
 });
 
-export const drawerBody = style({
-  "@layer": {
-    [componentsLayer]: {
-      display: "flex",
-      flexDirection: "column",
-      gap: theme.spacing["4"],
-      outline: "none",
-      padding: theme.spacing["5"],
-      // The drawer is fixed to the viewport; only its body scrolls.
-      width: "100%",
-      minHeight: 0,
-      overflowY: "auto",
-      color: theme.color.foreground.primary,
+export const drawerBody = style([
+  {
+    "@layer": {
+      [componentsLayer]: {
+        display: "flex",
+        flexDirection: "column",
+        gap: theme.spacing["4"],
+        outline: "none",
+        // The drawer is fixed to the viewport; only its body scrolls.
+        width: "100%",
+        minHeight: 0,
+        overflowY: "auto",
+        color: theme.color.foreground.primary,
+      },
     },
   },
-});
+  // Unlayered on purpose. The global reset sets `*{padding:0}` without a layer,
+  // and an unlayered rule beats a layered one however specific the layered one is,
+  // so padding declared inside @layer components silently computes to zero.
+  // Matches the gutter on the request and response panes.
+  { padding: `${theme.spacing["5"]} ${theme.spacing["4"]}` },
+]);
 
-export const drawerHeader = style({
-  "@layer": {
-    [componentsLayer]: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: theme.spacing["3"],
-      borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-      paddingBottom: theme.spacing["4"],
+export const drawerHeader = style([
+  {
+    "@layer": {
+      [componentsLayer]: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: theme.spacing["3"],
+        borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      },
     },
   },
-});
+  // Unlayered: see drawerBody.
+  { paddingBottom: theme.spacing["4"] },
+]);
 
 export const drawerTitle = style({
   "@layer": {
@@ -82,28 +91,31 @@ export const drawerTitle = style({
   },
 });
 
-export const drawerCloseButton = style({
-  "@layer": {
-    [componentsLayer]: {
-      display: "inline-flex",
-      alignItems: "center",
-      gap: theme.spacing["1"],
-      clipPath: theme.clipPath.sm,
-      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-      backgroundColor: "transparent",
-      cursor: "pointer",
-      padding: `${theme.spacing["1"]} ${theme.spacing["2"]}`,
-      textTransform: theme.typography.textTransform.uppercase,
-      letterSpacing: theme.typography.letterSpacing.wide,
-      color: theme.color.foreground.secondary,
-      fontFamily: theme.typography.family.mono,
-      fontSize: theme.typography.size.xs,
-      selectors: {
-        "&[data-hovered]": {
-          borderColor: theme.color.border.primary,
-          color: theme.color.foreground.primary,
+export const drawerCloseButton = style([
+  {
+    "@layer": {
+      [componentsLayer]: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: theme.spacing["1"],
+        clipPath: theme.clipPath.sm,
+        border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+        backgroundColor: "transparent",
+        cursor: "pointer",
+        textTransform: theme.typography.textTransform.uppercase,
+        letterSpacing: theme.typography.letterSpacing.wide,
+        color: theme.color.foreground.secondary,
+        fontFamily: theme.typography.family.mono,
+        fontSize: theme.typography.size.xs,
+        selectors: {
+          "&[data-hovered]": {
+            borderColor: theme.color.border.primary,
+            color: theme.color.foreground.primary,
+          },
         },
       },
     },
   },
-});
+  // Unlayered: see drawerBody.
+  { padding: `${theme.spacing["1"]} ${theme.spacing["2"]}` },
+]);

@@ -543,7 +543,15 @@ export const opyCopilotHideButton = style([
 export const opyCopilotShell = style({
   display: "grid",
   flex: 1,
-  gridTemplateRows: "minmax(0, 1fr) clamp(14rem, 36%, 24rem)",
+  /**
+   * The conversation takes the free space, not the status panel above it.
+   *
+   * These rows used to be the other way round — status on `1fr`, chat capped at
+   * 24rem — which left the transcript a few lines tall under a large empty area.
+   * Status now sizes to its content and scrolls internally once it outgrows what
+   * is left, and the chat keeps the 14rem floor it always had.
+   */
+  gridTemplateRows: "minmax(0, auto) minmax(14rem, 1fr)",
   gap: theme.spacing["2"],
   height: "100%",
   minHeight: 0,
@@ -594,6 +602,10 @@ export const opyCopilotViewportSection = style({
 
 export const opyCopilotViewportSectionSummary = style({
   display: "flex",
+  // The meta line cannot share a row with the title in a drawer-width column, so
+  // it drops beneath it rather than the title being crushed to nothing and
+  // overflowing across it.
+  flexWrap: "wrap",
   alignItems: "flex-start",
   justifyContent: "space-between",
   gap: theme.spacing["2"],
@@ -619,10 +631,12 @@ export const opyCopilotViewportSectionSummary = style({
 
 export const opyCopilotViewportSectionSummaryMain = style({
   display: "flex",
-  flex: 1,
+  // A basis wide enough that the aside wraps instead of squeezing the title.
+  flex: "1 1 12rem",
   flexDirection: "column",
   gap: theme.spacing["1"],
   minWidth: 0,
+  overflowWrap: "anywhere",
 });
 
 export const opyCopilotViewportSectionSummaryTitle = style({
@@ -663,9 +677,12 @@ export const opyCopilotViewportSectionSummaryText = style({
 
 export const opyCopilotViewportSectionSummaryAside = style({
   display: "inline-flex",
-  flexShrink: 0,
+  // Was flexShrink 0, which let the aside claim the whole row and leave the
+  // title a 16px box its text then painted straight out of.
+  flex: "1 1 auto",
   alignItems: "flex-start",
   justifyContent: "flex-end",
+  minWidth: 0,
 });
 
 export const opyCopilotViewportSectionSummaryMeta = style({
@@ -689,6 +706,7 @@ export const opyCopilotViewportSectionSummaryMetaGroup = style({
   alignItems: "center",
   justifyContent: "flex-end",
   gap: theme.spacing["1"],
+  overflowWrap: "anywhere",
 });
 
 export const opyCopilotViewportSectionSummaryFlag = style({

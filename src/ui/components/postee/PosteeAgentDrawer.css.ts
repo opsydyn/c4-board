@@ -27,25 +27,29 @@ export const agentBody = style({
   },
 });
 
-export const agentPrompt = style({
-  "@layer": {
-    [componentsLayer]: {
-      clipPath: theme.clipPath.sm,
-      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-      backgroundColor: theme.color.background.input,
-      padding: theme.spacing["3"],
-      resize: "vertical",
-      color: theme.color.foreground.primary,
-      fontFamily: theme.typography.family.mono,
-      fontSize: theme.typography.size.sm,
-      ":focus": {
-        outline: "none",
-        borderColor: theme.color.border.focus,
-        boxShadow: theme.effect.glow.sm,
+export const agentPrompt = style([
+  {
+    "@layer": {
+      [componentsLayer]: {
+        clipPath: theme.clipPath.sm,
+        border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+        backgroundColor: theme.color.background.input,
+        resize: "vertical",
+        color: theme.color.foreground.primary,
+        fontFamily: theme.typography.family.mono,
+        fontSize: theme.typography.size.sm,
+        ":focus": {
+          outline: "none",
+          borderColor: theme.color.border.focus,
+          boxShadow: theme.effect.glow.sm,
+        },
       },
     },
   },
-});
+  // Unlayered: the global reset zeroes padding without a layer, so a layered
+  // padding never applies. See Drawer.css.ts.
+  { padding: theme.spacing["3"] },
+]);
 
 export const agentProposalMeta = style({
   "@layer": {
@@ -94,17 +98,16 @@ export const agentRationale = style({
 });
 
 /** Sanitizer repairs and model assumptions — read before sending, not after. */
-export const agentWarning = style({
+export const agentWarning = style([{
   "@layer": {
     [componentsLayer]: {
       display: "flex",
       gap: theme.spacing["2"],
       margin: 0,
       borderLeft: `${theme.border.width.base} solid ${theme.color.status.caution}`,
-      paddingLeft: theme.spacing["2"],
       color: theme.color.status.caution,
       fontFamily: theme.typography.family.mono,
       fontSize: theme.typography.size.xs,
     },
   },
-});
+}, { paddingLeft: theme.spacing["2"] }]);
