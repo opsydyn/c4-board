@@ -122,7 +122,16 @@ describe("Varlock environment policy", () => {
     const literalPattern =
       /["']((?:(?:PUBLIC|VITE|OPSYDYN|C4)_[A-Z0-9_]+|SETTINGS_V1|RIG_AGENT_V1|OPENAI_API_KEY))["']/g;
     const propertyPattern = /\b(?:process|import\.meta)\.env\.([A-Z][A-Z0-9_]*)\b/g;
-    const platformKeys = new Set(["BASE_URL", "DEV", "NODE_ENV", "NODE_OPTIONS"]);
+    // Supplied by the runtime or the CI runner, not by anyone configuring this app.
+    // GITHUB_ENV names the file a workflow step appends exports to; putting it in
+    // .env.schema would invite someone to set it locally, which is exactly wrong.
+    const platformKeys = new Set([
+      "BASE_URL",
+      "DEV",
+      "GITHUB_ENV",
+      "NODE_ENV",
+      "NODE_OPTIONS",
+    ]);
 
     for (const root of ["src", "src-tauri/src", ".github/scripts"]) {
       for (const file of sourceFiles(root)) {
