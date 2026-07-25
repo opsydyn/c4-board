@@ -209,8 +209,7 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
       tabOrder: openScratchIds.length,
       now: Date.now(),
     });
-    send({ type: "CREATE_SCRATCH" } satisfies PosteeEvent);
-    send({ type: "UPDATE_SCRATCH_DRAFT", draft } satisfies PosteeEvent);
+    send({ type: "ADOPT_SCRATCH_DRAFT", draft } satisfies PosteeEvent);
     sendUi({ type: "CLOSE_AGENT" });
 
     const proposalId = lastProposalIdRef.current;

@@ -150,6 +150,45 @@ describe("Postee scratch workspace machine", () => {
     actor.stop();
   });
 
+  it("adopts a supplied draft as a new scratch, content intact", async () => {
+    const actor = createActor(createPosteeWorkspaceMachine({ layer }));
+    actor.start();
+    await waitFor(actor, (snapshot) => snapshot.matches({ ready: "idle" }));
+
+    // An agent proposal arrives as a whole draft rather than an id to update: the
+    // update path silently drops a draft whose id is not already known, which is
+    // how a proposal could be accepted and then vanish.
+    actor.send({
+      type: "ADOPT_SCRATCH_DRAFT",
+      draft: {
+        id: "proposed-1",
+        name: "Fetch systems",
+        method: "POST",
+        url: "{{API_URL}}/graphql",
+        description: null,
+        headers: [],
+        body: { mode: "graphql", raw: null, form_values: null },
+        graphql: { document: "query { systems { id } }", variables_json: "{}", operation_name: null },
+        environmentId: null,
+        tabOrder: 1,
+        isOpen: true,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
+
+    const context = actor.getSnapshot().context;
+    expect(context.activeEditor).toEqual({ kind: "scratch", scratchId: "proposed-1" });
+    expect(context.openScratchIds).toContain("proposed-1");
+    expect(context.scratchDrafts["proposed-1"]).toMatchObject({
+      name: "Fetch systems",
+      method: "POST",
+      url: "{{API_URL}}/graphql",
+    });
+    expect(context.scratchDrafts["proposed-1"]?.graphql?.document).toBe("query { systems { id } }");
+    actor.stop();
+  });
+
   it("executes an active scratch and records history without a saved request id", async () => {
     let capturedRequest: PreparedRequest | undefined;
     const response: PreparedResponse = {

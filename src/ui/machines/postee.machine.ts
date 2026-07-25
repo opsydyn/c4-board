@@ -153,6 +153,7 @@ export type PosteeEvent =
   | { type: "CLOSE_SCRATCH"; scratchId: string }
   | { type: "REOPEN_SCRATCH"; scratchId: string }
   | { type: "UPDATE_SCRATCH_DRAFT"; draft: PosteeScratchDraft }
+  | { type: "ADOPT_SCRATCH_DRAFT"; draft: PosteeScratchDraft }
   | { type: "PROMOTE_SCRATCH"; scratchId: string; collectionId: CollectionId; requestId: RequestId }
   | { type: "SELECT_COLLECTION"; collectionId: CollectionId }
   | { type: "SELECT_REQUEST"; requestId: RequestId }
@@ -721,6 +722,36 @@ const posteeWorkspaceSetup = setup({
     hasActiveGraphqlRequest: ({ context }) => graphqlSchemaContext(context) !== null,
   },
   actions: {
+    /**
+     * Opens a draft that already exists in full — an agent proposal, rather than a
+     * blank tab the operator fills in.
+     *
+     * Distinct from UPDATE_SCRATCH_DRAFT on purpose: that path requires the draft
+     * id to be known already and silently returns the context unchanged when it is
+     * not, so composing CREATE_SCRATCH with an update discarded the proposal
+     * without a trace.
+     */
+    adoptScratchDraft: assign(({ context, event }) => {
+      if (event.type !== "ADOPT_SCRATCH_DRAFT") {
+        return context;
+      }
+
+      const draft = { ...event.draft, tabOrder: context.openScratchIds.length, isOpen: true };
+      runLayeredEffect(context.layer, savePosteeScratchDraft(draft)).catch((cause: unknown) => {
+        console.error("[postee][scratch] Failed to persist an adopted draft:", cause);
+      });
+
+      return {
+        ...context,
+        scratchDrafts: {
+          ...context.scratchDrafts,
+          [draft.id]: draft,
+        },
+        openScratchIds: [...context.openScratchIds, draft.id],
+        activeEditor: { kind: "scratch" as const, scratchId: draft.id },
+        runner: initialRunner(),
+      };
+    }),
     createScratch: assign(({ context }) => {
       const tabOrder = context.openScratchIds.length;
       const scratch = newPosteeScratchDraft({
@@ -1782,6 +1813,9 @@ const readyState = posteeWorkspaceSetup.createStateConfig({
         },
         UPDATE_SCRATCH_DRAFT: {
           actions: "updateScratchDraft",
+        },
+        ADOPT_SCRATCH_DRAFT: {
+          actions: "adoptScratchDraft",
         },
         PROMOTE_SCRATCH: {
           target: "promotingScratch",

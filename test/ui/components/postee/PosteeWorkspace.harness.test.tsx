@@ -22,6 +22,31 @@ vi.mock("@monaco-editor/react", () => ({
   loader: { config: vi.fn() },
 }));
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(async (command: string) => {
+    if (command === "rig_agent_propose_postee_request") {
+      return {
+        summary: "Fetch all systems from the API.",
+        rationale: "To retrieve a list of every system.",
+        warnings: ["Using POST method for GraphQL query despite initial request being GET."],
+        name: "Fetch systems",
+        method: "POST",
+        url: "{{API_URL}}/graphql",
+        headers: [],
+        bodyMode: "graphql",
+        body: null,
+        graphqlDocument: "query { systems { id } }",
+        graphqlVariablesJson: "{}",
+        graphqlOperationName: null,
+        provider: "openai",
+        model: "gpt-4o-mini",
+        usage: { inputTokens: 900, outputTokens: 120, totalTokens: 1020 },
+      };
+    }
+    return null;
+  }),
+}));
+
 vi.mock("@/core/effects/useAppSettings", async () => {
   // The real defaults, so the workspace behaves as it does for a fresh install.
   const { DEFAULT_APP_SETTINGS } = await import("@/core/effects/settings.types");
@@ -128,6 +153,22 @@ describe("PosteeWorkspace", () => {
     await screen.findByRole("dialog", { name: /opy/i });
 
     expect(screen.getByLabelText("Request URL")).toBeInTheDocument();
+  });
+
+  it("lands an accepted proposal in the request builder", async () => {
+    const user = userEvent.setup();
+    await renderWorkspace();
+
+    await user.click(screen.getByRole("button", { name: /show opy net assistant/i }));
+    await user.type(screen.getByLabelText(/describe the request/i), "fetch every system");
+    await user.click(screen.getByRole("button", { name: /propose a request/i }));
+    await user.click(await screen.findByRole("button", { name: /open as draft/i }));
+
+    // The drawer test only proved the callback fired. This proves the proposal
+    // actually reaches the editor — the step that silently dropped it.
+    await waitFor(() => {
+      expect(screen.getByLabelText("Request URL")).toHaveValue("{{API_URL}}/graphql");
+    });
   });
 
   it("exposes the pane divider as a keyboard-operable separator", async () => {
