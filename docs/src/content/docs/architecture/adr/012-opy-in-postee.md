@@ -264,3 +264,29 @@ is. Anything relying on the model's cooperation should be treated as unimplement
   anywhere in the serialised context. Validated by planting three real leaks —
   emitting environment values, passing the URL through, and failing open on an
   unparseable URL — and confirming each is caught and named.
+- 2026-07-25: **Phase 2a implemented**, and a full read of `ai_agent.rs` corrected
+  three assumptions this ADR made from sampling it:
+
+  1. **There is no error taxonomy.** Every command returns `Result<_, String>`.
+     The ADR listed this as unverified; it is now confirmed absent, so Postee tools
+     follow the same stringly-typed convention rather than introducing a second one.
+  2. **Proposals are extracted, not parsed.** `extract_openai::<T>()` drives a
+     `JsonSchema` type directly, so a Postee request proposal is a schema type, not
+     text to be parsed — which removes a whole class of parsing work from Phase 3.
+  3. **The house pattern is sanitize-then-validate.** `sanitize_c4_diagram_plan`
+     normalizes and drops recoverable problems into `warnings`; `validate_*` rejects
+     what cannot be repaired. Postee proposals should follow exactly this shape.
+
+  Also confirmed: tools take no `State<AppDb>` and are pure over frontend-supplied
+  context, which is what makes the redaction boundary unbypassable. A tool that
+  queried the database in Rust would reintroduce every secret Phase 1 removes.
+
+  Phase 2a ships `activeRequest`, `environmentKeys`, and `lastResponseSummary` over
+  the request-scoped context Phase 1 produces. The tools named in the original plan
+  — `collection_summary`, `graphql_schema_lookup` — need workspace-scoped context
+  that does not exist yet; extending the boundary to cover it is Phase 2b.
+
+  One security note worth recording: on macOS **debug** builds the keychain is
+  disabled by design (`keychain_supported_in_runtime`), so the OpenAI key resolves
+  from the `app_settings` table instead. That is a development-only fallback, but it
+  means the key sits in SQLite during development.

@@ -14,7 +14,8 @@ mod rig_runtime;
 
 use ai_agent::{
     rig_agent_clear_openai_api_key, rig_agent_hello, rig_agent_plan_c4_diagram,
-    rig_agent_review_c4_board, rig_agent_run_read_tool, rig_agent_secret_status,
+    rig_agent_review_c4_board, rig_agent_run_postee_read_tool, rig_agent_run_read_tool,
+    rig_agent_secret_status,
     rig_agent_store_openai_api_key,
 };
 use azure_sync::{azure_graph_query, azure_graph_validate_auth};
@@ -434,6 +435,7 @@ pub fn run() {
             rig_agent_hello,
             rig_agent_plan_c4_diagram,
             rig_agent_review_c4_board,
+            rig_agent_run_postee_read_tool,
             rig_agent_run_read_tool,
             rig_agent_secret_status,
             rig_agent_store_openai_api_key

@@ -724,6 +724,222 @@ fn build_c4_board_summary_context(board_summary: &RigC4BoardSummary) -> Option<S
     Some(sections.join("\n\n"))
 }
 
+/// Postee agent context, mirroring the shape assembled and **redacted** in
+/// TypeScript by `postee/agent-redaction.ts` (ADR-012).
+///
+/// Deliberately carries no database handle and no raw secrets. Like the board
+/// tools, these operate purely on what the frontend supplies — which is what keeps
+/// the redaction boundary unbypassable. A tool that queried the database here would
+/// reintroduce every secret the boundary exists to remove.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextHeader {
+    pub key: String,
+    /// `None` when the value was withheld, which is the default.
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextRequest {
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<RigPosteeContextHeader>,
+    pub body_mode: String,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextEnvironment {
+    pub name: String,
+    /// Keys only. Values never cross this boundary in any redaction mode.
+    pub variable_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeContextResponse {
+    pub status: i64,
+    pub duration_ms: i64,
+    pub size_bytes: i64,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeContext {
+    pub request: RigPosteeContextRequest,
+    pub environment: Option<RigPosteeContextEnvironment>,
+    pub last_response: Option<RigPosteeContextResponse>,
+    /// What the redaction boundary withheld, so the agent can say so rather than
+    /// guess at values it was never given.
+    pub withheld: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RigPosteeReadToolName {
+    ActiveRequest,
+    EnvironmentKeys,
+    LastResponseSummary,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeEmptyInput {}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeReadToolRequest {
+    pub tool: RigPosteeReadToolName,
+    pub input: serde_json::Value,
+    pub context: RigPosteeContext,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeReadToolResponse {
+    pub tool: RigPosteeReadToolName,
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeActiveRequestResult {
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    /// Header names, plus whether each value was supplied.
+    pub header_keys: Vec<String>,
+    pub headers_with_values: Vec<String>,
+    pub body_mode: String,
+    pub has_body: bool,
+    pub withheld: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeEnvironmentKeysResult {
+    pub name: Option<String>,
+    pub variable_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RigPosteeLastResponseResult {
+    pub has_response: bool,
+    pub status: Option<i64>,
+    pub duration_ms: Option<i64>,
+    pub size_bytes: Option<i64>,
+    pub body: Option<String>,
+}
+
+fn execute_postee_active_request_tool(context: &RigPosteeContext) -> RigPosteeActiveRequestResult {
+    let mut header_keys = context
+        .request
+        .headers
+        .iter()
+        .map(|header| header.key.clone())
+        .collect::<Vec<_>>();
+    header_keys.sort();
+
+    let mut headers_with_values = context
+        .request
+        .headers
+        .iter()
+        .filter(|header| header.value.is_some())
+        .map(|header| header.key.clone())
+        .collect::<Vec<_>>();
+    headers_with_values.sort();
+
+    RigPosteeActiveRequestResult {
+        name: context.request.name.clone(),
+        method: context.request.method.clone(),
+        url: context.request.url.clone(),
+        header_keys,
+        headers_with_values,
+        body_mode: context.request.body_mode.clone(),
+        has_body: context.request.body.is_some(),
+        withheld: context.withheld.clone(),
+    }
+}
+
+fn execute_postee_environment_keys_tool(
+    context: &RigPosteeContext,
+) -> RigPosteeEnvironmentKeysResult {
+    match context.environment.as_ref() {
+        Some(environment) => {
+            let mut variable_keys = environment.variable_keys.clone();
+            variable_keys.sort();
+            RigPosteeEnvironmentKeysResult {
+                name: Some(environment.name.clone()),
+                variable_keys,
+            }
+        }
+        None => RigPosteeEnvironmentKeysResult {
+            name: None,
+            variable_keys: Vec::new(),
+        },
+    }
+}
+
+fn execute_postee_last_response_tool(context: &RigPosteeContext) -> RigPosteeLastResponseResult {
+    match context.last_response.as_ref() {
+        Some(response) => RigPosteeLastResponseResult {
+            has_response: true,
+            status: Some(response.status),
+            duration_ms: Some(response.duration_ms),
+            size_bytes: Some(response.size_bytes),
+            body: response.body.clone(),
+        },
+        None => RigPosteeLastResponseResult {
+            has_response: false,
+            status: None,
+            duration_ms: None,
+            size_bytes: None,
+            body: None,
+        },
+    }
+}
+
+fn execute_rig_postee_read_tool(
+    input: RigPosteeReadToolRequest,
+) -> Result<RigPosteeReadToolResponse, String> {
+    let serialize = |tool: RigPosteeReadToolName, value: serde_json::Value| RigPosteeReadToolResponse {
+        tool,
+        result: value,
+    };
+
+    match input.tool {
+        RigPosteeReadToolName::ActiveRequest => {
+            serde_json::from_value::<RigPosteeEmptyInput>(input.input)
+                .map_err(|error| format!("Invalid activeRequest input payload: {error}"))?;
+            let result = execute_postee_active_request_tool(&input.context);
+            let value = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize activeRequest result: {error}"))?;
+            Ok(serialize(RigPosteeReadToolName::ActiveRequest, value))
+        }
+        RigPosteeReadToolName::EnvironmentKeys => {
+            serde_json::from_value::<RigPosteeEmptyInput>(input.input)
+                .map_err(|error| format!("Invalid environmentKeys input payload: {error}"))?;
+            let result = execute_postee_environment_keys_tool(&input.context);
+            let value = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize environmentKeys result: {error}"))?;
+            Ok(serialize(RigPosteeReadToolName::EnvironmentKeys, value))
+        }
+        RigPosteeReadToolName::LastResponseSummary => {
+            serde_json::from_value::<RigPosteeEmptyInput>(input.input)
+                .map_err(|error| format!("Invalid lastResponseSummary input payload: {error}"))?;
+            let result = execute_postee_last_response_tool(&input.context);
+            let value = serde_json::to_value(result)
+                .map_err(|error| format!("Unable to serialize lastResponseSummary result: {error}"))?;
+            Ok(serialize(RigPosteeReadToolName::LastResponseSummary, value))
+        }
+    }
+}
+
 fn normalize_read_tool_lookup_id(
     tool: RigReadToolName,
     field_name: &str,
@@ -1251,6 +1467,13 @@ pub async fn rig_agent_run_read_tool(
 }
 
 #[tauri::command]
+pub async fn rig_agent_run_postee_read_tool(
+    input: RigPosteeReadToolRequest,
+) -> Result<RigPosteeReadToolResponse, String> {
+    execute_rig_postee_read_tool(input)
+}
+
+#[tauri::command]
 pub async fn rig_agent_store_openai_api_key(
     state: State<'_, AppDb>,
     secret: String,
@@ -1484,6 +1707,102 @@ pub async fn rig_agent_review_c4_board(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn postee_context_fixture() -> RigPosteeContext {
+        RigPosteeContext {
+            request: RigPosteeContextRequest {
+                name: "Fetch account".to_string(),
+                method: "POST".to_string(),
+                url: "https://api.example.test/accounts".to_string(),
+                headers: vec![
+                    RigPosteeContextHeader {
+                        key: "Authorization".to_string(),
+                        value: None,
+                    },
+                    RigPosteeContextHeader {
+                        key: "Accept".to_string(),
+                        value: Some("application/json".to_string()),
+                    },
+                ],
+                body_mode: "json".to_string(),
+                body: None,
+            },
+            environment: Some(RigPosteeContextEnvironment {
+                name: "Production".to_string(),
+                variable_keys: vec!["ZONE".to_string(), "API_TOKEN".to_string()],
+            }),
+            last_response: Some(RigPosteeContextResponse {
+                status: 200,
+                duration_ms: 120,
+                size_bytes: 512,
+                body: None,
+            }),
+            withheld: vec!["header values".to_string()],
+        }
+    }
+
+    #[test]
+    fn postee_active_request_tool_reports_which_headers_had_values() {
+        let result = execute_postee_active_request_tool(&postee_context_fixture());
+
+        assert_eq!(result.header_keys, vec!["Accept", "Authorization"]);
+        // Authorization arrived withheld, so it must not be listed as supplied.
+        assert_eq!(result.headers_with_values, vec!["Accept"]);
+        assert!(!result.has_body);
+        assert_eq!(result.withheld, vec!["header values"]);
+    }
+
+    #[test]
+    fn postee_environment_tool_returns_sorted_keys_and_never_values() {
+        let result = execute_postee_environment_keys_tool(&postee_context_fixture());
+
+        assert_eq!(result.name.as_deref(), Some("Production"));
+        assert_eq!(result.variable_keys, vec!["API_TOKEN", "ZONE"]);
+    }
+
+    #[test]
+    fn postee_environment_tool_tolerates_no_environment() {
+        let mut context = postee_context_fixture();
+        context.environment = None;
+
+        let result = execute_postee_environment_keys_tool(&context);
+
+        assert_eq!(result.name, None);
+        assert!(result.variable_keys.is_empty());
+    }
+
+    #[test]
+    fn postee_last_response_tool_reports_shape_without_a_body() {
+        let result = execute_postee_last_response_tool(&postee_context_fixture());
+
+        assert!(result.has_response);
+        assert_eq!(result.status, Some(200));
+        assert_eq!(result.size_bytes, Some(512));
+        // The body was withheld upstream; the tool must not invent one.
+        assert_eq!(result.body, None);
+    }
+
+    #[test]
+    fn postee_last_response_tool_handles_no_run_yet() {
+        let mut context = postee_context_fixture();
+        context.last_response = None;
+
+        let result = execute_postee_last_response_tool(&context);
+
+        assert!(!result.has_response);
+        assert_eq!(result.status, None);
+    }
+
+    #[test]
+    fn postee_read_tool_rejects_a_malformed_input_payload() {
+        let request = RigPosteeReadToolRequest {
+            tool: RigPosteeReadToolName::ActiveRequest,
+            input: serde_json::json!("not-an-object"),
+            context: postee_context_fixture(),
+        };
+
+        assert!(execute_rig_postee_read_tool(request).is_err());
+    }
 
     #[test]
     fn hello_defaults_are_stable() {
