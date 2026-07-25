@@ -287,6 +287,19 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
 
+      # The job above builds the released tag; GitHub runs this file from the ref
+      # that triggered the workflow. Those never match — release-plz cuts its
+      # release branch at a point in time, so anything merged afterwards is on main
+      # and absent from the tag for good. Release tooling therefore comes from the
+      # workflow's own ref, which also means a fix here applies to tags cut before
+      # it. See test/config/release-workflow.test.ts.
+      - name: Checkout release tooling from the workflow ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/scripts
+          path: .release-tooling
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
@@ -393,7 +406,7 @@ jobs:
           # key ones (it uses var_os, which cannot tell empty from absent), and a
           # line-wrapped base64 certificate corrupts GITHUB_ENV. See
           # .github/scripts/apple-signing-env.test.ts.
-          bun .github/scripts/apple-signing-env.ts
+          bun .release-tooling/.github/scripts/apple-signing-env.ts
 
           if [[ -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_P8:-}" ]]; then
             key_dir="${RUNNER_TEMP}/appstoreconnect"
