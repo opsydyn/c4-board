@@ -84,6 +84,18 @@ describe("workspace layout invariants", () => {
     }
   });
 
+  it("keeps layout in states rather than flags", () => {
+    const workspace = readFileSync(
+      resolve(__dirname, "../../../../src/ui/components/postee/PosteeWorkspace.tsx"),
+      "utf8",
+    );
+    // Flags admit combinations that should not exist and scatter the rules that
+    // connect them through click handlers (ADR-011 Phase 5).
+    expect(workspace).toContain("posteeUiMachine");
+    expect(workspace).not.toContain("useState(true)");
+    expect(workspace).not.toMatch(/useState<"Execution" \| "LoadTest">/);
+  });
+
   it("keeps history off the response tabs", () => {
     // History as a third tab meant reading it cost you the response; it overlays
     // as a drawer instead (ADR-011 Phase 3).

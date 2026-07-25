@@ -27,6 +27,7 @@ import {
 } from "../../../core/effects/postee/types";
 import { useAppSettings } from "../../../core/effects/useAppSettings";
 import { createPosteeWorkspaceMachine, type PosteeEvent, type WorkspaceLayer } from "../../machines/postee.machine";
+import { posteeUiMachine } from "../../machines/postee-ui.machine";
 import { PosteeRequestBuilder } from "./PosteeRequestBuilder";
 import { PosteeResponsePanel } from "./PosteeResponsePanel";
 import { PosteeSidebar } from "./PosteeSidebar";
@@ -82,16 +83,24 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
   // Extract UI state from machine
   const { isSidebarOpen, showDiff } = uiFlags;
 
-  // Active response tab state (local UI state, not in machine)
-  const [activeResponseTab, setActiveResponseTab] = useState<"Execution" | "LoadTest">("Execution");
-  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [isSaveScratchDialogOpen, setIsSaveScratchDialogOpen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
-  // A layout preference, not workspace data — it belongs to this machine, not the
-  // database. Read lazily so the first paint already has the stored split.
-  const [paneRatio, setPaneRatio] = useState(() =>
-    parsePaneRatio(typeof window === "undefined" ? null : window.localStorage.getItem(PANE_RATIO_KEY))
-  );
+
+  // Layout is a set of states, not a set of flags (ADR-011). The ratio is a
+  // preference rather than workspace data, so it is restored from local storage
+  // rather than the database — read lazily so the first paint has the stored split.
+  const [uiState, sendUi] = useMachine(posteeUiMachine, {
+    input: {
+      paneRatio: parsePaneRatio(
+        typeof window === "undefined" ? null : window.localStorage.getItem(PANE_RATIO_KEY),
+      ),
+    },
+  });
+  const isResponsePanelOpen = uiState.matches({ responsePane: "open" });
+  const isHistoryDrawerOpen = uiState.matches({ historyDrawer: "open" });
+  const activeResponseTab = uiState.matches({ responseTab: "loadTest" }) ? "LoadTest" as const : "Execution" as const;
+  const paneRatio = uiState.context.paneRatio;
+  const setPaneRatio = useCallback((ratio: number) => sendUi({ type: "SET_PANE_RATIO", ratio }), [sendUi]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -137,17 +146,15 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
     ? variablesByEnvironment[currentEnvironmentId] ?? []
     : [];
 
-  // Local state for response panel toggle (replaces machine's isResponseOpen)
-  const [isResponsePanelOpen, setIsResponsePanelOpen] = useState(true);
   const [navigationTarget, setNavigationTarget] = useState<string | null>(null);
 
-  // Auto-open response panel when request completes
+  // A finished request is worth looking at: show execution, opening the pane if the
+  // user had collapsed it.
   useEffect(() => {
     if (lastResponse || lastError) {
-      setIsResponsePanelOpen(true);
-      setActiveResponseTab("Execution");
+      sendUi({ type: "SELECT_RESPONSE_TAB", tab: "execution" });
     }
-  }, [lastResponse, lastError]);
+  }, [lastResponse, lastError, sendUi]);
 
   useEffect(() => {
     if (isSaveScratchDialogOpen && activeScratchDraft === null && scratchPromotion.status === "idle") {
@@ -161,28 +168,24 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
   }, [send]);
 
   const handleToggleResponse = useCallback(() => {
-    setIsResponsePanelOpen((prev) => !prev);
-  }, []);
+    sendUi({ type: "TOGGLE_RESPONSE" });
+  }, [sendUi]);
 
   const handleToggleDiff = useCallback(() => {
     send({ type: "UI_TOGGLE_DIFF" });
   }, [send]);
 
-  const handleLoadTestToggle = useCallback(
-    (selected: boolean) => {
-      if (!isResponsePanelOpen) {
-        setIsResponsePanelOpen(true);
-      }
-      setActiveResponseTab(selected ? "LoadTest" : "Execution");
-    },
-    [isResponsePanelOpen],
-  );
+  // Opening the pane when a tab is chosen is the machine's rule now, not this
+  // handler's responsibility to remember.
+  const handleLoadTestToggle = useCallback((selected: boolean) => {
+    sendUi({ type: "SELECT_RESPONSE_TAB", tab: selected ? "loadTest" : "execution" });
+  }, [sendUi]);
 
   // History overlays now, so opening it no longer disturbs the response pane.
   const handleHistoryToggle = useCallback((selected: boolean) => {
-    setIsHistoryDrawerOpen(selected);
-  }, []);
-  const handleCloseHistory = useCallback(() => setIsHistoryDrawerOpen(false), []);
+    sendUi({ type: selected ? "OPEN_HISTORY" : "CLOSE_HISTORY" });
+  }, [sendUi]);
+  const handleCloseHistory = useCallback(() => sendUi({ type: "CLOSE_HISTORY" }), [sendUi]);
 
   // Sidebar handlers
   const handleCreateCollection = useCallback(

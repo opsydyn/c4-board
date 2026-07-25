@@ -300,3 +300,22 @@ one that was already built, and delete the stacked variant that replaced it".
   covers the behaviour those flags produce, so the refactor can be done against a
   green suite instead of blind — but it is a separate change and this ADR should
   not be marked complete until it lands.
+- 2026-07-25: **Phase 5 complete.** Layout moved out of `useState` into
+  `posteeUiMachine`, a parallel-state machine holding the response pane, response
+  tab, history drawer, and pane ratio.
+
+  Two things worth recording:
+
+  1. **The sidebar was deliberately left out.** It is already a state in the
+     workspace machine, and giving it a second home would have been two sources of
+     truth for one thing — the exact problem this phase exists to remove. The rule
+     is one owner per concern, not "all UI state in the UI machine".
+  2. **Doing the harness first was what made this safe.** The refactor changed how
+     every layout control behaves, and the harness exercised those controls through
+     the new machine end to end. Without it the change would have been verified
+     only by reading.
+
+  "Selecting the load chamber also opens the response pane" is now a transition
+  rather than an `if` in a click handler, so no future caller can forget it.
+
+  This ADR is fully implemented.
