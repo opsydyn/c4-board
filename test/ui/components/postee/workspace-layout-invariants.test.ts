@@ -48,4 +48,21 @@ describe("workspace layout invariants", () => {
   it("keeps the scroll on the region rather than the page", () => {
     expect(styleBlock("mainColumn")).toContain("overflowY: \"auto\"");
   });
+
+  it("keeps the response a peer of the request rather than stacked beneath it", () => {
+    // The stacked variant is what put the load chamber below the builder.
+    expect(stylesheet).not.toContain("export const responseInline");
+    // Track 4: sidebar, request, divider, response.
+    expect(styleBlock("responseColumn")).toContain("gridColumn: \"4 / 5\"");
+  });
+
+  it("does not re-stack the response at narrow widths", () => {
+    // `gridColumn: "1 / -1"` under a media query put the response back below the
+    // request, reintroducing the page scroll the shell exists to prevent.
+    expect(styleBlock("responseColumn")).not.toContain("1 / -1");
+  });
+
+  it("lets the response pane shrink to its track", () => {
+    expect(styleBlock("responseColumn")).toContain("minHeight: 0");
+  });
 });

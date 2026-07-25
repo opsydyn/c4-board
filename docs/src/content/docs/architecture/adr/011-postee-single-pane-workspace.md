@@ -4,7 +4,7 @@ title: "ADR-011: Postee Single-Pane Workspace Layout"
 
 # ADR-011: Postee Single-Pane Workspace Layout
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-25
 **Deciders**: Alan P Currie
 **Technical Story**: The load chamber renders below the request builder, so reaching it means scrolling
@@ -246,3 +246,5 @@ one that was already built, and delete the stacked variant that replaced it".
 ### Updates
 
 - 2026-07-25: Initial draft.
+- 2026-07-25: **Accepted.** Phase 1 (fixed-height shell) implemented; Phases 2-5 proceed as
+  written.

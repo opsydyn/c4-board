@@ -13,9 +13,11 @@ import type { PosteeRequestDraft, PosteeScratchDraft } from "@/core/effects/post
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMachine } from "@xstate/react";
 import { nanoid } from "nanoid";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveActiveRequestDraft } from "@/core/effects/postee/active-request-draft";
+import { parsePaneRatio, workspaceTemplateColumns } from "@/core/effects/postee/workspace-panes";
 import { ToggleButton } from "react-aria-components";
+import { PaneDivider } from "./PaneDivider";
 import {
   CollectionId as CollectionIdBrand,
   durationToMillis,
@@ -36,6 +38,8 @@ import * as layoutStyles from "../styles.css";
 import * as styles from "./PosteeWorkspace.css";
 
 const NAVIGATION_OVERLAY_MIN_DURATION_MS = 220;
+
+const PANE_RATIO_KEY = "postee:pane-ratio";
 
 export function PosteeWorkspace() {
   const machine = useMemo(() => createPosteeWorkspaceMachine(), []);
@@ -71,6 +75,17 @@ export function PosteeWorkspace() {
   // Active response tab state (local UI state, not in machine)
   const [activeResponseTab, setActiveResponseTab] = useState<"Execution" | "LoadTest" | "History">("Execution");
   const [isSaveScratchDialogOpen, setIsSaveScratchDialogOpen] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+  // A layout preference, not workspace data — it belongs to this machine, not the
+  // database. Read lazily so the first paint already has the stored split.
+  const [paneRatio, setPaneRatio] = useState(() =>
+    parsePaneRatio(typeof window === "undefined" ? null : window.localStorage.getItem(PANE_RATIO_KEY))
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(PANE_RATIO_KEY, String(paneRatio));
+  }, [paneRatio]);
 
   // Extract derived workspace state from machine
   const {
@@ -422,7 +437,9 @@ export function PosteeWorkspace() {
 
   // Layout calculations
   const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
-  const templateColumns = `${leftTrack} 1fr`;
+  const templateColumns = workspaceTemplateColumns(leftTrack, paneRatio, {
+    responseOpen: isResponsePanelOpen,
+  });
   const templateRows = "1fr";
 
   const responsePanelContent = (
@@ -451,6 +468,7 @@ export function PosteeWorkspace() {
   return (
     <div
       className={styles.workspace}
+      ref={shellRef}
       style={{
         gridTemplateColumns: templateColumns,
         gridTemplateRows: templateRows,
@@ -589,12 +607,15 @@ export function PosteeWorkspace() {
           onConfirm={handlePromoteScratch}
         />
 
-        {isResponsePanelOpen && (
-          <section className={styles.responseInline} aria-label="Response panel">
+      </main>
+      {isResponsePanelOpen && (
+        <>
+          <PaneDivider ratio={paneRatio} onRatioChange={setPaneRatio} splitAreaRef={shellRef} />
+          <section className={styles.responseColumn} aria-label="Response panel">
             {responsePanelContent}
           </section>
-        )}
-      </main>
+        </>
+      )}
       {navigationTarget && (
         <div className={layoutStyles.navigationOverlay} role="status" aria-live="polite">
           <div

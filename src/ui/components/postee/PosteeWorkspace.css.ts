@@ -511,34 +511,26 @@ export const suggestionButton = style({
   },
 });
 
+/**
+ * The response pane, peer to the request rather than stacked beneath it.
+ *
+ * Track 4 of the shell: sidebar, request, divider, response. The former
+ * `max-width: 1360px` rule re-stacked this to `1 / -1`, which reintroduced the
+ * page scroll the shell exists to prevent; narrow widths become a tab in Phase 4
+ * instead (ADR-011).
+ */
 export const responseColumn = style({
   display: "flex",
   flexDirection: "column",
   gridRow: "1 / 2",
-  gridColumn: "3 / 4",
+  gridColumn: "4 / 5",
   gap: theme.spacing["4"],
   borderLeft: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "rgba(8, 14, 12, 0.96)",
   padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
+  minWidth: 0,
+  minHeight: 0,
   overflowY: "auto",
-
-  "@media": {
-    "(max-width: 1360px)": {
-      gridColumn: "1 / -1",
-      borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-      borderLeft: "none",
-    },
-  },
-});
-
-export const responseInline = style({
-  display: "flex",
-  flexDirection: "column",
-  gap: theme.spacing["4"],
-  marginTop: theme.spacing["4"],
-  borderTop: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-  backgroundColor: "rgba(8, 14, 12, 0.96)",
-  padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
 });
 
 export const sectionTitle = style({
