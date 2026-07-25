@@ -65,6 +65,10 @@ import {
   reactFlowNodeToDb,
   saveDiagram,
 } from "../../core/effects/canvas-persistence";
+import {
+  canvasWorkspaceTemplateColumns,
+  canvasWorkspaceTemplateRows,
+} from "../../core/effects/canvas-workspace-tracks";
 import { patchSettings } from "../../core/effects/database";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeMetadata } from "../../core/effects/edge-operations";
@@ -2642,14 +2646,19 @@ export function C4CanvasContainer() {
     return () => media.removeEventListener("change", listener);
   }, []);
 
-  const leftTrack = isSidebarOpen ? "minmax(260px, 320px)" : "0px";
-  const rightTrack = !isCompactLayout && isDetailsOpen ? "minmax(340px, 420px)" : "0px";
   const opyHostMode = resolveOpyHostMode({
     isOpen: isOpy9000Open,
     surfaceMode: appSettings.opySurfaceMode,
   });
   const isLayoutPreviewOpen = layoutPreview !== null || layoutPreviewStatus !== null;
-  const rowTrack = isLayoutPreviewOpen || isDataBarOpen || opyHostMode === "drawer" ? "1fr auto" : "1fr";
+  const columnTrack = canvasWorkspaceTemplateColumns({
+    isSidebarOpen,
+    isDetailsOpen,
+    isCompactLayout,
+    // The layout preview takes the drawer's place, so its column stays closed.
+    isOpyDrawerOpen: opyHostMode === "drawer" && !isLayoutPreviewOpen,
+  });
+  const rowTrack = canvasWorkspaceTemplateRows({ isLayoutPreviewOpen, isDataBarOpen });
   const opyDrawerChromeTone: OpyWidgetChromeTone = opyChromeStatus?.frameTone ?? "neutral";
   useIsomorphicLayoutEffect(() => {
     if (!opyPanelPortalElement || !hasOpyPanelActivated) {
@@ -2856,7 +2865,7 @@ export function C4CanvasContainer() {
     <div
       className={styles.workspace}
       style={{
-        gridTemplateColumns: `${leftTrack} 1fr ${rightTrack}`,
+        gridTemplateColumns: columnTrack,
         gridTemplateRows: rowTrack,
       }}
     >

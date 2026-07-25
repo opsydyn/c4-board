@@ -1,23 +1,33 @@
 import { style } from "@vanilla-extract/css";
 import { componentsLayer } from "../../../styles/layers.css";
+import { settingsCard, settingsCardDanger } from "../../../styles/pages/settings.css";
 import { theme } from "../../../styles/theme.css";
 
-export const agentField = style({
+/**
+ * The settings card, minus the 180px floor it needs to keep a two-column grid
+ * even. In a drawer the cards are stacked, so a short one should stay short.
+ *
+ * Composed unlayered, like the styles it overrides — a layered rule would lose
+ * the cascade to an unlayered one no matter how specific it is.
+ */
+export const agentCard = style([settingsCard, { minHeight: 0 }]);
+
+/** settingsCardDanger only tints; the card itself still supplies the box. */
+export const agentCardDanger = style([agentCard, settingsCardDanger]);
+
+/** Card rhythm inside the drawer, matching the settings grid's spacing. */
+export const agentBody = style({
   "@layer": {
     [componentsLayer]: {
       display: "flex",
       flexDirection: "column",
-      gap: theme.spacing["2"],
-      textTransform: theme.typography.textTransform.uppercase,
-      letterSpacing: theme.typography.letterSpacing.wide,
-      color: theme.color.foreground.secondary,
-      fontFamily: theme.typography.family.mono,
-      fontSize: theme.typography.size.xs,
+      gap: theme.spacing["4"],
+      minHeight: 0,
     },
   },
 });
 
-export const agentInput = style({
+export const agentPrompt = style({
   "@layer": {
     [componentsLayer]: {
       clipPath: theme.clipPath.sm,
@@ -31,90 +41,67 @@ export const agentInput = style({
       ":focus": {
         outline: "none",
         borderColor: theme.color.border.focus,
+        boxShadow: theme.effect.glow.sm,
       },
     },
   },
 });
 
-/** Kept adjacent to the submit control: egress consent should not be hidden. */
-export const agentConsent = style({
+export const agentProposalMeta = style({
   "@layer": {
     [componentsLayer]: {
       display: "flex",
-      alignItems: "center",
+      alignItems: "baseline",
       gap: theme.spacing["2"],
-      color: theme.color.foreground.secondary,
-      fontFamily: theme.typography.family.mono,
-      fontSize: theme.typography.size.xs,
+      minWidth: 0,
     },
   },
 });
 
-export const agentSubmit = style({
+export const agentMethod = style({
   "@layer": {
     [componentsLayer]: {
-      clipPath: theme.clipPath.sm,
-      border: `${theme.border.width.thin} solid ${theme.color.border.primary}`,
-      backgroundColor: theme.color.interactive.primary,
-      cursor: "pointer",
-      padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
-      textTransform: theme.typography.textTransform.uppercase,
-      letterSpacing: theme.typography.letterSpacing.wide,
-      color: theme.color.background.base,
+      color: theme.color.status.ready,
       fontFamily: theme.typography.family.mono,
       fontSize: theme.typography.size.xs,
-      ":disabled": {
-        opacity: theme.opacity.disabled,
-        cursor: "not-allowed",
-      },
+      fontWeight: theme.typography.weight.bold,
     },
   },
 });
 
-export const agentError = style({
+/** A URL is the longest thing here; it wraps rather than widening the drawer. */
+export const agentUrl = style({
   "@layer": {
     [componentsLayer]: {
-      clipPath: theme.clipPath.sm,
-      border: `${theme.border.width.thin} solid ${theme.color.status.critical}`,
-      padding: theme.spacing["3"],
-      color: theme.color.status.critical,
-      fontFamily: theme.typography.family.mono,
-      fontSize: theme.typography.size.xs,
-    },
-  },
-});
-
-export const agentProposal = style({
-  "@layer": {
-    [componentsLayer]: {
-      display: "flex",
-      flexDirection: "column",
-      gap: theme.spacing["2"],
-      clipPath: theme.clipPath.sm,
-      border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
-      padding: theme.spacing["4"],
+      overflowWrap: "anywhere",
       color: theme.color.foreground.primary,
+      fontFamily: theme.typography.family.mono,
+      fontSize: theme.typography.size.xs,
+    },
+  },
+});
+
+export const agentRationale = style({
+  "@layer": {
+    [componentsLayer]: {
+      margin: 0,
+      lineHeight: 1.5,
+      color: theme.color.foreground.secondary,
+      fontFamily: theme.typography.family.sans,
       fontSize: theme.typography.size.sm,
     },
   },
 });
 
-export const agentProposalRow = style({
+/** Sanitizer repairs and model assumptions — read before sending, not after. */
+export const agentWarning = style({
   "@layer": {
     [componentsLayer]: {
       display: "flex",
       gap: theme.spacing["2"],
-      color: theme.color.foreground.secondary,
-      fontFamily: theme.typography.family.mono,
-      fontSize: theme.typography.size.xs,
-    },
-  },
-});
-
-export const agentWarning = style({
-  "@layer": {
-    [componentsLayer]: {
       margin: 0,
+      borderLeft: `${theme.border.width.base} solid ${theme.color.status.caution}`,
+      paddingLeft: theme.spacing["2"],
       color: theme.color.status.caution,
       fontFamily: theme.typography.family.mono,
       fontSize: theme.typography.size.xs,

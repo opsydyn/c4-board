@@ -11,11 +11,11 @@ export const drawerOverlay = style({
   "@layer": {
     [componentsLayer]: {
       position: "fixed",
+      zIndex: 40,
       inset: 0,
       display: "flex",
       justifyContent: "flex-end",
       backgroundColor: "rgba(2, 5, 4, 0.55)",
-      zIndex: 40,
     },
   },
 });
@@ -25,11 +25,11 @@ export const drawerDialog = style({
   "@layer": {
     [componentsLayer]: {
       display: "flex",
-      width: "min(720px, 100vw)",
-      height: "100%",
       borderLeft: `${theme.border.width.base} solid ${theme.color.border.primary}`,
       boxShadow: `${theme.effect.glow.lg}, -18px 0 60px rgba(0, 0, 0, 0.46)`,
       background: "linear-gradient(180deg, rgba(7, 13, 10, 0.985) 0%, rgba(4, 8, 6, 0.98) 100%)",
+      width: "min(720px, 100vw)",
+      height: "100%",
       "@media": {
         "(prefers-reduced-motion: no-preference)": {
           animation: `${slideIn} 160ms ease-out`,
@@ -44,13 +44,13 @@ export const drawerBody = style({
     [componentsLayer]: {
       display: "flex",
       flexDirection: "column",
-      gap: theme.spacing["3"],
-      padding: `${theme.spacing["5"]} ${theme.spacing["4"]}`,
-      width: "100%",
+      gap: theme.spacing["4"],
+      outline: "none",
+      padding: theme.spacing["5"],
       // The drawer is fixed to the viewport; only its body scrolls.
+      width: "100%",
       minHeight: 0,
       overflowY: "auto",
-      outline: "none",
       color: theme.color.foreground.primary,
     },
   },
@@ -63,6 +63,8 @@ export const drawerHeader = style({
       alignItems: "center",
       justifyContent: "space-between",
       gap: theme.spacing["3"],
+      borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+      paddingBottom: theme.spacing["4"],
     },
   },
 });

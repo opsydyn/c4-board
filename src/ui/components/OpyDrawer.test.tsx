@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OpyDrawer } from "./OpyDrawer";
 
 describe("OpyDrawer", () => {
-  it("renders OPY content inside a bottom drawer shell", () => {
+  it("renders OPY content inside the side drawer shell", () => {
     render(
       <OpyDrawer
         diagramName="Payments Board"

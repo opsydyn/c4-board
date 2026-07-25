@@ -7,12 +7,14 @@ export const drawerRoot = style({
     [componentsLayer]: {
       display: "flex",
       flexDirection: "column",
-      gridRow: "2 / 3",
-      gridColumn: "1 / -1",
+      // The last column of the workspace grid, mirroring the OPY drawer in Postee.
+      gridRow: "1 / -1",
+      gridColumn: "4 / 5",
       clipPath: theme.clipPath.lg,
       border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
-      boxShadow: `${theme.effect.glow.lg}, 0 -18px 60px rgba(0, 0, 0, 0.46)`,
+      boxShadow: `${theme.effect.glow.lg}, -18px 0 60px rgba(0, 0, 0, 0.46)`,
       background: "linear-gradient(180deg, rgba(7, 13, 10, 0.985) 0%, rgba(4, 8, 6, 0.98) 100%)",
+      minWidth: 0,
       overflow: "hidden",
       color: theme.color.foreground.primary,
 
@@ -20,17 +22,17 @@ export const drawerRoot = style({
         "&[data-chrome-tone=\"ready\"]": {
           borderColor: theme.color.status.ready,
           boxShadow:
-            `${theme.effect.glow.lg}, 0 -18px 60px color-mix(in srgb, ${theme.color.status.ready} 14%, transparent)`,
+            `${theme.effect.glow.lg}, -18px 0 60px color-mix(in srgb, ${theme.color.status.ready} 14%, transparent)`,
         },
         "&[data-chrome-tone=\"caution\"]": {
           borderColor: theme.color.status.caution,
           boxShadow:
-            `${theme.effect.glow.lg}, 0 -18px 60px color-mix(in srgb, ${theme.color.status.caution} 16%, transparent)`,
+            `${theme.effect.glow.lg}, -18px 0 60px color-mix(in srgb, ${theme.color.status.caution} 16%, transparent)`,
         },
         "&[data-chrome-tone=\"critical\"]": {
           borderColor: theme.color.status.critical,
           boxShadow:
-            `${theme.effect.glow.lg}, 0 -18px 64px color-mix(in srgb, ${theme.color.status.critical} 18%, transparent)`,
+            `${theme.effect.glow.lg}, -18px 0 64px color-mix(in srgb, ${theme.color.status.critical} 18%, transparent)`,
         },
       },
     },
@@ -45,14 +47,14 @@ export const drawerHeader = style([
         flexWrap: "wrap",
         alignItems: "center",
         justifyContent: "space-between",
-        gap: theme.spacing["5"],
+        gap: theme.spacing["3"],
         borderBottom: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
         background: "linear-gradient(180deg, rgba(10, 18, 14, 0.98) 0%, rgba(7, 13, 10, 0.94) 100%)",
       },
     },
   },
   {
-    padding: `${theme.spacing["4"]} ${theme.spacing["6"]}`,
+    padding: `${theme.spacing["4"]} ${theme.spacing["5"]}`,
     "@media": {
       "screen and (max-width: 760px)": {
         padding: `${theme.spacing["3"]} ${theme.spacing["4"]}`,
@@ -65,7 +67,7 @@ export const drawerIdentity = style({
   "@layer": {
     [componentsLayer]: {
       display: "flex",
-      flex: "1 1 16rem",
+      flex: "1 1 auto",
       flexDirection: "column",
       gap: theme.spacing["1"],
       minWidth: 0,

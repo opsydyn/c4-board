@@ -1,4 +1,4 @@
-import { ArrowsOutSimpleIcon, CaretDownIcon } from "@phosphor-icons/react";
+import { ArrowsOutSimpleIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import * as styles from "./OpyDrawer.css";
 
@@ -43,7 +43,7 @@ export const OpyDrawer = ({
           aria-label="Collapse OPY drawer"
           onClick={onCollapse}
         >
-          <CaretDownIcon size={16} weight="bold" aria-hidden="true" />
+          <CaretRightIcon size={16} weight="bold" aria-hidden="true" />
         </button>
         <button
           type="button"
