@@ -66,6 +66,24 @@ describe("workspace layout invariants", () => {
     expect(styleBlock("responseColumn")).toContain("minHeight: 0");
   });
 
+  it("keeps the panes as containers so content responds to the pane, not the window", () => {
+    // Panes are a fraction of the viewport now, so a viewport media query would
+    // describe space the content does not have (ADR-011 Phase 4).
+    expect(styleBlock("responseColumn")).toContain("containerType: \"inline-size\"");
+    expect(styleBlock("mainColumn")).toContain("containerType: \"inline-size\"");
+    expect(styleBlock("loadTestMetrics")).toContain("@container");
+    expect(styleBlock("loadTestMetrics")).not.toContain("@media");
+  });
+
+  it("keeps fixed height floors out of the panes", () => {
+    // Each of these forced overflow inside a height-bound pane.
+    expect(styleBlock("panel")).not.toContain("minHeight: \"200px\"");
+    expect(styleBlock("tabContent")).not.toContain("minHeight: \"200px\"");
+    for (const state of ["responseEmptyState", "responseLoadingState", "responseErrorState"]) {
+      expect(styleBlock(state)).not.toContain("minHeight: \"300px\"");
+    }
+  });
+
   it("keeps history off the response tabs", () => {
     // History as a third tab meant reading it cost you the response; it overlays
     // as a drawer instead (ADR-011 Phase 3).

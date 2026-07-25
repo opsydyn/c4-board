@@ -267,3 +267,19 @@ one that was already built, and delete the stacked variant that replaced it".
   takes its own drag handle with it. Grid tracks use `minmax(0, …)` rather than
   bare `fr`, since a track's automatic minimum is its content and a wide response
   would otherwise push the shell past the viewport, undoing Phase 1.
+- 2026-07-25: **Phase 4 implemented.** Fixed floors removed, editors made
+  viewport-relative, load chamber preamble compacted. One finding changed the
+  approach:
+
+  **Viewport media queries became wrong the moment panes stopped being the
+  viewport.** The load-test grids reflowed at `1200px` / `900px` of *window*
+  width, so a three-column metrics grid stayed three columns inside a pane half
+  that wide. The panes are now named containers (`containerType: inline-size`) and
+  their contents reflow on `@container` at `720px` / `480px` of *pane* width. Any
+  future rule about how pane content reflows belongs in a container query; a
+  viewport query in there is a latent bug.
+
+  Editors take a definite `clamp(180px, 42vh, 620px)` rather than `height: 100%`.
+  Percentage height on Monaco collapses to zero whenever an ancestor lacks a
+  definite height, and that failure is invisible until it is in front of a user —
+  a clamp adapts to the shell without ever being able to collapse.

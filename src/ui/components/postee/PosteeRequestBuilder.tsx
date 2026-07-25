@@ -946,7 +946,7 @@ export function PosteeRequestBuilder({
                         onChange={handleGraphqlDocumentChange}
                         schema={graphqlSchema}
                         readOnly={!isEditorSynchronized || isRunning}
-                        height="300px"
+                        height="clamp(180px, 42vh, 620px)"
                       />
                     </div>
                     <div className={styles.graphqlEditorSection}>
@@ -957,7 +957,7 @@ export function PosteeRequestBuilder({
                         value={graphqlVariables}
                         onChange={handleGraphqlVariablesChange}
                         readOnly={!isEditorSynchronized || isRunning}
-                        height="180px"
+                        height="clamp(120px, 18vh, 280px)"
                         placeholder="{}"
                         ariaLabel="GraphQL variables"
                       />
@@ -986,7 +986,7 @@ export function PosteeRequestBuilder({
                     value={editorPresentation.requestBody}
                     onChange={handleBodyChange}
                     readOnly={!isEditorSynchronized || isRunning}
-                    height="300px"
+                    height="clamp(180px, 42vh, 620px)"
                     placeholder="{}"
                   />
                 )}

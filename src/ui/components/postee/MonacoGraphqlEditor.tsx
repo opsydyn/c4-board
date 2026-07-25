@@ -158,7 +158,7 @@ export function MonacoGraphqlEditor({
   onChange,
   schema,
   readOnly,
-  height = "300px",
+  height = "clamp(180px, 42vh, 620px)",
 }: MonacoGraphqlEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);

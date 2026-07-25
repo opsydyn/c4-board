@@ -31,6 +31,8 @@ import {
   metricValue,
   miniBarValue,
   miniBarWrapper,
+  loadTestHeader,
+  loadTestWarning,
   sectionTitle,
   submitButton,
   textInput,
@@ -797,24 +799,19 @@ export function LoadTestPanel({
 
   return (
     <section className={loadTestPanel}>
-      <header>
+      {/*
+        The chamber shares a pane with the response now, so the standing warning is
+        a title affordance rather than two lines of permanent copy (ADR-011 Phase 4).
+      */}
+      <header className={loadTestHeader}>
         <h3 className={sectionTitle}>OPSYDYN Load Chamber (Experimental)</h3>
-        <p
-          style={{
-            marginTop: "0.25rem",
-            fontSize: "0.9rem",
-            opacity: 0.75,
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-          }}
+        <span
+          className={loadTestWarning}
+          title="Initiating a load test seals the blast doors and arms the sirens. A runner will pound this endpoint every 100ms until the alarms clear."
         >
-          <WarningOctagonIcon size={18} weight="bold" />
-          <span>
-            Initiating a load test seals the blast doors and arms the sirens. A runner will pound this endpoint every
-            100ms until the alarms clear.
-          </span>
-        </p>
+          <WarningOctagonIcon size={16} weight="bold" />
+          Arms the sirens
+        </span>
       </header>
 
       {isDetecting && (

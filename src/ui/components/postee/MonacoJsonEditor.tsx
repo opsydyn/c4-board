@@ -122,7 +122,7 @@ export function MonacoJsonEditor({
   value,
   onChange,
   readOnly = false,
-  height = "300px",
+  height = "clamp(180px, 42vh, 620px)",
   placeholder = "{}",
   ariaLabel = "Request body",
 }: MonacoJsonEditorProps) {

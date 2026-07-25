@@ -316,6 +316,8 @@ export const requestButtonActive = style([
 ]);
 
 export const mainColumn = style({
+  containerName: "requestPane",
+  containerType: "inline-size",
   position: "relative",
   display: "flex",
   flexDirection: "column",
@@ -400,7 +402,7 @@ export const panel = style({
   boxShadow: theme.effect.glow.sm,
   backgroundColor: "rgba(10, 18, 14, 0.94)",
   padding: `${theme.spacing["4"]} ${theme.spacing["5"]}`,
-  minHeight: "200px",
+  minHeight: 0,
 });
 
 /**
@@ -520,6 +522,11 @@ export const suggestionButton = style({
  * instead (ADR-011).
  */
 export const responseColumn = style({
+  // Named container: the pane is now a fraction of the viewport, so its contents
+  // must respond to the pane's own width. Viewport media queries would describe
+  // space this content does not have (ADR-011 Phase 4).
+  containerName: "responsePane",
+  containerType: "inline-size",
   display: "flex",
   flexDirection: "column",
   gridRow: "1 / 2",
@@ -753,7 +760,7 @@ export const responseBody = style({
 
 export const tabContent = style({
   padding: `${theme.spacing["4"]} 0`,
-  minHeight: "200px",
+  minHeight: 0,
 });
 
 export const graphqlEditorLayout = style({
@@ -878,11 +885,11 @@ export const loadTestControls = style({
   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: theme.spacing["3"],
 
-  "@media": {
-    "(max-width: 1200px)": {
+  "@container": {
+    "responsePane (max-width: 720px)": {
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     },
-    "(max-width: 900px)": {
+    "responsePane (max-width: 480px)": {
       gridTemplateColumns: "minmax(0, 1fr)",
     },
   },
@@ -954,11 +961,11 @@ export const loadTestMetrics = style({
   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: theme.spacing["3"],
 
-  "@media": {
-    "(max-width: 1200px)": {
+  "@container": {
+    "responsePane (max-width: 720px)": {
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     },
-    "(max-width: 900px)": {
+    "responsePane (max-width: 480px)": {
       gridTemplateColumns: "minmax(0, 1fr)",
     },
   },
@@ -993,7 +1000,7 @@ export const chartWrapper = style({
   backgroundColor: "rgba(12, 20, 16, 0.9)",
   padding: theme.spacing["3"],
   width: "100%",
-  height: "180px",
+  height: "clamp(120px, 22vh, 180px)",
 });
 
 export const chartVisualizationGrid = style({
@@ -1127,7 +1134,8 @@ export const responseEmptyState = style({
 	`,
   backgroundSize: "20px 20px",
   padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
-  minHeight: "300px",
+  minHeight: 0,
+  flex: 1,
   textAlign: "center",
   color: theme.color.foreground.secondary,
 });
@@ -1177,7 +1185,8 @@ export const responseLoadingState = style({
 	`,
   backgroundSize: "20px 20px",
   padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
-  minHeight: "300px",
+  minHeight: 0,
+  flex: 1,
   textAlign: "center",
   color: theme.color.foreground.secondary,
 });
@@ -1214,7 +1223,8 @@ export const responseErrorState = style({
 	`,
   backgroundSize: "20px 20px",
   padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
-  minHeight: "300px",
+  minHeight: 0,
+  flex: 1,
   textAlign: "center",
   color: theme.color.foreground.secondary,
 });
@@ -1244,4 +1254,27 @@ export const responseErrorMessage = style({
   color: theme.color.foreground.primary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
+});
+
+/** Title row for the load chamber: heading and its standing warning on one line. */
+export const loadTestHeader = style({
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: theme.spacing["2"],
+});
+
+/**
+ * The chamber's warning, reduced to a marker with the full text on hover. It is a
+ * permanent condition rather than news, and it shares a pane with the response.
+ */
+export const loadTestWarning = style({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: theme.spacing["1"],
+  color: theme.color.status.caution,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+  cursor: "help",
 });

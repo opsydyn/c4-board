@@ -653,7 +653,7 @@ export function ResponseViewer({
               )
               : (
                 <Editor
-                  height="300px"
+                  height="clamp(180px, 42vh, 620px)"
                   defaultLanguage={isJson ? "json" : "plaintext"}
                   value={formattedBody}
                   theme="postee-response-dark"
@@ -678,7 +678,7 @@ export function ResponseViewer({
 
           {showHeaders && (
             <Editor
-              height="150px"
+              height="clamp(120px, 18vh, 280px)"
               // A header block, not JSON: an object cannot hold two Set-Cookie lines.
               defaultLanguage="plaintext"
               value={formatHeaderBlock(headerEntries)}
