@@ -949,7 +949,9 @@ fn execute_postee_history_lookup_tool(context: &RigPosteeContext) -> RigPosteeHi
 
     let failure_count = entries
         .iter()
-        .filter(|entry| entry.error_message.is_some() || entry.status.is_some_and(|status| status >= 400))
+        .filter(|entry| {
+            entry.error_message.is_some() || entry.status.is_some_and(|status| status >= 400)
+        })
         .count() as i64;
 
     RigPosteeHistoryLookupResult {
@@ -966,10 +968,7 @@ fn execute_postee_response_lookup_tool(
     let history_id = normalize_secret(&input.history_id)
         .ok_or_else(|| "responseLookup requires a non-empty historyId.".to_string())?;
 
-    let entry = context
-        .history
-        .iter()
-        .find(|entry| entry.id == history_id);
+    let entry = context.history.iter().find(|entry| entry.id == history_id);
 
     let Some(entry) = entry else {
         return Ok(RigPosteeResponseLookupResult {
@@ -1118,10 +1117,11 @@ fn execute_postee_last_response_tool(context: &RigPosteeContext) -> RigPosteeLas
 fn execute_rig_postee_read_tool(
     input: RigPosteeReadToolRequest,
 ) -> Result<RigPosteeReadToolResponse, String> {
-    let serialize = |tool: RigPosteeReadToolName, value: serde_json::Value| RigPosteeReadToolResponse {
-        tool,
-        result: value,
-    };
+    let serialize =
+        |tool: RigPosteeReadToolName, value: serde_json::Value| RigPosteeReadToolResponse {
+            tool,
+            result: value,
+        };
 
     match input.tool {
         RigPosteeReadToolName::ActiveRequest => {
@@ -1144,16 +1144,18 @@ fn execute_rig_postee_read_tool(
             serde_json::from_value::<RigPosteeEmptyInput>(input.input)
                 .map_err(|error| format!("Invalid lastResponseSummary input payload: {error}"))?;
             let result = execute_postee_last_response_tool(&input.context);
-            let value = serde_json::to_value(result)
-                .map_err(|error| format!("Unable to serialize lastResponseSummary result: {error}"))?;
+            let value = serde_json::to_value(result).map_err(|error| {
+                format!("Unable to serialize lastResponseSummary result: {error}")
+            })?;
             Ok(serialize(RigPosteeReadToolName::LastResponseSummary, value))
         }
         RigPosteeReadToolName::CollectionSummary => {
             serde_json::from_value::<RigPosteeEmptyInput>(input.input)
                 .map_err(|error| format!("Invalid collectionSummary input payload: {error}"))?;
             let result = execute_postee_collection_summary_tool(&input.context);
-            let value = serde_json::to_value(result)
-                .map_err(|error| format!("Unable to serialize collectionSummary result: {error}"))?;
+            let value = serde_json::to_value(result).map_err(|error| {
+                format!("Unable to serialize collectionSummary result: {error}")
+            })?;
             Ok(serialize(RigPosteeReadToolName::CollectionSummary, value))
         }
         RigPosteeReadToolName::HistoryLookup => {
@@ -1176,8 +1178,9 @@ fn execute_rig_postee_read_tool(
             serde_json::from_value::<RigPosteeEmptyInput>(input.input)
                 .map_err(|error| format!("Invalid graphqlSchemaLookup input payload: {error}"))?;
             let result = execute_postee_graphql_schema_tool(&input.context);
-            let value = serde_json::to_value(result)
-                .map_err(|error| format!("Unable to serialize graphqlSchemaLookup result: {error}"))?;
+            let value = serde_json::to_value(result).map_err(|error| {
+                format!("Unable to serialize graphqlSchemaLookup result: {error}")
+            })?;
             Ok(serialize(RigPosteeReadToolName::GraphqlSchemaLookup, value))
         }
     }
@@ -1274,7 +1277,11 @@ fn build_postee_context_text(context: &RigPosteeContext) -> String {
         context.request.method,
         context.request.url,
         context.request.body_mode,
-        if header_keys.is_empty() { "(none)".to_string() } else { header_keys }
+        if header_keys.is_empty() {
+            "(none)".to_string()
+        } else {
+            header_keys
+        }
     ));
 
     if let Some(environment) = context.environment.as_ref() {
@@ -1389,9 +1396,10 @@ fn sanitize_postee_request_proposal(
     }
 
     if matches!(proposal.method.as_str(), "GET" | "HEAD") && proposal.body.is_some() {
-        proposal
-            .warnings
-            .push(format!("Dropped the body: {} requests do not carry one.", proposal.method));
+        proposal.warnings.push(format!(
+            "Dropped the body: {} requests do not carry one.",
+            proposal.method
+        ));
         proposal.body = None;
     }
 
@@ -1410,7 +1418,10 @@ fn validate_postee_request_proposal(
     }
 
     if !POSTEE_METHODS.contains(&proposal.method.as_str()) {
-        return Err(format!("Proposal uses an unsupported method '{}'.", proposal.method));
+        return Err(format!(
+            "Proposal uses an unsupported method '{}'.",
+            proposal.method
+        ));
     }
 
     if !POSTEE_BODY_MODES.contains(&proposal.body_mode.as_str()) {
@@ -2488,7 +2499,10 @@ mod tests {
         .expect("lookup should succeed");
 
         assert!(!result.found);
-        assert!(result.body_unavailable_reason.expect("a reason").contains("No history entry"));
+        assert!(result
+            .body_unavailable_reason
+            .expect("a reason")
+            .contains("No history entry"));
     }
 
     #[test]
@@ -2508,7 +2522,10 @@ mod tests {
 
         assert_eq!(result.collection_count, 1);
         assert_eq!(result.request_count, 1);
-        assert_eq!(result.collections[0].requests[0].header_keys, vec!["Authorization"]);
+        assert_eq!(
+            result.collections[0].requests[0].header_keys,
+            vec!["Authorization"]
+        );
     }
 
     #[test]
