@@ -608,7 +608,13 @@ export function SettingsPanel() {
         setAgentSecretWarning(status.warning);
         setAgentSecretResolutionOrder(status.resolutionOrder);
         setOpenAiApiKeyDraft("");
-        clearLegacyOpenAiFallback();
+        // Only drop the settings-db copy when the key actually reached the keychain.
+        // On macOS debug builds the keychain is disabled by design, so settings-db IS
+        // the store — clearing unconditionally wiped the key that had just been saved
+        // and left the agent unusable with nothing reported as wrong.
+        if (status.source === "keychain") {
+          clearLegacyOpenAiFallback();
+        }
         setAgentSecretActionMessage(
           status.source === "keychain"
             ? "OPENAI KEY STORED IN KEYCHAIN."
