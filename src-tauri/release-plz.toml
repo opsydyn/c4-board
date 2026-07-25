@@ -8,7 +8,10 @@ git_only = true
 publish = false
 publish_no_verify = true
 release_always = true
-changelog_update = false
+# Generate release notes from the commit history. This was off, so v0.0.6 was
+# published with an empty body despite carrying 115 commits. 119 of the 123
+# commits in that range were conventional, so generated notes are worth having.
+changelog_update = true
 semver_check = false
 
 git_tag_name = "v{{ version }}"
