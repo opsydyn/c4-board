@@ -36,6 +36,7 @@ Each ADR follows this structure:
 | [ADR-010](./010-http-response-integrity.md)      | HTTP Response Integrity — Never Discard a Response on Body Decode Failure | Accepted | 2026-07-24 |
 | [ADR-011](./011-postee-single-pane-workspace.md) | Postee Single-Pane Workspace Layout                              | Accepted | 2026-07-25 |
 | [ADR-012](./012-opy-in-postee.md)                | OPY in Postee — Agent-Assisted Request Authoring                 | Accepted | 2026-07-25 |
+| [ADR-013](./013-desktop-auto-update.md)          | Desktop Auto-Update via Signed GitHub Releases                   | Proposed | 2026-07-25 |
 
 ## Contributing
 
