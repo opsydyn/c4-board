@@ -17,14 +17,20 @@ export interface ProposePosteeRequestInput {
   readonly maxTokens?: number;
 }
 
-interface ProposePosteeRequestPayload extends PosteeRequestProposal {
+/** The command flattens the proposal alongside its provenance and token usage. */
+export interface ProposePosteeRequestPayload extends PosteeRequestProposal {
   readonly provider: string;
   readonly model: string;
+  readonly usage: {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly totalTokens: number;
+  };
 }
 
 export const proposePosteeRequest = async (
   input: ProposePosteeRequestInput,
-): Promise<PosteeRequestProposal> => {
+): Promise<ProposePosteeRequestPayload> => {
   const payload = await invoke<ProposePosteeRequestPayload>("rig_agent_propose_postee_request", {
     input,
   });

@@ -290,7 +290,7 @@ type PosteeMachineEvent =
  * Run an Effect with the provided layer
  * This is idiomatic Effect - just provide the layer to the effect
  */
-const runLayeredEffect = <A, E>(
+export const runLayeredEffect = <A, E>(
   layer: WorkspaceLayer,
   effect: Effect.Effect<A, E, WorkspaceEnv>,
 ): Promise<A> => Effect.runPromise(Effect.provide(effect, layer));

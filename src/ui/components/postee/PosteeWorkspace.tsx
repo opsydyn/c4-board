@@ -19,6 +19,7 @@ import { parsePaneRatio, workspaceTemplateColumns } from "@/core/effects/postee/
 import { type PosteeRequestProposal, proposalToScratchDraft } from "@/core/effects/postee/agent-proposal";
 import { buildPosteeAgentContext } from "@/core/effects/postee/agent-redaction";
 import { proposePosteeRequest } from "@/core/effects/postee/agent-runtime";
+import { markPosteeAgentProposalAccepted, recordPosteeAgentRun } from "@/core/effects/postee/agent-persistence";
 import { ToggleButton } from "react-aria-components";
 import { PaneDivider } from "./PaneDivider";
 import { PosteeAgentDrawer } from "./PosteeAgentDrawer";
@@ -30,7 +31,12 @@ import {
   RequestId as RequestIdBrand,
 } from "../../../core/effects/postee/types";
 import { useAppSettings } from "../../../core/effects/useAppSettings";
-import { createPosteeWorkspaceMachine, type PosteeEvent, type WorkspaceLayer } from "../../machines/postee.machine";
+import {
+  createPosteeWorkspaceMachine,
+  type PosteeEvent,
+  runLayeredEffect,
+  type WorkspaceLayer,
+} from "../../machines/postee.machine";
 import { posteeUiMachine } from "../../machines/postee-ui.machine";
 import { PosteeRequestBuilder } from "./PosteeRequestBuilder";
 import { PosteeResponsePanel } from "./PosteeResponsePanel";
@@ -89,6 +95,8 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
 
   const [isSaveScratchDialogOpen, setIsSaveScratchDialogOpen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
+  // The proposal currently on screen, so accepting it can be linked to its draft.
+  const lastProposalIdRef = useRef<string | null>(null);
 
   // Layout is a set of states, not a set of flags (ADR-011). The ratio is a
   // preference rather than workspace data, so it is restored from local storage
@@ -204,7 +212,15 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
     send({ type: "CREATE_SCRATCH" } satisfies PosteeEvent);
     send({ type: "UPDATE_SCRATCH_DRAFT", draft } satisfies PosteeEvent);
     sendUi({ type: "CLOSE_AGENT" });
-  }, [openScratchIds.length, send, sendUi]);
+
+    const proposalId = lastProposalIdRef.current;
+    if (proposalId !== null) {
+      runLayeredEffect(state.context.layer, markPosteeAgentProposalAccepted(proposalId, draft.id, Date.now()))
+        .catch((cause: unknown) => {
+          console.error("[postee][agent] Failed to mark proposal accepted:", cause);
+        });
+    }
+  }, [openScratchIds.length, send, sendUi, state.context.layer]);
 
   const handleProposeRequest = useCallback(
     async (input: { readonly description: string; readonly includeBodies: boolean }) => {
@@ -235,9 +251,37 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
         { mode: "strict", includeHeaderValues: false, includeBodies: input.includeBodies },
       );
 
-      return proposePosteeRequest({ description: input.description, context: agentContext });
+      const proposal = await proposePosteeRequest({
+        description: input.description,
+        context: agentContext,
+      });
+
+      // A run has to leave a trace: what was asked, what the boundary withheld, and
+      // what came back. Recorded before the operator decides, so a proposal that is
+      // never taken up is still visible (ADR-008 replayability, ADR-012).
+      const proposalId = nanoid();
+      lastProposalIdRef.current = proposalId;
+      await runLayeredEffect(
+        state.context.layer,
+        recordPosteeAgentRun({
+          runId: nanoid(),
+          proposalId,
+          description: input.description,
+          model: proposal.model ?? "unknown",
+          includeBodies: input.includeBodies,
+          withheld: agentContext.withheld,
+          usage: proposal.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          proposal,
+          now: Date.now(),
+        }),
+      ).catch((cause: unknown) => {
+        // Losing the audit row must not lose the operator their proposal.
+        console.error("[postee][agent] Failed to record agent run:", cause);
+      });
+
+      return proposal;
     },
-    [activeScratchDraft, history],
+    [activeScratchDraft, history, state.context.layer],
   );
 
   // Sidebar handlers

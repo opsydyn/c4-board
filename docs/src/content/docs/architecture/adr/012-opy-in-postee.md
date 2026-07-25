@@ -103,8 +103,9 @@ mechanism the scratch-first workspace already provides.
 
 ### Persistence
 
-Shared run machinery gains a `surface` discriminator (`board | postee`) on `opy_agent_runs`,
-`opy_agent_tool_calls`, and `opy_agent_artifacts`. Proposals get their own table.
+~~Shared run machinery gains a `surface` discriminator (`board | postee`) on `opy_agent_runs`,
+`opy_agent_tool_calls`, and `opy_agent_artifacts`.~~ **Superseded — see the 2026-07-25 update below.**
+Postee gets its own run and proposal tables; the board tables are untouched.
 
 `opy_diagram_proposals` holds C4 node and edge payloads. A Postee proposal holds a method, URL,
 headers, body mode, and GraphQL document. These have nothing in common beyond the word "proposal", and
@@ -365,3 +366,32 @@ is. Anything relying on the model's cooperation should be treated as unimplement
   open it, surfacing as an unused `handleOpenAgent`. The workspace harness now
   asserts the drawer is reachable from the toolbar, which is the check that would
   have caught it without the compiler's help.
+- 2026-07-25: **Persistence implemented, and this ADR's plan for it was wrong.**
+
+  The proposal was a `surface` discriminator on `opy_agent_runs`,
+  `opy_agent_tool_calls`, and `opy_agent_artifacts`. Reading their schemas shows why
+  that cannot work: the latter two require `task_id -> opy_agent_tasks` and
+  `session_id -> opy_chat_sessions`, both `NOT NULL`, and their `name`/`kind` CHECK
+  constraints enumerate board-specific values. A Postee run has no chat session and
+  no board task, so sharing those tables would mean fabricating both to satisfy
+  foreign keys — a worse lie than a second table, and a set of enum values that
+  would need rebuilding the tables to extend.
+
+  Migration `033` therefore adds `postee_agent_runs` and `postee_agent_proposals`,
+  leaving the board tables alone. It is the same argument already accepted for
+  proposals, extended to runs: these tables have nothing in common beyond the word.
+
+  `withheld_json` is the load-bearing column. Without it a replay cannot distinguish
+  "the model saw a response body and ignored it" from "the model was never shown
+  one", which is exactly the question an audit of an agent with a redaction boundary
+  needs to answer. Token usage and the body-consent flag are recorded for the same
+  reason: a run has a cost and an egress decision, and both belong in the record.
+
+  A proposal row is written **before** the operator decides, so a proposal that is
+  never taken up is still visible. Accepting it links the row to the scratch draft it
+  became. Failure to write the audit row is logged and swallowed — losing the trace
+  must not lose the operator their proposal.
+
+  **Still outstanding:** `request_lookup`. `collectionSummary` returns saved requests
+  with their redacted URLs and header names, which covers most of what it was for,
+  but it is not a lookup by id and this ADR should not be read as having shipped it.
