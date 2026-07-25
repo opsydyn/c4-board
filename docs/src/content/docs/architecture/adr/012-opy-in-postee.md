@@ -81,12 +81,19 @@ The GraphQL introspection path already redacts header values into history
 
 Mirroring the existing three, same envelope, executed in Rust:
 
-- `collection_summary` — collections, request names, methods, URL shapes
-- `request_lookup` — one request: method, URL, headers *(values redacted)*, body mode
-- `history_lookup` — recent executions: status, duration, size, error; **no bodies by default**
-- `response_lookup` — one history entry's body, **gated on per-run consent**
-- `graphql_schema_lookup` — the cached introspection snapshot for an endpoint
-- `environment_summary` — environment names and variable **keys**, never values
+- `collectionSummary` — collections, request names, methods, redacted URLs, header names
+- `historyLookup` — recent executions: status, duration, size, error; **no bodies by default**
+- `responseLookup` — one history entry's body, **gated on per-run consent**
+- `graphqlSchemaLookup` — the cached introspection snapshot for an endpoint, summarised
+- `environmentKeys` — environment name and variable **keys**, never values
+- `activeRequest` — the request currently being edited, and which headers arrived withheld
+- `lastResponseSummary` — the shape of the most recent response
+
+As shipped, and amended from the original list — see the 2026-07-25 amendment below.
+`request_lookup` is not among them: `collectionSummary` already returns every saved
+request in full, so a lookup by id would spend a round trip returning information the
+agent has. `activeRequest` and `lastResponseSummary` were added because the request on
+screen and its last result are what most questions are actually about.
 
 `graphql_schema_lookup` is the highest-value tool and carries no secrets: the schema is already
 cached per endpoint and context fingerprint, so operations can be grounded in a real schema rather
@@ -395,3 +402,21 @@ is. Anything relying on the model's cooperation should be treated as unimplement
   **Still outstanding:** `request_lookup`. `collectionSummary` returns saved requests
   with their redacted URLs and header names, which covers most of what it was for,
   but it is not a lookup by id and this ADR should not be read as having shipped it.
+- 2026-07-25: **Amended: `request_lookup` is dropped, and the tool list now records
+  what shipped.**
+
+  `collectionSummary` returns every saved request already — name, method, redacted
+  URL, header names — so a lookup by id would cost a round trip to return something
+  the agent is holding. Lookup tools earn their place when the corpus is too large to
+  supply whole, which is true of a board with hundreds of nodes and not yet true of a
+  Postee workspace. If collections grow to where the summary has to be truncated,
+  `request_lookup` becomes worth adding and this decision should be revisited.
+
+  Two tools were added that this ADR never named: `activeRequest` and
+  `lastResponseSummary`. The original list was written from the shape of the data
+  rather than from the questions asked of it, and most questions are about the
+  request on screen and what happened when it last ran.
+
+  With this amendment the ADR is fully implemented: redaction boundary, seven read
+  tools, proposals landing as scratch drafts, diagnosis behind consent, the drawer
+  surface, and the run and proposal audit trail.
