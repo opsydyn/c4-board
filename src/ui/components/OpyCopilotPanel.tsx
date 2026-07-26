@@ -13,8 +13,6 @@ import {
   detectRigExecutionPolicyViolation,
   type RigExecutionPolicySettings,
   type RigMutationPolicySettings,
-  summarizeRigExecutionPolicySettings,
-  summarizeRigMutationPolicySettings,
   summarizeRigToolPolicy,
 } from "../../core/effects/agent-policy";
 import {
@@ -55,6 +53,7 @@ import {
   withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
 import type { EffectiveRigAgentV1RolloutState } from "../../core/effects/feature-flags";
+import { describeActionMode, isBlockingBoundary, type OpyActionModeSurface } from "../../core/effects/opy-action-mode";
 import {
   createOpyAddNodeActionFlowDescriptor,
   type OpyActionFlowDescriptor,
@@ -245,12 +244,6 @@ interface OpyDiagnosticsSurface {
   readonly respondedAtMs: number;
   readonly context: RigAgentContextBundle;
   readonly run: OpyAgentRun | null;
-}
-
-interface OpyActionModeSurface {
-  readonly tone: "critical" | "warning" | "ready";
-  readonly label: string;
-  readonly detail: string;
 }
 
 interface OpyLatestAnomalySurface {
@@ -1457,75 +1450,6 @@ const parseOpyTranscriptDiagnostics = (content: string): OpyTranscriptDiagnostic
     confidence,
     citations,
   };
-};
-
-const describeActionMode = (
-  actionMode: AiActionMode,
-  agentPolicy: RigMutationPolicySettings,
-  rigExecutionPolicy: RigExecutionPolicySettings,
-  executionPolicyViolation: ReturnType<typeof detectRigExecutionPolicyViolation>,
-  rigAgentRollout: EffectiveRigAgentV1RolloutState,
-): OpyActionModeSurface => {
-  const policySummary = summarizeRigMutationPolicySettings(agentPolicy);
-  const executionSummary = summarizeRigExecutionPolicySettings(rigExecutionPolicy);
-
-  if (executionPolicyViolation) {
-    return {
-      tone: "critical",
-      label: executionPolicyViolation.kind === "kill-switch"
-        ? "KILL SWITCH ACTIVE"
-        : "EXECUTION POLICY BLOCK",
-      detail: `${executionPolicyViolation.message} ${executionPolicyViolation.recommendedAction} ${executionSummary}`,
-    };
-  }
-
-  if (rigAgentRollout.mode === "disabled") {
-    const rolloutDetail = rigAgentRollout.baseMode === "canary"
-      ? "rig_agent_v1 is staged in CANARY and this workstation is not enrolled."
-      : "rig_agent_v1 is disabled by the current environment rollout.";
-
-    return {
-      tone: "critical",
-      label: "ROLLOUT GATE ACTIVE",
-      detail:
-        `${rolloutDetail} OPY chat remains available for context, but proposal and mutation routes stay offline. ${policySummary}`,
-    };
-  }
-
-  const rolloutPrefix = rigAgentRollout.mode === "canary"
-    ? "Canary rollout active. "
-    : "";
-
-  switch (actionMode) {
-    case "disabled":
-      return {
-        tone: "critical",
-        label: "MUTATION ROUTES OFFLINE",
-        detail:
-          `${rolloutPrefix}Board writes and proposal generation are blocked. Chat and board review remain read-only. ${policySummary}`,
-      };
-    case "read-only":
-      return {
-        tone: "critical",
-        label: "READ-ONLY BOUNDARY ACTIVE",
-        detail:
-          `${rolloutPrefix}Use chat and /review for inspection. /add, /diagram, and apply paths are blocked in this mode. ${policySummary}`,
-      };
-    case "propose":
-      return {
-        tone: "warning",
-        label: "PROPOSAL BOUNDARY ACTIVE",
-        detail:
-          `${rolloutPrefix}OPY can prepare changes, but apply paths stay blocked until APPLY-WITH-CONFIRMATION is enabled. ${policySummary}`,
-      };
-    case "apply-with-confirmation":
-      return {
-        tone: "ready",
-        label: "CONFIRMED APPLY BOUNDARY",
-        detail:
-          `${rolloutPrefix}Mutations still require operator confirmation before the board is changed. ${policySummary}`,
-      };
-  }
 };
 
 const toOpyChromeTone = (tone: OpyActionModeSurface["tone"]): OpyWidgetChromeTone =>
@@ -6674,6 +6598,25 @@ export function OpyCopilotPanel({
     });
   }, [expandedTaskIds, hydrateOpyTaskDetails, taskArtifactsByTaskId, taskDetailLoadingByTaskId, taskToolCallsByTaskId]);
 
+  const actionBoundaryBanner = (
+    <section
+      className={`${styles.opyCopilotModeBanner} ${
+        actionModeSurface.tone === "critical"
+          ? styles.opyCopilotModeBannerCritical
+          : actionModeSurface.tone === "warning"
+          ? styles.opyCopilotModeBannerWarning
+          : styles.opyCopilotModeBannerReady
+      }`}
+      aria-label="OPY action mode boundary"
+    >
+      <div className={styles.opyCopilotProposalHeader}>
+        <span>{`MODE ${actionBoundaryText}`}</span>
+        <span>{actionModeSurface.label}</span>
+      </div>
+      <p className={styles.opyCopilotProposalHint}>{actionModeSurface.detail}</p>
+    </section>
+  );
+
   const statusText = agentSecretStatus === "loading"
     ? "KEY::CHECKING"
     : agentSecretStatus === "error"
@@ -7419,6 +7362,15 @@ export function OpyCopilotPanel({
             )}
           </div>
         )}
+        {
+          /*
+          A blocked agent explains itself up front. This used to live only inside
+          the CONTROL FIELD disclosure, so `EXECUTION::BLOCKED` was all an operator
+          saw while the provider allow-list mismatch that caused it stayed folded
+          away — the reason had to be read out of the settings database instead.
+        */
+        }
+        {isBlockingBoundary(actionModeSurface) && actionBoundaryBanner}
         {renderViewportSection({
           keyId: "control",
           title: "CONTROL FIELD",
@@ -8268,22 +8220,7 @@ export function OpyCopilotPanel({
                   </button>
                 </div>
               </div>
-              <section
-                className={`${styles.opyCopilotModeBanner} ${
-                  actionModeSurface.tone === "critical"
-                    ? styles.opyCopilotModeBannerCritical
-                    : actionModeSurface.tone === "warning"
-                    ? styles.opyCopilotModeBannerWarning
-                    : styles.opyCopilotModeBannerReady
-                }`}
-                aria-label="OPY action mode boundary"
-              >
-                <div className={styles.opyCopilotProposalHeader}>
-                  <span>{`MODE ${actionBoundaryText}`}</span>
-                  <span>{actionModeSurface.label}</span>
-                </div>
-                <p className={styles.opyCopilotProposalHint}>{actionModeSurface.detail}</p>
-              </section>
+              {!isBlockingBoundary(actionModeSurface) && actionBoundaryBanner}
             </>
           ),
         })}
