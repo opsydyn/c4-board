@@ -67,6 +67,11 @@ globalStyle("*, *::before, *::after", {
 globalStyle("html, body", {
   fontFamily:
     "'Berkeley Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  // Every surface here is dark, but the UA only knows that if we say so. Without
+  // it, browser-drawn chrome we cannot style — scrollbars above all — renders in
+  // the OS light palette, which showed up as a grey bar down the edge of any
+  // scrolling panel. Also fixes form controls and the flash before paint.
+  colorScheme: "dark",
   fontSynthesis: "none",
   WebkitFontSmoothing: "antialiased",
   MozOsxFontSmoothing: "grayscale",

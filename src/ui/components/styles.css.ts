@@ -2419,8 +2419,18 @@ globalStyle(`${reactFlowControls} button svg`, {
  * ReactFlow Background
  * Grid pattern styles (global selectors for ReactFlow classes)
  */
+// This SVG is a child of `canvasContainer` at `z-index: -1`, and a negative-z
+// child paints above its parent's background. An opaque colour here therefore
+// hides the mesh and the mode tint that the container paints beneath it.
+//
+// It used to be set to `background.base` — the same colour the container already
+// paints, so it bought nothing and cost the grid. ReactFlow ships its own rule
+// for this selector at equal specificity that resolves to `transparent`, so
+// which one won came down to stylesheet order: dev put ReactFlow's last and
+// looked correct, the production bundle put ours last and the board went flat.
+// Staying transparent removes the dependence on order rather than betting on it.
 globalStyle(".react-flow__background", {
-  backgroundColor: theme.color.background.base,
+  backgroundColor: "transparent",
 });
 
 globalStyle(".react-flow__background-pattern", {
