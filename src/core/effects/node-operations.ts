@@ -47,7 +47,19 @@ export type NodeType = C4Type | DDDType;
 /**
  * Node domain discriminator
  */
-export type NodeDomain = "c4" | "ddd";
+/**
+ * The domains a diagram can be in.
+ *
+ * Kept as a value, not only a type, because migration 034's CHECK constraints
+ * accept exactly these — a domain that exists in TypeScript and not in SQLite is
+ * a failure on save rather than at compile time (ADR-016).
+ */
+export const DIAGRAM_DOMAINS = ["c4", "ddd", "eventStorming"] as const;
+
+export type NodeDomain = (typeof DIAGRAM_DOMAINS)[number];
+
+export const isDiagramDomain = (value: unknown): value is NodeDomain =>
+  typeof value === "string" && (DIAGRAM_DOMAINS as ReadonlyArray<string>).includes(value);
 
 export type SubdomainType = "core" | "generic" | "supporting";
 

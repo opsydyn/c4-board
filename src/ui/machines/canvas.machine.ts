@@ -32,9 +32,11 @@ import {
   type LayoutOptions,
   type LayoutPresetName,
 } from "../../core/effects/layout";
+import type { NodeDomain } from "../../core/effects/node-operations";
 import * as NodeOps from "../../core/effects/node-operations";
 
-export type DiagramDomain = "c4" | "ddd";
+/** Re-exported, not redeclared: one source, so widening it is one edit (ADR-016). */
+export type DiagramDomain = NodeDomain;
 
 export type CanvasEvent =
   // === Domain Toggle ===

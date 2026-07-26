@@ -6,9 +6,11 @@
  */
 
 import { ArrowsLeftRightIcon as ArrowsLeftRight } from "@phosphor-icons/react";
+import type { NodeDomain } from "../../core/effects/node-operations";
 import { domainToggle, domainToggleActive, domainToggleButton } from "./styles.css";
 
-export type DiagramDomain = "c4" | "ddd";
+/** Re-exported, not redeclared (ADR-016). */
+export type DiagramDomain = NodeDomain;
 
 interface DomainToggleProps {
   currentDomain: DiagramDomain;

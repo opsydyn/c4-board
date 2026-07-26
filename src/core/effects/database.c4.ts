@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { DatabaseService, NotFoundError } from "./database.base";
+import type { NodeDomain } from "./node-operations";
 
 // ============================================================================
 // Domain Models (C4 + DDD)
@@ -49,7 +50,8 @@ export type NodeType = C4NodeType | DDDNodeType;
 /**
  * Node Domain
  */
-export type NodeDomain = "c4" | "ddd";
+/** Re-exported, not redeclared (ADR-016). */
+export type { NodeDomain };
 
 /**
  * Node Model

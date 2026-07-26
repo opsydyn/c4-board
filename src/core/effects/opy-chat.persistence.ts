@@ -3,6 +3,7 @@ import type { RigAgentCitation, RigAgentContextBundle } from "./agent-context";
 import type { RigC4DiagramProposal } from "./ai-agent.runtime";
 import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService, NotFoundError } from "./database.base";
+import type { NodeDomain } from "./node-operations";
 import type {
   OpyAgentLifecycleConfirmation,
   OpyAgentLifecycleMode,
@@ -20,7 +21,8 @@ import type {
 } from "./opy-agent.trace";
 
 export type OpyChatRole = "assistant" | "user" | "system";
-export type OpyChatDomain = "c4" | "ddd";
+/** Re-exported, not redeclared (ADR-016). */
+export type OpyChatDomain = NodeDomain;
 
 export interface OpyChatSession {
   readonly id: string;
