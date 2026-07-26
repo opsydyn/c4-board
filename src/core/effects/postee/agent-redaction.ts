@@ -30,7 +30,9 @@ export interface PosteeAgentRequestInput {
   readonly name: string;
   readonly method: string;
   readonly url: string;
-  readonly headers: ReadonlyArray<{ readonly id: string; readonly key: string; readonly value: string; readonly enabled: boolean }>;
+  readonly headers: ReadonlyArray<
+    { readonly id: string; readonly key: string; readonly value: string; readonly enabled: boolean }
+  >;
   readonly bodyMode: string;
   readonly body: string | null;
 }
@@ -143,23 +145,27 @@ export interface PosteeAgentContext {
  * will not parse is reduced to the part before `?` rather than passed through:
  * failing to parse must not mean failing open.
  */
+const parseUrl = Option.liftThrowable((value: string) => new URL(value));
+
 const redactUrl = (url: string, mode: RedactionMode): string => {
   if (mode === "off" || url.trim() === "") return url;
 
   const [beforeQuery = ""] = url.split("?");
-  let parsed: URL | null = null;
-  try {
-    parsed = new URL(url);
-  } catch {
-    parsed = null;
-  }
 
-  if (parsed === null) return beforeQuery;
-  if (mode === "strict") return `${parsed.origin}${parsed.pathname}`;
+  return Option.match(parseUrl(url), {
+    // Failing to parse must not mean failing open: fall back to the part before
+    // the query rather than returning the original.
+    onNone: () => beforeQuery,
+    onSome: (parsed) => {
+      const base = `${parsed.origin}${parsed.pathname}`;
+      if (mode === "strict") return base;
 
-  const names = Array.from(parsed.searchParams.keys());
-  const query = names.map((name) => `${name}=`).join("&");
-  return query.length > 0 ? `${parsed.origin}${parsed.pathname}?${query}` : `${parsed.origin}${parsed.pathname}`;
+      const query = Array.from(parsed.searchParams.keys())
+        .map((name) => `${name}=`)
+        .join("&");
+      return query.length > 0 ? `${base}?${query}` : base;
+    },
+  });
 };
 
 export interface PosteeGraphqlSchemaSummary {

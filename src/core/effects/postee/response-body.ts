@@ -72,8 +72,9 @@ export const decodeBodyText = (
 export const responseBodySize = (body: ResponseBody): number =>
   ResponseBody.$match(body, {
     Decoded: ({ bytes }) => bytes.byteLength,
-    DecodeFailure: ({ partial }) => Option.match(partial, {
-      onNone: () => 0,
-      onSome: (bytes) => bytes.byteLength,
-    }),
+    DecodeFailure: ({ partial }) =>
+      Option.match(partial, {
+        onNone: () => 0,
+        onSome: (bytes) => bytes.byteLength,
+      }),
   });

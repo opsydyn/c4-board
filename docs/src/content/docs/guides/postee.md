@@ -126,6 +126,25 @@ The toggle stays usable while a run is in flight, so silencing the noise never r
 
 The **Blast Door Status** indicator tracks run state and is silent.
 
+### Thresholds
+
+A run that only produces numbers cannot fail anything. Declare a budget and the run reports a verdict:
+
+| Field | Meaning |
+| ----- | ------- |
+| **P95 Budget (ms)** | The run fails if p95 latency reaches it |
+| **Error Budget (%)** | The run fails if the proportion of failed attempts reaches it |
+
+Both are optional and blank by default. A blank field asserts nothing — no verdict is shown at all, rather than a green pass for a claim nobody made. Any single breach fails the run.
+
+The error rate is a **proportion of attempts**, so it means the same thing whatever the duration. A run that never sent anything reports zero rather than a blank.
+
+### Exporting a run
+
+**Export CSV** writes the interval series, one row per 100ms window, leading with the interval columns because those are what vary across the run. **Export JSON** writes the same samples plus the threshold verdict, if one was reached.
+
+A number you cannot compare with last week's number is not a regression test, and the interval series otherwise lives only in memory until you clear the panel.
+
 ### Known limitation: coordinated omission
 
 Workers are a closed loop — send, wait for the response, send again — so when the target slows down the generator issues **fewer** requests. Slow periods are therefore under-represented in the histogram, and the reported percentiles are optimistic under degradation.

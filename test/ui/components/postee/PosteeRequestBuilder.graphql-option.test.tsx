@@ -1,12 +1,16 @@
-import { PosteeRequestBuilder, type PosteeRequestBuilderProps } from "@/ui/components/postee/PosteeRequestBuilder";
 import type { PosteeScratchDraft } from "@/core/effects/postee";
+import { PosteeRequestBuilder, type PosteeRequestBuilderProps } from "@/ui/components/postee/PosteeRequestBuilder";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@monaco-editor/react", () => ({
   default: ({ value, onChange }: { value: string; onChange?: (v: string | undefined) => void }) => (
-    <textarea aria-label="Editor" value={value} onChange={(e) => onChange?.(e.target.value)} />
+    <textarea
+      aria-label="Editor"
+      value={value}
+      onChange={(e) => onChange?.(e.target.value)}
+    />
   ),
   DiffEditor: () => <div />,
   loader: { config: vi.fn() },

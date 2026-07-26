@@ -4,7 +4,7 @@ title: "ADR-019: Load test control and measurement accuracy"
 
 # ADR-019: Load test control and measurement accuracy
 
-**Status**: Accepted (slices 1-4 implemented; slice 5 outstanding)
+**Status**: Accepted
 **Date**: 2026-07-26
 
 ## Context
@@ -95,8 +95,10 @@ Delivered as five slices, each verifiable alone:
 
 Slices 1–3 are the correctness fix. Slices 4–5 are what makes it usable in CI.
 
-Slices 1–4 are implemented. Slice 5 is outstanding: without thresholds the tool
-still cannot fail a pipeline, which is the main reason teams run load tests.
+All five slices are implemented. Thresholds and export are evaluated in the
+functional core from the final snapshot rather than in Rust: the snapshot already
+crosses the IPC boundary with everything the judgement needs, so putting it there
+would have grown the contract for nothing and made a pure decision hard to test.
 
 ### 5. Coordinated omission (deferred, deliberately)
 

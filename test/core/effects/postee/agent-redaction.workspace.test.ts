@@ -34,7 +34,14 @@ const introspection = JSON.stringify({
 });
 
 const input = (): PosteeAgentContextInput => ({
-  request: { name: "Active", method: "GET", url: "https://api.example.test/x", headers: [], bodyMode: "json", body: null },
+  request: {
+    name: "Active",
+    method: "GET",
+    url: "https://api.example.test/x",
+    headers: [],
+    bodyMode: "json",
+    body: null,
+  },
   collections: [
     {
       name: "Accounts",
@@ -144,7 +151,10 @@ describe("summariseGraphqlSchema", () => {
 
   it("tolerates a schema with no mutations", () => {
     const queryOnly = JSON.stringify({
-      __schema: { queryType: { name: "Query" }, types: [{ kind: "OBJECT", name: "Query", fields: [{ name: "ping" }] }] },
+      __schema: {
+        queryType: { name: "Query" },
+        types: [{ kind: "OBJECT", name: "Query", fields: [{ name: "ping" }] }],
+      },
     });
 
     const summary = summariseGraphqlSchema(queryOnly);

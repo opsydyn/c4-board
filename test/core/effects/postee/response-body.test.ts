@@ -1,4 +1,4 @@
-import { ResponseBody, contentTypeCharset, decodeBodyText } from "@/core/effects/postee/response-body";
+import { contentTypeCharset, decodeBodyText, ResponseBody } from "@/core/effects/postee/response-body";
 import { Option } from "effect";
 import { describe, expect, it } from "vitest";
 

@@ -1,10 +1,10 @@
 import type { PosteeRequestDraft } from "@/core/effects/postee";
+import { resolveActiveRequestDraft } from "@/core/effects/postee/active-request-draft";
 import {
   newPosteeScratchDraft,
   type PosteeScratchDraft,
   scratchAsRequestDraft,
 } from "@/core/effects/postee/scratch-draft";
-import { resolveActiveRequestDraft } from "@/core/effects/postee/active-request-draft";
 import { describe, expect, it } from "vitest";
 
 /**

@@ -7,12 +7,12 @@ import {
   type PreparedRequest,
   type PreparedResponse,
 } from "@/core/effects/postee/http-client";
+import { ResponseBody } from "@/core/effects/postee/response-body";
 import { Bytes, CollectionId, RequestBody, RequestId, StatusCode } from "@/core/effects/postee/types";
 import { createPosteeWorkspaceMachine } from "@/ui/machines/postee.machine";
 import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { createActor, SimulatedClock, waitFor } from "xstate";
-import { ResponseBody } from "@/core/effects/postee/response-body";
 
 const collection: PosteeCollection = {
   id: "collection-1",

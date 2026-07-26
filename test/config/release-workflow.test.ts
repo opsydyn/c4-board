@@ -207,9 +207,7 @@ describe("the Apple signing switch", () => {
     // The property that makes the whole switch work. Withdraw fires when
     // notarisation did not succeed; with signing off it never runs at all, so
     // the unsigned dmg survives to the release.
-    const withdraw = assetSteps.find((candidate) =>
-      candidate.name?.includes("Withdraw unnotarised")
-    );
+    const withdraw = assetSteps.find((candidate) => candidate.name?.includes("Withdraw unnotarised"));
 
     expect(withdraw?.if).toContain("APPLE_SIGNING_ENABLED == 'true'");
   });

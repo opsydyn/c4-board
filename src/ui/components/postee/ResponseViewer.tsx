@@ -560,8 +560,7 @@ export function ResponseViewer({
             <strong>Response body could not be decoded.</strong>
             <p>{bodyDecodeError}</p>
             <p>
-              The status line and headers above are what the server actually sent; only the body is
-              unreadable.
+              The status line and headers above are what the server actually sent; only the body is unreadable.
             </p>
           </div>
         )}

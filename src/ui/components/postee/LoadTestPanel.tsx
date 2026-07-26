@@ -1,5 +1,11 @@
 import type { PosteeRequestDraft } from "@/core/effects/postee";
 import { buildLoadTestRequestPayload, type LoadTestProgress } from "@/core/effects/postee/load-test";
+import { toCsv, toJsonReport } from "@/core/effects/postee/load-test-export";
+import {
+  evaluateThresholds,
+  formatThresholdVerdict,
+  type LoadTestThreshold,
+} from "@/core/effects/postee/load-test-thresholds";
 import { HTTP_METHODS, type HttpMethod } from "@/core/effects/postee/types";
 import { WarningOctagonIcon } from "@phosphor-icons/react";
 import { GlyphCircle } from "@visx/glyph";
@@ -609,6 +615,10 @@ export function LoadTestPanel({
   const [concurrency, setConcurrency] = useState<string>("10");
   const [rpsLimit, setRpsLimit] = useState<string>("");
   const [timeoutMs, setTimeoutMs] = useState<string>("30000");
+  // ADR-019 slice 5. Empty means nothing is asserted about the run, which is a
+  // different claim from asserting something that held.
+  const [p95Budget, setP95Budget] = useState<string>("");
+  const [errorRateBudget, setErrorRateBudget] = useState<string>("");
   const [isSirenEnabled, setSirenEnabled] = useState(sirenEnabledDefault);
   const sirenOscRef = useRef<Tone.Oscillator | null>(null);
   const sirenLfoRef = useRef<Tone.LFO | null>(null);
@@ -793,6 +803,40 @@ export function LoadTestPanel({
     }
   }, [status]);
 
+  /** Only the fields that were filled in become claims. ADR-019 slice 5. */
+  const thresholds = useMemo<LoadTestThreshold[]>(() => {
+    const declared: LoadTestThreshold[] = [];
+    const p95 = Number.parseFloat(p95Budget);
+    if (Number.isFinite(p95) && p95 > 0) {
+      declared.push({ metric: "p95_latency_ms", comparator: "below", value: p95 });
+    }
+    const errorRate = Number.parseFloat(errorRateBudget);
+    if (Number.isFinite(errorRate) && errorRate >= 0) {
+      // Entered as a percentage because that is how people say it.
+      declared.push({ metric: "error_rate", comparator: "below", value: errorRate / 100 });
+    }
+    return declared;
+  }, [p95Budget, errorRateBudget]);
+
+  const verdict = useMemo(
+    () => (latest ? evaluateThresholds(latest, thresholds) : null),
+    [latest, thresholds],
+  );
+
+  /**
+   * Downloads through a blob URL rather than a filesystem plugin: the panel runs
+   * in a webview, and this keeps the export path identical in the browser and the
+   * packaged app.
+   */
+  const download = useCallback((contents: string, filename: string, mime: string) => {
+    const url = URL.createObjectURL(new Blob([contents], { type: mime }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
   const isBlastDoorAlertActive = status === "running"
     && isSirenEnabled
     && masterAudioEnabled
@@ -892,6 +936,31 @@ export function LoadTestPanel({
               onChange={(event) => setTimeoutMs(event.target.value)}
             />
           </label>
+          {/* ADR-019 slice 5. Optional: left blank, the run asserts nothing. */}
+          <label className={metricCard}>
+            <span className={metricLabel}>P95 Budget (ms, optional)</span>
+            <input
+              className={textInput}
+              type="number"
+              min={1}
+              step={10}
+              placeholder="no threshold"
+              value={p95Budget}
+              onChange={(event) => setP95Budget(event.target.value)}
+            />
+          </label>
+          <label className={metricCard}>
+            <span className={metricLabel}>Error Budget (%, optional)</span>
+            <input
+              className={textInput}
+              type="number"
+              min={0}
+              step={0.1}
+              placeholder="no threshold"
+              value={errorRateBudget}
+              onChange={(event) => setErrorRateBudget(event.target.value)}
+            />
+          </label>
         </div>
         <div className={loadTestButtonRow} style={{ marginTop: "1rem" }}>
           <button
@@ -941,6 +1010,44 @@ export function LoadTestPanel({
           >
             Purge Telemetry
           </button>
+          {
+            /* ADR-019 slice 5. A number you cannot compare with last week's is
+              not a regression test, so the interval series has to leave. */
+          }
+          <button
+            type="button"
+            className={submitButton}
+            style={{
+              backgroundColor: "transparent",
+              color: "inherit",
+              borderColor: "rgba(60, 92, 80, 0.6)",
+            }}
+            onClick={() => {
+              download(toCsv(samples), "load-test.csv", "text/csv");
+            }}
+            disabled={samples.length === 0}
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            className={submitButton}
+            style={{
+              backgroundColor: "transparent",
+              color: "inherit",
+              borderColor: "rgba(60, 92, 80, 0.6)",
+            }}
+            onClick={() => {
+              download(
+                toJsonReport(samples, verdict),
+                "load-test.json",
+                "application/json",
+              );
+            }}
+            disabled={samples.length === 0}
+          >
+            Export JSON
+          </button>
           <button
             type="button"
             className={submitButton}
@@ -968,6 +1075,18 @@ export function LoadTestPanel({
             />
             <span>Blast Door Status: {statusText}</span>
           </span>
+          {verdict?.declared === true && status !== "running" && (
+            <span
+              className={loadTestStatus}
+              role="status"
+              style={{
+                color: verdict.passed ? "#4CC38A" : "#F97066",
+                whiteSpace: "pre-line",
+              }}
+            >
+              {formatThresholdVerdict(verdict)}
+            </span>
+          )}
         </div>
       </form>
 

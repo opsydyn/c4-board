@@ -148,6 +148,15 @@ export {
   startLoadTest,
   stopLoadTest,
 } from "./load-test";
+export { toCsv, toJsonReport } from "./load-test-export";
+export {
+  evaluateThresholds,
+  formatThresholdVerdict,
+  type LoadTestThreshold,
+  type ThresholdComparator,
+  type ThresholdMetric,
+  type ThresholdVerdict,
+} from "./load-test-thresholds";
 
 export {
   completeContentTypeHeaders,

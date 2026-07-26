@@ -16,6 +16,7 @@ import {
   type PosteeScratchDraft,
   prepareGraphqlDraft,
 } from "@/core/effects/postee";
+import { scratchAsRequest, scratchAsRequestDraft } from "@/core/effects/postee/scratch-draft";
 import { bodyModeToSumType, HTTP_METHODS, type HttpMethod, type RequestBodyMode } from "@/core/effects/postee/types";
 import { type UrlValidationResult, validateUrl } from "@/core/effects/postee/url-validation";
 import type { GraphqlSchemaState, RequestDraftSaveState } from "@/ui/machines/postee.machine";
@@ -30,7 +31,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { TabPanel } from "react-aria-components";
 import { EnvironmentEditor } from "./EnvironmentEditor";
 import { type Header, HeadersEditor } from "./HeadersEditor";
-import { scratchAsRequest, scratchAsRequestDraft } from "@/core/effects/postee/scratch-draft";
 import { MonacoGraphqlEditor } from "./MonacoGraphqlEditor";
 import { MonacoJsonEditor } from "./MonacoJsonEditor";
 import { Select } from "./Select";
@@ -922,54 +922,56 @@ export function PosteeRequestBuilder({
               {isGraphqlBody
                 ? (
                   <div className={styles.graphqlEditorLayout}>
-                    {/*
+                    {
+                      /*
                       Document and variables were stacked, which pushed variables off
                       the bottom of a fixed-height pane. Tabs keep both reachable
                       without the shell scrolling (ADR-011).
-                    */}
+                    */
+                    }
                     <TabBar
                       tabs={["Document", "Variables"]}
                       activeTab={graphqlTab}
                       onTabChange={(next) => setGraphqlTab(next as "Document" | "Variables")}
                     >
-                    <TabPanel id="Document" className={styles.graphqlEditorSection}>
-                      <div className={styles.graphqlEditorHeading}>
-                        <span>Schema</span>
-                        <div className={styles.graphqlSchemaControls}>
-                          <span className={styles.graphqlSchemaStatus} role="status" aria-live="polite">
-                            {graphqlSchemaStatusText}
-                          </span>
-                          <Tooltip content="Refresh GraphQL schema">
-                            <button
-                              type="button"
-                              className={styles.graphqlSchemaRefreshButton}
-                              onClick={onRefreshGraphqlSchema}
-                              disabled={!canRefreshGraphqlSchema}
-                              aria-label="Refresh GraphQL schema"
-                            >
-                              <ArrowClockwiseIcon size={14} weight="bold" aria-hidden="true" />
-                            </button>
-                          </Tooltip>
+                      <TabPanel id="Document" className={styles.graphqlEditorSection}>
+                        <div className={styles.graphqlEditorHeading}>
+                          <span>Schema</span>
+                          <div className={styles.graphqlSchemaControls}>
+                            <span className={styles.graphqlSchemaStatus} role="status" aria-live="polite">
+                              {graphqlSchemaStatusText}
+                            </span>
+                            <Tooltip content="Refresh GraphQL schema">
+                              <button
+                                type="button"
+                                className={styles.graphqlSchemaRefreshButton}
+                                onClick={onRefreshGraphqlSchema}
+                                disabled={!canRefreshGraphqlSchema}
+                                aria-label="Refresh GraphQL schema"
+                              >
+                                <ArrowClockwiseIcon size={14} weight="bold" aria-hidden="true" />
+                              </button>
+                            </Tooltip>
+                          </div>
                         </div>
-                      </div>
-                      <MonacoGraphqlEditor
-                        value={graphqlDocument}
-                        onChange={handleGraphqlDocumentChange}
-                        schema={graphqlSchema}
-                        readOnly={!isEditorSynchronized || isRunning}
-                        height="clamp(180px, 42vh, 620px)"
-                      />
-                    </TabPanel>
-                    <TabPanel id="Variables" className={styles.graphqlEditorSection}>
-                      <MonacoJsonEditor
-                        value={graphqlVariables}
-                        onChange={handleGraphqlVariablesChange}
-                        readOnly={!isEditorSynchronized || isRunning}
-                        height="clamp(180px, 42vh, 620px)"
-                        placeholder="{}"
-                        ariaLabel="GraphQL variables"
-                      />
-                    </TabPanel>
+                        <MonacoGraphqlEditor
+                          value={graphqlDocument}
+                          onChange={handleGraphqlDocumentChange}
+                          schema={graphqlSchema}
+                          readOnly={!isEditorSynchronized || isRunning}
+                          height="clamp(180px, 42vh, 620px)"
+                        />
+                      </TabPanel>
+                      <TabPanel id="Variables" className={styles.graphqlEditorSection}>
+                        <MonacoJsonEditor
+                          value={graphqlVariables}
+                          onChange={handleGraphqlVariablesChange}
+                          readOnly={!isEditorSynchronized || isRunning}
+                          height="clamp(180px, 42vh, 620px)"
+                          placeholder="{}"
+                          ariaLabel="GraphQL variables"
+                        />
+                      </TabPanel>
                     </TabBar>
                     {graphqlPreparation !== null && graphqlPreparation.operationNames.length > 1 && (
                       <label className={styles.graphqlOperationField}>

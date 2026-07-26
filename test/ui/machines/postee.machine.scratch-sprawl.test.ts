@@ -36,8 +36,7 @@ const makeLayer = (rows: ReadonlyArray<PosteeScratchDraftRow>) => {
   const executions: Array<{ sql: string; values: ReadonlyArray<unknown> | undefined }> = [];
   const layer = Layer.merge(
     Layer.succeed(DatabaseService, {
-      query: <T>(sql: string) =>
-        Effect.succeed((sql.includes("postee_scratch_drafts") ? rows : []) as T[]),
+      query: <T>(sql: string) => Effect.succeed((sql.includes("postee_scratch_drafts") ? rows : []) as T[]),
       execute: (sql: string, values?: unknown[]) => {
         executions.push({ sql, values });
         return Effect.void;

@@ -1,9 +1,6 @@
 import { DatabaseService } from "@/core/effects/database.base";
+import { markPosteeAgentProposalAccepted, recordPosteeAgentRun } from "@/core/effects/postee/agent-persistence";
 import type { PosteeRequestProposal } from "@/core/effects/postee/agent-proposal";
-import {
-  markPosteeAgentProposalAccepted,
-  recordPosteeAgentRun,
-} from "@/core/effects/postee/agent-persistence";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 

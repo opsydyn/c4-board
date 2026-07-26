@@ -7,8 +7,8 @@
  * no new gate of its own — and there is nothing here that writes to the database.
  */
 
-import type { HttpMethod, RequestBodyMode } from "./types";
 import { newPosteeScratchDraft, type PosteeScratchDraft } from "./scratch-draft";
+import type { HttpMethod, RequestBodyMode } from "./types";
 
 export interface PosteeProposalHeader {
   readonly key: string;

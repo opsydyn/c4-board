@@ -1,7 +1,4 @@
-import {
-  type PosteeRequestProposal,
-  proposalToScratchDraft,
-} from "@/core/effects/postee/agent-proposal";
+import { type PosteeRequestProposal, proposalToScratchDraft } from "@/core/effects/postee/agent-proposal";
 import { isPristinePosteeScratchDraft } from "@/core/effects/postee/scratch-draft";
 import { describe, expect, it } from "vitest";
 

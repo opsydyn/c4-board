@@ -115,9 +115,7 @@ describe("PosteeAgentDrawer", () => {
     await user.type(screen.getByLabelText(/describe the request/i), "why did this fail");
     await user.click(screen.getByRole("button", { name: /propose/i }));
 
-    await waitFor(() =>
-      expect(props.onPropose).toHaveBeenCalledWith(expect.objectContaining({ includeBodies: true }))
-    );
+    await waitFor(() => expect(props.onPropose).toHaveBeenCalledWith(expect.objectContaining({ includeBodies: true })));
   });
 
   it("reports a failure instead of leaving the operator waiting", async () => {

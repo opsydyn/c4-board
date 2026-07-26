@@ -17,8 +17,8 @@ import {
   FileIcon,
   FolderIcon,
   GearSixIcon,
-  RobotIcon,
   PencilLineIcon,
+  RobotIcon,
   TrashSimpleIcon,
 } from "@phosphor-icons/react";
 import type { Key, Selection } from "@react-types/shared";
@@ -243,30 +243,30 @@ export function PosteeSidebar({
             </button>
           )}
           {onNavigateToSettings
-          ? (
-            <a
-              className={layoutStyles.sidebarBrandAction}
-              href="/settings"
-              aria-label="Open global settings"
-              title="Open global settings"
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigateToSettings();
-              }}
-            >
-              <GearSixIcon size={16} weight="duotone" />
-            </a>
-          )
-          : (
-            <a
-              className={layoutStyles.sidebarBrandAction}
-              href="/settings"
-              aria-label="Open global settings"
-              title="Open global settings"
-            >
-              <GearSixIcon size={16} weight="duotone" />
-            </a>
-          )}
+            ? (
+              <a
+                className={layoutStyles.sidebarBrandAction}
+                href="/settings"
+                aria-label="Open global settings"
+                title="Open global settings"
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigateToSettings();
+                }}
+              >
+                <GearSixIcon size={16} weight="duotone" />
+              </a>
+            )
+            : (
+              <a
+                className={layoutStyles.sidebarBrandAction}
+                href="/settings"
+                aria-label="Open global settings"
+                title="Open global settings"
+              >
+                <GearSixIcon size={16} weight="duotone" />
+              </a>
+            )}
         </span>
       </div>
       <p className={layoutStyles.sidebarTagline}>PRECISION TOOLS FOR PROFESSIONALS</p>

@@ -10,19 +10,17 @@
 
 import type { PosteeCollection, PosteeRequest } from "@/core/effects/database.postee";
 import type { PosteeRequestDraft, PosteeScratchDraft } from "@/core/effects/postee";
+import { resolveActiveRequestDraft } from "@/core/effects/postee/active-request-draft";
+import { markPosteeAgentProposalAccepted, recordPosteeAgentRun } from "@/core/effects/postee/agent-persistence";
+import { type PosteeRequestProposal, proposalToScratchDraft } from "@/core/effects/postee/agent-proposal";
+import { buildPosteeAgentContext } from "@/core/effects/postee/agent-redaction";
+import { proposePosteeRequest } from "@/core/effects/postee/agent-runtime";
+import { parsePaneRatio, workspaceTemplateColumns } from "@/core/effects/postee/workspace-panes";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import { useMachine } from "@xstate/react";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { resolveActiveRequestDraft } from "@/core/effects/postee/active-request-draft";
-import { parsePaneRatio, workspaceTemplateColumns } from "@/core/effects/postee/workspace-panes";
-import { type PosteeRequestProposal, proposalToScratchDraft } from "@/core/effects/postee/agent-proposal";
-import { buildPosteeAgentContext } from "@/core/effects/postee/agent-redaction";
-import { proposePosteeRequest } from "@/core/effects/postee/agent-runtime";
-import { markPosteeAgentProposalAccepted, recordPosteeAgentRun } from "@/core/effects/postee/agent-persistence";
 import { ToggleButton } from "react-aria-components";
-import { PaneDivider } from "./PaneDivider";
-import { PosteeAgentDrawer } from "./PosteeAgentDrawer";
 import {
   CollectionId as CollectionIdBrand,
   durationToMillis,
@@ -31,13 +29,15 @@ import {
   RequestId as RequestIdBrand,
 } from "../../../core/effects/postee/types";
 import { useAppSettings } from "../../../core/effects/useAppSettings";
+import { posteeUiMachine } from "../../machines/postee-ui.machine";
 import {
   createPosteeWorkspaceMachine,
   type PosteeEvent,
   runLayeredEffect,
   type WorkspaceLayer,
 } from "../../machines/postee.machine";
-import { posteeUiMachine } from "../../machines/postee-ui.machine";
+import { PaneDivider } from "./PaneDivider";
+import { PosteeAgentDrawer } from "./PosteeAgentDrawer";
 import { PosteeRequestBuilder } from "./PosteeRequestBuilder";
 import { PosteeResponsePanel } from "./PosteeResponsePanel";
 import { PosteeSidebar } from "./PosteeSidebar";
@@ -723,7 +723,6 @@ export function PosteeWorkspace({ layer }: PosteeWorkspaceProps = {}) {
           onClose={() => setIsSaveScratchDialogOpen(false)}
           onConfirm={handlePromoteScratch}
         />
-
       </main>
       {isResponsePanelOpen && (
         <>

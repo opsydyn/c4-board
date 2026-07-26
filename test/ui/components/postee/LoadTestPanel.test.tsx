@@ -1,4 +1,5 @@
 import type { PosteeRequestDraft } from "@/core/effects/postee";
+import type { LoadTestProgress } from "@/core/effects/postee/load-test";
 import { LoadTestPanel } from "@/ui/components/postee/LoadTestPanel";
 import type { LoadTestState } from "@/ui/components/postee/useLoadTest";
 import { render, screen } from "@testing-library/react";
@@ -147,5 +148,86 @@ describe("aborting a run", () => {
     render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
 
     expect(abortButton()).toBeEnabled();
+  });
+});
+
+/**
+ * ADR-019 slice 5. Thresholds and export in the panel.
+ *
+ * The verdict only appears once a run has produced numbers and someone actually
+ * declared something — an empty budget field asserts nothing, and showing a
+ * green "passed" for a claim nobody made would be a lie of omission.
+ */
+describe("thresholds and export", () => {
+  const finishedSample = {
+    elapsed_ms: 1000,
+    requests_sent: 100,
+    requests_success: 100,
+    requests_failed: 0,
+    rps: 100,
+    p50_latency_ms: 10,
+    p95_latency_ms: 500,
+    p99_latency_ms: 700,
+    avg_latency_ms: 20,
+    min_latency_ms: 5,
+    max_latency_ms: 800,
+    bytes_received: 10,
+    error_count: 0,
+    recent_errors: [],
+    interval_ms: 100,
+    interval_requests_sent: 10,
+    interval_requests_success: 10,
+    interval_requests_failed: 0,
+    interval_rps: 100,
+    interval_p50_latency_ms: 10,
+    interval_p95_latency_ms: 500,
+    interval_p99_latency_ms: 700,
+    responses_received: 100,
+    transport_failures: 0,
+    transport_timeouts: 0,
+    transport_connect_failures: 0,
+    status_counts: {},
+    status_classes: [],
+  } as unknown as LoadTestProgress;
+
+  it("says nothing about thresholds when none were declared", () => {
+    useLoadTestMock.mockReturnValue(
+      makeIdleLoadTestState({ status: "complete", latest: finishedSample, samples: [finishedSample] }),
+    );
+
+    render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
+
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("fails the run when the measured p95 is over the declared budget", async () => {
+    useLoadTestMock.mockReturnValue(
+      makeIdleLoadTestState({ status: "complete", latest: finishedSample, samples: [finishedSample] }),
+    );
+    const user = userEvent.setup();
+
+    render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
+    await user.type(screen.getByLabelText(/p95 budget/i), "200");
+
+    expect(screen.getByRole("status")).toHaveTextContent(/FAILED/);
+  });
+
+  it("cannot export before there is anything to export", () => {
+    useLoadTestMock.mockReturnValue(makeIdleLoadTestState({ status: "idle", samples: [] }));
+
+    render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
+
+    expect(screen.getByRole("button", { name: /export csv/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /export json/i })).toBeDisabled();
+  });
+
+  it("offers export once samples exist", () => {
+    useLoadTestMock.mockReturnValue(
+      makeIdleLoadTestState({ status: "complete", latest: finishedSample, samples: [finishedSample] }),
+    );
+
+    render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
+
+    expect(screen.getByRole("button", { name: /export csv/i })).toBeEnabled();
   });
 });

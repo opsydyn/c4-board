@@ -60,8 +60,7 @@ export interface DecodedBoardMetadata {
   readonly viewport?: Viewport;
 }
 
-const line = (record: Record_, marker: CommentMarker): string =>
-  `${marker} ${tag} ${JSON.stringify(record)}`;
+const line = (record: Record_, marker: CommentMarker): string => `${marker} ${tag} ${JSON.stringify(record)}`;
 
 /**
  * One line per element, as comments. Every node is recorded regardless of whether

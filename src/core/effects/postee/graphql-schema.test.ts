@@ -16,8 +16,8 @@ import {
   type PreparedRequest,
   type PreparedResponse,
 } from "./http-client";
-import { Bytes, durationFromMillis, StatusCode } from "./types";
 import { ResponseBody } from "./response-body";
+import { Bytes, durationFromMillis, StatusCode } from "./types";
 
 const schema = buildSchema(`
   type Query { viewer: Viewer }

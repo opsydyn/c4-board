@@ -1,7 +1,5 @@
 import { fetch as TauriFetch } from "@tauri-apps/plugin-http";
 import { Context, Data, Duration, Effect, Layer, Match, Option } from "effect";
-import { contentTypeCharset, decodeBodyText, ResponseBody, responseBodySize } from "./response-body";
-import { findHeader, type HeaderEntries } from "./response-headers";
 import {
   evaluateRequestSemantics,
   getEffectiveRequestContent,
@@ -9,6 +7,8 @@ import {
   hasRequestContent,
   normalizeRequestContent,
 } from "./http-method-policy";
+import { contentTypeCharset, decodeBodyText, ResponseBody, responseBodySize } from "./response-body";
+import { findHeader, type HeaderEntries } from "./response-headers";
 import type { EnvironmentVariable, RequestHeader } from "./schema";
 import {
   type Bytes,
@@ -345,7 +345,6 @@ const responseHeadersToEntries = (headers: Headers): ReadonlyArray<readonly [str
   });
   return entries;
 };
-
 
 const makeAbortController = () => new AbortController();
 

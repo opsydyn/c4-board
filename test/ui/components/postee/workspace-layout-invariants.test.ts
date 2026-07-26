@@ -103,7 +103,7 @@ describe("workspace layout invariants", () => {
       resolve(__dirname, "../../../../src/ui/components/postee/PosteeResponsePanel.tsx"),
       "utf8",
     );
-    expect(panel).toContain('activeTab: "Execution" | "LoadTest";');
-    expect(panel).not.toContain('activeTab === "History"');
+    expect(panel).toContain("activeTab: \"Execution\" | \"LoadTest\";");
+    expect(panel).not.toContain("activeTab === \"History\"");
   });
 });

@@ -25,7 +25,14 @@ const SECRETS = {
 } as const;
 
 const input = (): PosteeAgentContextInput => ({
-  request: { name: "Active", method: "GET", url: "https://api.example.test/x", headers: [], bodyMode: "json", body: null },
+  request: {
+    name: "Active",
+    method: "GET",
+    url: "https://api.example.test/x",
+    headers: [],
+    bodyMode: "json",
+    body: null,
+  },
   history: [
     {
       id: "hist-1",

@@ -11,27 +11,27 @@ export const paneDivider = style({
     [componentsLayer]: {
       position: "relative",
       // Track 3 of the shell grid, between the two panes.
+      flex: "0 0 auto",
       gridRow: "1 / 2",
       gridColumn: "3 / 4",
-      flex: "0 0 auto",
-      width: "10px",
-      cursor: "col-resize",
       backgroundColor: "transparent",
+      cursor: "col-resize",
+      width: "10px",
       selectors: {
         "&::before": {
-          content: "",
           position: "absolute",
           top: 0,
           bottom: 0,
           left: "50%",
-          width: theme.border.width.thin,
           transform: "translateX(-50%)",
-          backgroundColor: theme.color.border.secondary,
           transition: theme.transition.fast,
+          backgroundColor: theme.color.border.secondary,
+          width: theme.border.width.thin,
+          content: "",
         },
         "&:hover::before, &:focus-visible::before": {
-          backgroundColor: theme.color.border.focus,
           boxShadow: theme.effect.glow.sm,
+          backgroundColor: theme.color.border.focus,
         },
       },
       ":focus-visible": {
