@@ -109,9 +109,13 @@ C4Container
 chosen from the elements present — `C4Component` if any component exists, else `C4Container` if any
 container does, else `C4Context` — because Mermaid's element vocabulary differs per diagram type.
 
-Round-trip metadata is still emitted as comments, but as **advisory** only: the C4 dialect is not an
-import path, and `import-mermaid.ts` is not extended to parse it. Claiming a round-trip that loses
-every position would be worse than not offering one.
+Per-node position metadata is **not** emitted. The C4 dialect is not an import path and
+`import-mermaid.ts` is not extended to parse it, so `@pos` comments would be dead weight that reads
+like a round-trip guarantee. A header comment states the loss instead, and points at the flowchart
+dialect for anyone who wanted a backup.
+
+The diagram type is the first line, ahead of those comments: Mermaid documents comment syntax only
+within the diagram body and says nothing about whether comments may precede the declaration.
 
 ### Preview is lazy, sandboxed, and honest about failure
 
