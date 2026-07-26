@@ -1,10 +1,10 @@
 {
   "managedBy": "github-actions/release-plz",
   "purpose": "Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
-  "base": "5b993934b6f2ac270203942adcf76d6a643f78e4",
-  "head": "c6ed86ec1a75e4bfb56e942c37fe3722229261b3",
+  "base": "c2f13f60cd2fcb136f6dd67940c70671a12e0d8a",
+  "head": "0b16a362a4e1536159000dd929761e448aa36aef",
   "paths": [
-    "src/styles/global.css.ts",
-    "src/ui/components/styles.css.ts"
+    "src/core/effects/azure-sync.mapper.ts",
+    "src/styles/global.css.ts"
   ]
 }
