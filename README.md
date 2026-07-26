@@ -73,6 +73,12 @@ The app also includes the Postee workspace for local API/client experimentation:
 - history/search
 - load-test panel
 
+The Load Chamber drives sustained traffic at an endpoint and reports HDR-histogram latency percentiles (p50/p95/p99). It is desktop-only, and **a run cannot be cancelled** — it sends real traffic for the full configured duration, so start short and point it at something you own.
+
+Postee withholds credential material by design: environment variable values never leave the process, header values are withheld by default, and query strings are stripped from URLs including in error messages ([ADR-012](docs/src/content/docs/architecture/adr/012-opy-in-postee.md)).
+
+How to use it: [Postee guide](docs/src/content/docs/guides/postee.md)
+
 ### Azure And Topology Intelligence
 
 - Azure graph sync for importing live cloud resources into the board.
@@ -285,6 +291,7 @@ bun run docs:check
 - [Product roadmap](docs/src/content/docs/overview/product-roadmap-team-topology-azure-sync.md)
 - [Release installation](docs/src/content/docs/guides/release-installation.md)
 - [Azure sync](docs/src/content/docs/guides/azure-sync.md)
+- [Postee](docs/src/content/docs/guides/postee.md)
 - [ADR index](docs/src/content/docs/architecture/adr/index.md)
 - [Context menu implementation](docs/src/content/docs/guides/context-menu-implementation.md)
 - [Postmortem: OPY board interaction regression](docs/src/content/docs/postmortems/2026-06-05-opy-native-board-interaction-regression.md)
