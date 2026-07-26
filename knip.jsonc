@@ -4,6 +4,12 @@
   // the public/internal API surface has explicit ownership.
   "include": ["files", "dependencies", "unlisted"],
   "workspaces": {
+    ".": {
+      // Invoked by path from .github/workflows, never imported, so knip cannot
+      // see them. release.yml runs them from a `.release-tooling/` checkout that
+      // exists only in CI, which puts them further out of reach still.
+      "entry": [".github/scripts/*.run.ts!"]
+    },
     "docs": {}
   },
   "ignoreDependencies": [
@@ -25,7 +31,6 @@
     "src/ui/components/SearchInput.css.ts",
     "src/ui/components/SearchInput.tsx",
     "src/ui/components/postee/PosteeEnvironmentPanel.tsx",
-    "src/ui/components/postee/PosteeWorkspace.original.tsx",
     "tests/mocks/@vanilla-extract/css.ts",
     "tests/mocks/vanilla-extract.mock.ts",
     "tests/utils/index.ts"
