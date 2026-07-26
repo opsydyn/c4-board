@@ -1,4 +1,5 @@
 import { globalFontFace, globalStyle } from "@vanilla-extract/css";
+import { resetLayer } from "./layers.css";
 
 // Self-hosted Berkeley Mono font faces (variable + static fallbacks)
 globalFontFace("Berkeley Mono", {
@@ -47,11 +48,20 @@ globalFontFace("Berkeley Mono", {
   fontWeight: 700,
 });
 
-// Minimal global resets
+// Minimal global resets.
+//
+// Inside the reset layer, deliberately. Declared outside every layer this beat
+// each of the 69 `padding` declarations component stylesheets make inside
+// `@layer components` — an unlayered rule outranks a layered one regardless of
+// specificity — so those components rendered with no padding at all.
 globalStyle("*, *::before, *::after", {
-  boxSizing: "border-box",
-  margin: 0,
-  padding: 0,
+  "@layer": {
+    [resetLayer]: {
+      boxSizing: "border-box",
+      margin: 0,
+      padding: 0,
+    },
+  },
 });
 
 globalStyle("html, body", {
