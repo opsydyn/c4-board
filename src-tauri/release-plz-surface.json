@@ -1,11 +1,9 @@
 {
   "managedBy": "github-actions/release-plz",
   "purpose": "Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
-  "base": "45d9a5bc21fd4a04342b7a13088f44ab3e88bd48",
-  "head": "8f298c8c0b4205d66b033e7042277b68ad0f40ab",
+  "base": "9a5e2d8d2e9f6a110950e45fb50c312d890e1afc",
+  "head": "a84a4124a13a5d2809348a7e39703902b775a4ed",
   "paths": [
-    "src/core/effects/launch-route.ts",
-    "src/layouts/Layout.astro",
-    "src/ui/launch-route.runtime.ts"
+    "src/styles/theme.contract.css.ts"
   ]
 }
