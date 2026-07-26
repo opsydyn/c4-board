@@ -91,8 +91,14 @@ impl LoadTestEngine {
     {
         let stats = LoadTestStats::new();
 
+        let redirect_limit = self.config.redirect_limit();
         let client = Client::builder()
             .timeout(self.config.timeout())
+            .redirect(if redirect_limit == 0 {
+                reqwest::redirect::Policy::none()
+            } else {
+                reqwest::redirect::Policy::limited(redirect_limit)
+            })
             .pool_max_idle_per_host(self.config.concurrency)
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
@@ -160,6 +166,8 @@ impl LoadTestEngine {
         drop(tx);
 
         let stats_for_collector = stats.clone();
+        // Cloned so the collector can classify without borrowing the engine.
+        let config_for_collector = self.config.clone();
         let collector_handle = tokio::spawn(async move {
             while let Some(result) = rx.recv().await {
                 match result {
@@ -168,7 +176,12 @@ impl LoadTestEngine {
                         latency,
                         bytes,
                     } => {
-                        stats_for_collector.record_response(status, latency, bytes);
+                        stats_for_collector.record_response(
+                            status,
+                            config_for_collector.is_success(status),
+                            latency,
+                            bytes,
+                        );
                     }
                     WorkerResult::Transport {
                         kind,
@@ -391,6 +404,8 @@ mod tests {
             concurrency: 2,
             rps_limit: None,
             timeout_ms: 5000,
+            success_statuses: None,
+            max_redirects: None,
         };
 
         let engine = LoadTestEngine::new(config);
@@ -408,6 +423,8 @@ mod tests {
             concurrency: 2,
             rps_limit: None,
             timeout_ms: 5000,
+            success_statuses: None,
+            max_redirects: None,
         };
 
         let engine = LoadTestEngine::new(config);
@@ -425,6 +442,8 @@ mod tests {
             concurrency: 1,
             rps_limit: None,
             timeout_ms: 5_000,
+            success_statuses: None,
+            max_redirects: None,
         };
 
         let plan = LoadTestEngine::build_request_plan(&config).expect("QUERY plan should be valid");
@@ -454,6 +473,8 @@ mod tests {
             concurrency: 1,
             rps_limit: None,
             timeout_ms: 5_000,
+            success_statuses: None,
+            max_redirects: None,
         };
 
         let plan = LoadTestEngine::build_request_plan(&config)
@@ -490,6 +511,8 @@ mod cancellation_tests {
             concurrency: 2,
             rps_limit: None,
             timeout_ms: 100,
+            success_statuses: None,
+            max_redirects: None,
         }
     }
 

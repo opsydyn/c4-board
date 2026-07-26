@@ -5,6 +5,7 @@
  */
 use hdrhistogram::Histogram;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -20,6 +21,38 @@ pub enum TransportErrorKind {
     Body,
     Other,
 }
+
+/// Latency for one class of HTTP status. ADR-019 slice 2.
+///
+/// A merged p99 across every status is uninformative during a load test: fast
+/// successes and slow errors average into a number describing neither. Reported
+/// per class, "p99 of 200s is 40ms, p99 of 503s is 30s" says the service is
+/// shedding load cleanly.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusClassLatency {
+    /// "2xx", "3xx", "4xx" or "5xx".
+    pub class: String,
+    pub count: u64,
+    pub p50_latency_ms: f64,
+    pub p95_latency_ms: f64,
+    pub p99_latency_ms: f64,
+}
+
+/// How many failure messages are kept as evidence. Counts are unbounded; these
+/// are only samples, and they must be the newest ones.
+const ERROR_SAMPLE_LIMIT: usize = 20;
+
+fn status_class_of(status: u16) -> Option<usize> {
+    match status {
+        200..=299 => Some(0),
+        300..=399 => Some(1),
+        400..=499 => Some(2),
+        500..=599 => Some(3),
+        _ => None,
+    }
+}
+
+const STATUS_CLASS_LABELS: [&str; 4] = ["2xx", "3xx", "4xx", "5xx"];
 
 /// Thread-safe statistics collector
 #[derive(Clone)]
@@ -44,8 +77,12 @@ struct StatsInner {
     /// HDR histogram provides accurate percentiles
     latencies: Histogram<u64>,
 
-    /// Error messages (limited to first 100)
-    errors: Vec<String>,
+    /// The most recent failure messages, bounded. ADR-019 slice 3.
+    ///
+    /// Was a `Vec` that stopped accepting at 100 while the reported field took the
+    /// tail of it, so after a hundred failures the same stale ten were returned
+    /// for the rest of the run.
+    errors: VecDeque<String>,
 
     /// Bytes received
     bytes_received: u64,
@@ -72,6 +109,10 @@ struct StatsInner {
     /// configuration, so folding it in would drag p99 towards the timeout setting
     /// and stop it describing the service.
     transport_latencies: Histogram<u64>,
+
+    /// Responses by exact status code, and latency per status class. ADR-019 slice 2.
+    status_counts: BTreeMap<u16, u64>,
+    status_class_latencies: [Histogram<u64>; 4],
 }
 
 impl LoadTestStats {
@@ -91,30 +132,32 @@ impl LoadTestStats {
     /// failure carried no latency at all, so the histogram held successes only —
     /// and under load the slow requests are exactly the ones that return 503, so
     /// it was systematically dropping its worst samples.
-    pub fn record_response(&self, status: u16, latency: Duration, bytes: u64) {
+    pub fn record_response(&self, status: u16, succeeded: bool, latency: Duration, bytes: u64) {
         let mut inner = self.inner.lock().unwrap();
         inner.requests_sent += 1;
         inner.responses_received += 1;
         inner.bytes_received += bytes;
         inner.interval_sent += 1;
 
-        // Success classification is unchanged in this slice so the only movement
-        // in the numbers is the histogram gaining its failures. Making success a
-        // configurable policy is slice 4.
-        if (200..400).contains(&status) {
+        // Whether a status is a pass is the test's decision, not HTTP's — see
+        // `LoadTestConfig::is_success`. ADR-019 slice 4.
+        if succeeded {
             inner.requests_success += 1;
             inner.interval_success += 1;
         } else {
             inner.requests_failed += 1;
             inner.interval_failed += 1;
-            if inner.errors.len() < 100 {
-                inner.errors.push(format!("HTTP {status}"));
-            }
+            inner.push_error(format!("HTTP {status}"));
         }
+
+        *inner.status_counts.entry(status).or_insert(0) += 1;
 
         let latency_us = latency.as_micros() as u64;
         inner.latencies.record(latency_us).ok();
         inner.interval_latencies.record(latency_us).ok();
+        if let Some(class) = status_class_of(status) {
+            inner.status_class_latencies[class].record(latency_us).ok();
+        }
     }
 
     /// Record an attempt that never produced a response.
@@ -143,9 +186,7 @@ impl LoadTestStats {
             .record(latency.as_micros() as u64)
             .ok();
 
-        if inner.errors.len() < 100 {
-            inner.errors.push(detail);
-        }
+        inner.push_error(detail);
     }
 
     /// Get current progress snapshot.
@@ -198,6 +239,25 @@ impl LoadTestStats {
             (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         };
 
+        let status_classes: Vec<StatusClassLatency> = STATUS_CLASS_LABELS
+            .iter()
+            .enumerate()
+            .filter_map(|(index, label)| {
+                let histogram = &inner.status_class_latencies[index];
+                if histogram.is_empty() {
+                    // A class nobody hit is absent rather than a row of zeroes.
+                    return None;
+                }
+                Some(StatusClassLatency {
+                    class: (*label).to_string(),
+                    count: histogram.len(),
+                    p50_latency_ms: histogram.value_at_quantile(0.50) as f64 / 1000.0,
+                    p95_latency_ms: histogram.value_at_quantile(0.95) as f64 / 1000.0,
+                    p99_latency_ms: histogram.value_at_quantile(0.99) as f64 / 1000.0,
+                })
+            })
+            .collect();
+
         let progress = LoadTestProgress {
             elapsed_ms: elapsed.as_millis() as u64,
             requests_sent: inner.requests_sent,
@@ -216,7 +276,7 @@ impl LoadTestStats {
             max_latency_ms: max,
             bytes_received: inner.bytes_received,
             error_count: inner.requests_failed,
-            recent_errors: inner.errors.iter().rev().take(10).cloned().collect(),
+            recent_errors: inner.errors.iter().rev().cloned().collect(),
             interval_ms,
             interval_requests_sent: interval_sent,
             interval_requests_success: interval_success,
@@ -229,6 +289,8 @@ impl LoadTestStats {
             transport_failures: inner.transport_failures,
             transport_timeouts: inner.transport_timeouts,
             transport_connect_failures: inner.transport_connect_failures,
+            status_counts: inner.status_counts.clone(),
+            status_classes,
         };
 
         // Close the window. Reset rather than accumulate, so the interval
@@ -258,7 +320,7 @@ impl StatsInner {
             requests_success: 0,
             requests_failed: 0,
             latencies: Histogram::<u64>::new(3).expect("Failed to create histogram"),
-            errors: Vec::new(),
+            errors: VecDeque::new(),
             bytes_received: 0,
             interval_start: start_time,
             interval_sent: 0,
@@ -270,7 +332,19 @@ impl StatsInner {
             transport_timeouts: 0,
             transport_connect_failures: 0,
             transport_latencies: Histogram::<u64>::new(3).expect("Failed to create histogram"),
+            status_counts: BTreeMap::new(),
+            status_class_latencies: std::array::from_fn(|_| {
+                Histogram::<u64>::new(3).expect("Failed to create histogram")
+            }),
         }
+    }
+
+    /// Keep the newest messages and drop the oldest, so the sample tracks the run.
+    fn push_error(&mut self, detail: String) {
+        if self.errors.len() == ERROR_SAMPLE_LIMIT {
+            self.errors.pop_front();
+        }
+        self.errors.push_back(detail);
     }
 }
 
@@ -364,6 +438,12 @@ pub struct LoadTestProgress {
 
     /// Of those, how many failed to connect.
     pub transport_connect_failures: u64,
+
+    /// Responses by exact status code. ADR-019 slice 2.
+    pub status_counts: BTreeMap<u16, u64>,
+
+    /// Latency per status class, omitting classes nothing landed in.
+    pub status_classes: Vec<StatusClassLatency>,
 }
 
 #[cfg(test)]
@@ -374,8 +454,8 @@ mod tests {
     fn test_stats_recording() {
         let stats = LoadTestStats::new();
 
-        stats.record_response(200, Duration::from_millis(100), 1024);
-        stats.record_response(200, Duration::from_millis(200), 2048);
+        stats.record_response(200, true, Duration::from_millis(100), 1024);
+        stats.record_response(200, true, Duration::from_millis(200), 2048);
         stats.record_transport_failure(
             TransportErrorKind::Connect,
             Duration::from_millis(5),
@@ -416,11 +496,11 @@ mod interval_tests {
     fn interval_counts_cover_only_the_window_since_the_last_snapshot() {
         let stats = LoadTestStats::new();
 
-        stats.record_response(200, ms(10), 100);
-        stats.record_response(200, ms(10), 100);
+        stats.record_response(200, true, ms(10), 100);
+        stats.record_response(200, true, ms(10), 100);
         let first = stats.snapshot();
 
-        stats.record_response(200, ms(10), 100);
+        stats.record_response(200, true, ms(10), 100);
         let second = stats.snapshot();
 
         assert_eq!(first.interval_requests_sent, 2, "first window saw two");
@@ -434,7 +514,7 @@ mod interval_tests {
         let stats = LoadTestStats::new();
 
         for _ in 0..50 {
-            stats.record_response(200, ms(5), 10);
+            stats.record_response(200, true, ms(5), 10);
         }
         let busy = stats.snapshot();
         let quiet = stats.snapshot();
@@ -456,14 +536,14 @@ mod interval_tests {
 
         // A long, healthy stretch.
         for _ in 0..1000 {
-            stats.record_response(200, ms(5), 10);
+            stats.record_response(200, true, ms(5), 10);
         }
         let fast = stats.snapshot();
 
         // Then a short, sharp spike — under 5% of the run, which is the case the
         // cumulative series cannot show and the one that matters most.
         for _ in 0..20 {
-            stats.record_response(200, ms(500), 10);
+            stats.record_response(200, true, ms(500), 10);
         }
         let slow = stats.snapshot();
 
@@ -503,7 +583,7 @@ mod interval_tests {
         // Final-report numbers must stay comparable with previous runs.
         let stats = LoadTestStats::new();
         for _ in 0..1000 {
-            stats.record_response(200, ms(20), 10);
+            stats.record_response(200, true, ms(20), 10);
         }
 
         let snapshot = stats.snapshot();
@@ -536,8 +616,8 @@ mod outcome_tests {
     fn a_slow_error_response_is_in_the_latency_histogram() {
         let stats = LoadTestStats::new();
 
-        stats.record_response(200, ms(10), 100);
-        stats.record_response(503, ms(900), 20);
+        stats.record_response(200, true, ms(10), 100);
+        stats.record_response(503, false, ms(900), 20);
 
         let snapshot = stats.snapshot();
 
@@ -552,7 +632,7 @@ mod outcome_tests {
     fn a_non_2xx_response_still_counts_as_a_failed_request() {
         let stats = LoadTestStats::new();
 
-        stats.record_response(500, ms(10), 0);
+        stats.record_response(500, false, ms(10), 0);
         let snapshot = stats.snapshot();
 
         assert_eq!(snapshot.requests_failed, 1);
@@ -565,8 +645,8 @@ mod outcome_tests {
         // connection did not. Both were previously "failed" and nothing else.
         let stats = LoadTestStats::new();
 
-        stats.record_response(200, ms(5), 10);
-        stats.record_response(429, ms(5), 10);
+        stats.record_response(200, true, ms(5), 10);
+        stats.record_response(429, false, ms(5), 10);
         stats.record_transport_failure(TransportErrorKind::Timeout, ms(30_000), "timed out".into());
 
         let snapshot = stats.snapshot();
@@ -581,7 +661,7 @@ mod outcome_tests {
         // Mixing them would make p99 converge on the timeout setting.
         let stats = LoadTestStats::new();
 
-        stats.record_response(200, ms(10), 10);
+        stats.record_response(200, true, ms(10), 10);
         stats.record_transport_failure(TransportErrorKind::Timeout, ms(30_000), "timed out".into());
 
         let snapshot = stats.snapshot();
@@ -612,11 +692,148 @@ mod outcome_tests {
         // Slice 1 must not undo ADR-019's interval window.
         let stats = LoadTestStats::new();
 
-        stats.record_response(200, ms(5), 10);
+        stats.record_response(200, true, ms(5), 10);
         let first = stats.snapshot();
         let second = stats.snapshot();
 
         assert_eq!(first.interval_requests_sent, 1);
         assert_eq!(second.interval_requests_sent, 0);
+    }
+}
+
+#[cfg(test)]
+mod distribution_tests {
+    use super::*;
+
+    /// ADR-019 slices 2 and 3.
+    ///
+    /// Slice 2: a merged p99 says nothing during a load test. "p99 of 200s is
+    /// 40ms, p99 of 503s is 30s" says the service is shedding load cleanly, which
+    /// is the judgement the tool exists to support.
+    ///
+    /// Slice 3: `recent_errors` was not recent. Collection stopped at 100 and the
+    /// field reported the tail of that frozen vector, so a run degrading at minute
+    /// five showed evidence from second two forever.
+    fn ms(millis: u64) -> Duration {
+        Duration::from_millis(millis)
+    }
+
+    #[test]
+    fn every_status_is_counted_by_its_exact_code() {
+        let stats = LoadTestStats::new();
+
+        stats.record_response(200, true, ms(5), 10);
+        stats.record_response(200, true, ms(5), 10);
+        stats.record_response(429, false, ms(5), 10);
+        stats.record_response(503, false, ms(5), 10);
+
+        let snapshot = stats.snapshot();
+
+        assert_eq!(snapshot.status_counts.get(&200), Some(&2));
+        assert_eq!(snapshot.status_counts.get(&429), Some(&1));
+        assert_eq!(snapshot.status_counts.get(&503), Some(&1));
+    }
+
+    #[test]
+    fn latency_is_reported_per_status_class() {
+        // The point of the slice: fast successes alongside slow errors must not
+        // average into one uninformative number.
+        let stats = LoadTestStats::new();
+
+        for _ in 0..50 {
+            stats.record_response(200, true, ms(10), 10);
+        }
+        for _ in 0..50 {
+            stats.record_response(503, false, ms(2000), 10);
+        }
+
+        let snapshot = stats.snapshot();
+        let find = |class: &str| {
+            snapshot
+                .status_classes
+                .iter()
+                .find(|entry| entry.class == class)
+                .unwrap_or_else(|| panic!("no {class} class reported"))
+        };
+
+        let ok = find("2xx");
+        let server = find("5xx");
+
+        assert_eq!(ok.count, 50);
+        assert_eq!(server.count, 50);
+        assert!(ok.p95_latency_ms < 100.0, "2xx p95 was {}", ok.p95_latency_ms);
+        assert!(
+            server.p95_latency_ms > 1000.0,
+            "5xx p95 was {}",
+            server.p95_latency_ms
+        );
+    }
+
+    #[test]
+    fn a_class_with_no_responses_is_not_reported() {
+        let stats = LoadTestStats::new();
+        stats.record_response(200, true, ms(5), 10);
+
+        let snapshot = stats.snapshot();
+
+        assert!(snapshot.status_classes.iter().all(|entry| entry.class != "4xx"));
+    }
+
+    #[test]
+    fn recent_errors_are_actually_recent() {
+        let stats = LoadTestStats::new();
+
+        for index in 0..500 {
+            stats.record_transport_failure(
+                TransportErrorKind::Other,
+                ms(1),
+                format!("failure-{index}"),
+            );
+        }
+
+        let snapshot = stats.snapshot();
+
+        assert!(
+            snapshot.recent_errors.iter().any(|error| error.contains("failure-499")),
+            "the newest failure is missing: {:?}",
+            snapshot.recent_errors
+        );
+        assert!(
+            !snapshot.recent_errors.iter().any(|error| error.contains("failure-0")),
+            "the oldest failure is still being reported: {:?}",
+            snapshot.recent_errors
+        );
+    }
+
+    #[test]
+    fn the_error_sample_stays_bounded() {
+        let stats = LoadTestStats::new();
+
+        for index in 0..10_000 {
+            stats.record_transport_failure(TransportErrorKind::Other, ms(1), format!("e{index}"));
+        }
+
+        let snapshot = stats.snapshot();
+
+        assert!(
+            snapshot.recent_errors.len() <= 20,
+            "error sample grew to {}",
+            snapshot.recent_errors.len()
+        );
+    }
+
+    #[test]
+    fn the_failure_count_is_not_bounded_by_the_sample() {
+        // Counts are the measurement; messages are only evidence.
+        let stats = LoadTestStats::new();
+
+        for index in 0..10_000 {
+            stats.record_transport_failure(TransportErrorKind::Other, ms(1), format!("e{index}"));
+        }
+
+        let snapshot = stats.snapshot();
+
+        assert_eq!(snapshot.requests_failed, 10_000);
+        assert_eq!(snapshot.transport_failures, 10_000);
     }
 }

@@ -42,7 +42,7 @@ Each ADR follows this structure:
 | [ADR-016](./016-event-storming-big-picture-mode.md) | Event Storming Mode (Big Picture)                             | Accepted | 2026-07-26 |
 | [ADR-017](./017-azure-resource-type-mapping.md) | Azure Resource Type Mapping and Relationship Projection        | Proposed | 2026-07-26 |
 | [ADR-018](./018-azure-sync-enterprise-readiness.md) | Azure Sync Enterprise Readiness                            | Proposed | 2026-07-26 |
-| [ADR-019](./019-load-test-control-and-accuracy.md) | Load Test Control and Measurement Accuracy              | Proposed | 2026-07-26 |
+| [ADR-019](./019-load-test-control-and-accuracy.md) | Load Test Control and Measurement Accuracy              | Accepted | 2026-07-26 |
 
 ## Contributing
 

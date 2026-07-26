@@ -4,7 +4,7 @@ title: "ADR-019: Load test control and measurement accuracy"
 
 # ADR-019: Load test control and measurement accuracy
 
-**Status**: Proposed
+**Status**: Accepted (slices 1-4 implemented; slice 5 outstanding)
 **Date**: 2026-07-26
 
 ## Context
@@ -94,6 +94,9 @@ Delivered as five slices, each verifiable alone:
 5. **Thresholds and export.** Declare `p95 < 200ms` or `error_rate < 1%` and have the run report pass/fail, and emit the interval series as CSV/JSON. Without thresholds it cannot gate a pipeline, which is the main reason teams run load tests; without export a number cannot be compared with last week's.
 
 Slices 1–3 are the correctness fix. Slices 4–5 are what makes it usable in CI.
+
+Slices 1–4 are implemented. Slice 5 is outstanding: without thresholds the tool
+still cannot fail a pipeline, which is the main reason teams run load tests.
 
 ### 5. Coordinated omission (deferred, deliberately)
 

@@ -192,6 +192,10 @@ describe("buildLoadTestRequestPayload", () => {
         concurrency: 10,
         rps_limit: null,
         timeout_ms: 30_000,
+        // ADR-019 slice 4: policy travels with the config, defaulting to null so
+        // the backend applies 2xx-only and its own redirect limit.
+        success_statuses: null,
+        max_redirects: null,
       },
     });
   });
@@ -212,6 +216,10 @@ describe("buildLoadTestRequestPayload", () => {
         concurrency: 10,
         rps_limit: null,
         timeout_ms: 30_000,
+        // ADR-019 slice 4: policy travels with the config, defaulting to null so
+        // the backend applies 2xx-only and its own redirect limit.
+        success_statuses: null,
+        max_redirects: null,
       },
     });
   });
@@ -275,6 +283,10 @@ describe("buildLoadTestRequestPayload", () => {
         concurrency: 10,
         rps_limit: null,
         timeout_ms: 30_000,
+        // ADR-019 slice 4: policy travels with the config, defaulting to null so
+        // the backend applies 2xx-only and its own redirect limit.
+        success_statuses: null,
+        max_redirects: null,
       },
     });
   });

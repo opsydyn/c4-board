@@ -87,14 +87,34 @@ A 503 is a **response** — the service chose to send it. A refused connection o
 
 Transport failures are timed separately rather than mixed into response latency. A 30-second timeout is time-to-give-up, bounded by your timeout setting; folding it in would drag p99 towards that setting until it stopped describing the service at all.
 
+#### Status distribution
+
+Responses are counted by exact status code, and latency is reported **per status class**. This is the pair of numbers worth watching under load:
+
+```
+2xx  count 41,203   p95   38ms
+503  count  1,187   p95 2,900ms
+```
+
+A service shedding load cleanly looks like that. One merged p95 across both would describe neither.
+
+#### What counts as a pass
+
+By default only **2xx** succeeds. Redirects no longer count: redirects are followed for you, so a 3xx surfacing in the results means the follow limit was exhausted — a redirect loop, which used to be reported as healthy.
+
+If the endpoint under test is *expected* to return something else — testing a rate limiter, say — declare it. An explicit list replaces the default rather than extending it, so `[429]` means 429 passes and 200 does not.
+
+Redirect following is configurable too, and setting it to zero measures the endpoint you actually named rather than wherever it points.
+
 Reported per run:
 
 - Requests sent, succeeded, failed
 - Responses received, and transport failures split by timeout and connect
+- Responses by status code, and latency percentiles per status class
 - Requests per second
 - Latency: p50, p95, p99, plus average, min and max
 - Bytes received
-- Error count, with recent errors listed
+- Error count, with the **most recent** failure messages as samples (counts are unbounded; the sample is the newest 20)
 
 The charts cover requests per second, p95 latency over time, throughput against latency as a scatter, success versus failure per tick, and latency distribution bands.
 

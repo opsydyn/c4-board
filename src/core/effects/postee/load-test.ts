@@ -92,6 +92,10 @@ export interface LoadTestConfigInput {
   concurrency?: number;
   rpsLimit?: number | null;
   timeoutMs?: number;
+  /** Statuses that count as a pass. Omitted or empty means 2xx. ADR-019 slice 4. */
+  successStatuses?: number[] | null;
+  /** Redirects to follow; 0 stops following them. Omitted keeps the default of 10. */
+  maxRedirects?: number | null;
 }
 
 export type LoadTestRequestPayload =
@@ -182,6 +186,21 @@ export interface LoadTestProgress {
   transport_failures: number;
   transport_timeouts: number;
   transport_connect_failures: number;
+
+  /** Responses by exact status code, keyed by code. ADR-019 slice 2. */
+  status_counts: Record<string, number>;
+
+  /**
+   * Latency per status class, omitting classes nothing landed in. A merged p99
+   * across every status describes neither the successes nor the errors.
+   */
+  status_classes: Array<{
+    class: string;
+    count: number;
+    p50_latency_ms: number;
+    p95_latency_ms: number;
+    p99_latency_ms: number;
+  }>;
 }
 
 export type LoadTestEventCallback = EventCallback<LoadTestProgress>;
@@ -208,6 +227,8 @@ const toBackendConfig = (input: LoadTestConfigInput) => ({
   concurrency: input.concurrency ?? 10,
   rps_limit: input.rpsLimit ?? null,
   timeout_ms: input.timeoutMs ?? 30_000,
+  success_statuses: input.successStatuses ?? null,
+  max_redirects: input.maxRedirects ?? null,
 });
 
 export const startLoadTest = (
