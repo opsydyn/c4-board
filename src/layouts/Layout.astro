@@ -10,6 +10,15 @@ import { RuntimeBootstrap } from "../components/RuntimeBootstrap.tsx";
 		<head>
 			<meta charset="UTF-8" />
 			<meta name="viewport" content="width=device-width" />
+			<!--
+				Resumes the view the app was left in. In <head> and before the app
+				mounts, so reopening in Postee is a redirect rather than a visible
+				flash of the board.
+			-->
+			<script>
+				import { applyLaunchRoute } from "../ui/launch-route.runtime";
+				applyLaunchRoute();
+			</script>
 			<style>
 				html,
 				body {
