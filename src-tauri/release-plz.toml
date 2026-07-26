@@ -8,12 +8,16 @@ git_only = true
 publish = false
 publish_no_verify = true
 release_always = true
-# ADR-013 Phase 2. The updater reads releases/latest/download/latest.json, so a
-# release must not exist publicly until its assets do. v0.0.8 was published with
-# zero assets for ~15 minutes and then permanently without either macOS bundle,
-# because the build ran after publication. The Release workflow clears the draft
-# flag once every platform job has uploaded.
-git_release_draft = true
+# Reverted from ADR-013 Phase 2's draft-then-publish. Apple has not processed a
+# notarisation for this team in over a day, and a gate that waits for every
+# platform means nothing ships at all — v0.0.9, v0.0.10 and v0.0.11 all sat as
+# drafts with no assets. Shipping Linux and Windows beats shipping nothing.
+#
+# The cost is knowingly reaccepted: releases/latest resolves to a release whose
+# assets are still uploading, for roughly the length of the build. That matters
+# to the updater (ADR-013) and is why the draft gate existed; restore it once
+# notarisation is reliable.
+git_release_draft = false
 # Generate release notes from the commit history. This was off, so v0.0.6 was
 # published with an empty body despite carrying 115 commits. 119 of the 123
 # commits in that range were conventional, so generated notes are worth having.

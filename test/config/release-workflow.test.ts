@@ -135,7 +135,7 @@ describe("release asset job", () => {
   it("withdraws macOS assets that were never notarised", () => {
     // tauri-action uploads before notarisation runs, so an unnotarised .dmg is
     // already on the release. Gatekeeper refuses it, which is worse than absent.
-    const withdraw = assetSteps.find((step) => (step.run ?? "").includes("delete-asset"));
+    const withdraw = assetSteps.find((step) => (step.run ?? "").includes("Withdrawing"));
 
     expect(withdraw, "unnotarised macOS assets are never withdrawn").toBeDefined();
     expect(String(withdraw?.if)).toContain("steps.notarize.outcome != 'success'");
@@ -144,7 +144,7 @@ describe("release asset job", () => {
   it("withdraws only its own architecture's assets", () => {
     // Both macOS jobs run concurrently against one release; a broad delete would
     // race and remove the other architecture's bundles.
-    const withdraw = assetSteps.find((step) => (step.run ?? "").includes("delete-asset"));
+    const withdraw = assetSteps.find((step) => (step.run ?? "").includes("Withdrawing"));
 
     expect(withdraw?.run).toContain("MACOS_ASSET_TOKEN");
   });
@@ -157,49 +157,48 @@ describe("release asset job", () => {
 });
 
 /**
- * ADR-013 Phase 2. `releases/latest/download/latest.json` is the updater's
- * endpoint, so a release must not be published before its assets exist.
+ * Release publication.
  *
- * v0.0.8 demonstrated both halves of the problem in one go: published with zero
- * assets for roughly fifteen minutes, and then permanently missing both macOS
- * bundles because those jobs failed. An updater checking in either window gets a
- * 404 or a partial release.
+ * ADR-013 Phase 2 made releases drafts until every platform had uploaded, so
+ * `releases/latest` could never resolve to a release without assets. That gate
+ * is reverted: Apple stopped processing this team's notarisations, macOS never
+ * succeeded, and v0.0.9 through v0.0.11 all sat as drafts with nothing in them.
+ * Shipping Linux and Windows beats shipping nothing.
  *
- * The release is therefore created as a draft and published only once every
- * platform has uploaded. A draft is invisible to `releases/latest`, which is the
- * property that makes the window disappear rather than shrink.
+ * The window the gate closed is knowingly reopened. These tests pin the reasons
+ * so restoring it later is a decision rather than an archaeology exercise.
  */
-describe("release publication ordering", () => {
-  it("creates the release as a draft", () => {
-    expect(releasePlzConfig).toMatch(/^git_release_draft\s*=\s*true$/m);
+describe("release publication", () => {
+  it("publishes immediately rather than drafting", () => {
+    expect(releasePlzConfig).toMatch(/^git_release_draft\s*=\s*false$/m);
   });
 
-  it("looks the release up in a way that can see a draft", () => {
-    // GET /releases/tags/{tag} returns "a published release with the specified
-    // tag" — it cannot find a draft, so both lookups have to list and filter.
+  it("says why the draft gate was given up", () => {
+    // Without the reason recorded, someone re-enables it and stalls releases
+    // again, or leaves it off long after notarisation is fixed.
+    expect(releasePlzConfig).toMatch(/notarisation|Apple/i);
+  });
+
+  it("looks the release up in a way that survives either mode", () => {
     for (const job of ["release-plz-release", "resolve-existing-release"]) {
       expect(runsOf(job), `${job} cannot resolve a draft release`)
         .not.toMatch(/releases\/tags\//);
-      // The listing form, filtered on the tag it was asked for.
       expect(runsOf(job), `${job} does not filter releases by tag`)
         .toMatch(/select\(\.tag_name ==/);
     }
   });
 
-  it("publishes only after every platform has uploaded", () => {
-    const publish = jobsRaw["publish-release"];
-    expect(publish, "no publish-release job").toBeDefined();
-
-    expect(publish?.["needs"]).toContain("build-release-assets");
-    // With fail-fast disabled, the matrix result is success only when every leg
-    // is. v0.0.8 would have stayed a draft rather than shipping without macOS.
-    expect(String(publish?.["if"])).toContain("needs.build-release-assets.result == 'success'");
+  it("retries the lookup, because the list endpoint lags the create", () => {
+    // v0.0.11 was created at 15:32:18 and a lookup at 15:32:19 did not see it.
+    expect(runsOf("release-plz-release")).toMatch(/for attempt in/);
   });
 
-  it("clears the draft flag rather than creating a second release", () => {
-    const runs = runsOf("publish-release");
+  it("withdraws assets by release id, never by tag", () => {
+    // `gh release view <tag>` cannot see a draft and falls back to the latest
+    // published release — this listed v0.0.8's assets during v0.0.10.
+    const withdraw = assetSteps.find((step) => (step.run ?? "").includes("Withdrawing"));
 
-    expect(runs).toMatch(/--method PATCH/);
-    expect(runs).toMatch(/draft=false/);
+    expect(withdraw?.run).toContain("releases/${RELEASE_ID}/assets");
+    expect(withdraw?.run, "resolves the release by tag").not.toMatch(/release view "\$\{RELEASE_TAG\}"/);
   });
 });

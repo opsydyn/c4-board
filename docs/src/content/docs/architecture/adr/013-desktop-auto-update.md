@@ -181,6 +181,26 @@ The withdrawal is scoped by `matrix.macosAssetToken` because both macOS jobs act
 a single release concurrently; an unscoped delete would remove the other
 architecture's bundles.
 
+### Phase 2 reverted, 2026-07-26
+
+Draft-then-publish is off. Apple has not processed a notarisation for this team in over a day, and a
+gate that waits for every platform means nothing ships at all: v0.0.9, v0.0.10 and v0.0.11 all sat
+as drafts with zero assets.
+
+Two things were wrong, and only one of them was Apple's. The `Withdraw unnotarised macOS assets`
+step resolved the release with `gh release view <tag>`, which **cannot see a draft** and silently
+falls back to the latest published release — during v0.0.10 it listed *v0.0.8's* assets and tried to
+delete one. It only failed to do damage because the subsequent delete could not resolve the tag
+either. That failure took the macOS job down with it, so the matrix never succeeded and the gate
+never opened. Notarisation alone would not have blocked publication; the withdrawal bug did.
+
+The withdrawal now resolves everything by release id, which works in either mode.
+
+The window this reopens is real and understood: `releases/latest` resolves to a release whose assets
+are still uploading, for about the length of the build. That is precisely what the updater cannot
+tolerate, so **Phase 2 must be restored before the updater ships** — not merely when notarisation
+starts working.
+
 ### Release ordering must change
 
 The updater endpoint is `releases/latest/download/latest.json`. For that to be true rather than
