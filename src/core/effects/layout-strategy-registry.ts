@@ -6,6 +6,7 @@ import { hexagonalLayoutStrategy } from "./hexagonal-layout-strategy";
 import { hubSpokeLayoutStrategy } from "./hub-spoke-layout-strategy";
 import type { LayoutDiagnostic, LayoutStrategy, SynchronousLayoutStrategy } from "./layout.types";
 import { systemContextLayoutStrategy } from "./system-context-layout-strategy";
+import { timelineLayoutStrategy } from "./timeline-layout-strategy";
 
 const synchronousStrategies = new Map<string, SynchronousLayoutStrategy>([
   [dagreLayoutStrategy.id, dagreLayoutStrategy],
@@ -14,6 +15,8 @@ const synchronousStrategies = new Map<string, SynchronousLayoutStrategy>([
   [hubSpokeLayoutStrategy.id, hubSpokeLayoutStrategy],
   [systemContextLayoutStrategy.id, systemContextLayoutStrategy],
   [hexagonalLayoutStrategy.id, hexagonalLayoutStrategy],
+  // Ranks by position on the timeline rather than by edges (ADR-016).
+  [timelineLayoutStrategy.id, timelineLayoutStrategy],
 ]);
 
 const strategies = new Map<string, LayoutStrategy>([
