@@ -37,6 +37,7 @@ Each ADR follows this structure:
 | [ADR-011](./011-postee-single-pane-workspace.md) | Postee Single-Pane Workspace Layout                              | Accepted | 2026-07-25 |
 | [ADR-012](./012-opy-in-postee.md)                | OPY in Postee — Agent-Assisted Request Authoring                 | Accepted | 2026-07-25 |
 | [ADR-013](./013-desktop-auto-update.md)          | Desktop Auto-Update via Signed GitHub Releases                   | Proposed | 2026-07-25 |
+| [ADR-014](./014-mermaid-c4-export-and-preview.md) | Mermaid C4 Export and Rendered Preview                           | Proposed | 2026-07-26 |
 
 ## Contributing
 
