@@ -658,7 +658,7 @@ export const opyCopilotViewportSectionSummaryText = style({
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
-  letterSpacing: theme.typography.letterSpacing.normal,
+  letterSpacing: theme.typography.letterSpacing.wide,
   whiteSpace: "nowrap",
   color: theme.color.foreground.primary,
   fontSize: theme.typography.size.xs,
@@ -1884,21 +1884,32 @@ globalStyle(`${opyFlyoutBody} > *`, {
  * Domain Toggle
  * Switch between C4 and DDD modeling modes
  */
+/**
+ * The mode switcher. Sized for three modes: two fitted the sidebar comfortably,
+ * three overflowed it and clipped the first label to "ODE::C4" (ADR-016).
+ *
+ * `minWidth: 0` lets the row shrink inside the sidebar column rather than
+ * spilling out of it, so a fourth mode degrades into narrower buttons instead of
+ * pushing the first one off the edge.
+ */
 export const domainToggle = style({
   display: "flex",
   alignItems: "center",
-  gap: theme.spacing["2"],
+  gap: theme.spacing["1"],
   clipPath: theme.clipPath.base,
   marginBottom: theme.spacing["3"],
   border: `${theme.border.width.base} solid ${theme.color.border.primary}`,
   boxShadow: theme.effect.glow.sm,
   backgroundColor: "rgba(9, 16, 13, 0.92)",
-  padding: theme.spacing["2"],
+  padding: theme.spacing["1"],
+  minWidth: 0,
 });
 
 export const domainToggleButton = style({
   display: "flex",
-  flex: 1,
+  // Sized to its own label, not to an equal share: `flex: 1` gave every button
+  // the same width, so the longest one clipped while the shortest had slack.
+  flex: "0 0 auto",
   alignItems: "center",
   justifyContent: "center",
   transition: theme.transition.base,
@@ -1906,9 +1917,13 @@ export const domainToggleButton = style({
   border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
   backgroundColor: "transparent",
   cursor: "pointer",
-  padding: `${theme.spacing["2"]} ${theme.spacing["3"]}`,
+  padding: `${theme.spacing["2"]} ${theme.spacing["2"]}`,
+  // Shrinks with the row rather than forcing it wider than the sidebar.
+  minWidth: 0,
+  overflow: "hidden",
   textTransform: "uppercase",
   letterSpacing: theme.typography.letterSpacing.wide,
+  whiteSpace: "nowrap",
   color: theme.color.foreground.tertiary,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,

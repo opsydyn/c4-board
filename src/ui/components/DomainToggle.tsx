@@ -17,10 +17,17 @@ interface DomainToggleProps {
   onDomainChange: (domain: DiagramDomain) => void;
 }
 
-const MODES: ReadonlyArray<{ readonly domain: DiagramDomain; readonly label: string }> = [
-  { domain: "c4", label: "MODE::C4" },
-  { domain: "ddd", label: "MODE::DDD" },
-  { domain: "eventStorming", label: "MODE::STORM" },
+/**
+ * Short labels. `MODE::` repeated three times cost more width than the row has —
+ * with three modes the first button was pushed out of the sidebar and clipped to
+ * "ODE::C4" — and the swap icon beside them already says these are modes.
+ */
+const MODES: ReadonlyArray<
+  { readonly domain: DiagramDomain; readonly label: string; readonly description: string }
+> = [
+  { domain: "c4", label: "C4", description: "C4 architecture mode" },
+  { domain: "ddd", label: "DDD", description: "Domain-driven design mode" },
+  { domain: "eventStorming", label: "STORM", description: "Event storming mode" },
 ];
 
 export function DomainToggle({ currentDomain, onDomainChange }: DomainToggleProps) {
@@ -34,6 +41,8 @@ export function DomainToggle({ currentDomain, onDomainChange }: DomainToggleProp
           className={`${domainToggleButton} ${currentDomain === mode.domain ? domainToggleActive : ""}`}
           onClick={() => onDomainChange(mode.domain)}
           aria-pressed={currentDomain === mode.domain}
+          aria-label={mode.description}
+          title={mode.description}
         >
           {mode.label}
         </button>
