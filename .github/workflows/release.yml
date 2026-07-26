@@ -20,7 +20,20 @@ env:
   # Developer ID signing and notarisation. macOS is the primary platform, and the
   # updater replaces the .app in place — an unsigned replacement is refused by
   # Gatekeeper and leaves the user with an app that will not open (ADR-013 Phase 0).
-  APPLE_SIGNING_ENABLED: "true"
+  #
+  # Switchable, because while Apple's notary service is not processing this team's
+  # submissions the withdraw step deletes every macOS asset and the platform ships
+  # nothing at all. For a testing round an unsigned .dmg plus the documented
+  # `xattr` workaround beats no macOS build. Turning this off also skips the
+  # withdraw step, so the unsigned bundle survives to the release.
+  #
+  # Set the repository variable to flip it, no commit required:
+  #   gh variable set APPLE_SIGNING_ENABLED --body false   # unsigned testing build
+  #   gh variable delete APPLE_SIGNING_ENABLED             # back to signed
+  #
+  # Unset means signed: shipping unsigned has to be a deliberate act, never a
+  # forgotten one. While it is off the updater must stay off too (ADR-013).
+  APPLE_SIGNING_ENABLED: ${{ vars.APPLE_SIGNING_ENABLED || 'true' }}
 
 jobs:
   release-gate:

@@ -157,6 +157,71 @@ describe("release asset job", () => {
 });
 
 /**
+ * The Apple signing switch.
+ *
+ * Apple has not processed a notarisation for this team in over a day, and the
+ * withdraw step exists precisely so nothing unnotarised reaches a release — which
+ * means macOS ships nothing at all while the outage lasts. For a testing round
+ * that trade is wrong: an unsigned `.dmg` plus a documented `xattr` workaround is
+ * worth more than no macOS build.
+ *
+ * So signing becomes switchable rather than assumed. The properties below are
+ * what make "off" safe: every Apple step gated on the same flag, and crucially
+ * the *withdraw* step gated too — without that, turning signing off would build
+ * a dmg, fail to notarise it, and then delete it.
+ */
+describe("the Apple signing switch", () => {
+  const appleStepNames = [
+    "Validate Apple signing",
+    "Export Apple signing",
+    "Notarise and staple",
+    "Replace macOS assets",
+    "Withdraw unnotarised",
+  ] as const;
+
+  const workflowRaw = readFileSync(join(process.cwd(), ".github/workflows/release.yml"), "utf8");
+
+  it("is a single flag, not a value repeated per step", () => {
+    // One switch to flip. Five independent conditions would drift.
+    for (const name of appleStepNames) {
+      const step = assetSteps.find((candidate) => candidate.name?.includes(name));
+
+      expect(step?.if, `${name} is not gated on the signing flag`)
+        .toContain("APPLE_SIGNING_ENABLED");
+    }
+  });
+
+  it("can be turned off without editing the workflow", () => {
+    // Hardcoding `"true"` means every flip is a commit, a review and a release
+    // cycle. A repository variable can be changed between runs.
+    expect(workflowRaw).toMatch(/APPLE_SIGNING_ENABLED:\s*\$\{\{\s*vars\.APPLE_SIGNING_ENABLED/);
+  });
+
+  it("defaults to signing when nobody has said otherwise", () => {
+    // The unset case must be the safe one: an absent variable means sign, so
+    // shipping unsigned is always a deliberate act rather than a forgotten one.
+    expect(workflowRaw).toMatch(/vars\.APPLE_SIGNING_ENABLED[^\n]*'true'/);
+  });
+
+  it("does not withdraw macOS assets when signing is off", () => {
+    // The property that makes the whole switch work. Withdraw fires when
+    // notarisation did not succeed; with signing off it never runs at all, so
+    // the unsigned dmg survives to the release.
+    const withdraw = assetSteps.find((candidate) =>
+      candidate.name?.includes("Withdraw unnotarised")
+    );
+
+    expect(withdraw?.if).toContain("APPLE_SIGNING_ENABLED == 'true'");
+  });
+
+  it("records that unsigned releases need the Gatekeeper workaround", () => {
+    // A reader finding an unsigned dmg on a release should be able to tell it was
+    // intended, and what users have to do about it.
+    expect(workflowRaw).toMatch(/xattr|quarantine|Gatekeeper/i);
+  });
+});
+
+/**
  * Release publication.
  *
  * ADR-013 Phase 2 made releases drafts until every platform had uploaded, so
