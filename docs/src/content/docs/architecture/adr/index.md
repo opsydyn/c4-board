@@ -39,6 +39,7 @@ Each ADR follows this structure:
 | [ADR-013](./013-desktop-auto-update.md)          | Desktop Auto-Update via Signed GitHub Releases                   | Proposed | 2026-07-25 |
 | [ADR-014](./014-mermaid-c4-export-and-preview.md) | Mermaid C4 Export and Rendered Preview                           | Accepted | 2026-07-26 |
 | [ADR-015](./015-board-metadata-envelope.md)      | Board Metadata Envelope for Diagram Exports                      | Accepted | 2026-07-26 |
+| [ADR-016](./016-event-storming-big-picture-mode.md) | Event Storming Mode (Big Picture)                             | Proposed | 2026-07-26 |
 
 ## Contributing
 
