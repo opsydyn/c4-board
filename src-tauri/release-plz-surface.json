@@ -1,33 +1,10 @@
 {
   "managedBy": "github-actions/release-plz",
   "purpose": "Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
-  "base": "a2667bd1bdcfbedb42940fb658f30a1949dd95f8",
-  "head": "9a5e2d8d2e9f6a110950e45fb50c312d890e1afc",
+  "base": "5b993934b6f2ac270203942adcf76d6a643f78e4",
+  "head": "c6ed86ec1a75e4bfb56e942c37fe3722229261b3",
   "paths": [
-    "src/core/effects/canvas-ambient-tone.ts",
-    "src/core/effects/database.c4.ts",
-    "src/core/effects/event-storming.ts",
-    "src/core/effects/export-mermaid-c4.ts",
-    "src/core/effects/export-mermaid.ts",
-    "src/core/effects/export-notices.ts",
-    "src/core/effects/export-plantuml-c4.ts",
-    "src/core/effects/layout-strategy-registry.ts",
-    "src/core/effects/node-operations.ts",
-    "src/core/effects/opy-chat.persistence.ts",
-    "src/core/effects/timeline-layout-strategy.ts",
-    "src/core/effects/timeline-layout.ts",
-    "src/styles/theme.contract.css.ts",
-    "src/styles/themes/dark-nord.css.ts",
-    "src/styles/themes/dark.css.ts",
-    "src/styles/themes/light.css.ts",
-    "src/ui/components/C4Canvas.tsx",
-    "src/ui/components/C4CanvasContainer.tsx",
-    "src/ui/components/DomainToggle.tsx",
-    "src/ui/components/nodes/nodeTypesByDomain.ts",
-    "src/ui/components/nodes/StickyNode.tsx",
-    "src/ui/components/nodes/styles.css.ts",
-    "src/ui/components/StormToolbar.tsx",
-    "src/ui/components/styles.css.ts",
-    "src/ui/machines/canvas.machine.ts"
+    "src/styles/global.css.ts",
+    "src/ui/components/styles.css.ts"
   ]
 }
