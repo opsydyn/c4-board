@@ -54,23 +54,116 @@ export interface AzureMappingOptions {
 
 const normalizeType = (azureType: string): string => azureType.trim().toLowerCase();
 
+/**
+ * Azure resource type to C4 type. ADR-017.
+ *
+ * Exact keys, not substring tests. The previous implementation asked whether the
+ * type *contained* `microsoft.web/sites`, which quietly fails for
+ * `microsoft.web/staticsites` — a different resource whose name happens not to
+ * contain the other. Exact lookup makes a miss a miss rather than a wrong answer.
+ *
+ * The shape of the judgement: a boundary other things run inside is a container,
+ * something that runs or acts is a component, a publicly reachable surface is an
+ * externalSystem, and a top-level platform is a system.
+ */
+const C4_TYPE_BY_AZURE_TYPE: Readonly<Record<string, AzureMappedC4Type>> = {
+  // Boundaries and stores.
+  "microsoft.app/managedenvironments": "container",
+  "microsoft.compute/virtualmachines": "container",
+  "microsoft.containerregistry/registries": "container",
+  "microsoft.network/virtualnetworks": "container",
+  "microsoft.operationalinsights/workspaces": "container",
+  "microsoft.storage/storageaccounts": "container",
+
+  // Things that run or act.
+  "microsoft.app/containerapps": "component",
+  "microsoft.dashboard/grafana": "component",
+  "microsoft.insights/actiongroups": "component",
+  "microsoft.insights/components": "component",
+  "microsoft.managedidentity/userassignedidentities": "component",
+  "microsoft.network/networkwatchers": "component",
+  "microsoft.portal/dashboards": "component",
+  "microsoft.web/sites": "component",
+
+  // Reachable from outside the boundary.
+  "microsoft.bing/accounts": "externalSystem",
+  "microsoft.web/staticsites": "externalSystem",
+
+  // Top-level platforms.
+  "microsoft.cognitiveservices/accounts": "system",
+  "microsoft.containerservice/managedclusters": "system",
+};
+
+/**
+ * Provider namespace to C4 type. ADR-017, second tier.
+ *
+ * `az provider list` reports 4,654 resource types across 316 providers, so an
+ * exact table covering 19 of them can never be the primary mechanism. The
+ * namespace carries most of the signal — anything under `microsoft.keyvault` or
+ * `microsoft.cache` is a store regardless of its leaf name — which turns a few
+ * entries here into coverage across whole product families.
+ *
+ * Consulted only when the exact table has no entry, so a specific override
+ * (a vnet inside the component-leaning network namespace) still wins.
+ */
+const C4_TYPE_BY_PROVIDER: Readonly<Record<string, AzureMappedC4Type>> = {
+  // Stores and boundaries.
+  "microsoft.cache": "container",
+  "microsoft.compute": "container",
+  "microsoft.containerregistry": "container",
+  "microsoft.dbformariadb": "container",
+  "microsoft.dbformysql": "container",
+  "microsoft.dbforpostgresql": "container",
+  "microsoft.documentdb": "container",
+  "microsoft.eventhub": "container",
+  "microsoft.keyvault": "container",
+  "microsoft.operationalinsights": "container",
+  "microsoft.servicebus": "container",
+  "microsoft.sql": "container",
+  "microsoft.storage": "container",
+
+  // Things that run or act.
+  "microsoft.app": "component",
+  "microsoft.dashboard": "component",
+  "microsoft.eventgrid": "component",
+  "microsoft.insights": "component",
+  "microsoft.logic": "component",
+  "microsoft.managedidentity": "component",
+  "microsoft.network": "component",
+  "microsoft.portal": "component",
+  "microsoft.web": "component",
+
+  // Platforms other things are built on.
+  "microsoft.apimanagement": "system",
+  "microsoft.cognitiveservices": "system",
+  "microsoft.containerservice": "system",
+};
+
+/**
+ * Three tiers, most specific first: the exact type, then its provider namespace,
+ * then shape. The shape tier only runs for providers nothing here has an opinion
+ * on — a nested type (`provider/type/child`) lives inside something else and
+ * reads as a component, a top-level type reads as a system.
+ *
+ * Documented in the Azure sync guide so a reader can predict what an unmapped
+ * resource will look like without reading this file.
+ */
 const inferC4Type = (azureType: string): AzureMappedC4Type => {
   const normalized = normalizeType(azureType);
 
-  if (normalized.includes("microsoft.network/virtualnetworks")) {
-    return "container";
-  }
-  if (normalized.includes("microsoft.compute/virtualmachines")) {
-    return "container";
-  }
-  if (normalized.includes("microsoft.web/sites")) {
-    return "component";
-  }
-  if (normalized.includes("microsoft.containerservice/managedclusters")) {
-    return "system";
+  const exact = C4_TYPE_BY_AZURE_TYPE[normalized];
+  if (exact) {
+    return exact;
   }
 
-  return "system";
+  const provider = normalized.split("/")[0];
+  const byProvider = provider ? C4_TYPE_BY_PROVIDER[provider] : undefined;
+  if (byProvider) {
+    return byProvider;
+  }
+
+  // `provider/type` is top level; `provider/type/child` is nested.
+  return normalized.split("/").length > 2 ? "component" : "system";
 };
 
 const readTeamOwnership = (tags: Readonly<Record<string, string>>): string | undefined => {

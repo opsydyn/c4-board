@@ -468,6 +468,8 @@ fn build_default_query(scope: &AzureSyncScopeDto) -> String {
          _ref_privateLinkServiceId = properties.privateLinkService.id, \
          _ref_dnsZoneId = coalesce(properties.privateDnsZoneId, properties.privateDnsZone.id), \
          _ref_keyVaultId = properties.keyVault.id, \
+         _ref_environmentId = coalesce(properties.environmentId, properties.managedEnvironmentId), \
+         _ref_registryId = coalesce(properties.registryId, properties.containerRegistryId), \
          _ref_managedBy = managedBy",
     );
 
@@ -493,6 +495,10 @@ fn build_default_query(scope: &AzureSyncScopeDto) -> String {
 fn relationship_type_for_property_ref(label: &str) -> (&'static str, &'static str) {
     match label {
         "serverFarmId" => ("depends_on", "high"),
+        // A Container App runs inside its managed environment and pulls from its
+        // registry. Both are as load-bearing as an App Service Plan. ADR-017.
+        "environmentId" => ("depends_on", "high"),
+        "registryId" => ("depends_on", "high"),
         "workspaceId" => ("data_link", "high"),
         "storageAccountId" => ("data_link", "high"),
         "subnetId"
@@ -883,6 +889,68 @@ Use the default query or ensure custom query projects those columns."
         relationships,
         warnings,
     })
+}
+
+#[cfg(test)]
+mod projection_tests {
+    use super::{build_default_query, relationship_type_for_property_ref, AzureSyncScopeDto};
+
+    /// ADR-017.
+    ///
+    /// The first end-to-end run against a real subscription produced zero edges.
+    /// Not because the estate was flat — its Container Apps each carried
+    /// `properties.environmentId` pointing at their managed environment — but
+    /// because the projection never selected that column, so the relationship was
+    /// discarded before it left the CLI. A board of disconnected nodes looks like
+    /// an answer, which is worse than importing nothing.
+    fn empty_scope() -> AzureSyncScopeDto {
+        AzureSyncScopeDto {
+            subscription_ids: vec![],
+            resource_groups: None,
+            tag_filters: None,
+            query: None,
+        }
+    }
+
+    #[test]
+    fn projects_the_container_app_environment_reference() {
+        let query = build_default_query(&empty_scope());
+
+        assert!(
+            query.contains("_ref_environmentId"),
+            "container apps lose their environment edge without this column"
+        );
+        // Both spellings exist across API versions; coalesce covers them.
+        assert!(query.contains("properties.environmentId"));
+        assert!(query.contains("properties.managedEnvironmentId"));
+    }
+
+    #[test]
+    fn projects_the_container_registry_reference() {
+        assert!(build_default_query(&empty_scope()).contains("_ref_registryId"));
+    }
+
+    #[test]
+    fn labels_the_new_refs_rather_than_leaving_them_inferred() {
+        // Unknown labels degrade to ("inferred", "medium"), which is safe but
+        // loses fidelity. These two are known relationships, so name them.
+        assert_eq!(
+            relationship_type_for_property_ref("environmentId"),
+            ("depends_on", "high")
+        );
+        assert_eq!(
+            relationship_type_for_property_ref("registryId"),
+            ("depends_on", "high")
+        );
+    }
+
+    #[test]
+    fn still_degrades_gracefully_for_labels_it_does_not_know() {
+        assert_eq!(
+            relationship_type_for_property_ref("somethingNew"),
+            ("inferred", "medium")
+        );
+    }
 }
 
 #[cfg(test)]
