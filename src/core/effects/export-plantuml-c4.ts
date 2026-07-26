@@ -21,6 +21,7 @@
 
 import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Effect } from "effect";
+import { encodeBoardMetadata } from "./board-metadata";
 import type { EdgeData } from "./edge-operations";
 import type { C4Type, NodeData } from "./node-operations";
 
@@ -277,6 +278,14 @@ export const exportC4ToPlantUML = (
           }
         }
       }
+    }
+
+    // ADR-015. The same record the Mermaid dialects carry, in PlantUML's comment
+    // syntax. Every node, including ones C4-PlantUML notation cannot express.
+    const metadata = encodeBoardMetadata(nodes, edges, options.viewport, "'");
+    if (metadata.length > 0) {
+      lines.push("");
+      lines.push(...metadata);
     }
 
     lines.push("");

@@ -7,6 +7,7 @@
 
 import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Data, Effect } from "effect";
+import { decodeBoardMetadata } from "./board-metadata";
 import type {
   EdgeAnimationSpeed,
   EdgeCommunicationStyle,
@@ -248,6 +249,25 @@ export const importPlantUMLC4 = (
 ): Effect.Effect<ImportResult, Error> =>
   Effect.gen(function*() {
     const lines = content.split("\n").map((line) => line.trim());
+
+    // ADR-015. When the file carries the envelope it is the board, complete and
+    // independent of what C4-PlantUML notation could express.
+    const envelope = yield* Effect.try({
+      try: () => decodeBoardMetadata(lines),
+      catch: (cause) =>
+        new PlantUmlImportError({
+          message: cause instanceof Error ? cause.message : "Board metadata could not be read",
+        }),
+    });
+
+    if (envelope !== null) {
+      return {
+        nodes: envelope.nodes,
+        edges: envelope.edges,
+        ...(envelope.viewport ? { viewport: envelope.viewport } : {}),
+      };
+    }
+
     const elements: ParsedElement[] = [];
     const relationships: ParsedRelationship[] = [];
     let viewport: Viewport | undefined;

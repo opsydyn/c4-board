@@ -105,8 +105,9 @@ Rendering non-C4 nodes is a separate question.
 
 ### Neutral
 
-- PlantUML can carry the same envelope with `'` comments. Worth doing for consistency, but the
-  Mermaid dialects are what prompted this.
+- PlantUML carries the same envelope with `'` comments. The marker is a parameter rather than a
+  second encoder, so the record cannot drift between formats — a test asserts both markers decode
+  to an identical result.
 
 ## Alternatives Considered
 

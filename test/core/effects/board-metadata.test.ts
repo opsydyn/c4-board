@@ -135,6 +135,38 @@ describe("round trip", () => {
   });
 });
 
+describe("comment markers", () => {
+  /**
+   * Mermaid comments with `%%`, PlantUML with `'`. The record is the same either
+   * way — it is a c4-board concern, not a dialect's — so the marker is a
+   * parameter rather than a second encoder to keep in step.
+   */
+  it("emits PlantUML comments when asked", () => {
+    for (const line of encodeBoardMetadata([node], [], undefined, "'")) {
+      expect(line.startsWith("' @c4b:"), `not a PlantUML comment: ${line}`).toBe(true);
+    }
+  });
+
+  it("defaults to Mermaid comments", () => {
+    expect(encodeBoardMetadata([node], [])[0]?.startsWith("%% @c4b:")).toBe(true);
+  });
+
+  it("reads either marker, so one decoder serves both formats", () => {
+    for (const marker of ["%%", "'"] as const) {
+      const lines = encodeBoardMetadata([node], [edge], undefined, marker);
+
+      expect(decodeBoardMetadata(lines)?.nodes, `${marker} did not decode`).toHaveLength(1);
+    }
+  });
+
+  it("carries the same record whichever marker is used", () => {
+    const viaMermaid = decodeBoardMetadata(encodeBoardMetadata([node], [edge], undefined, "%%"));
+    const viaPlantUml = decodeBoardMetadata(encodeBoardMetadata([node], [edge], undefined, "'"));
+
+    expect(viaPlantUml).toEqual(viaMermaid);
+  });
+});
+
 describe("decodeBoardMetadata", () => {
   it("returns null when a file carries no envelope, so legacy parsing can run", () => {
     expect(decodeBoardMetadata(["flowchart TB", "  a[\"A\"]"])).toBeNull();

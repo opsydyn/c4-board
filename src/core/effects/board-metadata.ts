@@ -19,9 +19,13 @@ import type { Edge, Node, Viewport } from "@xyflow/react";
 /** Bumped when the record shape changes in a way older readers cannot handle. */
 export const BOARD_METADATA_VERSION = 1;
 
-const PREFIX = `%% @c4b:v${BOARD_METADATA_VERSION} `;
-/** Matches any version, so an unreadable one can be reported rather than skipped. */
-const ANY_VERSION = /^%%\s*@c4b:v(\d+)\s+(.*)$/;
+/** Mermaid comments with `%%`, PlantUML with `'`. The record itself is identical. */
+export type CommentMarker = "%%" | "'";
+
+const tag = `@c4b:v${BOARD_METADATA_VERSION}`;
+
+/** Matches either marker and any version, so an unreadable one can be reported. */
+const ANY_VERSION = /^(?:%%|')\s*@c4b:v(\d+)\s+(.*)$/;
 
 interface NodeRecord {
   readonly kind: "node";
@@ -56,7 +60,8 @@ export interface DecodedBoardMetadata {
   readonly viewport?: Viewport;
 }
 
-const line = (record: Record_): string => `${PREFIX}${JSON.stringify(record)}`;
+const line = (record: Record_, marker: CommentMarker): string =>
+  `${marker} ${tag} ${JSON.stringify(record)}`;
 
 /**
  * One line per element, as comments. Every node is recorded regardless of whether
@@ -67,6 +72,7 @@ export const encodeBoardMetadata = (
   nodes: Node[],
   edges: Edge[],
   viewport?: Viewport,
+  marker: CommentMarker = "%%",
 ): string[] => {
   if (nodes.length === 0 && edges.length === 0) return [];
 
@@ -80,7 +86,7 @@ export const encodeBoardMetadata = (
       ...(node.width === undefined ? {} : { w: node.width }),
       ...(node.height === undefined ? {} : { h: node.height }),
       data: (node.data ?? {}) as Record<string, unknown>,
-    })
+    }, marker)
   );
 
   for (const edge of edges) {
@@ -91,10 +97,10 @@ export const encodeBoardMetadata = (
       target: edge.target,
       ...(edge.label === undefined ? {} : { label: String(edge.label) }),
       ...(edge.data === undefined ? {} : { data: edge.data as Record<string, unknown> }),
-    }));
+    }, marker));
   }
 
-  if (viewport !== undefined) lines.push(line({ kind: "board", viewport }));
+  if (viewport !== undefined) lines.push(line({ kind: "board", viewport }, marker));
 
   return lines;
 };
