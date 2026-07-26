@@ -3132,6 +3132,7 @@ export function C4CanvasContainer() {
       <section className={styles.canvasRegion} ref={canvasRegionRef}>
         <C4Canvas
           ref={canvasRef}
+          domain={state.context.currentDomain}
           nodes={filteredCanvas.nodes}
           edges={filteredCanvas.edges}
           onNodesChange={onNodesChange}

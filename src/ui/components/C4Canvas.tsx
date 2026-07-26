@@ -24,26 +24,11 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useReactFlow } from "@xyflow/react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ComponentNode } from "./nodes/ComponentNode";
-import { ContainerNode } from "./nodes/ContainerNode";
-import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
-import { PersonNode } from "./nodes/PersonNode";
-import { StickyNode } from "./nodes/StickyNode";
-import { SystemNode } from "./nodes/SystemNode";
+import type { NodeDomain } from "../../core/effects/node-operations";
+import { nodeTypesForDomain } from "./nodes/nodeTypesByDomain";
 // DDD Strategic Nodes
-import { AggregateNode } from "./nodes/AggregateNode";
-import { BoundedContextNode } from "./nodes/BoundedContextNode";
-import { DomainEventNode } from "./nodes/DomainEventNode";
 // DDD Tactical Nodes
-import { DomainServiceNode } from "./nodes/DomainServiceNode";
-import { EntityNode } from "./nodes/EntityNode";
-import { FactoryNode } from "./nodes/FactoryNode";
-import { RepositoryNode } from "./nodes/RepositoryNode";
-import { ValueObjectNode } from "./nodes/ValueObjectNode";
 // DDD Application Nodes
-import { ApplicationServiceNode } from "./nodes/ApplicationServiceNode";
-import { CommandNode } from "./nodes/CommandNode";
-import { QueryNode } from "./nodes/QueryNode";
 // DDD Infrastructure Nodes
 import { CaretDownIcon, CaretUpIcon, FileCodeIcon } from "@phosphor-icons/react";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
@@ -69,9 +54,6 @@ import { CustomAnimatedEdge } from "./CustomAnimatedEdge";
 import { DownloadButton } from "./DownloadButton";
 import { EdgeMetadataEditor } from "./EdgeMetadataEditor";
 import { ImportButton } from "./ImportButton";
-import { ACLNode } from "./nodes/ACLNode";
-import { IntegrationEventNode } from "./nodes/IntegrationEventNode";
-import { SagaNode } from "./nodes/SagaNode";
 import { RoutedEdge } from "./RoutedEdge";
 import { SearchBox } from "./SearchBox";
 import * as styles from "./styles.css";
@@ -97,6 +79,8 @@ interface C4CanvasProps {
   onContextMenuAction?: (action: ContextMenuAction, nodeId?: string, edgeId?: string) => void;
   animationsEnabled?: boolean;
   ambientTone?: CanvasAmbientTone;
+  /** Chooses how node types are drawn (ADR-016). */
+  domain?: NodeDomain;
   readOnly?: boolean;
   visualHarness?: boolean;
   viewportFitNodeIds?: readonly string[];
@@ -148,6 +132,7 @@ function C4CanvasInner(
     onContextMenuAction,
     animationsEnabled = true,
     ambientTone = "c4",
+    domain = "c4",
     readOnly = false,
     visualHarness = false,
     viewportFitNodeIds,
@@ -221,40 +206,9 @@ function C4CanvasInner(
   }), [fitGraph, getNode, setCenter]);
 
   // Define custom node types for C4 and DDD elements
-  const nodeTypes = useMemo(
-    () => ({
-      // C4 Architecture nodes
-      person: PersonNode,
-      system: SystemNode,
-      externalSystem: ExternalSystemNode,
-      container: ContainerNode,
-      component: ComponentNode,
-      // DDD Strategic nodes
-      boundedContext: BoundedContextNode,
-      aggregate: AggregateNode,
-      domainEvent: DomainEventNode,
-      // DDD Tactical nodes
-      entity: EntityNode,
-      valueObject: ValueObjectNode,
-      domainService: DomainServiceNode,
-      repository: RepositoryNode,
-      factory: FactoryNode,
-      // DDD Application nodes
-      command: CommandNode,
-      query: QueryNode,
-      applicationService: ApplicationServiceNode,
-      // DDD Infrastructure nodes
-      integrationEvent: IntegrationEventNode,
-      antiCorruptionLayer: ACLNode,
-      saga: SagaNode,
-      // Event Storming stickies with no equivalent elsewhere (ADR-016). The
-      // three a storm shares — event, actor, external system — keep their
-      // existing renderers.
-      hotspot: StickyNode,
-      opportunity: StickyNode,
-    }),
-    [],
-  );
+  // Resolved per domain, and stable per domain: ReactFlow remounts every node
+  // when this identity changes (ADR-016).
+  const nodeTypes = useMemo(() => nodeTypesForDomain(domain), [domain]);
 
   // Define custom edge types
   const edgeTypes = useMemo(

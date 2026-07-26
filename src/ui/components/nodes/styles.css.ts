@@ -923,7 +923,12 @@ export const stickyNode = style({
   color: "rgba(8, 12, 10, 0.92)",
 
   selectors: {
+    // All five, including the three a storm borrows: on a wall an actor is a
+    // pale yellow note, not a C4 person in cyan (ADR-016).
+    "&[data-sticky=\"domainEvent\"]": { backgroundColor: theme.color.semantic.esEvent },
     "&[data-sticky=\"hotspot\"]": { backgroundColor: theme.color.semantic.esHotspot },
+    "&[data-sticky=\"person\"]": { backgroundColor: theme.color.semantic.esActor },
+    "&[data-sticky=\"externalSystem\"]": { backgroundColor: theme.color.semantic.esExternalSystem },
     "&[data-sticky=\"opportunity\"]": { backgroundColor: theme.color.semantic.esOpportunity },
     "&[data-selected=\"true\"]": { boxShadow: theme.effect.glow.base },
   },
@@ -943,6 +948,10 @@ export const stickyNodeMarker = style({
       transform: "rotate(45deg)",
       backgroundColor: "rgba(8, 12, 10, 0.85)",
     },
+    // Only a hotspot carries the rotated mark; the rest are plain notes.
+    "&[data-sticky=\"domainEvent\"]": { display: "none" },
+    "&[data-sticky=\"person\"]": { display: "none" },
+    "&[data-sticky=\"externalSystem\"]": { display: "none" },
     "&[data-sticky=\"opportunity\"]": { display: "none" },
   },
 });
