@@ -1,6 +1,6 @@
 [package]
 name = "c4-board"
-version = "0.0.12"
+version = "0.0.13"
 description = "OPSYDYN C4 Board desktop application"
 authors = ["OPSYDYN"]
 edition = "2021"
