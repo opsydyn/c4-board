@@ -4,7 +4,8 @@ title: "ADR-014: Mermaid C4 Export and Rendered Preview"
 
 # ADR-014: Mermaid C4 Export and Rendered Preview
 
-**Status**: Proposed
+**Status**: Accepted
+**Accepted**: 2026-07-26 — All four phases implemented and verified; Mermaid's C4 renderer accepts the emitted syntax. The position-metadata decision is superseded by ADR-015.
 **Date**: 2026-07-26
 **Deciders**: Alan P Currie
 **Technical Story**: The PlantUML exporter emits real C4 macros. The Mermaid exporter emits a
@@ -203,11 +204,11 @@ is checked by hand, once, and recorded.
 
 | Metric | Before | After | Status |
 | ------ | ------ | ----- | ------ |
-| Mermaid export carries C4 semantics | No — shapes only | Yes, as an option | Proposed |
-| Technology/description in a Mermaid export | merged into one HTML label | separate macro arguments | Proposed |
-| User can see the diagram before pasting | No | Yes | Proposed |
-| Flowchart round-trip fidelity | positions preserved | unchanged | Proposed |
-| Mermaid bundle loaded when only copying code | n/a | never | Proposed |
+| Mermaid export carries C4 semantics | No — shapes only | Yes, as an option | Done |
+| Technology/description in a Mermaid export | merged into one HTML label | separate macro arguments | Done |
+| User can see the diagram before pasting | No | Yes | Done |
+| Flowchart round-trip fidelity | positions preserved | unchanged | Done |
+| Mermaid bundle loaded when only copying code | n/a | never | Done |
 
 ## References
 

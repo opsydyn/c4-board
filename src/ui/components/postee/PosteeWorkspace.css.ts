@@ -316,8 +316,6 @@ export const requestButtonActive = style([
 ]);
 
 export const mainColumn = style({
-  containerName: "requestPane",
-  containerType: "inline-size",
   position: "relative",
   display: "flex",
   flexDirection: "column",
@@ -326,10 +324,12 @@ export const mainColumn = style({
   gap: theme.spacing["4"],
   padding: `${theme.spacing["5"]} ${theme.spacing["6"]}`,
   minWidth: 0,
-  // Pairs with the fixed-height shell: this is the region that scrolls, so it has
-  // to be allowed to shrink to the track it was given.
   minHeight: 0,
   overflowY: "auto",
+  // Pairs with the fixed-height shell: this is the region that scrolls, so it has
+  // to be allowed to shrink to the track it was given.
+  containerName: "requestPane",
+  containerType: "inline-size",
 });
 
 export const mainHeader = style({
@@ -525,8 +525,6 @@ export const responseColumn = style({
   // Named container: the pane is now a fraction of the viewport, so its contents
   // must respond to the pane's own width. Viewport media queries would describe
   // space this content does not have (ADR-011 Phase 4).
-  containerName: "responsePane",
-  containerType: "inline-size",
   display: "flex",
   flexDirection: "column",
   gridRow: "1 / 2",
@@ -538,6 +536,8 @@ export const responseColumn = style({
   minWidth: 0,
   minHeight: 0,
   overflowY: "auto",
+  containerName: "responsePane",
+  containerType: "inline-size",
 });
 
 export const sectionTitle = style({
@@ -626,11 +626,18 @@ export const saveButton = style([
   },
 ]);
 
+/**
+ * The Send/Cancel group, inline in the request bar beside Save.
+ *
+ * No top margin. `requestBarRow` is `align-items: center`, which centres each
+ * item's *margin box* — so a top margin here pushed Send half of it lower than
+ * Save, which sits in the same row with none. It is a leftover from when this
+ * group had a row of its own.
+ */
 export const actionRow = style({
   display: "flex",
   alignItems: "center",
   gap: theme.spacing["3"],
-  marginTop: theme.spacing["3"],
 });
 
 export const statusBadge = style({
@@ -1124,6 +1131,7 @@ export const latencyLegendSwatch = style({
  */
 export const responseEmptyState = style({
   display: "flex",
+  flex: 1,
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
@@ -1135,7 +1143,6 @@ export const responseEmptyState = style({
   backgroundSize: "20px 20px",
   padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
   minHeight: 0,
-  flex: 1,
   textAlign: "center",
   color: theme.color.foreground.secondary,
 });
@@ -1175,6 +1182,7 @@ globalStyle(`${responseEmptyState} svg`, {
 
 export const responseLoadingState = style({
   display: "flex",
+  flex: 1,
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
@@ -1186,7 +1194,6 @@ export const responseLoadingState = style({
   backgroundSize: "20px 20px",
   padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
   minHeight: 0,
-  flex: 1,
   textAlign: "center",
   color: theme.color.foreground.secondary,
 });
@@ -1213,6 +1220,7 @@ globalStyle(`${responseLoadingState} svg`, {
 
 export const responseErrorState = style({
   display: "flex",
+  flex: 1,
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
@@ -1224,7 +1232,6 @@ export const responseErrorState = style({
   backgroundSize: "20px 20px",
   padding: `${theme.spacing["12"]} ${theme.spacing["4"]}`,
   minHeight: 0,
-  flex: 1,
   textAlign: "center",
   color: theme.color.foreground.secondary,
 });
@@ -1273,8 +1280,8 @@ export const loadTestWarning = style({
   display: "inline-flex",
   alignItems: "center",
   gap: theme.spacing["1"],
+  cursor: "help",
   color: theme.color.status.caution,
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.xs,
-  cursor: "help",
 });

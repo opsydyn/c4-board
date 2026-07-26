@@ -4,7 +4,8 @@ title: "ADR-015: Board Metadata Envelope for Diagram Exports"
 
 # ADR-015: Board Metadata Envelope for Diagram Exports
 
-**Status**: Proposed
+**Status**: Accepted
+**Accepted**: 2026-07-26 — Implemented across both Mermaid dialects and PlantUML. All sixteen NodeData fields, DDD nodes included, survive a round trip in every format.
 **Date**: 2026-07-26
 **Deciders**: Alan P Currie
 **Technical Story**: A shared export should land on another user's board the way it left this one.
@@ -147,10 +148,10 @@ Rendering non-C4 nodes is a separate question.
 
 | Metric | Before | After | Status |
 | ------ | ------ | ----- | ------ |
-| `NodeData` fields surviving a share | 4 of 16 | 16 of 16 | Proposed |
-| DDD nodes surviving a share | 0 | all | Proposed |
-| Dialects that round-trip | flowchart only | both | Proposed |
-| Import inferring type from shape | yes | only for legacy files | Proposed |
+| `NodeData` fields surviving a share | 4 of 16 | 16 of 16 | Done |
+| DDD nodes surviving a share | 0 | all | Done |
+| Dialects that round-trip | flowchart only | both | Done |
+| Import inferring type from shape | yes | only for legacy files | Done |
 
 ## References
 
