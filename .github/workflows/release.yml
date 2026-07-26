@@ -226,12 +226,26 @@ jobs:
         run: |
           set -euo pipefail
           release_tag="$(jq -r '.[0].tag' <<<"${RELEASES}")"
+
           # The release is created as a draft (ADR-013 Phase 2), and
           # /releases/tags/{tag} only finds published releases, so list and filter.
-          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
-            --jq "[.[] | select(.tag_name == \"${release_tag}\")] | first | .id")"
-          if [[ -z "${release_id}" || "${release_id}" == "null" ]]; then
-            echo "::error::No release found for tag ${release_tag}"
+          #
+          # Retried, because the list endpoint lags the create. v0.0.11 was created
+          # at 15:32:18 and a lookup at 15:32:19 did not see it — the release
+          # existed and the job failed anyway. per_page=100 rather than --paginate:
+          # a release made seconds ago is always on the first page, and --paginate
+          # applies --jq per page, emitting "null" for every page without a match.
+          release_id=""
+          for attempt in 1 2 3 4 5 6; do
+            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq "[.[] | select(.tag_name == \"${release_tag}\")] | first | .id // empty")"
+            [[ -n "${release_id}" ]] && break
+            echo "Release ${release_tag} not visible yet; retrying (${attempt}/6)."
+            sleep $((attempt * 3))
+          done
+
+          if [[ -z "${release_id}" ]]; then
+            echo "::error::No release found for tag ${release_tag} after 6 attempts"
             exit 1
           fi
           # build-release-assets checks this tag out. A draft GitHub release does
@@ -267,9 +281,9 @@ jobs:
           release_tag="${{ inputs.release_tag }}"
           # Drafts are invisible to /releases/tags/{tag}, and a re-run targets a
           # release that has not been published yet by design.
-          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
-            --jq "[.[] | select(.tag_name == \"${release_tag}\")] | first | .id")"
-          if [[ -z "${release_id}" || "${release_id}" == "null" ]]; then
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq "[.[] | select(.tag_name == \"${release_tag}\")] | first | .id // empty")"
+          if [[ -z "${release_id}" ]]; then
             echo "::error::No release found for tag ${release_tag}"
             exit 1
           fi
