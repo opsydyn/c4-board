@@ -25,6 +25,7 @@ import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Effect } from "effect";
 import { encodeBoardMetadata } from "./board-metadata";
 import type { EdgeData } from "./edge-operations";
+import { undrawnNotice } from "./export-notices";
 import type { C4Type, NodeData } from "./node-operations";
 
 export interface MermaidC4ExportOptions {
@@ -186,6 +187,8 @@ export const exportC4ToMermaidC4 = (
       lines.push("");
       for (const edge of c4Edges) lines.push(relationshipFor(edge, aliases));
     }
+
+    lines.push(...undrawnNotice({ total: nodes.length, drawn: c4Nodes.length, marker: "%%" }));
 
     // ADR-015. Every node, including ones this dialect cannot draw, so a shared
     // C4 export lands on another board with its layout and data intact.

@@ -9,6 +9,7 @@ import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Effect } from "effect";
 import { encodeBoardMetadata } from "./board-metadata";
 import type { EdgeData } from "./edge-operations";
+import { undrawnNotice } from "./export-notices";
 import type { C4Type, NodeData } from "./node-operations";
 
 /**
@@ -226,6 +227,8 @@ export const exportC4ToMermaid = (
         if (relationship) lines.push(relationship);
       }
     }
+
+    lines.push(...undrawnNotice({ total: nodes.length, drawn: c4Nodes.length, marker: "%%" }));
 
     // ADR-015. The authoritative record; the @pos/@ovl comments above remain so
     // a file exported now still reads on an older build.

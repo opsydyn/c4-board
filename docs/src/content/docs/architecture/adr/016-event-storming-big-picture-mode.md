@@ -4,7 +4,8 @@ title: "ADR-016: Event Storming Mode (Big Picture)"
 
 # ADR-016: Event Storming Mode (Big Picture)
 
-**Status**: Proposed
+**Status**: Accepted
+**Accepted**: 2026-07-26 — All five phases implemented. A storm built in the app round-trips complete through both Mermaid dialects and PlantUML; the drawing is partial and now says so.
 **Date**: 2026-07-26
 **Deciders**: Alan P Currie
 **Technical Story**: DDD mode can approximate an event storm and gets it wrong in the ways that
@@ -121,10 +122,27 @@ saturation adjusted — an orange event must stay recognisably orange.
 The metadata envelope (ADR-015) carries arbitrary `NodeData`, so event storms round-trip through
 export and import immediately, with no work.
 
-The Mermaid and PlantUML exports will draw **nothing**, because both filter to C4 types — the same
-position DDD boards are in today. This ADR does not change that. Teaching the flowchart dialect to
-draw non-C4 nodes is a separate decision affecting DDD equally, and bundling it here would make this
-change about exports rather than about Event Storming.
+~~The Mermaid and PlantUML exports will draw **nothing**, because both filter to C4 types.~~
+
+**Corrected in Phase 5.** That was wrong, and wrong in the direction that matters. A storm's actor
+*is* a `person` and its external system *is* an `externalSystem` — both C4 types — so those are
+drawn while the event backbone, hotspots and opportunities are not. A board exported from the app
+produced:
+
+```
+%% 19 of 27 nodes are not drawn in this format — it draws C4 elements only.
+flowchart TB
+    person_R17VLJctIsns(["Actor"])
+    external_W6hBKoMPFOxb[["External system"]]
+```
+
+The supporting cast, with the whole story missing. An empty diagram says "nothing here"; that one
+looks complete and is not, which is the worse failure.
+
+Until a dialect can draw these, every export states how many nodes it left out — and says nothing
+when the drawing is complete, so the notice keeps its meaning. Teaching the flowchart dialect to
+draw non-C4 nodes remains a separate decision affecting DDD equally, and this finding strengthens
+the case for it.
 
 ## Consequences
 
@@ -141,7 +159,8 @@ change about exports rather than about Event Storming.
   future feature now asks "and what does this mean for event storms?"
 - Two CHECK constraints to migrate, on tables holding real user data.
 - Three themes to extend for every new token.
-- Event storms export as an empty drawing until the export question is answered separately.
+- Event storms export a *partial* drawing — the actors and external systems, without the events —
+  until the export question is answered separately. Every export says how many nodes it omitted.
 
 ### Neutral
 
@@ -191,10 +210,10 @@ change about exports rather than about Event Storming.
 
 | Metric | Before | After | Status |
 | ------ | ------ | ----- | ------ |
-| Event Storming stickies available | 3 of 5, two in the wrong mode | 5 of 5 | Proposed |
-| Hotspots | none | first-class | Proposed |
-| Timeline layout | none | one preset | Proposed |
-| Domains supported | 2 | 3 | Proposed |
+| Event Storming stickies available | 3 of 5, two in the wrong mode | 5 of 5 | Done |
+| Hotspots | none | first-class | Done |
+| Timeline layout | none | one preset | Done |
+| Domains supported | 2 | 3 | Done |
 
 ## References
 

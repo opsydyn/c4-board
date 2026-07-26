@@ -23,6 +23,7 @@ import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Effect } from "effect";
 import { encodeBoardMetadata } from "./board-metadata";
 import type { EdgeData } from "./edge-operations";
+import { undrawnNotice } from "./export-notices";
 import type { C4Type, NodeData } from "./node-operations";
 
 // ============================================================================
@@ -279,6 +280,8 @@ export const exportC4ToPlantUML = (
         }
       }
     }
+
+    lines.push(...undrawnNotice({ total: nodes.length, drawn: c4Nodes.length, marker: "'" }));
 
     // ADR-015. The same record the Mermaid dialects carry, in PlantUML's comment
     // syntax. Every node, including ones C4-PlantUML notation cannot express.
