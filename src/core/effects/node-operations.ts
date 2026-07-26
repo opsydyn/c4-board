@@ -40,9 +40,15 @@ export type DDDType =
   | "saga";
 
 /**
- * Combined node type (C4 + DDD)
+ * Event Storming introduces only what has no equivalent already: a storm's event
+ * is a `domainEvent` and its actor a `person` (ADR-016).
  */
-export type NodeType = C4Type | DDDType;
+export type EventStormingOnlyType = "hotspot" | "opportunity";
+
+/**
+ * Combined node type (C4 + DDD + Event Storming)
+ */
+export type NodeType = C4Type | DDDType | EventStormingOnlyType;
 
 /**
  * Node domain discriminator
@@ -119,6 +125,8 @@ export interface NodeData extends Record<string, unknown> {
   couplingOverrides?: CouplingOverrides;
   iconId?: NodeIconId;
   layoutRole?: ArchitectureSemanticRole;
+  /** Event Storming: marks an event as a phase boundary on the timeline (ADR-016). */
+  isPivotal?: boolean;
 
   // DDD-specific fields
   aggregateRoot?: string;
@@ -190,6 +198,12 @@ const DEFAULT_DIMENSIONS: Record<NodeType | "default", { width: number; height: 
   domainService: { width: 200, height: 150 },
   repository: { width: 200, height: 150 },
   factory: { width: 200, height: 150 },
+
+  // Event Storming (ADR-016). Stickies, so square-ish and small — a wall is read
+  // by the shape and colour of a note, not by how much text fits in it. Sized to
+  // match `domainEvent`, which a storm reuses as its event.
+  hotspot: { width: 180, height: 120 },
+  opportunity: { width: 180, height: 120 },
 
   // DDD Application types (medium)
   command: { width: 180, height: 120 },

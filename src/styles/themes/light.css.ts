@@ -64,6 +64,11 @@ export const lightTheme = createTheme(themeContract, {
       integrationEvent: "#D946EF", // Fuchsia-500
       acl: "#84CC16", // Lime-500
       saga: "#F43F5E", // Rose-500
+      esEvent: "#ea580c", // Orange-600 — the backbone
+      esHotspot: "#e11d48", // Rose-600 — disagreement, risk
+      esActor: "#ca8a04", // Yellow-600, legible on a light surface
+      esExternalSystem: "#db2777", // Pink-600
+      esOpportunity: "#65a30d", // Lime-600
     },
 
     status: {

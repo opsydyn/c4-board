@@ -66,6 +66,11 @@ export const darkTheme = createTheme(themeContract, {
       integrationEvent: "#e879f9", // Fuchsia-400 (cross-context)
       acl: "#a3e635", // Lime-400 (translation)
       saga: "#fb7185", // Rose-400 (long-running)
+      esEvent: "#fb923c", // Orange-400 — the backbone
+      esHotspot: "#f43f5e", // Rose-500 — disagreement, risk
+      esActor: "#fde68a", // Amber-200 — pale yellow, as on a wall
+      esExternalSystem: "#f9a8d4", // Pink-300
+      esOpportunity: "#a3e635", // Lime-400
     },
 
     status: {

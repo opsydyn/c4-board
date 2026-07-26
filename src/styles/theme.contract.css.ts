@@ -71,6 +71,16 @@ export const themeContract = createThemeContract({
       integrationEvent: null, // DDD Integration Event (fuchsia)
       acl: null, // DDD Anti-Corruption Layer (lime)
       saga: null, // DDD Saga (rose)
+
+      // Event Storming (Big Picture) — ADR-016. The colours are the language: a
+      // practitioner reads a wall by colour before reading a word, so these
+      // follow the Event Storming convention rather than the DDD palette above.
+      // Hue is preserved; saturation is adjusted for this app's dark surface.
+      esEvent: null, // Event Storming Event (orange)
+      esHotspot: null, // Event Storming Hotspot (red)
+      esActor: null, // Event Storming Actor (pale yellow)
+      esExternalSystem: null, // Event Storming External System (pink)
+      esOpportunity: null, // Event Storming Opportunity (green)
     },
 
     // Operational status colors - military/engineering
