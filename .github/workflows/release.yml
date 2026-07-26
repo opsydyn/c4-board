@@ -284,7 +284,9 @@ jobs:
       - release-plz-release
       - resolve-existing-release
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Raised from 60: the first macOS notarisation was still in progress when the
+    # job was killed at exactly 60m, so we never learned whether it would finish.
+    timeout-minutes: 120
     permissions:
       contents: write
     strategy:
@@ -450,6 +452,35 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           tauriScript: bun tauri
           includeUpdaterJson: false
+
+      # Notarisation is deliberately outside `tauri build`: the bundler does it
+      # inline with no progress output, no submission id, and no way to retry
+      # without rebuilding — which cost two 50-minute jobs and left nothing to
+      # query afterwards. The build above only signs (see apple-signing-env.ts).
+      - name: Notarise and staple macOS bundles
+        if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' }}
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          NOTARIZE_TIMEOUT_MINUTES: "60"
+        run: bun .release-tooling/.github/scripts/notarize-macos.run.ts
+
+      # The bundles uploaded above carry no notarisation ticket. Re-uploading the
+      # stapled ones replaces them by name; the release is still a draft at this
+      # point (ADR-013 Phase 2), so no one can see the interim state.
+      - name: Replace macOS assets with the stapled bundles
+        if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for dmg in target/release/bundle/dmg/*.dmg; do
+            echo "Re-uploading stapled $(basename "${dmg}")"
+            gh release upload "${RELEASE_TAG}" "${dmg}" --clobber
+          done
 
   publish-release:
     name: Publish release

@@ -18,15 +18,23 @@
 /** Written to a file, never the environment — it is a PEM key and needs its newlines. */
 const FILE_ONLY = "APPLE_API_KEY_P8";
 
+/**
+ * Signing only. The notarisation credentials are deliberately absent.
+ *
+ * tauri-bundler notarises inside `tauri build` the moment it can authenticate,
+ * which buys 40+ minutes of total silence and no way to retry without rebuilding.
+ * With no credentials, `notarize_auth()` returns `MissingCredentials`, which the
+ * bundler logs as "skipping app notarization" and carries on — so a step that can
+ * report progress and be retried does the notarising instead.
+ *
+ * APPLE_TEAM_ID stays: `MissingTeamId` is the single variant the bundler treats as
+ * fatal rather than skippable.
+ */
 const EXPORTED = [
   "APPLE_CERTIFICATE",
   "APPLE_CERTIFICATE_PASSWORD",
   "APPLE_SIGNING_IDENTITY",
   "APPLE_TEAM_ID",
-  "APPLE_API_KEY",
-  "APPLE_API_ISSUER",
-  "APPLE_ID",
-  "APPLE_PASSWORD",
 ] as const;
 
 export type AppleSigningSecrets = Readonly<Partial<Record<string, string>>>;

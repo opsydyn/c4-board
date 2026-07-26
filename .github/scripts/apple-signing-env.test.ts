@@ -46,22 +46,26 @@ describe("appleSigningEnvLines", () => {
     expect(namesIn(lines)).not.toContain("APPLE_PASSWORD");
   });
 
-  it("exports the API key credentials the bundler falls back to", () => {
-    const lines = appleSigningEnvLines(API_KEY_SECRETS);
-
-    expect(valueOf(lines, "APPLE_API_KEY")).toBe("SDSW238PV3");
-    expect(valueOf(lines, "APPLE_API_ISSUER")).toBe("issuer-uuid");
-  });
-
-  it("exports the Apple ID pair when both are genuinely supplied", () => {
+  it("withholds notarisation credentials so the bundler signs but does not notarise", () => {
+    // tauri-bundler notarises inside `tauri build` whenever it can authenticate,
+    // giving no progress output and no way to retry without rebuilding. Denied
+    // credentials, notarize_auth() returns MissingCredentials, which the bundler
+    // logs as "skipping app notarization" and continues — leaving notarisation to
+    // a step that can report on itself. Only MissingTeamId would fail the build.
     const lines = appleSigningEnvLines({
       ...API_KEY_SECRETS,
       APPLE_ID: "someone@example.test",
       APPLE_PASSWORD: "app-specific",
     });
 
-    expect(valueOf(lines, "APPLE_ID")).toBe("someone@example.test");
-    expect(valueOf(lines, "APPLE_PASSWORD")).toBe("app-specific");
+    for (const name of ["APPLE_API_KEY", "APPLE_API_ISSUER", "APPLE_ID", "APPLE_PASSWORD"]) {
+      expect(namesIn(lines), `${name} would trigger notarisation during the build`)
+        .not.toContain(name);
+    }
+  });
+
+  it("still exports the team id, whose absence is the one error that fails the build", () => {
+    expect(valueOf(appleSigningEnvLines(API_KEY_SECRETS), "APPLE_TEAM_ID")).toBe("TEAMID");
   });
 
   it("strips the line wrapping macOS base64 adds to the certificate", () => {

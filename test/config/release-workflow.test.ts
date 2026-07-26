@@ -87,6 +87,34 @@ describe("release asset job", () => {
     expect(toolingIndex).toBeLessThan(firstUse);
   });
 
+  it("notarises in a step of its own, after the build", () => {
+    // Inside `tauri build` this produced one line and then 40-55 minutes of
+    // silence, with no submission id to query afterwards.
+    const build = assetSteps.findIndex((step) => step.uses?.includes("tauri-action") === true);
+    const notarise = assetSteps.findIndex((step) => (step.run ?? "").includes("notarize-macos.run.ts"));
+
+    expect(notarise, "no notarisation step").toBeGreaterThan(-1);
+    expect(notarise).toBeGreaterThan(build);
+  });
+
+  it("gives the notarisation step the credentials the build is denied", () => {
+    const step = assetSteps.find((candidate) => (candidate.run ?? "").includes("notarize-macos"));
+    const env = (step?.["env"] ?? {}) as Readonly<Record<string, unknown>>;
+
+    for (const name of ["APPLE_API_KEY", "APPLE_API_ISSUER"]) {
+      expect(Object.keys(env), `notarisation cannot authenticate without ${name}`).toContain(name);
+    }
+  });
+
+  it("replaces the uploaded bundles with the stapled ones", () => {
+    // tauri-action uploads before notarisation runs, so those assets carry no
+    // ticket. The release is a draft until publish-release, so nobody sees them.
+    const replace = assetSteps.find((step) => (step.run ?? "").includes("--clobber"));
+
+    expect(replace, "stapled bundles are never re-uploaded").toBeDefined();
+    expect(replace?.run).toContain(".dmg");
+  });
+
   it("still exports Apple signing secrets through the tested script", () => {
     const step = assetSteps.find((candidate) => candidate.name?.includes("Export Apple signing"));
 
