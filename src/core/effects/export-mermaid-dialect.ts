@@ -6,11 +6,12 @@
  *   flowchart — lossless. Carries `@pos` and `@ovl` comments that
  *               `import-mermaid.ts` reads back, so a board survives a round trip.
  *   c4        — readable. Real C4 macros with technology and description in their
- *               own arguments, but no layout, because Mermaid C4 has no layout
- *               algorithm at all.
+ *               own arguments. Mermaid draws it by statement order, so the picture
+ *               differs from the board, but the metadata envelope (ADR-015) means
+ *               it re-imports exactly.
  *
- * The default is flowchart, and stays there: switching it would quietly turn every
- * export into something the importer cannot read.
+ * The default is flowchart because its *drawing* matches the board. Both dialects
+ * round-trip.
  */
 
 import type { Edge, Node, Viewport } from "@xyflow/react";
@@ -40,7 +41,7 @@ export const MERMAID_DIALECTS: ReadonlyArray<MermaidDialectOption> = [
   {
     id: "c4",
     label: "C4",
-    hint: "C4 semantics for sharing. Layout is not preserved.",
+    hint: "C4 semantics for sharing. Re-imports into c4-board exactly.",
     // Mermaid's own wording: "the syntax and properties can change in future
     // releases". Someone pasting this into a doc should know.
     isExperimental: true,
@@ -59,9 +60,11 @@ export const exportMermaidForDialect = (
   options: MermaidDialectExportOptions = {},
 ): Effect.Effect<string> => {
   if (dialect === "c4") {
-    // Deliberately not given the viewport: C4 has nowhere to put it.
+    // The viewport rides in the metadata envelope (ADR-015), even though the C4
+    // diagram itself has nowhere to show it.
     return exportC4ToMermaidC4(nodes, edges, {
       ...(options.title === undefined ? {} : { title: options.title }),
+      ...(options.viewport === undefined ? {} : { viewport: options.viewport }),
     });
   }
 

@@ -46,10 +46,16 @@ describe("exportMermaidForDialect", () => {
     expect(run("c4").split("\n")[0]).toBe("C4Container");
   });
 
-  it("keeps the round-trip metadata only in the dialect that round-trips", () => {
+  it("carries the board metadata in both dialects", () => {
+    // ADR-015 supersedes ADR-014 here: the envelope is a c4-board concern and
+    // Mermaid ignores %% comments, so nothing stopped C4 carrying it.
+    for (const dialect of ["flowchart", "c4"] as const) {
+      expect(run(dialect), `${dialect} carries no metadata envelope`).toContain("@c4b:v");
+    }
+  });
+
+  it("keeps the legacy flowchart comments, so older builds still read new files", () => {
     expect(run("flowchart")).toContain("@pos(");
-    // Emitting positions here would read as a guarantee C4 cannot honour.
-    expect(run("c4")).not.toContain("@pos(");
   });
 
   it("passes the title through to either dialect", () => {
@@ -83,7 +89,10 @@ describe("MERMAID_DIALECTS", () => {
       expect(dialect.hint.length, `${dialect.id} has no hint`).toBeGreaterThan(0);
     }
 
-    expect(MERMAID_DIALECTS.find((dialect) => dialect.id === "flowchart")?.hint)
-      .toMatch(/re-?import|round-?trip/i);
+    // Both dialects re-import now (ADR-015), so both hints must say so.
+    for (const dialect of MERMAID_DIALECTS) {
+      expect(dialect.hint, `${dialect.id} does not mention re-importing`)
+        .toMatch(/re-?import|round-?trip|restore/i);
+    }
   });
 });

@@ -7,6 +7,7 @@
 
 import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Data, Effect } from "effect";
+import { decodeBoardMetadata } from "./board-metadata";
 import type {
   EdgeAnimationSpeed,
   EdgeCommunicationStyle,
@@ -300,6 +301,26 @@ export const importMermaid = (
 ): Effect.Effect<ImportResult, Error> =>
   Effect.gen(function*() {
     const lines = content.split("\n").map((line) => line.trim());
+
+    // ADR-015. When the file carries a metadata envelope it *is* the board —
+    // complete, and independent of what the dialect was able to draw. Inferring
+    // type from a shape and scraping fields out of an HTML label is the fallback
+    // for files exported before the envelope existed.
+    const envelope = yield* Effect.try({
+      try: () => decodeBoardMetadata(lines),
+      catch: (cause) =>
+        new MermaidImportError({
+          message: cause instanceof Error ? cause.message : "Board metadata could not be read",
+        }),
+    });
+
+    if (envelope !== null) {
+      return {
+        nodes: envelope.nodes,
+        edges: envelope.edges,
+        ...(envelope.viewport ? { viewport: envelope.viewport } : {}),
+      };
+    }
     const parsedNodes: ParsedNode[] = [];
     const parsedEdges: ParsedEdge[] = [];
     let viewport: Viewport | undefined;

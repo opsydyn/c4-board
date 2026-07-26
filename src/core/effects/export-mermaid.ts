@@ -7,6 +7,7 @@
 
 import type { Edge, Node, Viewport } from "@xyflow/react";
 import { Effect } from "effect";
+import { encodeBoardMetadata } from "./board-metadata";
 import type { EdgeData } from "./edge-operations";
 import type { C4Type, NodeData } from "./node-operations";
 
@@ -225,6 +226,11 @@ export const exportC4ToMermaid = (
         if (relationship) lines.push(relationship);
       }
     }
+
+    // ADR-015. The authoritative record; the @pos/@ovl comments above remain so
+    // a file exported now still reads on an older build.
+    const metadata = encodeBoardMetadata(nodes, edges, options.viewport);
+    if (metadata.length > 0) lines.push("", ...metadata);
 
     return lines.join("\n");
   })());

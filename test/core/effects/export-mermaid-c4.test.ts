@@ -42,6 +42,13 @@ const node = (
 
 const run = (nodes: Node[], edges: Edge[] = []) => Effect.runSync(exportC4ToMermaidC4(nodes, edges));
 
+/**
+ * The drawn statements, without the metadata envelope. The two carry different
+ * things on purpose (ADR-015): the diagram shows what C4 can express, the
+ * envelope records the whole board including nodes nothing can draw.
+ */
+const statements = (out: string) => out.split("\n").filter((line) => !line.trim().startsWith("%%")).join("\n");
+
 describe("element mapping", () => {
   it("maps each C4 type to its Mermaid element", () => {
     const out = run([
@@ -92,7 +99,7 @@ describe("element mapping", () => {
     const out = run([node("s", "system", { label: "Board" })]);
 
     expect(out).toContain("System(board, \"Board\")");
-    expect(out).not.toContain("\"\"");
+    expect(statements(out)).not.toContain("\"\"");
   });
 });
 
@@ -223,10 +230,14 @@ describe("the whole document", () => {
     expect(run([node("s", "system")]).split("\n")[0]).toBe("C4Context");
   });
 
-  it("says that layout is not preserved, because Mermaid C4 has none", () => {
-    // Not decoration: someone exporting this as a backup would otherwise expect
-    // their board to come back the way they left it.
-    expect(run([node("s", "system")])).toMatch(/layout is not preserved/i);
+  it("warns that the rendering will not match the board", () => {
+    // Mermaid positions C4 shapes by statement order. The board still comes back
+    // exactly on re-import, from the envelope — those are different claims and
+    // the header has to make both, or it misleads one way or the other.
+    const out = run([node("s", "system")]);
+
+    expect(out).toMatch(/statement order/i);
+    expect(out).toMatch(/restores the board exactly/i);
   });
 
   it("emits a valid empty diagram for a board with no C4 nodes", () => {
@@ -239,7 +250,12 @@ describe("the whole document", () => {
   it("ignores nodes that are not C4 elements", () => {
     const ddd = { id: "d", position: { x: 0, y: 0 }, data: { label: "Domain", dddType: "domain" } };
 
-    expect(run([ddd as unknown as Node, node("s", "system")])).not.toContain("Domain");
+    const out = run([ddd as unknown as Node, node("s", "system")]);
+
+    // Not drawn — C4 has no notation for it...
+    expect(statements(out)).not.toContain("Domain");
+    // ...but recorded, so sharing the file does not lose the node (ADR-015).
+    expect(out).toContain("Domain");
   });
 
   it("accepts a title", () => {
