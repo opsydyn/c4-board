@@ -69,12 +69,14 @@ export function ExportModal({
 }: ExportModalProps) {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<"code" | "preview">("code");
+  /** Only Mermaid can be rendered here; PlantUML needs a renderer we do not ship. */
+  const canPreview = exportFormat === "mermaid";
   const [preview, setPreview] = useState<MermaidPreview>(MermaidPreview.Idle());
   const renderSequence = useRef(0);
 
   // Mermaid is imported only from here, and only once a preview is asked for.
   useEffect(() => {
-    if (view !== "preview" || exportedCode === null) return;
+    if (!canPreview || view !== "preview" || exportedCode === null) return;
 
     let isCancelled = false;
     renderSequence.current += 1;
@@ -96,7 +98,7 @@ export function ExportModal({
     return () => {
       isCancelled = true;
     };
-  }, [view, exportedCode, renderMermaid]);
+  }, [canPreview, view, exportedCode, renderMermaid]);
 
   if (!exportedCode || !exportFormat) {
     return null;
@@ -178,24 +180,29 @@ export function ExportModal({
                 </div>
               )}
 
-              {/* Code or rendered diagram */}
-              <div className={settings.settingsInlineActions}>
-                {(["code", "preview"] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={settings.settingsToggleControl}
-                    data-active={view === option ? "true" : "false"}
-                    aria-pressed={view === option}
-                    onClick={() => setView(option)}
-                  >
-                    {option === "code" ? "CODE" : "PREVIEW"}
-                  </button>
-                ))}
-              </div>
+              {
+                /* Code or rendered diagram — preview is Mermaid-only, since nothing
+                  here can render PlantUML. */
+              }
+              {canPreview && (
+                <div className={settings.settingsInlineActions}>
+                  {(["code", "preview"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={settings.settingsToggleControl}
+                      data-active={view === option ? "true" : "false"}
+                      aria-pressed={view === option}
+                      onClick={() => setView(option)}
+                    >
+                      {option === "code" ? "CODE" : "PREVIEW"}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className={exportModalContent}>
-                {view === "code"
+                {view === "code" || !canPreview
                   ? (
                     <pre className={exportModalCodeBlock}>
 									<code>{exportedCode}</code>

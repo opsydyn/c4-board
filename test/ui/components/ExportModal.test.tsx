@@ -50,6 +50,21 @@ describe("dialect selection", () => {
     return waitFor(() => expect(props.onMermaidDialectChange).toHaveBeenCalledWith("flowchart"));
   });
 
+  it("does not offer a Mermaid preview for PlantUML", () => {
+    // Mermaid cannot parse PlantUML. Offering the toggle fed `@startuml` to the
+    // Mermaid renderer and showed "No diagram type detected" as if the export
+    // were broken.
+    setup({ exportFormat: "plantuml", exportedCode: "@startuml\n@enduml" });
+
+    expect(screen.queryByRole("button", { name: /preview/i })).not.toBeInTheDocument();
+  });
+
+  it("does not render PlantUML through the Mermaid renderer", () => {
+    const props = setup({ exportFormat: "plantuml", exportedCode: "@startuml\n@enduml" });
+
+    expect(props.renderMermaid).not.toHaveBeenCalled();
+  });
+
   it("hides the dialect choice for PlantUML, which has only one form", () => {
     setup({ exportFormat: "plantuml", exportedCode: "@startuml\n@enduml" });
 
