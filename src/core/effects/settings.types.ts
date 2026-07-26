@@ -291,7 +291,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   transitionIntensity: "normal",
   masterAudioEnabled: true,
   saveVolEnabled: true,
-  sirenEnabledDefault: true,
+  // ADR-019: opt-in. An audible alarm should never be something you have to
+  // discover how to switch off.
+  sirenEnabledDefault: false,
   azurePanelVisible: false,
   ownershipLensVisible: false,
   couplingExplainabilityVisible: false,

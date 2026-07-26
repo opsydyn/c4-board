@@ -146,6 +146,7 @@ export {
   type LoadTestConfigInput,
   type LoadTestProgress,
   startLoadTest,
+  stopLoadTest,
 } from "./load-test";
 
 export {

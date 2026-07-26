@@ -264,21 +264,42 @@ fn save_custom_icon(
     })
 }
 
+/// The cancellation handle for the run currently in flight, if any. ADR-019.
+///
+/// One slot rather than a registry: the panel starts one run at a time, and a
+/// stop button that had to name which run it meant would be a worse button.
+#[derive(Default)]
+struct ActiveLoadTest(std::sync::Mutex<Option<load_test::CancellationHandle>>);
+
 #[tauri::command]
-async fn start_load_test(app: tauri::AppHandle, config: LoadTestConfig) -> Result<(), String> {
+fn stop_load_test(active: tauri::State<'_, ActiveLoadTest>) -> Result<(), String> {
+    // Idempotent by design: stopping nothing is a no-op, not an error. The button
+    // is allowed to be pressed twice, or after a run has already finished.
+    let handle = active.0.lock().map_err(|_| "load test state poisoned")?.clone();
+    if let Some(handle) = handle {
+        handle.cancel();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_load_test(
+    app: tauri::AppHandle,
+    active: tauri::State<'_, ActiveLoadTest>,
+    config: LoadTestConfig,
+) -> Result<(), String> {
     // Validate config
     config.validate()?;
 
+    let engine = LoadTestEngine::new(config)?;
+    let cancel = engine.cancellation_handle();
+
+    // Published before the run starts, so a stop arriving immediately after start
+    // still finds a handle rather than a None it would silently ignore.
+    *active.0.lock().map_err(|_| "load test state poisoned")? = Some(cancel);
+
     // Spawn load test in background
     tokio::spawn(async move {
-        let engine = match LoadTestEngine::new(config) {
-            Ok(engine) => engine,
-            Err(e) => {
-                let _ = app.emit("load-test-error", e);
-                return;
-            }
-        };
-
         // Run load test with progress streaming
         let app_clone = app.clone();
         let result = engine
@@ -425,6 +446,7 @@ pub fn run() {
             get_layout_visual_fixture,
             save_custom_icon,
             start_load_test,
+            stop_load_test,
             sql_execute,
             sql_query,
             db_runtime_probe,
@@ -451,6 +473,7 @@ pub fn run() {
             let pool = db::create_pool(&db_path)?;
             tauri::async_runtime::block_on(MIGRATOR.run(&pool))?;
             app.manage(db::AppDb(pool));
+            app.manage(ActiveLoadTest::default());
 
             // Build and set the native menu
             let menu = build_menu(app.handle())?;

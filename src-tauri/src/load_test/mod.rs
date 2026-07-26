@@ -16,6 +16,6 @@ pub mod engine;
 pub mod stats;
 
 pub use config::LoadTestConfig;
-pub use engine::LoadTestEngine;
+pub use engine::{CancellationHandle, LoadTestEngine};
 #[allow(unused_imports)]
 pub use stats::{LoadTestProgress, LoadTestStats};

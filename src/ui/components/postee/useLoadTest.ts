@@ -7,6 +7,7 @@ import {
   type LoadTestConfigInput,
   type LoadTestProgress,
   startLoadTest,
+  stopLoadTest,
 } from "@/core/effects/postee";
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,6 +22,7 @@ export interface LoadTestState {
   latest: LoadTestProgress | null;
   samples: LoadTestProgress[];
   start: (config: LoadTestConfigInput) => Promise<void>;
+  stop: () => Promise<void>;
   isSupported: boolean;
   isDetecting: boolean;
   reset: () => void;
@@ -186,6 +188,26 @@ export const useLoadTest = (): LoadTestState => {
     [],
   );
 
+  /**
+   * Stop the run in flight. ADR-019.
+   *
+   * Deliberately does not set status: the backend finishes the requests already
+   * in flight and emits `load-test-complete` with the stats it gathered, which
+   * moves the state machine the same way a natural finish does. Forcing status
+   * here would race that event and could discard the final snapshot.
+   */
+  const stop = useCallback(async () => {
+    try {
+      await Effect.runPromise(stopLoadTest());
+    } catch (cause) {
+      // A run that has already finished is the common case, not a fault — the
+      // button can be clicked in the gap between the last request and the
+      // complete event. Surfacing that as an error would report a failure for
+      // having worked.
+      console.warn("Load test stop request did not apply", cause);
+    }
+  }, []);
+
   return useMemo(
     () => ({
       status,
@@ -193,10 +215,11 @@ export const useLoadTest = (): LoadTestState => {
       latest,
       samples,
       start,
+      stop,
       isSupported,
       isDetecting,
       reset,
     }),
-    [status, error, latest, samples, start, reset, isSupported, isDetecting],
+    [status, error, latest, samples, start, stop, reset, isSupported, isDetecting],
   );
 };

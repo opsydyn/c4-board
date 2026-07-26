@@ -154,6 +154,34 @@ export interface LoadTestProgress {
   bytes_received: number;
   error_count: number;
   recent_errors: string[];
+
+  /**
+   * The window since the previous snapshot rather than the whole run. ADR-019.
+   *
+   * Charts plot these; the cumulative fields above are for the final summary. A
+   * running average cannot show a dip and a whole-run p95 cannot show a recovery,
+   * so drawing the cumulative series on a time axis implied a meaning it did not
+   * have.
+   */
+  interval_ms: number;
+  interval_requests_sent: number;
+  interval_requests_success: number;
+  interval_requests_failed: number;
+  interval_rps: number;
+  interval_p50_latency_ms: number;
+  interval_p95_latency_ms: number;
+  interval_p99_latency_ms: number;
+
+  /**
+   * Outcome model. ADR-019 slice 1.
+   *
+   * A 503 is a response the service chose to send; a refused connection is not a
+   * response at all. Both used to be counted only as "failed".
+   */
+  responses_received: number;
+  transport_failures: number;
+  transport_timeouts: number;
+  transport_connect_failures: number;
 }
 
 export type LoadTestEventCallback = EventCallback<LoadTestProgress>;
@@ -194,6 +222,24 @@ export const startLoadTest = (
       });
     },
     catch: (cause) => toLoadTestRuntimeError(cause, "Failed to start load test"),
+  });
+
+/**
+ * Ask the backend to stop the run in flight. ADR-019.
+ *
+ * Idempotent, and stopping nothing succeeds: a run can finish between the button
+ * rendering and the click, and surfacing that as an error would show a failure
+ * for having worked. Workers finish the request already in flight and the stats
+ * gathered so far are reported — a partial measurement is still a measurement.
+ */
+export const stopLoadTest = (): Effect.Effect<void, LoadTestRuntimeError> =>
+  Effect.tryPromise({
+    try: async () => {
+      await requireTauriRuntime();
+
+      await invoke("stop_load_test");
+    },
+    catch: (cause) => toLoadTestRuntimeError(cause, "Failed to stop load test"),
   });
 
 export const listenLoadTestProgress = (

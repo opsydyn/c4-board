@@ -21,18 +21,18 @@ import {
   latencyLegendSwatch,
   loadTestButtonRow,
   loadTestControls,
+  loadTestHeader,
   loadTestMetrics,
   loadTestPanel,
   loadTestStatus,
   loadTestStatusIndicator,
   loadTestStatusIndicatorActive,
+  loadTestWarning,
   metricCard,
   metricLabel,
   metricValue,
   miniBarValue,
   miniBarWrapper,
-  loadTestHeader,
-  loadTestWarning,
   sectionTitle,
   submitButton,
   textInput,
@@ -584,7 +584,7 @@ const SuccessFailureStacked = ({ samples }: { samples: LoadTestProgress[] }) => 
 
 export function LoadTestPanel({
   requestDraft,
-  sirenEnabledDefault = true,
+  sirenEnabledDefault = false,
   masterAudioEnabled = true,
   masterVolume = 0.8,
   animationsEnabled = true,
@@ -596,6 +596,7 @@ export function LoadTestPanel({
     latest,
     isDetecting,
     start,
+    stop,
     isSupported,
     reset,
   } = useLoadTest();
@@ -799,10 +800,12 @@ export function LoadTestPanel({
 
   return (
     <section className={loadTestPanel}>
-      {/*
+      {
+        /*
         The chamber shares a pane with the response now, so the standing warning is
         a title affordance rather than two lines of permanent copy (ADR-011 Phase 4).
-      */}
+      */
+      }
       <header className={loadTestHeader}>
         <h3 className={sectionTitle}>OPSYDYN Load Chamber (Experimental)</h3>
         <span
@@ -897,6 +900,33 @@ export function LoadTestPanel({
             disabled={status === "running" || !targetUrl.trim() || isDetecting || payload._tag === "Invalid"}
           >
             {status === "running" ? "Load In Progress…" : "Initiate Load Test"}
+          </button>
+          {
+            /*
+            ADR-019. Enabled only while a run is in flight, and it is the one
+            control that is. Stopping keeps the stats gathered so far — the
+            backend emits `load-test-complete` with them — so aborting a run
+            costs the remaining duration, not the measurement.
+          */
+          }
+          <button
+            type="button"
+            className={submitButton}
+            style={{
+              backgroundColor: status === "running"
+                ? "rgba(249, 112, 102, 0.22)"
+                : "transparent",
+              color: "inherit",
+              borderColor: status === "running"
+                ? "rgba(249, 112, 102, 0.85)"
+                : "rgba(60, 92, 80, 0.6)",
+            }}
+            onClick={() => {
+              void stop();
+            }}
+            disabled={status !== "running"}
+          >
+            Abort Run
           </button>
           <button
             type="button"
@@ -993,13 +1023,13 @@ export function LoadTestPanel({
       <div className={chartVisualizationGrid}>
         <MetricVisualization
           label="Requests per Second"
-          field="rps"
+          field="interval_rps"
           color="#4CC38A"
           samples={samples}
         />
         <MetricVisualization
           label="Latency P95 (ms)"
-          field="p95_latency_ms"
+          field="interval_p95_latency_ms"
           color="#8FD6FF"
           units="ms"
           samples={samples}

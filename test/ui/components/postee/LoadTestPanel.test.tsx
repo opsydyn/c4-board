@@ -27,6 +27,7 @@ const makeIdleLoadTestState = (
   latest: null,
   samples: [],
   start: vi.fn().mockResolvedValue(undefined),
+  stop: vi.fn().mockResolvedValue(undefined),
   isSupported: true,
   isDetecting: false,
   reset: vi.fn(),
@@ -107,5 +108,44 @@ describe("LoadTestPanel", () => {
     );
     expect(screen.getByRole("button", { name: /initiate load test/i })).toBeDisabled();
     expect(start).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ADR-019. The abort control.
+ *
+ * A load test sends real traffic and previously could not be stopped — the only
+ * command was `start_load_test` and workers checked nothing but elapsed time.
+ * These pin the two properties that make the button trustworthy: it is available
+ * exactly when a run is in flight, and pressing it asks the backend to stop.
+ */
+describe("aborting a run", () => {
+  const abortButton = () => screen.getByRole("button", { name: /abort run/i });
+
+  it("stops the run when pressed", async () => {
+    const stop = vi.fn().mockResolvedValue(undefined);
+    useLoadTestMock.mockReturnValue(makeIdleLoadTestState({ status: "running", stop }));
+    const user = userEvent.setup();
+
+    render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
+    await user.click(abortButton());
+
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("is disabled when nothing is running", () => {
+    useLoadTestMock.mockReturnValue(makeIdleLoadTestState({ status: "idle" }));
+
+    render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
+
+    expect(abortButton()).toBeDisabled();
+  });
+
+  it("is enabled while a run is in flight", () => {
+    useLoadTestMock.mockReturnValue(makeIdleLoadTestState({ status: "running" }));
+
+    render(<LoadTestPanel requestDraft={queryJsonDraft} masterAudioEnabled={false} />);
+
+    expect(abortButton()).toBeEnabled();
   });
 });

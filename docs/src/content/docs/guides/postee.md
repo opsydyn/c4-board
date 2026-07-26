@@ -47,11 +47,9 @@ The **Load Chamber** drives sustained traffic at an endpoint and reports what ha
 
 ### Before you start
 
-This sends real traffic at whatever you point it at, as fast as you configure, for the full duration.
+This sends real traffic at whatever you point it at, as fast as you configure. Point it at something you own.
 
-**A run cannot be cancelled.** There is no stop control and no cancellation command in the backend — once started, it runs for the configured duration. Choose the duration before you start rather than planning to abort. Start short.
-
-Point it at something you own.
+**Abort Run** stops a run in flight. Workers finish the request already in the air and the run reports the statistics it gathered, so aborting costs you the remaining duration, not the measurement.
 
 ### Settings
 
@@ -72,9 +70,27 @@ Progress is emitted every 100ms while the run is in flight, so the charts move i
 
 Latency percentiles come from an HDR histogram rather than from averaging samples, so **p50, p95 and p99 are accurate at the tail** — which is the part worth looking at. An average latency that looks fine while p99 is terrible is the normal shape of a struggling service.
 
+#### Interval versus cumulative
+
+Two views of the same run, and they answer different questions ([ADR-019](../architecture/adr/019-load-test-control-and-accuracy.md)):
+
+- **Charts plot the interval view** — requests and percentiles for the 100ms window since the last update. This is what "right now" means, so a spike looks like a spike and a recovery looks like a recovery.
+- **The summary figures are cumulative** — percentiles across every sample in the run. This is the right thing for a final report.
+
+Interval percentiles over a 100ms window come from few samples at low request rates and will look noisy. That noise is real; it is what a running average was concealing.
+
+#### Responses versus transport failures
+
+A 503 is a **response** — the service chose to send it. A refused connection or a timeout is not a response at all. These are counted separately, because under load they mean opposite things: one says the service is shedding traffic deliberately, the other says you never reached it.
+
+**Latency is recorded for every response whatever its status.** Previously only successes entered the histogram, and since the slow requests under load are exactly the ones that return 503, the percentiles were dropping their worst samples and reading optimistically. If you compare a run now against one recorded before this change, expect the percentiles to look **worse** — that is the measurement being corrected, not the service regressing.
+
+Transport failures are timed separately rather than mixed into response latency. A 30-second timeout is time-to-give-up, bounded by your timeout setting; folding it in would drag p99 towards that setting until it stopped describing the service at all.
+
 Reported per run:
 
 - Requests sent, succeeded, failed
+- Responses received, and transport failures split by timeout and connect
 - Requests per second
 - Latency: p50, p95, p99, plus average, min and max
 - Bytes received
@@ -84,9 +100,17 @@ The charts cover requests per second, p95 latency over time, throughput against 
 
 ### Sirens
 
-Starting a run arms an audible siren for as long as it runs, and the **Blast Door Status** indicator tracks the run state. The siren is a real oscillator, so it respects the global audio settings — it will not sound if master audio is off. Turn it off with **SIREN::ON/OFF** in the panel, or change the default in Settings.
+The siren is **off by default** and has to be armed deliberately, with **SIREN::ON/OFF** in the panel or by changing the default in Settings. It is a real oscillator that sounds for as long as a run lasts, and it also respects the global audio settings — it will not sound if master audio is off.
 
-It exists so you notice a run is still going. Given a run cannot be cancelled, that is more useful than it sounds.
+The toggle stays usable while a run is in flight, so silencing the noise never requires aborting the measurement.
+
+The **Blast Door Status** indicator tracks run state and is silent.
+
+### Known limitation: coordinated omission
+
+Workers are a closed loop — send, wait for the response, send again — so when the target slows down the generator issues **fewer** requests. Slow periods are therefore under-represented in the histogram, and the reported percentiles are optimistic under degradation.
+
+What you are measuring is service time, not response time under the intended load. Treat these numbers as a comparison between runs rather than a worst-case guarantee. Correcting it is deliberately deferred: it changes what the numbers mean, and would make every previous run incomparable without saying so.
 
 ## Related
 

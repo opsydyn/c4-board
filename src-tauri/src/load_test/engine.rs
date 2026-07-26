@@ -5,7 +5,7 @@
  * Zero Tauri dependencies - pure async Rust.
  */
 use super::config::LoadTestConfig;
-use super::stats::{LoadTestProgress, LoadTestStats};
+use super::stats::{LoadTestProgress, LoadTestStats, TransportErrorKind};
 use bytes::Bytes;
 use governor::{
     clock::DefaultClock, state::direct::NotKeyed, state::InMemoryState, Quota, RateLimiter,
@@ -24,6 +24,39 @@ type DirectRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock>;
 
 pub struct LoadTestEngine {
     config: LoadTestConfig,
+    cancel: CancellationHandle,
+}
+
+/// Cooperative cancellation for a run. ADR-019.
+///
+/// Cloneable and cheap, so the command layer can hold one while the engine runs.
+/// Cancelling is idempotent — a second call is a no-op rather than an error,
+/// because an abort button that can be pressed twice should not be able to fail.
+#[derive(Clone)]
+pub struct CancellationHandle {
+    tx: Arc<watch::Sender<bool>>,
+}
+
+impl CancellationHandle {
+    fn new() -> Self {
+        let (tx, _rx) = watch::channel(false);
+        Self { tx: Arc::new(tx) }
+    }
+
+    /// Ask the run to stop. Workers finish the request already in flight and the
+    /// stats gathered so far are reported — a partial measurement is still a
+    /// measurement, and discarding it would teach users not to abort.
+    pub fn cancel(&self) {
+        // `send` fails and leaves the value untouched when nothing has subscribed
+        // yet, which is exactly the cancel-before-run case. `send_replace` stores
+        // the value regardless, so an engine cancelled before it starts never
+        // issues a request.
+        self.tx.send_replace(true);
+    }
+
+    fn subscribe(&self) -> watch::Receiver<bool> {
+        self.tx.subscribe()
+    }
 }
 
 #[derive(Clone)]
@@ -37,7 +70,15 @@ struct RequestPlan {
 impl LoadTestEngine {
     pub fn new(config: LoadTestConfig) -> Result<Self, String> {
         config.validate()?;
-        Ok(Self { config })
+        Ok(Self {
+            config,
+            cancel: CancellationHandle::new(),
+        })
+    }
+
+    /// A handle that can stop this run from elsewhere. Take it before `run`.
+    pub fn cancellation_handle(&self) -> CancellationHandle {
+        self.cancel.clone()
     }
 
     /// Run the load test with a progress callback
@@ -97,6 +138,8 @@ impl LoadTestEngine {
             let rate_limiter = rate_limiter.clone();
             let tx = tx.clone();
 
+            let cancel_rx = self.cancel.subscribe();
+
             let worker = tokio::spawn(async move {
                 Self::worker(
                     worker_id,
@@ -106,6 +149,7 @@ impl LoadTestEngine {
                     tx,
                     test_start,
                     test_duration,
+                    cancel_rx,
                 )
                 .await;
             });
@@ -119,11 +163,19 @@ impl LoadTestEngine {
         let collector_handle = tokio::spawn(async move {
             while let Some(result) = rx.recv().await {
                 match result {
-                    WorkerResult::Success { latency, bytes } => {
-                        stats_for_collector.record_success(latency, bytes);
+                    WorkerResult::Responded {
+                        status,
+                        latency,
+                        bytes,
+                    } => {
+                        stats_for_collector.record_response(status, latency, bytes);
                     }
-                    WorkerResult::Failure { error } => {
-                        stats_for_collector.record_failure(error);
+                    WorkerResult::Transport {
+                        kind,
+                        latency,
+                        detail,
+                    } => {
+                        stats_for_collector.record_transport_failure(kind, latency, detail);
                     }
                 }
             }
@@ -201,6 +253,7 @@ impl LoadTestEngine {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn worker(
         _worker_id: usize,
         client: Client,
@@ -209,14 +262,26 @@ impl LoadTestEngine {
         tx: mpsc::Sender<WorkerResult>,
         test_start: Instant,
         test_duration: Duration,
+        mut cancel_rx: watch::Receiver<bool>,
     ) {
         loop {
+            // Checked before the duration test so an already-cancelled engine
+            // never issues a single request.
+            if *cancel_rx.borrow() {
+                break;
+            }
+
             if test_start.elapsed() >= test_duration {
                 break;
             }
 
             if let Some(limiter) = rate_limiter.as_ref() {
-                limiter.until_ready().await;
+                // Waiting on the rate limiter must stay interruptible, or an abort
+                // during a low-RPS run would sit here until the next token.
+                tokio::select! {
+                    _ = limiter.until_ready() => {}
+                    _ = cancel_rx.changed() => break,
+                }
             }
 
             let request_start = Instant::now();
@@ -224,8 +289,16 @@ impl LoadTestEngine {
             let latency = request_start.elapsed();
 
             let worker_result = match result {
-                Ok(bytes) => WorkerResult::Success { latency, bytes },
-                Err(error) => WorkerResult::Failure { error },
+                Ok((status, bytes)) => WorkerResult::Responded {
+                    status,
+                    latency,
+                    bytes,
+                },
+                Err((kind, detail)) => WorkerResult::Transport {
+                    kind,
+                    latency,
+                    detail,
+                },
             };
 
             if tx.send(worker_result).await.is_err() {
@@ -234,7 +307,12 @@ impl LoadTestEngine {
         }
     }
 
-    async fn send_request(client: &Client, plan: &RequestPlan) -> Result<u64, String> {
+    /// Returns the status and body size of whatever came back. Only a failure to
+    /// obtain a response at all is an `Err` — a 503 is a response.
+    async fn send_request(
+        client: &Client,
+        plan: &RequestPlan,
+    ) -> Result<(u16, u64), (TransportErrorKind, String)> {
         let mut request = client.request(plan.method.clone(), plan.url.as_ref());
 
         for (name, value) in plan.headers.iter() {
@@ -248,25 +326,54 @@ impl LoadTestEngine {
         let response = request
             .send()
             .await
-            .map_err(|e| format!("Request failed: {e}"))?;
+            .map_err(|e| (classify_transport_error(&e), format!("Request failed: {e}")))?;
 
-        let status = response.status();
-        if !status.is_success() && !status.is_redirection() {
-            return Err(format!("HTTP {status}"));
-        }
+        let status = response.status().as_u16();
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| format!("Failed to read response: {e}"))?;
+        // The body is read whatever the status: it is part of the response the
+        // service produced, and skipping it for errors would understate both the
+        // latency and the bytes transferred.
+        let bytes = response.bytes().await.map_err(|e| {
+            (
+                classify_transport_error(&e),
+                format!("Failed to read response: {e}"),
+            )
+        })?;
 
-        Ok(bytes.len() as u64)
+        Ok((status, bytes.len() as u64))
     }
 }
 
+/// What one attempt produced. ADR-019 slice 1.
+///
+/// A response that arrived is not an error, whatever its status — collapsing a
+/// 503 and a refused connection into one `Err(String)` is what made the failure
+/// count unreadable and cost the histogram its slowest samples.
 enum WorkerResult {
-    Success { latency: Duration, bytes: u64 },
-    Failure { error: String },
+    Responded {
+        status: u16,
+        latency: Duration,
+        bytes: u64,
+    },
+    Transport {
+        kind: TransportErrorKind,
+        latency: Duration,
+        detail: String,
+    },
+}
+
+/// reqwest exposes the cause as predicates rather than a kind, so this is the
+/// single place that translation happens.
+fn classify_transport_error(error: &reqwest::Error) -> TransportErrorKind {
+    if error.is_timeout() {
+        TransportErrorKind::Timeout
+    } else if error.is_connect() {
+        TransportErrorKind::Connect
+    } else if error.is_body() || error.is_decode() {
+        TransportErrorKind::Body
+    } else {
+        TransportErrorKind::Other
+    }
 }
 
 #[cfg(test)]
@@ -355,5 +462,111 @@ mod tests {
         assert_eq!(plan.method.as_str(), "POST");
         assert_eq!(plan.body.as_deref(), Some(graphql_body.as_bytes()));
         assert_eq!(plan.headers.len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// ADR-019.
+    ///
+    /// The engine had no cancellation at all: `start_load_test` was the only
+    /// command and workers checked nothing but elapsed time. A wrong URL or a
+    /// mistyped duration ran to completion, hammering the target the whole way.
+    ///
+    /// These use a long duration and a short cancel, so a pass cannot be an
+    /// accident of the run finishing on its own.
+    fn long_running_config() -> LoadTestConfig {
+        LoadTestConfig {
+            // Unroutable by definition (RFC 5737 TEST-NET-1), so the test neither
+            // depends on the network nor sends traffic anywhere real.
+            url: "http://192.0.2.1:9/".to_string(),
+            method: "GET".to_string(),
+            headers: vec![],
+            body: None,
+            duration_secs: 30,
+            concurrency: 2,
+            rps_limit: None,
+            timeout_ms: 100,
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelling_ends_the_run_well_before_its_duration() {
+        let engine = LoadTestEngine::new(long_running_config()).expect("valid config");
+        let handle = engine.cancellation_handle();
+
+        let started = Instant::now();
+        let run = tokio::spawn(async move { engine.run(|_| {}).await });
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        handle.cancel();
+
+        let result = run.await.expect("run task should not panic");
+        let elapsed = started.elapsed();
+
+        assert!(result.is_ok(), "a cancelled run should not be an error");
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "cancellation did not stop the run: took {elapsed:?} of a 30s duration"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_run_still_reports_what_it_measured() {
+        // Discarding the numbers on abort would teach users not to abort.
+        let engine = LoadTestEngine::new(long_running_config()).expect("valid config");
+        let handle = engine.cancellation_handle();
+
+        let ticks = Arc::new(AtomicUsize::new(0));
+        let ticks_for_cb = ticks.clone();
+
+        let run = tokio::spawn(async move {
+            engine
+                .run(move |_| {
+                    ticks_for_cb.fetch_add(1, Ordering::Relaxed);
+                })
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        handle.cancel();
+
+        let progress = run.await.expect("run task").expect("cancelled run is ok");
+
+        assert!(ticks.load(Ordering::Relaxed) > 0, "no progress was reported");
+        assert!(
+            progress.requests_sent > 0,
+            "a cancelled run reported no attempts at all"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelling_before_the_run_starts_stops_it_immediately() {
+        let engine = LoadTestEngine::new(long_running_config()).expect("valid config");
+        let handle = engine.cancellation_handle();
+        handle.cancel();
+
+        let started = Instant::now();
+        let result = engine.run(|_| {}).await;
+
+        assert!(result.is_ok());
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "an already-cancelled engine still ran"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelling_twice_is_harmless() {
+        let engine = LoadTestEngine::new(long_running_config()).expect("valid config");
+        let handle = engine.cancellation_handle();
+
+        handle.cancel();
+        handle.cancel();
+
+        assert!(engine.run(|_| {}).await.is_ok());
     }
 }
