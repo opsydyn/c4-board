@@ -219,6 +219,8 @@ const buildCanvasBackgroundImage = (radialTint: string): string => `
 const canvasTintC4 = `color-mix(in srgb, ${theme.color.semantic.system} 12%, transparent)`;
 const canvasTintAzure = `color-mix(in srgb, ${theme.color.status.selected} 13%, transparent)`;
 const canvasTintDdd = `color-mix(in srgb, ${theme.color.semantic.domainEvent} 10%, transparent)`;
+// Same subtlety as the others: a cue that you are in storm mode, not a statement.
+const canvasTintStorm = `color-mix(in srgb, ${theme.color.semantic.esBoard} 11%, transparent)`;
 
 /**
  * Canvas Container
@@ -263,6 +265,10 @@ export const canvasContainerToneAzure = style({
 
 export const canvasContainerToneDDD = style({
   backgroundImage: buildCanvasBackgroundImage(canvasTintDdd),
+});
+
+export const canvasContainerToneStorm = style({
+  backgroundImage: buildCanvasBackgroundImage(canvasTintStorm),
 });
 
 /**

@@ -69,6 +69,7 @@ export const lightTheme = createTheme(themeContract, {
       esActor: "#ca8a04", // Yellow-600, legible on a light surface
       esExternalSystem: "#db2777", // Pink-600
       esOpportunity: "#65a30d", // Lime-600
+      esBoard: "#7c3aed", // Violet-600
     },
 
     status: {

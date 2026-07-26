@@ -71,6 +71,7 @@ export const darkTheme = createTheme(themeContract, {
       esActor: "#fde68a", // Amber-200 — pale yellow, as on a wall
       esExternalSystem: "#f9a8d4", // Pink-300
       esOpportunity: "#a3e635", // Lime-400
+      esBoard: "#a78bfa", // Violet-400
     },
 
     status: {

@@ -81,6 +81,7 @@ export const themeContract = createThemeContract({
       esActor: null, // Event Storming Actor (pale yellow)
       esExternalSystem: null, // Event Storming External System (pink)
       esOpportunity: null, // Event Storming Opportunity (green)
+      esBoard: null, // Event Storming board wash (purple)
     },
 
     // Operational status colors - military/engineering

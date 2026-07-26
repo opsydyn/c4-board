@@ -56,6 +56,7 @@ import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../.
 import type { ArchitectureSemanticRole } from "../../core/effects/architecture-role-classification";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
+import { canvasToneFor } from "../../core/effects/canvas-ambient-tone";
 import {
   clearLayoutAudits,
   createNewDiagram,
@@ -2685,12 +2686,10 @@ export function C4CanvasContainer() {
 
     opyPanelPortalElement.remove();
   }, [hasOpyPanelActivated, isOpy9000Open, opyHostMode, opyPanelPortalElement]);
-  const canvasAmbientTone = useMemo<"c4" | "ddd" | "azure">(() => {
-    if (isAzurePanelOpen) {
-      return "azure";
-    }
-    return state.context.currentDomain === "ddd" ? "ddd" : "c4";
-  }, [isAzurePanelOpen, state.context.currentDomain]);
+  const canvasAmbientTone = useMemo(
+    () => canvasToneFor({ domain: state.context.currentDomain, isAzurePanelOpen }),
+    [isAzurePanelOpen, state.context.currentDomain],
+  );
   const navigationLabel = useMemo(() => {
     switch (navigationTarget) {
       case "/postee":

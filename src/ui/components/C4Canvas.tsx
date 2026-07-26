@@ -58,7 +58,8 @@ import { RoutedEdge } from "./RoutedEdge";
 import { SearchBox } from "./SearchBox";
 import * as styles from "./styles.css";
 
-type CanvasAmbientTone = "c4" | "ddd" | "azure";
+// Re-exported, not redeclared: one definition per concept (ADR-016).
+import type { CanvasAmbientTone } from "../../core/effects/canvas-ambient-tone";
 
 interface C4CanvasProps {
   nodes: Node[];
@@ -296,6 +297,8 @@ function C4CanvasInner(
         return styles.canvasContainerToneAzure;
       case "ddd":
         return styles.canvasContainerToneDDD;
+      case "eventStorming":
+        return styles.canvasContainerToneStorm;
       case "c4":
       default:
         return styles.canvasContainerToneC4;
