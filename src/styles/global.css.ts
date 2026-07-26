@@ -1,5 +1,6 @@
 import { globalFontFace, globalStyle } from "@vanilla-extract/css";
 import { resetLayer } from "./layers.css";
+import { theme } from "./theme.css";
 
 // Self-hosted Berkeley Mono font faces (variable + static fallbacks)
 globalFontFace("Berkeley Mono", {
@@ -76,6 +77,54 @@ globalStyle("html, body", {
   WebkitFontSmoothing: "antialiased",
   MozOsxFontSmoothing: "grayscale",
   WebkitTextSizeAdjust: "100%",
+});
+
+/**
+ * Scrollbars.
+ *
+ * `color-scheme: dark` above is necessary but not sufficient. Chromium honours it
+ * for scrollbars; WKWebView does not — it hands overlay scrollbars to AppKit,
+ * which follows the *window's* appearance, not the document's. So the packaged
+ * macOS app drew the system light-grey scrollbar over a black UI while the same
+ * CSS looked correct in a browser.
+ *
+ * Painting them ourselves takes the platform out of the decision. WebKit replaces
+ * the overlay scrollbar entirely once these pseudo-elements are styled, so the
+ * dev server and the shipped app agree.
+ *
+ * Bare pseudo-element selectors are the weakest possible, so anything scoped to a
+ * class — Monaco hiding its own, ScratchTabStrip's thin strip — still wins.
+ */
+globalStyle("*", {
+  // For engines that implement the standard property rather than the WebKit
+  // pseudo-elements. Harmless where `::-webkit-scrollbar` already applies.
+  scrollbarWidth: "thin",
+  scrollbarColor: `${theme.color.border.primary} transparent`,
+});
+
+globalStyle("::-webkit-scrollbar", {
+  width: "10px",
+  height: "10px",
+});
+
+globalStyle("::-webkit-scrollbar-track", {
+  backgroundColor: "transparent",
+});
+
+globalStyle("::-webkit-scrollbar-thumb", {
+  border: "2px solid transparent",
+  backgroundClip: "content-box",
+  backgroundColor: theme.color.border.primary,
+});
+
+globalStyle("::-webkit-scrollbar-thumb:hover", {
+  backgroundColor: theme.color.interactive.primary,
+});
+
+// Where two scrollbars meet, this square is drawn by the UA and would otherwise
+// stay light for the same reason the thumb did.
+globalStyle("::-webkit-scrollbar-corner", {
+  backgroundColor: "transparent",
 });
 
 // Reset border-radius on all interactive elements to ensure tactical clip-path styling

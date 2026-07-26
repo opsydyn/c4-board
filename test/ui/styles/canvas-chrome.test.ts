@@ -54,9 +54,35 @@ describe("the ReactFlow background must not paint over the canvas", () => {
 });
 
 describe("the app declares itself a dark UI", () => {
-  it("sets color-scheme, so the UA draws dark scrollbars and form controls", () => {
-    // Without this the sidebar's overflow scrollbar renders in the OS light
-    // style — the grey bar down the edge of the board.
+  it("sets color-scheme, so form controls and pickers render dark", () => {
     expect(read("src/styles/global.css.ts")).toMatch(/colorScheme:\s*"dark"/);
+  });
+});
+
+describe("scrollbars are painted, not left to the platform", () => {
+  const source = read("src/styles/global.css.ts");
+
+  /**
+   * `color-scheme: dark` alone did not fix this. It ships in the bundle and
+   * Chromium honours it, but the packaged macOS app still drew a light grey
+   * scrollbar: WKWebView hands overlay scrollbars to AppKit, which follows the
+   * window's appearance rather than the document's `color-scheme`.
+   *
+   * So the colour has to be ours rather than the platform's. `::-webkit-scrollbar`
+   * replaces the overlay scrollbar with one WebKit paints from CSS, which is
+   * deterministic in both the dev server and the packaged app — the same move as
+   * the ReactFlow background: stop depending on the environment's default.
+   */
+  it("paints the WebKit thumb, which is what the packaged app actually uses", () => {
+    expect(source).toContain("::-webkit-scrollbar-thumb");
+    expect(source).toMatch(/::-webkit-scrollbar-thumb[\s\S]{0,200}theme\.color/);
+  });
+
+  it("paints the track too, so no light gutter shows behind the thumb", () => {
+    expect(source).toContain("::-webkit-scrollbar-track");
+  });
+
+  it("also sets scrollbar-color for engines that do not use the WebKit pseudos", () => {
+    expect(source).toMatch(/scrollbarColor:/);
   });
 });
