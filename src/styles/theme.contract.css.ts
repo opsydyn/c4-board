@@ -5,6 +5,24 @@
  * This creates a type-safe contract that all themes must implement.
  */
 
+/**
+ * ADD NEW TOKENS AT THE END OF THEIR BLOCK, NOT IN THE MIDDLE.
+ *
+ * Vanilla-extract names contract variables with a sequential index per file, so
+ * inserting a token renumbers every token after it. The production build
+ * recompiles everything together and is fine; the dev server does not, and
+ * serves component CSS still referencing the old names.
+ *
+ * The failure is silent. An unresolvable `var()` is invalid at computed-value
+ * time, so the property falls back to its initial value with no error and no
+ * warning — `background-image` becomes `none`, `padding` becomes `0`, `gap`
+ * becomes `normal`. It reads as a styling regression in whichever component you
+ * happen to open, and it is not one.
+ *
+ * Adding `esBoard` mid-block cost an afternoon of chasing exactly that across
+ * the layout menu and the layout preview drawer. If you do insert one, restart
+ * the dev server, or `touch src/**\/*.css.ts` to force a re-transform.
+ */
 import { createThemeContract } from "@vanilla-extract/css";
 
 /**
