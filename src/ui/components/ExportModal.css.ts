@@ -180,3 +180,24 @@ export const exportModalButtonPrimary = style([
     },
   },
 ]);
+
+/**
+ * The rendered diagram. Mermaid emits an SVG sized to its own layout, so the
+ * container scrolls rather than the dialog growing to fit an arbitrary diagram.
+ */
+export const exportModalPreview = style([
+  {
+    "@layer": {
+      [componentsLayer]: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+        backgroundColor: theme.color.background.surface,
+        minHeight: "12rem",
+        overflow: "auto",
+      },
+    },
+  },
+  { padding: theme.spacing["4"] },
+]);

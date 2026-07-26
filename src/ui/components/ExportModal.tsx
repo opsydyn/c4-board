@@ -7,9 +7,15 @@
  */
 
 import { CheckIcon as Check, CopyIcon as Copy, DownloadIcon as Download, XIcon as X } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { MERMAID_DIALECTS, type MermaidDialect } from "../../core/effects/export-mermaid-dialect";
+import {
+  MermaidPreview,
+  type MermaidRenderer,
+  mermaidRenderId,
+  previewErrorMessage,
+} from "../../core/effects/mermaid-preview";
 import * as settings from "../../styles/pages/settings.css";
 import {
   exportModalActions,
@@ -22,8 +28,10 @@ import {
   exportModalHeader,
   exportModalInner,
   exportModalOverlay,
+  exportModalPreview,
   exportModalTitle,
 } from "./ExportModal.css";
+import { renderMermaid as defaultRenderMermaid } from "./mermaid-renderer";
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -33,6 +41,8 @@ interface ExportModalProps {
   /** Mermaid only; PlantUML has a single dialect (ADR-014). */
   mermaidDialect?: MermaidDialect;
   onMermaidDialectChange?: (dialect: MermaidDialect) => void;
+  /** Injected so tests never load the 79.7 MB Mermaid bundle (ADR-014). */
+  renderMermaid?: MermaidRenderer;
   onClose: () => void;
 }
 
@@ -54,9 +64,39 @@ export function ExportModal({
   diagramName = "diagram",
   mermaidDialect,
   onMermaidDialectChange,
+  renderMermaid = defaultRenderMermaid,
   onClose,
 }: ExportModalProps) {
   const [copied, setCopied] = useState(false);
+  const [view, setView] = useState<"code" | "preview">("code");
+  const [preview, setPreview] = useState<MermaidPreview>(MermaidPreview.Idle());
+  const renderSequence = useRef(0);
+
+  // Mermaid is imported only from here, and only once a preview is asked for.
+  useEffect(() => {
+    if (view !== "preview" || exportedCode === null) return;
+
+    let isCancelled = false;
+    renderSequence.current += 1;
+    const id = mermaidRenderId(renderSequence.current);
+
+    setPreview(MermaidPreview.Rendering());
+    renderMermaid(exportedCode, id)
+      .then((svg) => {
+        if (!isCancelled) setPreview(MermaidPreview.Rendered({ svg }));
+      })
+      .catch((cause: unknown) => {
+        // Shown, not swallowed: a blank frame reads as an empty diagram rather
+        // than a rejected one, and C4 is experimental enough to reject often.
+        if (!isCancelled) {
+          setPreview(MermaidPreview.Failed({ message: previewErrorMessage(cause) }));
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [view, exportedCode, renderMermaid]);
 
   if (!exportedCode || !exportFormat) {
     return null;
@@ -138,11 +178,47 @@ export function ExportModal({
                 </div>
               )}
 
-              {/* Code Display */}
+              {/* Code or rendered diagram */}
+              <div className={settings.settingsInlineActions}>
+                {(["code", "preview"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={settings.settingsToggleControl}
+                    data-active={view === option ? "true" : "false"}
+                    aria-pressed={view === option}
+                    onClick={() => setView(option)}
+                  >
+                    {option === "code" ? "CODE" : "PREVIEW"}
+                  </button>
+                ))}
+              </div>
+
               <div className={exportModalContent}>
-                <pre className={exportModalCodeBlock}>
+                {view === "code"
+                  ? (
+                    <pre className={exportModalCodeBlock}>
 									<code>{exportedCode}</code>
-                </pre>
+                    </pre>
+                  )
+                  : MermaidPreview.$match({
+                    Idle: () => <p className={settings.settingsRowHint}>PREPARING PREVIEW…</p>,
+                    Rendering: () => <p className={settings.settingsRowHint}>RENDERING…</p>,
+                    Rendered: (rendered) => (
+                      <div
+                        className={exportModalPreview}
+                        aria-label="Rendered diagram"
+                        // Mermaid sanitises its own output under
+                        // securityLevel: "strict"; see mermaid-renderer.ts.
+                        dangerouslySetInnerHTML={{ __html: rendered.svg }}
+                      />
+                    ),
+                    Failed: (failed) => (
+                      <div className={settings.settingsCardDanger} role="alert">
+                        <p className={settings.settingsErrorText}>{failed.message}</p>
+                      </div>
+                    ),
+                  })(preview)}
               </div>
 
               {/* Actions */}
