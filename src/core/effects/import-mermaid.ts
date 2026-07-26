@@ -278,6 +278,23 @@ function parseOVLMetadata(line: string): EdgeMetadata | null {
  * Pure function that parses Mermaid text into diagram structure.
  * Returns an Effect that yields the import result.
  */
+/**
+ * Mermaid's C4 diagram declarations. This importer reads the *flowchart* dialect,
+ * whose `@pos` comments carry layout; C4 has no equivalent and none of its macros
+ * match the node patterns below. Detecting it turns "No valid nodes found", which
+ * reads as a corrupt file, into an answer the user can act on (ADR-014).
+ */
+const C4_DIAGRAM_TYPES = [
+  "C4Context",
+  "C4Container",
+  "C4Component",
+  "C4Dynamic",
+  "C4Deployment",
+] as const;
+
+const detectC4Dialect = (lines: ReadonlyArray<string>): string | null =>
+  C4_DIAGRAM_TYPES.find((type) => lines.some((line) => line.startsWith(type))) ?? null;
+
 export const importMermaid = (
   content: string,
 ): Effect.Effect<ImportResult, Error> =>
@@ -349,6 +366,16 @@ export const importMermaid = (
 
     // Validate that we found at least some nodes
     if (parsedNodes.length === 0) {
+      const c4Type = detectC4Dialect(lines);
+      if (c4Type !== null) {
+        return yield* Effect.fail(
+          new MermaidImportError({
+            message:
+              `This is a Mermaid ${c4Type} diagram, which cannot be imported: it carries no element positions. Export the board as Mermaid Flowchart to re-import it.`,
+          }),
+        );
+      }
+
       return yield* Effect.fail(
         new MermaidImportError({ message: "No valid nodes found in Mermaid file" }),
       );

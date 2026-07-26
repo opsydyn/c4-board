@@ -3251,6 +3251,26 @@ export function C4CanvasContainer() {
         </aside>
       )}
 
+      {
+        /*
+        A refused import used to be a console line while the board was replaced
+        with nothing. It says what happened now, and the board is untouched.
+      */
+      }
+      {state.context.importError !== null && (
+        <div className={styles.importErrorNotice} role="alert">
+          <span className={styles.importErrorNoticeTitle}>IMPORT::REFUSED</span>
+          <p className={styles.importErrorNoticeMessage}>{state.context.importError}</p>
+          <button
+            type="button"
+            className={styles.importErrorNoticeDismiss}
+            onClick={() => send({ type: "DISMISS_IMPORT_ERROR" })}
+          >
+            DISMISS
+          </button>
+        </div>
+      )}
+
       {layoutPreview && (
         <LayoutPreviewDrawer
           preview={layoutPreview}

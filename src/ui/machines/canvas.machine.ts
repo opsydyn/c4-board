@@ -130,6 +130,7 @@ export type CanvasEvent =
   | { type: "EXPORT_PLANTUML"; viewport?: Viewport }
   | { type: "EXPORT_MERMAID"; viewport?: Viewport }
   | { type: "SET_EXPORT_DIALECT"; dialect: MermaidDialect }
+  | { type: "DISMISS_IMPORT_ERROR" }
   | { type: "CLOSE_EXPORT_MODAL" }
   // Import events
   | { type: "IMPORT_DIAGRAM"; content: string; format: "plantuml" | "mermaid"; mode: "replace" | "merge" };
@@ -168,6 +169,8 @@ export interface CanvasContext {
   exportedCode: string | null;
   /** Which Mermaid dialect the modal is showing (ADR-014). */
   exportDialect: MermaidDialect;
+  /** Why the last import was refused, for the UI to show (null when fine). */
+  importError: string | null;
   /** Kept so switching dialect can re-emit without another canvas round trip. */
   exportViewport: Viewport | null;
 
@@ -964,6 +967,8 @@ const canvasMachineDefinition = setup({
       },
     }),
 
+    dismissImportError: assign({ importError: () => null }),
+
     closeExportModal: assign({
       exportModalOpen: () => false,
       exportFormat: () => null,
@@ -972,110 +977,69 @@ const canvasMachineDefinition = setup({
 
     // === Import Actions ===
 
-    importDiagram: assign({
-      nodes: ({ context, event }) => {
-        if (event.type !== "IMPORT_DIAGRAM") return context.nodes;
+    /**
+     * Parses once and applies the whole result together.
+     *
+     * Each of nodes, edges and viewport used to parse the file separately — three
+     * times per import — and each substituted an empty result on failure. In
+     * "replace" mode that empty result became the board, so importing a file the
+     * parser rejects silently destroyed the diagram, with only a console line to
+     * say why. Exporting the C4 dialect and importing it back did exactly that.
+     */
+    importDiagram: assign(({ context, event }) => {
+      if (event.type !== "IMPORT_DIAGRAM") return {};
 
-        // Parse the diagram content
-        const parseEffect = event.format === "plantuml"
-          ? PlantUMLImport.importPlantUMLC4(event.content)
-          : MermaidImport.importMermaid(event.content);
+      const parseEffect = event.format === "plantuml"
+        ? PlantUMLImport.importPlantUMLC4(event.content)
+        : MermaidImport.importMermaid(event.content);
 
-        try {
-          const result = runEffectSync(
-            Effect.catchAll(parseEffect, (error) => {
-              console.error("Import failed:", error);
-              return Effect.succeed({ nodes: [], edges: [], viewport: undefined });
-            }),
-          );
+      const outcome = runEffectSync(
+        Effect.either(parseEffect),
+      );
 
-          // Replace or merge based on mode
-          if (event.mode === "replace") {
-            return result.nodes;
-          } else {
-            // Merge: add imported nodes with offset to avoid overlap
-            const maxX = context.nodes.reduce(
-              (max, node) => Math.max(max, node.position.x),
-              0,
-            );
-            const offsetX = maxX + 400; // Offset imported nodes to the right
+      if (outcome._tag === "Left") {
+        // The board is left exactly as it was; the reason goes to the UI.
+        return { importError: outcome.left.message };
+      }
 
-            const offsetNodes = result.nodes.map((node) => ({
-              ...node,
-              id: `imported_${node.id}`, // Prefix to avoid ID conflicts
-              position: {
-                x: node.position.x + offsetX,
-                y: node.position.y,
-              },
-            }));
+      const result = outcome.right;
 
-            return [...context.nodes, ...offsetNodes];
-          }
-        } catch (error) {
-          console.error("Import failed:", error);
-          return context.nodes; // Keep existing nodes on error
-        }
-      },
-      edges: ({ context, event }) => {
-        if (event.type !== "IMPORT_DIAGRAM") return context.edges;
+      if (event.mode === "replace") {
+        return {
+          nodes: result.nodes,
+          edges: result.edges,
+          selectedNodeId: null,
+          importError: null,
+          ...(result.viewport ? { viewport: result.viewport } : {}),
+        };
+      }
 
-        const parseEffect = event.format === "plantuml"
-          ? PlantUMLImport.importPlantUMLC4(event.content)
-          : MermaidImport.importMermaid(event.content);
+      // Merge: offset imported nodes to the right of everything present, and
+      // prefix ids so an imported diagram cannot collide with the current one.
+      const offsetX = context.nodes.reduce(
+        (max, node) => Math.max(max, node.position.x),
+        0,
+      ) + 400;
 
-        try {
-          const result = runEffectSync(
-            Effect.catchAll(parseEffect, (error) => {
-              console.error("Import failed:", error);
-              return Effect.succeed({ nodes: [], edges: [], viewport: undefined });
-            }),
-          );
+      const offsetNodes = result.nodes.map((node) => ({
+        ...node,
+        id: `imported_${node.id}`,
+        position: { x: node.position.x + offsetX, y: node.position.y },
+      }));
 
-          if (event.mode === "replace") {
-            return result.edges;
-          } else {
-            // Merge: update edge IDs to match prefixed node IDs
-            const importedEdges = result.edges.map((edge) => ({
-              ...edge,
-              id: `imported_${edge.id}`,
-              source: `imported_${edge.source}`,
-              target: `imported_${edge.target}`,
-            }));
+      const importedEdges = result.edges.map((edge) => ({
+        ...edge,
+        id: `imported_${edge.id}`,
+        source: `imported_${edge.source}`,
+        target: `imported_${edge.target}`,
+      }));
 
-            return [...context.edges, ...importedEdges];
-          }
-        } catch (error) {
-          console.error("Import failed:", error);
-          return context.edges; // Keep existing edges on error
-        }
-      },
-      selectedNodeId: () => null, // Deselect on import
-      viewport: ({ event }) => {
-        if (event.type !== "IMPORT_DIAGRAM") return null;
-
-        const parseEffect = event.format === "plantuml"
-          ? PlantUMLImport.importPlantUMLC4(event.content)
-          : MermaidImport.importMermaid(event.content);
-
-        try {
-          const result = runEffectSync(
-            Effect.catchAll(parseEffect, (error) => {
-              console.error("Import failed:", error);
-              return Effect.succeed({ nodes: [], edges: [], viewport: undefined });
-            }),
-          );
-
-          // Return viewport from import if available (only in replace mode)
-          if (event.mode === "replace" && result.viewport) {
-            return result.viewport;
-          }
-
-          return null;
-        } catch (error) {
-          console.error("Import failed:", error);
-          return null;
-        }
-      },
+      return {
+        nodes: [...context.nodes, ...offsetNodes],
+        edges: [...context.edges, ...importedEdges],
+        selectedNodeId: null,
+        importError: null,
+      };
     }),
 
     // === Context Menu Actions ===
@@ -1252,6 +1216,7 @@ const canvasMachineDefinition = setup({
     exportFormat: null,
     exportedCode: null,
     exportDialect: DEFAULT_MERMAID_DIALECT,
+    importError: null,
     exportViewport: null,
 
     // Viewport state
@@ -1407,6 +1372,9 @@ const canvasMachineDefinition = setup({
         },
         SET_EXPORT_DIALECT: {
           actions: "setExportDialect",
+        },
+        DISMISS_IMPORT_ERROR: {
+          actions: "dismissImportError",
         },
         CLOSE_EXPORT_MODAL: {
           actions: "closeExportModal",

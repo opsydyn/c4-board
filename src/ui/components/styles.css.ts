@@ -2966,3 +2966,62 @@ export const evolutionEmptyState = style({
   fontFamily: theme.typography.family.mono,
   fontSize: theme.typography.size.sm,
 });
+
+/**
+ * A refused import. Sits above the canvas rather than inside a panel, because it
+ * reports something that did not happen to a board the user is still looking at.
+ */
+export const importErrorNotice = style({
+  // Fixed, not absolute: the workspace grid establishes no containing block, so
+  // an absolute notice would resolve against the viewport anyway — by accident
+  // rather than intent, and differently the moment an ancestor gains a position.
+  position: "fixed",
+  zIndex: 60,
+  top: theme.spacing["6"],
+  left: "50%",
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  transform: "translateX(-50%)",
+  clipPath: theme.clipPath.md,
+  border: `${theme.border.width.base} solid ${theme.color.status.critical}`,
+  boxShadow: `0 0 18px color-mix(in srgb, ${theme.color.status.critical} 22%, transparent)`,
+  backgroundColor: "rgba(28, 10, 12, 0.97)",
+  padding: theme.spacing["4"],
+  maxWidth: "min(38rem, 90vw)",
+});
+
+export const importErrorNoticeTitle = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.status.critical,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+});
+
+export const importErrorNoticeMessage = style({
+  margin: 0,
+  lineHeight: 1.5,
+  color: theme.color.foreground.primary,
+  fontFamily: theme.typography.family.sans,
+  fontSize: theme.typography.size.sm,
+});
+
+export const importErrorNoticeDismiss = style({
+  alignSelf: "flex-end",
+  clipPath: theme.clipPath.sm,
+  border: `${theme.border.width.thin} solid ${theme.color.border.secondary}`,
+  backgroundColor: "transparent",
+  cursor: "pointer",
+  padding: `${theme.spacing["1"]} ${theme.spacing["3"]}`,
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  color: theme.color.foreground.secondary,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.xs,
+
+  ":hover": {
+    borderColor: theme.color.status.critical,
+    color: theme.color.foreground.primary,
+  },
+});
