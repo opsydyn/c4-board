@@ -22,6 +22,9 @@ interface WorkflowStep {
   readonly name?: string;
   readonly uses?: string;
   readonly run?: string;
+  readonly if?: string;
+  readonly env?: Readonly<Record<string, unknown>>;
+  readonly "continue-on-error"?: boolean;
   readonly with?: Readonly<Record<string, unknown>>;
 }
 
@@ -99,7 +102,7 @@ describe("release asset job", () => {
 
   it("gives the notarisation step the credentials the build is denied", () => {
     const step = assetSteps.find((candidate) => (candidate.run ?? "").includes("notarize-macos"));
-    const env = (step?.["env"] ?? {}) as Readonly<Record<string, unknown>>;
+    const env = step?.env ?? {};
 
     for (const name of ["APPLE_API_KEY", "APPLE_API_ISSUER"]) {
       expect(Object.keys(env), `notarisation cannot authenticate without ${name}`).toContain(name);
@@ -126,7 +129,7 @@ describe("release asset job", () => {
   it("only re-uploads stapled bundles when notarisation actually succeeded", () => {
     const replace = assetSteps.find((step) => (step.run ?? "").includes("--clobber"));
 
-    expect(String(replace?.["if"])).toContain("steps.notarize.outcome == 'success'");
+    expect(String(replace?.if)).toContain("steps.notarize.outcome == 'success'");
   });
 
   it("withdraws macOS assets that were never notarised", () => {
@@ -135,7 +138,7 @@ describe("release asset job", () => {
     const withdraw = assetSteps.find((step) => (step.run ?? "").includes("delete-asset"));
 
     expect(withdraw, "unnotarised macOS assets are never withdrawn").toBeDefined();
-    expect(String(withdraw?.["if"])).toContain("steps.notarize.outcome != 'success'");
+    expect(String(withdraw?.if)).toContain("steps.notarize.outcome != 'success'");
   });
 
   it("withdraws only its own architecture's assets", () => {
