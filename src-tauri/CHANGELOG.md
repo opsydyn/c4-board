@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.11](https://github.com/opsydyn/c4-board/compare/v0.0.10...v0.0.11) - 2026-07-26
+
+### Added
+
+- add the Big Picture Event Storming vocabulary
+- widen the diagram domain to admit Event Storming
+
 ## [0.0.10](https://github.com/opsydyn/c4-board/compare/v0.0.9...v0.0.10) - 2026-07-26
 
 ### Other
