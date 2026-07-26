@@ -4,8 +4,17 @@ title: "Azure Resource Graph - Full Dataset Reference"
 
 # Azure Resource Graph - Full Dataset Reference
 
-**Subscription**: `e1289da2-5faa-44b8-b780-7609260fa273` (Azure subscription 1)
-**Queried**: 2026-02-12
+What `az graph query` returns and how it maps onto the board. Use it to see the row
+shape — the `_ref_*` enrichment columns, the three edge-discovery paths — without
+having to run a sync first.
+
+Identifiers here are placeholders. This page was originally a verbatim capture of one
+tenant's inventory; the subscription id, resource GUIDs and account-derived resource
+names were replaced when the repository became public. The structure is unchanged, so
+it still reflects real output. See [Azure sync](azure-sync.md) to run a query of your own.
+
+**Subscription**: `<subscription-id>`
+**Captured**: 2026-02-12
 **Total Resources**: 13
 **Edges**: 3 (1 property ref + 2 ARM parent)
 
@@ -19,11 +28,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Bing/accounts/bing-search-tester-2025",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Bing/accounts/bing-search-tester-2025",
   "type": "microsoft.bing/accounts",
   "name": "bing-search-tester-2025",
   "location": "global",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": {},
   "dependsOn": null,
@@ -36,15 +45,15 @@ All 13 resources as returned by the enriched KQL query.
 }
 ```
 
-### 2. alanc-me2llwan-eastus2
+### 2. example-aiservices-eastus2
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/alanc-me2llwan-eastus2",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/example-aiservices-eastus2",
   "type": "microsoft.cognitiveservices/accounts",
-  "name": "alanc-me2llwan-eastus2",
+  "name": "example-aiservices-eastus2",
   "location": "eastus2",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": null,
   "dependsOn": null,
@@ -57,15 +66,15 @@ All 13 resources as returned by the enriched KQL query.
 }
 ```
 
-### 3. alanc-me2llwan-eastus2_project (child of #2)
+### 3. example-aiservices-eastus2_project (child of #2)
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/alanc-me2llwan-eastus2/projects/alanc-me2llwan-eastus2_project",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/example-aiservices-eastus2/projects/example-aiservices-eastus2_project",
   "type": "microsoft.cognitiveservices/accounts/projects",
-  "name": "alanc-me2llwan-eastus2/alanc-me2llwan-eastus2_project",
+  "name": "example-aiservices-eastus2/example-aiservices-eastus2_project",
   "location": "eastus2",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": null,
   "dependsOn": null,
@@ -84,11 +93,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/az-ai-test-project",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/az-ai-test-project",
   "type": "microsoft.cognitiveservices/accounts",
   "name": "az-ai-test-project",
   "location": "eastus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": {},
   "dependsOn": null,
@@ -105,11 +114,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/az-ai-test-project/projects/aiFoundryTestProject",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/az-ai-test-project/projects/aiFoundryTestProject",
   "type": "microsoft.cognitiveservices/accounts/projects",
   "name": "az-ai-test-project/aiFoundryTestProject",
   "location": "eastus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": null,
   "dependsOn": null,
@@ -128,11 +137,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Dashboard/grafana/grafana-ai-o11y",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Dashboard/grafana/grafana-ai-o11y",
   "type": "microsoft.dashboard/grafana",
   "name": "grafana-ai-o11y",
   "location": "centralus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": {},
   "dependsOn": null,
@@ -149,11 +158,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/microsoft.insights/actiongroups/Application Insights Smart Detection",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/microsoft.insights/actiongroups/Application Insights Smart Detection",
   "type": "microsoft.insights/actiongroups",
   "name": "Application Insights Smart Detection",
   "location": "global",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": null,
   "dependsOn": null,
@@ -170,16 +179,16 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/microsoft.insights/components/ai_o11y",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/microsoft.insights/components/ai_o11y",
   "type": "microsoft.insights/components",
   "name": "ai_o11y",
   "location": "centralus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": {},
   "dependsOn": null,
   "_ref_serverFarmId": null,
-  "_ref_workspaceId": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourcegroups/DefaultResourceGroup-CUS/providers/Microsoft.OperationalInsights/workspaces/DefaultWorkspace-e1289da2-5faa-44b8-b780-7609260fa273-CUS",
+  "_ref_workspaceId": "/subscriptions/<subscription-id>/resourcegroups/DefaultResourceGroup-CUS/providers/Microsoft.OperationalInsights/workspaces/DefaultWorkspace-<subscription-id>-CUS",
   "_ref_subnetId": null,
   "_ref_vnetSubnetId": null,
   "_ref_nsgId": null,
@@ -193,11 +202,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Portal/dashboards/ae2c2bcc-f752-4731-8711-562b6d85587c-dashboard",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Portal/dashboards/<resource-guid>-dashboard",
   "type": "microsoft.portal/dashboards",
-  "name": "ae2c2bcc-f752-4731-8711-562b6d85587c-dashboard",
+  "name": "<resource-guid>-dashboard",
   "location": "centralus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "ai-foundry-tester-2025",
   "tags": {
     "hidden-title": "ai_o11y Dashboard"
@@ -216,11 +225,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/apim-learn/providers/Microsoft.Web/staticSites/apim-learn",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/apim-learn/providers/Microsoft.Web/staticSites/apim-learn",
   "type": "microsoft.web/staticsites",
   "name": "apim-learn",
   "location": "centralus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "apim-learn",
   "tags": null,
   "dependsOn": null,
@@ -237,11 +246,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/astro-blog/providers/Microsoft.Web/staticSites/astro-blog",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/astro-blog/providers/Microsoft.Web/staticSites/astro-blog",
   "type": "microsoft.web/staticsites",
   "name": "astro-blog",
   "location": "centralus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "astro-blog",
   "tags": null,
   "dependsOn": null,
@@ -258,11 +267,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/DefaultResourceGroup-CUS/providers/Microsoft.OperationalInsights/workspaces/DefaultWorkspace-e1289da2-5faa-44b8-b780-7609260fa273-CUS",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/DefaultResourceGroup-CUS/providers/Microsoft.OperationalInsights/workspaces/DefaultWorkspace-<subscription-id>-CUS",
   "type": "microsoft.operationalinsights/workspaces",
-  "name": "DefaultWorkspace-e1289da2-5faa-44b8-b780-7609260fa273-CUS",
+  "name": "DefaultWorkspace-<subscription-id>-CUS",
   "location": "centralus",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "defaultresourcegroup-cus",
   "tags": null,
   "dependsOn": null,
@@ -279,11 +288,11 @@ All 13 resources as returned by the enriched KQL query.
 
 ```json
 {
-  "id": "/subscriptions/e1289da2-5faa-44b8-b780-7609260fa273/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/NetworkWatcher_westeurope",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/NetworkWatcher_westeurope",
   "type": "microsoft.network/networkwatchers",
   "name": "NetworkWatcher_westeurope",
   "location": "westeurope",
-  "subscriptionId": "e1289da2-5faa-44b8-b780-7609260fa273",
+  "subscriptionId": "<subscription-id>",
   "resourceGroup": "networkwatcherrg",
   "tags": null,
   "dependsOn": null,
@@ -305,8 +314,8 @@ All 13 resources currently map to `system` via `inferC4Type()`:
 | # | Name | Azure Type | C4 Type | Notes |
 |---|------|-----------|---------|-------|
 | 1 | bing-search-tester-2025 | microsoft.bing/accounts | system | external service |
-| 2 | alanc-me2llwan-eastus2 | microsoft.cognitiveservices/accounts | system | AI foundry hub |
-| 3 | alanc-me2llwan-eastus2_project | microsoft.cognitiveservices/accounts/projects | system | child of #2 |
+| 2 | example-aiservices-eastus2 | microsoft.cognitiveservices/accounts | system | AI foundry hub |
+| 3 | example-aiservices-eastus2_project | microsoft.cognitiveservices/accounts/projects | system | child of #2 |
 | 4 | az-ai-test-project | microsoft.cognitiveservices/accounts | system | AI foundry hub |
 | 5 | aiFoundryTestProject | microsoft.cognitiveservices/accounts/projects | system | child of #4 |
 | 6 | grafana-ai-o11y | microsoft.dashboard/grafana | system | observability |
@@ -324,7 +333,7 @@ All 13 resources currently map to `system` via `inferC4Type()`:
 
 | From | To | Type | Confidence | Source |
 |------|----|------|------------|--------|
-| #3 alanc-me2llwan-eastus2_project | #2 alanc-me2llwan-eastus2 | depends_on | high | ARM parent inference |
+| #3 example-aiservices-eastus2_project | #2 example-aiservices-eastus2 | depends_on | high | ARM parent inference |
 | #5 aiFoundryTestProject | #4 az-ai-test-project | depends_on | high | ARM parent inference |
 | #8 ai_o11y | #12 DefaultWorkspace-...-CUS | data_link | high | `_ref_workspaceId` property |
 

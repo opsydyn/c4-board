@@ -75,10 +75,19 @@ The app also includes the Postee workspace for local API/client experimentation:
 
 ### Azure And Topology Intelligence
 
-- Azure graph sync groundwork for importing cloud resources into the board.
+- Azure graph sync for importing live cloud resources into the board.
 - Team ownership catalog and ownership lens.
 - Balanced coupling and mud-risk scoring model.
 - Explainability surfaces for topology review.
+
+Azure sync reads your account through the Azure CLI, so it needs `az login` and the `resource-graph` extension before the panel will return anything:
+
+```sh
+az login
+az extension add --name resource-graph
+```
+
+How to use it: [Azure sync guide](docs/src/content/docs/guides/azure-sync.md)
 
 Roadmap: [docs/src/content/docs/overview/product-roadmap-team-topology-azure-sync.md](docs/src/content/docs/overview/product-roadmap-team-topology-azure-sync.md)
 
@@ -103,6 +112,8 @@ Install the standard Tauri prerequisites for your operating system:
 - Node-compatible shell environment
 
 Tauri prerequisites: <https://v2.tauri.app/start/prerequisites/>
+
+The Azure sync panel additionally needs the **Azure CLI** with the `resource-graph` extension, since the app runs `az graph query` as a subprocess. It is not needed for anything else — see [Azure sync](docs/src/content/docs/guides/azure-sync.md).
 
 ## Setup
 
@@ -228,23 +239,34 @@ Release install notes: [docs/src/content/docs/guides/release-installation.md](do
 
 Apple signing and notarization notes: [.github/apple-signing.md](.github/apple-signing.md)
 
-## macOS Unsigned Build Workaround
+## macOS Gatekeeper Workaround
 
-Signed and notarized releases should open normally. For local unsigned test builds, macOS may block launch with "developer cannot be verified". See [docs/src/content/docs/guides/release-installation.md](docs/src/content/docs/guides/release-installation.md) for the safe local workaround.
+Releases are signed with a Developer ID certificate, but Apple's notarization service has been unreliable for us, and a build without a stapled ticket is refused by Gatekeeper with "developer cannot be verified". The same applies to local unsigned builds.
 
-Short version:
+Download `darwin_aarch64` for Apple Silicon, `darwin_x64` for Intel.
+
+macOS flags the downloaded `.dmg`, so clear that first — you are blocked before you can copy anything into `/Applications`:
 
 ```sh
-/usr/bin/xattr -r -d com.apple.quarantine /Applications/c4-board.app
+xattr -d com.apple.quarantine ~/Downloads/c4-board_<version>_darwin_aarch64.dmg
+```
+
+Then, after dragging the app across:
+
+```sh
+xattr -cr /Applications/c4-board.app
 open /Applications/c4-board.app
 ```
 
-Fallback if your local `xattr` does not support `-r`:
+To check whether you actually need this — `source=Notarized Developer ID` in the output means you do not:
 
 ```sh
-find /Applications/c4-board.app -exec /usr/bin/xattr -d com.apple.quarantine {} \; 2>/dev/null
-open /Applications/c4-board.app
+spctl -a -vvv /Applications/c4-board.app
 ```
+
+Full notes, including the `xattr -r` fallback and why macOS assets sometimes vanish from a release: [docs/src/content/docs/guides/release-installation.md](docs/src/content/docs/guides/release-installation.md)
+
+This is a stopgap. Delete it once notarization is reliable.
 
 ## Documentation Map
 
@@ -262,6 +284,7 @@ bun run docs:check
 - [Rig hello-world boundary](docs/src/content/docs/opy/rig-agent-hello-world.md)
 - [Product roadmap](docs/src/content/docs/overview/product-roadmap-team-topology-azure-sync.md)
 - [Release installation](docs/src/content/docs/guides/release-installation.md)
+- [Azure sync](docs/src/content/docs/guides/azure-sync.md)
 - [ADR index](docs/src/content/docs/architecture/adr/index.md)
 - [Context menu implementation](docs/src/content/docs/guides/context-menu-implementation.md)
 - [Postmortem: OPY board interaction regression](docs/src/content/docs/postmortems/2026-06-05-opy-native-board-interaction-regression.md)
