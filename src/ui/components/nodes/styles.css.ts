@@ -906,3 +906,51 @@ export const sagaNodeDescription = style({
   color: theme.color.foreground.secondary,
   fontSize: theme.typography.size.sm,
 });
+
+/**
+ * Event Storming stickies (ADR-016). Square-ish and flat, as a note on a wall is
+ * — the colour carries the meaning, so the surface stays plain.
+ */
+export const stickyNode = style({
+  position: "relative",
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing["2"],
+  border: `${theme.border.width.base} solid rgba(0, 0, 0, 0.4)`,
+  padding: theme.spacing["3"],
+  width: "100%",
+  height: "100%",
+  color: "rgba(8, 12, 10, 0.92)",
+
+  selectors: {
+    "&[data-sticky=\"hotspot\"]": { backgroundColor: theme.color.semantic.esHotspot },
+    "&[data-sticky=\"opportunity\"]": { backgroundColor: theme.color.semantic.esOpportunity },
+    "&[data-selected=\"true\"]": { boxShadow: theme.effect.glow.base },
+  },
+});
+
+/** The rotated square a hotspot is drawn as on a wall. */
+export const stickyNodeMarker = style({
+  position: "absolute",
+  top: "-6px",
+  right: "-6px",
+  border: `${theme.border.width.thin} solid rgba(0, 0, 0, 0.45)`,
+  width: "14px",
+  height: "14px",
+
+  selectors: {
+    "&[data-sticky=\"hotspot\"]": {
+      transform: "rotate(45deg)",
+      backgroundColor: "rgba(8, 12, 10, 0.85)",
+    },
+    "&[data-sticky=\"opportunity\"]": { display: "none" },
+  },
+});
+
+export const stickyNodeLabel = style({
+  textTransform: theme.typography.textTransform.uppercase,
+  letterSpacing: theme.typography.letterSpacing.wide,
+  fontFamily: theme.typography.family.mono,
+  fontSize: theme.typography.size.sm,
+  fontWeight: theme.typography.weight.bold,
+});

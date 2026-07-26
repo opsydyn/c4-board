@@ -179,6 +179,15 @@ export interface CreateNodeOptions {
 const GRID_SIZE = 20;
 const DEFAULT_PLACEMENT_CENTER = { x: 360, y: 280 };
 
+/**
+ * Every type a node may have. Derived from the dimensions record below, which the
+ * type system already forces to cover all of them — so this cannot drift from
+ * `NodeType` without a compile error.
+ */
+export const isNodeType = (value: unknown): value is NodeType =>
+  typeof value === "string" && value !== "default"
+  && Object.prototype.hasOwnProperty.call(DEFAULT_DIMENSIONS, value);
+
 const DEFAULT_DIMENSIONS: Record<NodeType | "default", { width: number; height: number }> = {
   // C4 types
   person: { width: 220, height: 160 },

@@ -28,6 +28,7 @@ import { ComponentNode } from "./nodes/ComponentNode";
 import { ContainerNode } from "./nodes/ContainerNode";
 import { ExternalSystemNode } from "./nodes/ExternalSystemNode";
 import { PersonNode } from "./nodes/PersonNode";
+import { StickyNode } from "./nodes/StickyNode";
 import { SystemNode } from "./nodes/SystemNode";
 // DDD Strategic Nodes
 import { AggregateNode } from "./nodes/AggregateNode";
@@ -246,6 +247,11 @@ function C4CanvasInner(
       integrationEvent: IntegrationEventNode,
       antiCorruptionLayer: ACLNode,
       saga: SagaNode,
+      // Event Storming stickies with no equivalent elsewhere (ADR-016). The
+      // three a storm shares — event, actor, external system — keep their
+      // existing renderers.
+      hotspot: StickyNode,
+      opportunity: StickyNode,
     }),
     [],
   );

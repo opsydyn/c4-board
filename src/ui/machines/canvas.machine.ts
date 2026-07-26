@@ -15,6 +15,7 @@ import { type AnyStateMachine, assign, setup } from "xstate";
 import * as DiagramOps from "../../core/effects/diagram-operations";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeData, EdgeMetadata } from "../../core/effects/edge-operations";
+import { eventStormingStickyFor } from "../../core/effects/event-storming";
 import {
   DEFAULT_MERMAID_DIALECT,
   exportMermaidForDialect,
@@ -100,6 +101,7 @@ export type CanvasEvent =
   | { type: "SHOW_NODE_CONTEXT_MENU"; nodeId: string; position: { x: number; y: number } }
   | { type: "SHOW_EDGE_CONTEXT_MENU"; edgeId: string; position: { x: number; y: number } }
   | { type: "SHOW_CANVAS_CONTEXT_MENU"; position: { x: number; y: number } }
+  | { type: "ADD_NODE"; nodeType: string }
   | { type: "ADD_NODE_AT_POSITION"; nodeType: string; position: { x: number; y: number } }
   | { type: "ADD_NODE_WITH_LABEL"; nodeType: NodeOps.C4Type; label: string }
   // Persistence events
@@ -212,6 +214,40 @@ const canvasMachineDefinition = setup({
     events: {} as CanvasEvent,
   },
   actions: {
+    /**
+     * One event for any node type, rather than one event per type.
+     *
+     * C4 and DDD each grew a machine event per node type — nineteen events
+     * describing the same operation. Event Storming is where that stops being
+     * worth repeating, so its palette is data-driven off EVENT_STORMING_STICKIES
+     * and adding a sticky needs no machine change at all (ADR-016).
+     */
+    addNode: assign({
+      nodes: ({ context, event }) => {
+        if (event.type !== "ADD_NODE" || !NodeOps.isNodeType(event.nodeType)) {
+          // A type the board cannot hold would be rejected by the database CHECK
+          // on save; better never to create it.
+          return context.nodes;
+        }
+
+        const newNode = runEffectSync(
+          NodeOps.createNode({
+            type: event.nodeType,
+            label: defaultLabelForNodeType(event.nodeType),
+            nodeCounter: context.nodeCounter,
+            selectedNodeId: context.selectedNodeId,
+            existingNodes: context.nodes,
+          }),
+        );
+
+        return [...context.nodes, newNode];
+      },
+      nodeCounter: ({ context, event }) =>
+        event.type === "ADD_NODE" && NodeOps.isNodeType(event.nodeType)
+          ? context.nodeCounter + 1
+          : context.nodeCounter,
+    }),
+
     addPerson: assign({
       nodes: ({ context }) => {
         // Use Effect service for pure business logic
@@ -1233,6 +1269,9 @@ const canvasMachineDefinition = setup({
         TOGGLE_ANIMATIONS: {
           actions: "toggleAnimations",
         },
+        ADD_NODE: {
+          actions: "addNode",
+        },
         ADD_PERSON: {
           actions: "addPerson",
         },
@@ -1440,6 +1479,9 @@ const canvasMachineDefinition = setup({
           actions: "setSaveError",
         },
         // Allow other actions while saving
+        ADD_NODE: {
+          actions: "addNode",
+        },
         ADD_PERSON: {
           actions: "addPerson",
         },
@@ -1536,6 +1578,14 @@ export type CanvasMachine = typeof canvasMachineDefinition;
 /** Falls back to a generic title so an unnamed board still labels its export. */
 const mermaidExportTitle = (diagramName: string): string =>
   diagramName !== "DIAGRAM::UNTITLED" ? diagramName : "C4 Diagram";
+
+/** Uses the storm palette's own wording where it has some, so a hotspot reads "Hotspot". */
+const defaultLabelForNodeType = (nodeType: NodeOps.NodeType): string => {
+  const sticky = eventStormingStickyFor(nodeType);
+  if (sticky) return sticky.label.charAt(0) + sticky.label.slice(1).toLowerCase();
+
+  return `New ${nodeType.replace(/([A-Z])/g, " $1").trim().toLowerCase()}`;
+};
 
 export const canvasMachine: CanvasMachine & AnyStateMachine = canvasMachineDefinition as
   & CanvasMachine

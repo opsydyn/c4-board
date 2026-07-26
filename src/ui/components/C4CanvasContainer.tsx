@@ -99,6 +99,7 @@ import type { OpyBoardAction } from "../../core/effects/opy-action.runtime";
 import { buildOpyBoardContextRegistry } from "../../core/effects/opy-board-context";
 import { buildGroundedProposalDiff, summarizeGroundedProposalDiff } from "../../core/effects/opy-c4-proposals";
 import { createOpyAgentCheckpoint, getOpyAgentCheckpoint } from "../../core/effects/opy-chat.persistence";
+import { layoutStrategyForDomain } from "../../core/effects/timeline-layout-strategy";
 import { useAppSettings } from "../../core/effects/useAppSettings";
 import { useDatabase } from "../../core/effects/useDatabase";
 import { flex } from "../../styles/sprinkles.css";
@@ -136,6 +137,7 @@ import { OpyDrawer } from "./OpyDrawer";
 import { OpyFloatingWidget } from "./OpyFloatingWidget";
 import { getNextOpySurfaceMode, resolveOpyHostMode } from "./opySurfaceMode";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { StormToolbar } from "./StormToolbar";
 import * as styles from "./styles.css";
 import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
 import { Toolbar } from "./Toolbar";
@@ -2351,8 +2353,10 @@ export function C4CanvasContainer() {
 
   // Handle auto-layout action
   const handleAutoLayout = useCallback((preset: LayoutPresetName) => {
-    openLayoutPreview(preset, "graph");
-  }, [openLayoutPreview]);
+    // An event storm is ordered by position, not dependency (ADR-016).
+    const strategyId = layoutStrategyForDomain(state.context.currentDomain);
+    openLayoutPreview(preset, "graph", strategyId === undefined ? undefined : { strategyId });
+  }, [openLayoutPreview, state.context.currentDomain]);
 
   useEffect(() => {
     if (
@@ -3035,7 +3039,17 @@ export function C4CanvasContainer() {
               onSummaryChange={handleAzureSyncSummaryChange}
             />
           )}
-          {state.context.currentDomain === "c4"
+          {/* Three domains, so a ternary no longer expresses the choice (ADR-016). */}
+          {state.context.currentDomain === "eventStorming"
+            ? (
+              <StormToolbar
+                onAddSticky={(nodeType) => send({ type: "ADD_NODE", nodeType })}
+                onAutoLayout={handleAutoLayout}
+                onAutoLayoutSelected={handleAutoLayoutSelected}
+                {...(state.context.currentLayout && { currentLayout: state.context.currentLayout })}
+              />
+            )
+            : state.context.currentDomain === "c4"
             ? (
               <Toolbar
                 onAddPerson={() => send({ type: "ADD_PERSON" })}

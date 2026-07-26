@@ -3025,3 +3025,37 @@ export const importErrorNoticeDismiss = style({
     color: theme.color.foreground.primary,
   },
 });
+
+/**
+ * Event Storming palette buttons (ADR-016).
+ *
+ * The colour is the vocabulary — a practitioner reads a wall by colour before
+ * reading a word — so each entry carries its sticky's swatch rather than relying
+ * on an icon to signal which sticky it adds.
+ */
+export const stormStickyButton = style({
+  justifyContent: "flex-start",
+});
+
+export const stormStickySwatch = style({
+  display: "inline-flex",
+  flexShrink: 0,
+  alignItems: "center",
+  justifyContent: "center",
+  border: `${theme.border.width.thin} solid rgba(0, 0, 0, 0.35)`,
+  width: "1.15rem",
+  height: "1.15rem",
+  color: "rgba(8, 12, 10, 0.85)",
+
+  selectors: {
+    "&[data-sticky=\"domainEvent\"]": { backgroundColor: theme.color.semantic.esEvent },
+    "&[data-sticky=\"person\"]": { backgroundColor: theme.color.semantic.esActor },
+    "&[data-sticky=\"externalSystem\"]": { backgroundColor: theme.color.semantic.esExternalSystem },
+    "&[data-sticky=\"opportunity\"]": { backgroundColor: theme.color.semantic.esOpportunity },
+    // Rotated, as it is on a wall: a hotspot is meant to interrupt the eye.
+    "&[data-sticky=\"hotspot\"]": {
+      transform: "rotate(45deg)",
+      backgroundColor: theme.color.semantic.esHotspot,
+    },
+  },
+});

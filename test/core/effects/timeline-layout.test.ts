@@ -230,3 +230,25 @@ describe("as a layout strategy", () => {
     expect(result.strategyId).toBe(timelineLayoutStrategy.id);
   });
 });
+
+describe("choosing a strategy for a domain", () => {
+  /**
+   * A storm laid out by dagre is the failure this whole phase exists to prevent,
+   * so the choice is a function rather than a conditional buried in a handler.
+   */
+  it("gives an event storm the timeline", async () => {
+    const { layoutStrategyForDomain } = await import("@/core/effects/timeline-layout-strategy");
+    const { TIMELINE_STRATEGY_ID } = await import("@/core/effects/timeline-layout-strategy");
+
+    expect(layoutStrategyForDomain("eventStorming")).toBe(TIMELINE_STRATEGY_ID);
+  });
+
+  it("leaves C4 and DDD to the layouts they already use", async () => {
+    const { layoutStrategyForDomain } = await import("@/core/effects/timeline-layout-strategy");
+
+    // undefined means "whatever the preset asked for", so existing behaviour is
+    // untouched rather than re-specified here.
+    expect(layoutStrategyForDomain("c4")).toBeUndefined();
+    expect(layoutStrategyForDomain("ddd")).toBeUndefined();
+  });
+});

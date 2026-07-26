@@ -17,24 +17,27 @@ interface DomainToggleProps {
   onDomainChange: (domain: DiagramDomain) => void;
 }
 
+const MODES: ReadonlyArray<{ readonly domain: DiagramDomain; readonly label: string }> = [
+  { domain: "c4", label: "MODE::C4" },
+  { domain: "ddd", label: "MODE::DDD" },
+  { domain: "eventStorming", label: "MODE::STORM" },
+];
+
 export function DomainToggle({ currentDomain, onDomainChange }: DomainToggleProps) {
   return (
     <div className={domainToggle}>
       <ArrowsLeftRight size={16} weight="bold" />
-      <button
-        type="button"
-        className={`${domainToggleButton} ${currentDomain === "c4" ? domainToggleActive : ""}`}
-        onClick={() => onDomainChange("c4")}
-      >
-        MODE::C4
-      </button>
-      <button
-        type="button"
-        className={`${domainToggleButton} ${currentDomain === "ddd" ? domainToggleActive : ""}`}
-        onClick={() => onDomainChange("ddd")}
-      >
-        MODE::DDD
-      </button>
+      {MODES.map((mode) => (
+        <button
+          key={mode.domain}
+          type="button"
+          className={`${domainToggleButton} ${currentDomain === mode.domain ? domainToggleActive : ""}`}
+          onClick={() => onDomainChange(mode.domain)}
+          aria-pressed={currentDomain === mode.domain}
+        >
+          {mode.label}
+        </button>
+      ))}
     </div>
   );
 }

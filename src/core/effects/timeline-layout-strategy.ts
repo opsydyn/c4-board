@@ -10,6 +10,7 @@
 import { EVENT_STORMING_STICKIES } from "./event-storming";
 import { evaluateLayoutQuality } from "./layout-metrics";
 import type { LayoutAnalysis, LayoutInput, LayoutResult, SynchronousLayoutStrategy } from "./layout.types";
+import type { NodeDomain } from "./node-operations";
 import { timelineLayout } from "./timeline-layout";
 
 export const TIMELINE_STRATEGY_ID = "event-storming-timeline";
@@ -70,3 +71,11 @@ export const timelineLayoutStrategy: SynchronousLayoutStrategy = {
   analyse: analyseTimeline,
   layout: layoutTimeline,
 };
+
+/**
+ * The strategy a domain should be laid out with, or undefined to leave the
+ * preset's own choice alone. Only an event storm overrides it — laying a storm
+ * out by dependency is the failure this strategy exists to prevent.
+ */
+export const layoutStrategyForDomain = (domain: NodeDomain): string | undefined =>
+  domain === "eventStorming" ? TIMELINE_STRATEGY_ID : undefined;
