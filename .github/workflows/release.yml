@@ -297,8 +297,10 @@ jobs:
             label: linux-x64
           - os: macos-15-intel
             label: macos-x64
+            macosAssetToken: darwin_x64
           - os: macos-14
             label: macos-arm64
+            macosAssetToken: darwin_aarch64
           - os: windows-latest
             label: windows-x64
     env:
@@ -458,6 +460,15 @@ jobs:
       # without rebuilding — which cost two 50-minute jobs and left nothing to
       # query afterwards. The build above only signs (see apple-signing-env.ts).
       - name: Notarise and staple macOS bundles
+        id: notarize
+        # Non-fatal, deliberately and temporarily. Apple's notary service is
+        # accepting this team's submissions and never processing them — four have
+        # sat In Progress, the oldest for eleven hours, with no developer log for
+        # any of them. Failing hard would block Linux and Windows releases too,
+        # for a fault we cannot fix. The step below withdraws the macOS bundles
+        # instead, so nothing ships that Gatekeeper will refuse. Revert to fatal
+        # once Apple resolves the account (ADR-013 Phase 0).
+        continue-on-error: true
         if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' }}
         shell: bash
         env:
@@ -470,7 +481,7 @@ jobs:
       # stapled ones replaces them by name; the release is still a draft at this
       # point (ADR-013 Phase 2), so no one can see the interim state.
       - name: Replace macOS assets with the stapled bundles
-        if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' }}
+        if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' && steps.notarize.outcome == 'success' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -481,6 +492,37 @@ jobs:
             echo "Re-uploading stapled $(basename "${dmg}")"
             gh release upload "${RELEASE_TAG}" "${dmg}" --clobber
           done
+
+      # tauri-action uploaded these before notarisation ran, so an unnotarised
+      # bundle is already on the release. macOS refuses to open it — "Apple cannot
+      # check it for malicious software" — which is a worse outcome than offering
+      # no macOS download at all. Withdraw rather than ship something broken.
+      - name: Withdraw unnotarised macOS assets
+        if: ${{ startsWith(matrix.os, 'macos') && env.APPLE_SIGNING_ENABLED == 'true' && steps.notarize.outcome != 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOS_ASSET_TOKEN: ${{ matrix.macosAssetToken }}
+        run: |
+          set -euo pipefail
+
+          # Scoped to this job's architecture: both macOS jobs target one release
+          # concurrently, and a broad delete would remove the other's bundles.
+          assets="$(gh release view "${RELEASE_TAG}" --json assets \
+            --jq ".assets[].name | select(contains(\"${MACOS_ASSET_TOKEN}\"))" || true)"
+
+          if [[ -z "${assets}" ]]; then
+            echo "No ${MACOS_ASSET_TOKEN} assets to withdraw."
+            exit 0
+          fi
+
+          while IFS= read -r asset; do
+            [[ -n "${asset}" ]] || continue
+            echo "::warning::Withdrawing unnotarised ${asset}"
+            gh release delete-asset "${RELEASE_TAG}" "${asset}" --yes
+          done <<< "${assets}"
+
+          echo "::warning::macOS ${MACOS_ASSET_TOKEN} bundles were signed but not notarised, and have been withheld from ${RELEASE_TAG}."
 
   publish-release:
     name: Publish release

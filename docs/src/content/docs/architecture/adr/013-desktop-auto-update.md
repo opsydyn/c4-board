@@ -147,6 +147,40 @@ a deliberately fake `sk-proj-rig-runtime-secret` test fixture and HTML `id` attr
 `task-history`. The Azure credentials reference is placeholders. Flipping visibility publishes all
 history, so this check is a precondition of the decision, not a formality.
 
+### Notarisation is blocked on Apple, and failure is temporarily non-fatal
+
+Signing works. Verified on the published v0.0.8 artifact: `Developer ID Application:
+OPSYDYN LTD (NLBJ9568VS)` chaining to the Apple Root CA, secure timestamp, hardened
+runtime enabled on the `.app`, signatures verifying under a simulated quarantined
+download.
+
+Notarisation does not, and not for a reason in this repository. Apple accepts each
+submission, issues an id within seconds, and never processes it:
+
+| submission | artifact | queued | status |
+| ---------- | -------- | ------ | ------ |
+| `4ba45325-4948-4ee6-ade5-3152b4c6b224` | c4-board.zip | 10h51m | In Progress |
+| `700c46fc-42c9-4e60-9a32-69b97922b07d` | c4-board.zip | 10h41m | In Progress |
+| `e1a2e7ed-01cf-422a-9277-70be4b452383` | aarch64.dmg | 1h24m | In Progress |
+| `ee146699-4292-43a2-a0ef-647572eb91b4` | x64.dmg | 1h17m | In Progress |
+
+No developer log exists for any of them — `Submission log is not yet available` —
+so none has reached a verdict. The artifacts are 19 MB, which rules out size as an
+explanation, and Apple System Status reports Developer ID Notary Service as OK.
+These are the team's first submissions, which matches reported cases where a team
+must be enabled for notarisation before anything is processed.
+
+**Temporary policy, to be reverted once Apple resolves the account.** A hard
+failure here blocks Linux and Windows releases as well, for a fault outside this
+repository. So the notarisation step is `continue-on-error`, and when it does not
+succeed the job **withdraws its own architecture's macOS assets from the release**
+rather than leaving them there. An unnotarised bundle is not a degraded download —
+Gatekeeper refuses to open it — so shipping one is worse than shipping none.
+
+The withdrawal is scoped by `matrix.macosAssetToken` because both macOS jobs act on
+a single release concurrently; an unscoped delete would remove the other
+architecture's bundles.
+
 ### Release ordering must change
 
 The updater endpoint is `releases/latest/download/latest.json`. For that to be true rather than

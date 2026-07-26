@@ -115,6 +115,37 @@ describe("release asset job", () => {
     expect(replace?.run).toContain(".dmg");
   });
 
+  it("does not fail the job when notarisation fails", () => {
+    // Apple is not processing this team's submissions (ADR-013). A hard failure
+    // would block Linux and Windows releases too, for a fault on Apple's side.
+    const step = assetSteps.find((candidate) => (candidate.run ?? "").includes("notarize-macos"));
+
+    expect(step?.["continue-on-error"]).toBe(true);
+  });
+
+  it("only re-uploads stapled bundles when notarisation actually succeeded", () => {
+    const replace = assetSteps.find((step) => (step.run ?? "").includes("--clobber"));
+
+    expect(String(replace?.["if"])).toContain("steps.notarize.outcome == 'success'");
+  });
+
+  it("withdraws macOS assets that were never notarised", () => {
+    // tauri-action uploads before notarisation runs, so an unnotarised .dmg is
+    // already on the release. Gatekeeper refuses it, which is worse than absent.
+    const withdraw = assetSteps.find((step) => (step.run ?? "").includes("delete-asset"));
+
+    expect(withdraw, "unnotarised macOS assets are never withdrawn").toBeDefined();
+    expect(String(withdraw?.["if"])).toContain("steps.notarize.outcome != 'success'");
+  });
+
+  it("withdraws only its own architecture's assets", () => {
+    // Both macOS jobs run concurrently against one release; a broad delete would
+    // race and remove the other architecture's bundles.
+    const withdraw = assetSteps.find((step) => (step.run ?? "").includes("delete-asset"));
+
+    expect(withdraw?.run).toContain("MACOS_ASSET_TOKEN");
+  });
+
   it("still exports Apple signing secrets through the tested script", () => {
     const step = assetSteps.find((candidate) => candidate.name?.includes("Export Apple signing"));
 
