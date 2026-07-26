@@ -9,6 +9,8 @@
 import { CheckIcon as Check, CopyIcon as Copy, DownloadIcon as Download, XIcon as X } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
+import { MERMAID_DIALECTS, type MermaidDialect } from "../../core/effects/export-mermaid-dialect";
+import * as settings from "../../styles/pages/settings.css";
 import {
   exportModalActions,
   exportModalButton,
@@ -28,6 +30,9 @@ interface ExportModalProps {
   exportedCode: string | null;
   exportFormat: "plantuml" | "mermaid" | null;
   diagramName?: string;
+  /** Mermaid only; PlantUML has a single dialect (ADR-014). */
+  mermaidDialect?: MermaidDialect;
+  onMermaidDialectChange?: (dialect: MermaidDialect) => void;
   onClose: () => void;
 }
 
@@ -47,6 +52,8 @@ export function ExportModal({
   exportedCode,
   exportFormat,
   diagramName = "diagram",
+  mermaidDialect,
+  onMermaidDialectChange,
   onClose,
 }: ExportModalProps) {
   const [copied, setCopied] = useState(false);
@@ -104,6 +111,32 @@ export function ExportModal({
                   <X size={24} weight="bold" />
                 </Button>
               </div>
+
+              {/* Dialect — Mermaid only; PlantUML has one form */}
+              {exportFormat === "mermaid" && onMermaidDialectChange && (
+                <div className={settings.settingsRow}>
+                  <div className={settings.settingsRowLabel}>
+                    <span>Dialect</span>
+                    <span className={settings.settingsRowHint}>
+                      {MERMAID_DIALECTS.find((option) => option.id === mermaidDialect)?.hint}
+                    </span>
+                  </div>
+                  <div className={settings.settingsControlGroup}>
+                    {MERMAID_DIALECTS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={settings.settingsToggleControl}
+                        data-active={option.id === mermaidDialect ? "true" : "false"}
+                        aria-pressed={option.id === mermaidDialect}
+                        onClick={() => onMermaidDialectChange(option.id)}
+                      >
+                        {option.isExperimental ? `${option.label} *` : option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Code Display */}
               <div className={exportModalContent}>

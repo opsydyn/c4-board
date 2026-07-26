@@ -3331,6 +3331,8 @@ export function C4CanvasContainer() {
         exportedCode={state.context.exportedCode}
         exportFormat={state.context.exportFormat}
         diagramName={state.context.diagramName}
+        mermaidDialect={state.context.exportDialect}
+        onMermaidDialectChange={(dialect) => send({ type: "SET_EXPORT_DIALECT", dialect })}
         onClose={() => send({ type: "CLOSE_EXPORT_MODAL" })}
       />
     </div>

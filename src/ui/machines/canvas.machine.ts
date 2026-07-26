@@ -15,7 +15,11 @@ import { type AnyStateMachine, assign, setup } from "xstate";
 import * as DiagramOps from "../../core/effects/diagram-operations";
 import * as EdgeOps from "../../core/effects/edge-operations";
 import type { EdgeData, EdgeMetadata } from "../../core/effects/edge-operations";
-import * as MermaidExport from "../../core/effects/export-mermaid";
+import {
+  DEFAULT_MERMAID_DIALECT,
+  exportMermaidForDialect,
+  type MermaidDialect,
+} from "../../core/effects/export-mermaid-dialect";
 import * as PlantUMLExport from "../../core/effects/export-plantuml-c4";
 import * as MermaidImport from "../../core/effects/import-mermaid";
 import * as PlantUMLImport from "../../core/effects/import-plantuml-c4";
@@ -125,6 +129,7 @@ export type CanvasEvent =
   // Export events
   | { type: "EXPORT_PLANTUML"; viewport?: Viewport }
   | { type: "EXPORT_MERMAID"; viewport?: Viewport }
+  | { type: "SET_EXPORT_DIALECT"; dialect: MermaidDialect }
   | { type: "CLOSE_EXPORT_MODAL" }
   // Import events
   | { type: "IMPORT_DIAGRAM"; content: string; format: "plantuml" | "mermaid"; mode: "replace" | "merge" };
@@ -161,6 +166,10 @@ export interface CanvasContext {
   exportModalOpen: boolean;
   exportFormat: "plantuml" | "mermaid" | null;
   exportedCode: string | null;
+  /** Which Mermaid dialect the modal is showing (ADR-014). */
+  exportDialect: MermaidDialect;
+  /** Kept so switching dialect can re-emit without another canvas round trip. */
+  exportViewport: Viewport | null;
 
   // Viewport state (for import/export)
   viewport: Viewport | null;
@@ -919,31 +928,39 @@ const canvasMachineDefinition = setup({
     exportMermaid: assign({
       exportModalOpen: () => true,
       exportFormat: () => "mermaid" as const,
+      exportViewport: ({ event }) => event.type === "EXPORT_MERMAID" && event.viewport ? event.viewport : null,
       exportedCode: ({ context, event }) => {
         if (event.type !== "EXPORT_MERMAID") return null;
 
-        // Generate Mermaid using Effect service
-        const options: MermaidExport.MermaidExportOptions = {
-          title: context.diagramName !== "DIAGRAM::UNTITLED"
-            ? context.diagramName
-            : "C4 Diagram",
-          includeDescriptions: true,
-          includeTechnology: true,
-          direction: "TB",
-        };
+        return runEffectSync(exportMermaidForDialect(
+          context.exportDialect,
+          context.nodes,
+          context.edges,
+          {
+            title: mermaidExportTitle(context.diagramName),
+            ...(event.viewport === undefined ? {} : { viewport: event.viewport }),
+          },
+        ));
+      },
+    }),
 
-        if (event.viewport) {
-          options.viewport = event.viewport;
-        }
+    // Switching dialect re-emits from the board rather than transforming the text,
+    // because the two dialects carry different information (ADR-014).
+    setExportDialect: assign({
+      exportDialect: ({ context, event }) =>
+        event.type === "SET_EXPORT_DIALECT" ? event.dialect : context.exportDialect,
+      exportedCode: ({ context, event }) => {
+        if (event.type !== "SET_EXPORT_DIALECT") return context.exportedCode;
 
-        const mermaid = runEffectSync(
-          MermaidExport.exportC4ToMermaid(
-            context.nodes,
-            context.edges,
-            options,
-          ),
-        );
-        return mermaid;
+        return runEffectSync(exportMermaidForDialect(
+          event.dialect,
+          context.nodes,
+          context.edges,
+          {
+            title: mermaidExportTitle(context.diagramName),
+            ...(context.exportViewport === null ? {} : { viewport: context.exportViewport }),
+          },
+        ));
       },
     }),
 
@@ -1234,6 +1251,8 @@ const canvasMachineDefinition = setup({
     exportModalOpen: false,
     exportFormat: null,
     exportedCode: null,
+    exportDialect: DEFAULT_MERMAID_DIALECT,
+    exportViewport: null,
 
     // Viewport state
     viewport: null,
@@ -1385,6 +1404,9 @@ const canvasMachineDefinition = setup({
         },
         EXPORT_MERMAID: {
           actions: "exportMermaid",
+        },
+        SET_EXPORT_DIALECT: {
+          actions: "setExportDialect",
         },
         CLOSE_EXPORT_MODAL: {
           actions: "closeExportModal",
@@ -1540,6 +1562,10 @@ const canvasMachineDefinition = setup({
 });
 
 export type CanvasMachine = typeof canvasMachineDefinition;
+
+/** Falls back to a generic title so an unnamed board still labels its export. */
+const mermaidExportTitle = (diagramName: string): string =>
+  diagramName !== "DIAGRAM::UNTITLED" ? diagramName : "C4 Diagram";
 
 export const canvasMachine: CanvasMachine & AnyStateMachine = canvasMachineDefinition as
   & CanvasMachine

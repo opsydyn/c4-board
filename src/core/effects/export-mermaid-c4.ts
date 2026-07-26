@@ -70,9 +70,35 @@ const toArgument = (value: string): string =>
     .replace(/\s*\n+\s*/g, " ")
     .trim();
 
-const toAlias = (id: string): string => {
-  const cleaned = id.replace(/[^a-zA-Z0-9_]/g, "_");
-  return /^[a-zA-Z]/.test(cleaned) ? cleaned : `n_${cleaned}`;
+const sanitizeAlias = (value: string): string => {
+  const cleaned = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return /^[a-z]/.test(cleaned) ? cleaned : "";
+};
+
+/**
+ * Aliases are what a reader sees. Node ids are nanoids, so
+ * `Person(person_2APJt5Nbv87k, "Operator")` is valid and useless in a dialect
+ * whose whole purpose is being read; the label is used instead, falling back to
+ * the id when it yields nothing usable. Collisions get a numeric suffix, since
+ * two elements sharing an alias would silently merge in the rendered diagram.
+ */
+const buildAliases = (entries: ReadonlyArray<{ node: Node }>): ReadonlyMap<string, string> => {
+  const taken = new Set<string>();
+  const aliases = new Map<string, string>();
+
+  for (const { node } of entries) {
+    const fromLabel = sanitizeAlias((node.data as NodeData | undefined)?.label ?? "");
+    const fromId = sanitizeAlias(node.id);
+    const base = fromLabel || fromId || "element";
+
+    let alias = base;
+    for (let suffix = 2; taken.has(alias); suffix += 1) alias = `${base}_${suffix}`;
+
+    taken.add(alias);
+    aliases.set(node.id, alias);
+  }
+
+  return aliases;
 };
 
 /** `Macro(alias, "a", "b")` with trailing empty arguments dropped rather than emitted. */
@@ -86,7 +112,7 @@ const macro = (name: string, alias: string, args: ReadonlyArray<string>): string
     : `  ${name}(${alias})`;
 };
 
-const elementFor = (node: Node, c4Type: C4Type): string => {
+const elementFor = (node: Node, c4Type: C4Type, alias: string): string => {
   const data = node.data as NodeData;
   const label = toArgument(data.label ?? "Unnamed");
   const technology = toArgument(data.technology ?? "");
@@ -96,18 +122,18 @@ const elementFor = (node: Node, c4Type: C4Type): string => {
     // No `techn` slot. Dropping a field the user filled in would be a silent
     // loss, so it joins the description rather than disappearing.
     const merged = [technology, description].filter((part) => part.length > 0).join(" · ");
-    return macro(ELEMENT_MACRO[c4Type], toAlias(node.id), [label, merged]);
+    return macro(ELEMENT_MACRO[c4Type], alias, [label, merged]);
   }
 
-  return macro(ELEMENT_MACRO[c4Type], toAlias(node.id), [label, technology, description]);
+  return macro(ELEMENT_MACRO[c4Type], alias, [label, technology, description]);
 };
 
-const relationshipFor = (edge: Edge): string => {
+const relationshipFor = (edge: Edge, aliases: ReadonlyMap<string, string>): string => {
   const label = toArgument(edge.label === undefined ? "" : String(edge.label)) || "uses";
   const protocol = toArgument((edge.data as EdgeData | undefined)?.metadata?.protocol ?? "");
 
   const args = [label, protocol].filter((argument, index) => index === 0 || argument.length > 0);
-  return `  Rel(${toAlias(edge.source)}, ${toAlias(edge.target)}, ${
+  return `  Rel(${aliases.get(edge.source) ?? edge.source}, ${aliases.get(edge.target) ?? edge.target}, ${
     args.map((argument) => `"${argument}"`).join(", ")
   })`;
 };
@@ -147,14 +173,15 @@ export const exportC4ToMermaidC4 = (
       lines.push(`  title ${toArgument(options.title)}`);
     }
 
+    const aliases = buildAliases(c4Nodes);
     for (const { node, c4Type } of c4Nodes) {
-      lines.push(elementFor(node, c4Type));
+      lines.push(elementFor(node, c4Type, aliases.get(node.id) ?? node.id));
     }
 
     const c4Edges = edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
     if (c4Edges.length > 0) {
       lines.push("");
-      for (const edge of c4Edges) lines.push(relationshipFor(edge));
+      for (const edge of c4Edges) lines.push(relationshipFor(edge, aliases));
     }
 
     return `${lines.join("\n")}\n`;

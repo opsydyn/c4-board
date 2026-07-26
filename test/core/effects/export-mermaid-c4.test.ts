@@ -52,11 +52,11 @@ describe("element mapping", () => {
       node("m", "component", { label: "Ledger" }),
     ]);
 
-    expect(out).toContain("Person(p, \"Operator\"");
-    expect(out).toContain("System(s, \"Board\"");
-    expect(out).toContain("System_Ext(x, \"Identity Provider\"");
-    expect(out).toContain("Container(c, \"Payments API\"");
-    expect(out).toContain("Component(m, \"Ledger\"");
+    expect(out).toContain("Person(operator, \"Operator\"");
+    expect(out).toContain("System(board, \"Board\"");
+    expect(out).toContain("System_Ext(identity_provider, \"Identity Provider\"");
+    expect(out).toContain("Container(payments_api, \"Payments API\"");
+    expect(out).toContain("Component(ledger, \"Ledger\"");
   });
 
   it("puts technology and description in their own arguments, not the label", () => {
@@ -68,7 +68,9 @@ describe("element mapping", () => {
       }),
     ]);
 
-    expect(out).toContain("Container(c, \"Payments API\", \"Rust + Axum\", \"Settles transactions\")");
+    expect(out).toContain(
+      "Container(payments_api, \"Payments API\", \"Rust + Axum\", \"Settles transactions\")",
+    );
     // The flowchart dialect's way of carrying these must not leak in.
     expect(out).not.toContain("<br/>");
     expect(out).not.toContain("<em>");
@@ -83,13 +85,13 @@ describe("element mapping", () => {
 
     expect(out).toContain("Browser");
     expect(out).toContain("Runs the board");
-    expect(out).toMatch(/Person\(p, "Operator", "[^"]*"\)/);
+    expect(out).toMatch(/Person\(operator, "Operator", "[^"]*"\)/);
   });
 
   it("omits absent optional arguments rather than emitting empty strings", () => {
     const out = run([node("s", "system", { label: "Board" })]);
 
-    expect(out).toContain("System(s, \"Board\")");
+    expect(out).toContain("System(board, \"Board\")");
     expect(out).not.toContain("\"\"");
   });
 });
@@ -162,10 +164,10 @@ describe("escaping and identifiers", () => {
   it("does not let a quote in a label break the macro", () => {
     const out = run([node("s", "system", { label: "The \"Big\" Board" })]);
 
-    expect(out).toContain("System(s,");
+    expect(out).toContain("System(the_big_board,");
     // One opening and one closing quote for the argument, and nothing in between
     // that would terminate it early.
-    expect(out).toMatch(/System\(s, "[^"]*"\)/);
+    expect(out).toMatch(/System\(the_big_board, "[^"]*"\)/);
     expect(out).toContain("Big");
   });
 
@@ -177,10 +179,39 @@ describe("escaping and identifiers", () => {
     expect(statement).toContain("line two");
   });
 
-  it("turns an id that is not a valid alias into one", () => {
-    const out = run([node("node-with-dashes", "system", { label: "Board" })]);
+  it("names elements after their label, since the point of this dialect is reading it", () => {
+    // Node ids are nanoids. `Person(person_2APJt5Nbv87k, "Operator")` is valid and
+    // unreadable, which defeats a format meant for sharing.
+    const out = run([node("person_2APJt5Nbv87k", "container", { label: "Payments API" })]);
+
+    expect(out).toContain("Container(payments_api, \"Payments API\")");
+  });
+
+  it("keeps aliases unique when two elements share a label", () => {
+    const out = run([
+      node("a", "system", { label: "Gateway" }),
+      node("b", "system", { label: "Gateway" }),
+    ]);
+
+    expect(out).toContain("System(gateway,");
+    expect(out).toContain("System(gateway_2,");
+  });
+
+  it("falls back to the id when a label yields no usable alias", () => {
+    const out = run([node("node-with-dashes", "system", { label: "!!!" })]);
 
     expect(out).toContain("System(node_with_dashes,");
+  });
+
+  it("uses the same aliases in relationships as in elements", () => {
+    const out = run(
+      [node("id1", "person", { label: "Operator" }), node("id2", "container", { label: "Payments API" })],
+      [{ id: "e1", source: "id1", target: "id2", label: "settles via" }],
+    );
+
+    expect(out).toContain("Person(operator,");
+    expect(out).toContain("Container(payments_api,");
+    expect(out).toContain("Rel(operator, payments_api, \"settles via\")");
   });
 });
 
