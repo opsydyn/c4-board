@@ -337,3 +337,49 @@ describe("a releasable change cannot silently produce no release", () => {
     expect(guardIndex).toBeGreaterThan(releasePlz);
   });
 });
+
+/**
+ * What the marker measures against.
+ *
+ * It computed the changed-path list from `github.event.before..GITHUB_SHA` — the
+ * range of one push. That makes the mechanism lossy: a push that is skipped,
+ * cancelled or fails leaves its changes unmarked forever, because the next push
+ * only ever looks at its own range.
+ *
+ * That is not hypothetical. A commit carrying an app change landed with every
+ * workflow suppressed, so it was never marked; the following push saw only its
+ * own file and correctly concluded there was nothing releasable. The change sat
+ * on main, unreleased, with the guard silent because nothing had *claimed* to be
+ * releasable.
+ *
+ * Measuring from the last release tag instead is idempotent: it always describes
+ * everything unreleased, so a missed push is picked up by the next one.
+ */
+describe("the marker measures from the last release, not the last push", () => {
+  /**
+   * Comment lines dropped, matching `runsOf` above: a comment explaining why a
+   * range was abandoned must not read as a use of it. Asserting over the raw
+   * text made this very test fail on its own explanation.
+   */
+  const markerRun = () =>
+    (((jobsRaw["release-plz-pr"]?.["steps"] ?? []) as ReadonlyArray<WorkflowStep>)
+      .find((step) => step.name?.includes("release surface marker"))?.run ?? "")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+
+  it("bases the diff on the most recent tag", () => {
+    expect(markerRun()).toMatch(/git describe --tags --abbrev=0/);
+  });
+
+  it("no longer bases it on the previous push", () => {
+    // `github.event.before` is the head of the *last push*, which says nothing
+    // about what has been released.
+    expect(markerRun()).not.toMatch(/github\.event\.before/);
+  });
+
+  it("still works on a repository with no tags yet", () => {
+    // The first release has nothing to describe against.
+    expect(markerRun()).toMatch(/hash-object -t tree/);
+  });
+});

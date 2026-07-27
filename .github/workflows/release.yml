@@ -136,10 +136,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          base_ref="${{ github.event.before }}"
-          if [[ "${base_ref}" == "0000000000000000000000000000000000000000" ]]; then
+
+          # Measured from the last release tag, not from the last push.
+          #
+          # It used to diff `github.event.before..GITHUB_SHA`, the range of one
+          # push, which loses anything from a push that was skipped, cancelled or
+          # failed — the next push only ever looks at its own range. That is how
+          # an app change reached main unreleased with nothing complaining: its
+          # push was suppressed, so it was never marked, and the following push
+          # correctly saw nothing releasable in its own diff.
+          #
+          # A tag-based range is idempotent. It always describes everything
+          # unreleased, so a missed push is picked up by the next one.
+          base_ref="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [[ -z "${base_ref}" ]]; then
+            # No releases yet, so everything is unreleased.
             base_ref="$(git hash-object -t tree /dev/null)"
           fi
+          echo "Marking app changes since ${base_ref}."
 
           bun .github/scripts/prepare-release-plz-surface.ts "${base_ref}" "${GITHUB_SHA}" "src-tauri/release-plz-surface.json"
 
