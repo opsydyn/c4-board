@@ -155,8 +155,14 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src-tauri/release-plz-surface.json
 
-          # [skip ci] is load-bearing: this job runs on pushes to main, so a push
-          # from inside it would re-trigger the whole workflow.
+          # The directive below is load-bearing: this job runs on pushes to main,
+          # so a push from inside it would re-trigger the whole workflow.
+          #
+          # Never quote that directive in a commit message that describes this
+          # step. GitHub scans the entire message, so a commit explaining the
+          # mechanism suppresses every workflow on its own push — which is how
+          # 2516fc9 landed with no CI and no release. Say "a skip-CI directive",
+          # never the literal token.
           git commit -m "chore: mark app changes outside src-tauri as releasable [skip ci]"
 
           # Credentials are scoped to this one push rather than persisted by the
