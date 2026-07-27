@@ -14,6 +14,22 @@ _Review architecture changes in the native workspace with semantic roles, diagno
 
 _Model complex event topologies with deterministic bus bands, explicit processor bridges, and readable subscriber paths._
 
+![Live Azure resources imported onto a board as typed nodes, grouped by resource group, with the complexity field panel scoring the topology](docs/images/azure-sync-board.png)
+
+_Import a live Azure subscription and get a typed board rather than a wall of identical boxes — resources classified as systems, containers, components or external services, grouped by resource group, and scored for coupling risk._
+
+![The OPY assistant panel open beside a board, offering to answer questions about architecture, ownership and coupling](docs/images/opy-assistant.png)
+
+_Ask OPY about architecture, ownership or coupling on the board in front of you. It proposes; you accept._
+
+![The Postee request builder showing a GET request with its JSON response body, headers and timing](docs/images/postee-request-builder.png)
+
+_Build and send HTTP requests without leaving the workspace, with a Monaco JSON viewer, response headers, timing and a searchable history._
+
+![The Postee load chamber after a completed run, showing requests per second, p95 latency, success and failure counts, and live charts](docs/images/postee-load-chamber.png)
+
+_Drive sustained load at an endpoint and read what happened: HDR-histogram percentiles, interval charts that show spikes rather than averaging them away, status distribution, and a pass/fail verdict against a latency or error budget._
+
 ## Current Status
 
 The current OPY/Rig C4 agentic loop is concluded for this phase. OPY can inspect a board, produce grounded reviews, generate typed C4 mutation proposals, require operator approval, apply safe changes, checkpoint before mutation, roll back, persist resumable task state, and expose audit/eval diagnostics.
