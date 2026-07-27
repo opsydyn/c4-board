@@ -1,10 +1,9 @@
 {
   "managedBy": "github-actions/release-plz",
   "purpose": "Marks app changes outside src-tauri so release-plz can open a release PR for the desktop app.",
-  "base": "85402c5af698e8ebfcae42a3634845559db4b9a0",
-  "head": "4324b31729eec81351f228faa61fcd8a916dcb17",
+  "base": "v0.0.16",
+  "head": "e7d5399c15f6af7ef854fb14b37a13f804046930",
   "paths": [
-    "src/core/effects/save-cue.ts",
-    "src/ui/components/C4CanvasContainer.tsx"
+    "src/core/effects/settings.types.ts"
   ]
 }
