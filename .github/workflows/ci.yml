@@ -38,6 +38,13 @@ jobs:
       - name: Validate environment schema
         run: bun run env:check
 
+      # Rust has had three gates all along — fmt, clippy as errors, and tests —
+      # while the frontend lint was advisory. It drifted to 114 problems before
+      # anyone counted. Deliberately not `--fix`: that would rewrite the checkout
+      # and exit clean, reporting a pass for code that never had one.
+      - name: Lint frontend
+        run: bun run lint
+
       - name: Run frontend tests
         run: bun run test:run
 

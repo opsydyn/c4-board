@@ -4,7 +4,7 @@ title: "ADR-017: Azure resource type mapping and relationship projection"
 
 # ADR-017: Azure resource type mapping and relationship projection
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-26
 
 ## Context
@@ -25,7 +25,7 @@ Two independent defects produce that.
 
 None of the four matched anything in the estate. All nine distinct Azure types collapsed to `system`, so the board renders 20 identical boxes. Worth noting `microsoft.web/staticsites` does not contain the substring `microsoft.web/sites`, so even a near-match misses; substring tests over type strings are the wrong shape for this.
 
-The intended mapping was already written down in `guides/azure-graph-sample-data.md` under "Next Steps" and never implemented.
+The intended mapping was already written down in `guides/azure-graph-sample-data.md` under "Next Steps" and never implemented. (That guide has since been rewritten around this decision, so the table now lives here rather than there.)
 
 ### No edges, on an estate that has relationships
 
@@ -115,6 +115,6 @@ Same 29 nodes; four distinct C4 types instead of one plus the resource-group gro
 
 ## References
 
-- Type mapping source table: `guides/azure-graph-sample-data.md`
+- Row shape and edge-discovery columns: [Azure Resource Graph reference](../guides/azure-graph-sample-data.md)
 - Usage: `guides/azure-sync.md`
 - [ADR-007: Azure graph sync](007-azure-graph-sync.md)

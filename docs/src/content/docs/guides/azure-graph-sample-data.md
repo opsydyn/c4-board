@@ -1,413 +1,98 @@
 ---
-title: "Azure Resource Graph - Full Dataset Reference"
+title: "Azure Resource Graph reference"
 ---
 
-# Azure Resource Graph - Full Dataset Reference
+# Azure Resource Graph reference
 
-What `az graph query` returns and how it maps onto the board. Use it to see the row
-shape — the `_ref_*` enrichment columns, the three edge-discovery paths — without
-having to run a sync first.
+What `az graph query` returns and how the app turns it into a board. Read this to understand the row shape and the edge-discovery columns without running a sync first.
 
-Identifiers here are placeholders. This page was originally a verbatim capture of one
-tenant's inventory; the subscription id, resource GUIDs and account-derived resource
-names were replaced when the repository became public. The structure is unchanged, so
-it still reflects real output. See [Azure sync](azure-sync.md) to run a query of your own.
+**This is a reference, not a capture.** It was originally a verbatim dump of one tenant's inventory, which went stale the moment that tenant changed and published its resource names besides. Identifiers and names here are illustrative; the structure is real. To see your own, follow the [Azure sync guide](azure-sync.md).
 
-**Subscription**: `<subscription-id>`
-**Captured**: 2026-02-12
-**Total Resources**: 13
-**Edges**: 3 (1 property ref + 2 ARM parent)
+## The row shape
 
----
-
-## Full Raw Dataset (az graph query)
-
-All 13 resources as returned by the enriched KQL query.
-
-### 1. bing-search-tester-2025
+Every resource comes back as one row. The `_ref_*` columns are projected by the app, not by Resource Graph — each one is a property that may hold another resource's id, and each becomes a candidate edge.
 
 ```json
 {
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Bing/accounts/bing-search-tester-2025",
-  "type": "microsoft.bing/accounts",
-  "name": "bing-search-tester-2025",
-  "location": "global",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": {},
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 2. example-aiservices-eastus2
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/example-aiservices-eastus2",
-  "type": "microsoft.cognitiveservices/accounts",
-  "name": "example-aiservices-eastus2",
-  "location": "eastus2",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": null,
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 3. example-aiservices-eastus2_project (child of #2)
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/example-aiservices-eastus2/projects/example-aiservices-eastus2_project",
-  "type": "microsoft.cognitiveservices/accounts/projects",
-  "name": "example-aiservices-eastus2/example-aiservices-eastus2_project",
-  "location": "eastus2",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": null,
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-**ARM parent edge**: `#3 → #2` (depends_on, high) — inferred from ID hierarchy
-
-### 4. az-ai-test-project
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/az-ai-test-project",
-  "type": "microsoft.cognitiveservices/accounts",
-  "name": "az-ai-test-project",
-  "location": "eastus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": {},
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 5. aiFoundryTestProject (child of #4)
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.CognitiveServices/accounts/az-ai-test-project/projects/aiFoundryTestProject",
-  "type": "microsoft.cognitiveservices/accounts/projects",
-  "name": "az-ai-test-project/aiFoundryTestProject",
-  "location": "eastus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": null,
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-**ARM parent edge**: `#5 → #4` (depends_on, high) — inferred from ID hierarchy
-
-### 6. grafana-ai-o11y
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Dashboard/grafana/grafana-ai-o11y",
-  "type": "microsoft.dashboard/grafana",
-  "name": "grafana-ai-o11y",
-  "location": "centralus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": {},
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 7. Application Insights Smart Detection
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/microsoft.insights/actiongroups/Application Insights Smart Detection",
-  "type": "microsoft.insights/actiongroups",
-  "name": "Application Insights Smart Detection",
-  "location": "global",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": null,
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 8. ai_o11y (has property ref edge)
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/microsoft.insights/components/ai_o11y",
-  "type": "microsoft.insights/components",
-  "name": "ai_o11y",
-  "location": "centralus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": {},
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": "/subscriptions/<subscription-id>/resourcegroups/DefaultResourceGroup-CUS/providers/Microsoft.OperationalInsights/workspaces/DefaultWorkspace-<subscription-id>-CUS",
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-**Property ref edge**: `#8 → #12` (data_link, high) — via `_ref_workspaceId`
-
-### 9. ae2c2bcc-...-dashboard
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/ai-foundry-tester-2025/providers/Microsoft.Portal/dashboards/<resource-guid>-dashboard",
-  "type": "microsoft.portal/dashboards",
-  "name": "<resource-guid>-dashboard",
-  "location": "centralus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "ai-foundry-tester-2025",
-  "tags": {
-    "hidden-title": "ai_o11y Dashboard"
-  },
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 10. apim-learn
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/apim-learn/providers/Microsoft.Web/staticSites/apim-learn",
-  "type": "microsoft.web/staticsites",
-  "name": "apim-learn",
-  "location": "centralus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "apim-learn",
-  "tags": null,
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 11. astro-blog
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/astro-blog/providers/Microsoft.Web/staticSites/astro-blog",
-  "type": "microsoft.web/staticsites",
-  "name": "astro-blog",
-  "location": "centralus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "astro-blog",
-  "tags": null,
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 12. DefaultWorkspace-...-CUS
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/DefaultResourceGroup-CUS/providers/Microsoft.OperationalInsights/workspaces/DefaultWorkspace-<subscription-id>-CUS",
-  "type": "microsoft.operationalinsights/workspaces",
-  "name": "DefaultWorkspace-<subscription-id>-CUS",
-  "location": "centralus",
-  "subscriptionId": "<subscription-id>",
-  "resourceGroup": "defaultresourcegroup-cus",
-  "tags": null,
-  "dependsOn": null,
-  "_ref_serverFarmId": null,
-  "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
-  "_ref_storageAccountId": null
-}
-```
-
-### 13. NetworkWatcher_westeurope
-
-```json
-{
-  "id": "/subscriptions/<subscription-id>/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/NetworkWatcher_westeurope",
-  "type": "microsoft.network/networkwatchers",
-  "name": "NetworkWatcher_westeurope",
+  "id": "/subscriptions/<subscription-id>/resourceGroups/example-rg/providers/Microsoft.App/containerApps/example-app",
+  "type": "microsoft.app/containerapps",
+  "name": "example-app",
   "location": "westeurope",
   "subscriptionId": "<subscription-id>",
-  "resourceGroup": "networkwatcherrg",
-  "tags": null,
+  "resourceGroup": "example-rg",
+  "tags": { "team": "platform" },
   "dependsOn": null,
+  "_ref_environmentId": "/subscriptions/<subscription-id>/resourceGroups/example-rg/providers/Microsoft.App/managedEnvironments/example-env",
   "_ref_serverFarmId": null,
   "_ref_workspaceId": null,
-  "_ref_subnetId": null,
-  "_ref_vnetSubnetId": null,
-  "_ref_nsgId": null,
   "_ref_storageAccountId": null
 }
 ```
 
----
+A row whose `_ref_*` columns are all `null` still becomes a node; it simply has no discovered relationships. That is common and is not a failure.
 
-## Current C4 Type Mapping
+## The projection
 
-All 13 resources currently map to `system` via `inferC4Type()`:
-
-| # | Name | Azure Type | C4 Type | Notes |
-|---|------|-----------|---------|-------|
-| 1 | bing-search-tester-2025 | microsoft.bing/accounts | system | external service |
-| 2 | example-aiservices-eastus2 | microsoft.cognitiveservices/accounts | system | AI foundry hub |
-| 3 | example-aiservices-eastus2_project | microsoft.cognitiveservices/accounts/projects | system | child of #2 |
-| 4 | az-ai-test-project | microsoft.cognitiveservices/accounts | system | AI foundry hub |
-| 5 | aiFoundryTestProject | microsoft.cognitiveservices/accounts/projects | system | child of #4 |
-| 6 | grafana-ai-o11y | microsoft.dashboard/grafana | system | observability |
-| 7 | Application Insights Smart Detection | microsoft.insights/actiongroups | system | alerting |
-| 8 | ai_o11y | microsoft.insights/components | system | App Insights |
-| 9 | ae2c2bcc-...-dashboard | microsoft.portal/dashboards | system | portal dashboard |
-| 10 | apim-learn | microsoft.web/staticsites | system | static site |
-| 11 | astro-blog | microsoft.web/staticsites | system | static site |
-| 12 | DefaultWorkspace-...-CUS | microsoft.operationalinsights/workspaces | system | Log Analytics |
-| 13 | NetworkWatcher_westeurope | microsoft.network/networkwatchers | system | network monitor |
-
----
-
-## Edges (3 total)
-
-| From | To | Type | Confidence | Source |
-|------|----|------|------------|--------|
-| #3 example-aiservices-eastus2_project | #2 example-aiservices-eastus2 | depends_on | high | ARM parent inference |
-| #5 aiFoundryTestProject | #4 az-ai-test-project | depends_on | high | ARM parent inference |
-| #8 ai_o11y | #12 DefaultWorkspace-...-CUS | data_link | high | `_ref_workspaceId` property |
-
----
-
-## Type Diversity Assessment
-
-The current estate has **zero diversity** in C4 type mapping — everything maps to `system`. Here's what `inferC4Type` currently recognizes:
-
-| C4 Type | Azure Type Pattern | Count in Estate |
-|---------|-------------------|-----------------|
-| container | `microsoft.network/virtualnetworks` | 0 |
-| container | `microsoft.compute/virtualmachines` | 0 |
-| component | `microsoft.web/sites` | 0 |
-| system | `microsoft.containerservice/managedclusters` | 0 |
-| system | *(default fallback)* | 13 |
-
-### Suggested Type Mapping Expansion
-
-To get meaningful C4 variety from this estate:
-
-| Azure Type | Suggested C4 Type | Rationale |
-|-----------|-------------------|-----------|
-| `microsoft.web/staticsites` | externalSystem | publicly accessible, externally facing |
-| `microsoft.insights/components` | component | monitoring component within a system |
-| `microsoft.insights/actiongroups` | component | alerting component |
-| `microsoft.operationalinsights/workspaces` | container | data store / platform |
-| `microsoft.dashboard/grafana` | component | visualization component |
-| `microsoft.portal/dashboards` | component | portal component |
-| `microsoft.cognitiveservices/accounts` | system | AI platform (keep as system) |
-| `microsoft.cognitiveservices/accounts/projects` | component | project within AI platform |
-| `microsoft.bing/accounts` | externalSystem | external API service |
-| `microsoft.network/networkwatchers` | component | infrastructure component |
-
-### Free Azure Resources to Demonstrate More Types
-
-See [Recommendation section below](#recommendation-free-resources-for-type-diversity) for resources that would exercise `container`, `component`, and `externalSystem` mappings.
-
----
-
-## Enriched KQL Query
-
-Current query projects 6 additional `_ref_*` columns for property-based edges:
+Sixteen `_ref_*` columns are projected, several of them coalescing two spellings that differ across API versions. The authoritative list is `build_default_query` in `src-tauri/src/azure_sync.rs`.
 
 ```kql
 Resources
 | project id, type, name, location, subscriptionId, resourceGroup, tags,
-           dependsOn = properties.dependsOn,
-           _ref_serverFarmId = properties.serverFarmId,
-           _ref_workspaceId = properties.WorkspaceResourceId,
-           _ref_subnetId = properties.subnet.id,
-           _ref_vnetSubnetId = properties.vnetSubnetResourceId,
-           _ref_nsgId = properties.networkSecurityGroup.id,
-           _ref_storageAccountId = properties.storageAccount.id
+    dependsOn = properties.dependsOn,
+    _ref_serverFarmId       = properties.serverFarmId,
+    _ref_workspaceId        = coalesce(properties.WorkspaceResourceId, properties.workspaceResourceId),
+    _ref_subnetId           = coalesce(properties.subnet.id, properties.subnetId),
+    _ref_vnetSubnetId       = properties.vnetSubnetResourceId,
+    _ref_nsgId              = coalesce(properties.networkSecurityGroup.id, properties.networkSecurityGroupId),
+    _ref_storageAccountId   = coalesce(properties.storageAccount.id, properties.storageAccountId),
+    _ref_virtualNetworkId   = coalesce(properties.virtualNetwork.id, properties.virtualNetworkId),
+    _ref_publicIpAddressId  = coalesce(properties.publicIPAddress.id, properties.publicIpAddressId),
+    _ref_routeTableId       = coalesce(properties.routeTable.id, properties.routeTableId),
+    _ref_natGatewayId       = coalesce(properties.natGateway.id, properties.natGatewayId),
+    _ref_privateEndpointId  = properties.privateEndpoint.id,
+    _ref_privateLinkServiceId = properties.privateLinkService.id,
+    _ref_dnsZoneId          = coalesce(properties.privateDnsZoneId, properties.privateDnsZone.id),
+    _ref_keyVaultId         = properties.keyVault.id,
+    _ref_environmentId      = coalesce(properties.environmentId, properties.managedEnvironmentId),
+    _ref_registryId         = coalesce(properties.registryId, properties.containerRegistryId),
+    _ref_managedBy          = managedBy
 ```
 
-### Property Ref → Relationship Type Mapping (Rust)
+Adding a relationship means adding one column here and one label below. The `_ref_` prefix is stripped generically, so an unknown label is consumed rather than rejected.
 
-| Ref Label | Relationship Type | Confidence |
-|-----------|------------------|------------|
-| serverFarmId | depends_on | high |
-| workspaceId | data_link | high |
-| storageAccountId | data_link | high |
-| subnetId / vnetSubnetId | network_link | high |
-| nsgId | network_link | high |
-| *(other)* | inferred | medium |
+## Property ref to relationship type
 
----
+From `relationship_type_for_property_ref`:
 
-## Recommendation: Free Resources for Type Diversity
+| Ref label | Relationship | Confidence |
+| --------- | ------------ | ---------- |
+| `serverFarmId` | depends_on | high |
+| `environmentId` | depends_on | high |
+| `registryId` | depends_on | high |
+| `workspaceId` | data_link | high |
+| `storageAccountId` | data_link | high |
+| `subnetId`, `vnetSubnetId`, `nsgId`, `virtualNetworkId`, `publicIpAddressId`, `routeTableId`, `natGatewayId`, `privateEndpointId`, `privateLinkServiceId`, `dnsZoneId` | network_link | high |
+| `keyVaultId` | identity_link | medium |
+| `managedBy` | depends_on | medium |
+| *anything else* | inferred | medium |
 
-### Option A: VNet + Subnet + NSG (Free, Instant)
+`_ref_registryId` is projected but has never been observed firing: a Container App holds its registries under `properties.configuration.registries[]`, an array of login-server hostnames rather than a resource id. It is kept because it is the documented property for AKS. See [ADR-017](../architecture/adr/017-azure-resource-type-mapping.md).
 
-Creates network topology with `container` type nodes and `network_link` edges.
+## The three ways an edge is found
+
+1. **ARM parent** — one resource id is a prefix of another's.
+2. **`dependsOn`** — ARM deployment authoring. Frequently empty; it reflects how something was deployed, not how it runs.
+3. **Property ref** — the `_ref_*` columns above. In practice this is where most real edges come from.
+
+## C4 type mapping
+
+Resolved in three tiers — exact type, then provider namespace, then shape. Azure has roughly 4,650 resource types, so the exact table is an override layer rather than the mechanism. Fully described in [ADR-017](../architecture/adr/017-azure-resource-type-mapping.md) and summarised for users in the [Azure sync guide](azure-sync.md).
+
+## Growing an estate to exercise more types
+
+A subscription with only web apps produces a monotonous board. These are cheap ways to get more shapes into a test tenant.
+
+**Network topology** — yields `container` nodes and `network_link` edges:
 
 ```bash
 az group create -n graph-sync-demo -l centralus
@@ -420,82 +105,19 @@ az network vnet create \
   --network-security-group demo-nsg
 ```
 
-### Option B: App Service Plan + Web App (Free Tier)
-
-Creates `component` type node with `depends_on` edge via `serverFarmId`.
+**App Service plan and web app** — yields a `component` with a `depends_on` edge via `serverFarmId`:
 
 ```bash
 az appservice plan create -g graph-sync-demo -n demo-plan --sku F1
 az webapp create -g graph-sync-demo -n demo-webapp-graphsync --plan demo-plan
 ```
 
-### Option C: Storage Account (Free Tier Usage)
+Between them these exercise all three edge-discovery paths.
 
-Standalone — useful for testing tag-based ownership and `data_link` edges.
+## Still open
 
-```bash
-az storage account create -g graph-sync-demo -n demostgraphsync --sku Standard_LRS --kind StorageV2
-```
+- **Ownership tags.** `readTeamOwnership` checks `team`, `owner`, `domain` and `managed-by`. Candidates worth adding: `cost-center`, `environment`, and `app`/`application` as a natural system grouping.
+- **Namespace for multi-subscription sync.** `AzureMappingOptions.namespace` is wired through but unused by the UI. It exists to prevent node id collisions when syncing more than one subscription, and would be a natural grouping key for layout.
+- **Further `_ref_` candidates.** `properties.dnsSettings.fqdn` for public IPs and Traffic Manager, and `properties.containerRegistryId` for AKS, are documented properties nothing has needed yet.
 
----
-
-## Next Steps
-
-### 1. Expand `inferC4Type()` type mapping
-
-Update `azure-sync.mapper.ts` to map Azure types to diverse C4 types instead of defaulting everything to `system`. Use a lookup table approach:
-
-| Azure Type Pattern | C4 Type | Reasoning |
-|-------------------|---------|-----------|
-| `microsoft.cognitiveservices/accounts` | system | Top-level AI platform |
-| `microsoft.cognitiveservices/accounts/projects` | component | Child project within a system |
-| `microsoft.web/staticsites` | externalSystem | Publicly accessible, externally facing |
-| `microsoft.web/sites` | component | App hosted on a platform |
-| `microsoft.insights/components` | component | Monitoring component |
-| `microsoft.insights/actiongroups` | component | Alerting component |
-| `microsoft.operationalinsights/workspaces` | container | Data store / logging platform |
-| `microsoft.dashboard/grafana` | component | Visualization component |
-| `microsoft.portal/dashboards` | component | Portal UI component |
-| `microsoft.bing/accounts` | externalSystem | External API service |
-| `microsoft.network/networkwatchers` | component | Infrastructure component |
-| `microsoft.network/virtualnetworks` | container | Network boundary |
-| `microsoft.compute/virtualmachines` | container | Compute host |
-| `microsoft.containerservice/managedclusters` | system | K8s platform |
-| `microsoft.storage/storageaccounts` | container | Data store |
-
-**Heuristic fallback**: Resources with `/` child segments (e.g. `accounts/projects`) default to `component`; top-level resources default to `system`.
-
-### 2. Deploy free Azure resources for richer test data
-
-Run Option A + B from the recommendations above to get:
-- `container` nodes (VNet, Subnet)
-- `component` nodes (Web App)
-- `network_link` edges (NSG -> Subnet)
-- `depends_on` edges (Web App -> App Service Plan via `serverFarmId`)
-
-This exercises all 3 edge discovery paths (ARM parent, property ref, dependsOn).
-
-### 3. Add `_ref_*` columns for additional edge discovery
-
-Candidates for enriched KQL projection:
-
-| Property Path | Ref Label | Relationship Type | Common On |
-|--------------|-----------|-------------------|-----------|
-| `properties.managedBy` | managedBy | depends_on | Managed disks, AKS node pools |
-| `properties.dnsSettings.fqdn` | dnsName | network_link | Public IPs, Traffic Manager |
-| `properties.keyVaultId` | keyVaultId | identity_link | App Services, Functions |
-| `properties.containerRegistryId` | registryId | depends_on | AKS, Container Apps |
-
-### 4. Tag-based team ownership
-
-Current `readTeamOwnership` checks: `team`, `owner`, `domain`, `managed-by`. Consider adding:
-- `cost-center` — maps to team/department
-- `environment` — could influence C4 grouping (dev/staging/prod)
-- `app` or `application` — natural C4 system grouping
-
-### 5. Namespace support for multi-subscription sync
-
-The `AzureMappingOptions.namespace` parameter is wired through but not yet used in the UI. Next steps:
-- Pass subscription name or alias as namespace when syncing multiple subscriptions
-- Namespace prevents node ID collisions across subscriptions
-- Consider grouping nodes by namespace in the canvas layout
+Expanding `inferC4Type` and projecting the Container App environment reference were both previously listed here as future work. Both shipped in ADR-017.
