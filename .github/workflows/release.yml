@@ -120,8 +120,20 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
+      # The frontend lives outside src-tauri/, so release-plz — which decides by
+      # packaging the crate and diffing it against the last released package —
+      # sees a frontend-only change as no change. This marker is inside the crate
+      # and listed in Cargo.toml's `include`, so committing it makes one.
+      #
+      # It has to be *committed*: release-plz packages from a git worktree built
+      # from HEAD, where an uncommitted file does not exist. Writing it to the
+      # working tree and stopping is what silently ate v0.0.13 and the
+      # continuous-tone fix, both times while logging that it had worked.
       - name: Prepare release surface marker
+        id: surface
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           base_ref="${{ github.event.before }}"
@@ -131,9 +143,29 @@ jobs:
 
           bun .github/scripts/prepare-release-plz-surface.ts "${base_ref}" "${GITHUB_SHA}" "src-tauri/release-plz-surface.json"
 
-          if ! git diff --quiet -- src-tauri/release-plz-surface.json; then
-            echo "Prepared src-tauri/release-plz-surface.json for app changes outside src-tauri/."
+          if git diff --quiet -- src-tauri/release-plz-surface.json; then
+            echo "No app changes outside src-tauri/ to mark."
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
+
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/release-plz-surface.json
+
+          # [skip ci] is load-bearing: this job runs on pushes to main, so a push
+          # from inside it would re-trigger the whole workflow.
+          git commit -m "chore: mark app changes outside src-tauri as releasable [skip ci]"
+
+          # Credentials are scoped to this one push rather than persisted by the
+          # checkout, which deliberately runs with persist-credentials: false.
+          git push \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${GITHUB_REF_NAME}"
+
+          echo "Committed src-tauri/release-plz-surface.json for app changes outside src-tauri/."
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -153,6 +185,30 @@ jobs:
           config: src-tauri/release-plz.toml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The failure this exists for was silent: release-plz reported
+      # "already up to date", opened nothing, and the job went green while the
+      # step above logged success. Two releases were lost that way before anyone
+      # noticed. A release job that decides to do nothing has to say so.
+      - name: Fail if a releasable change opened no release PR
+        if: ${{ always() && steps.surface.outputs.changed == 'true' }}
+        shell: bash
+        env:
+          SURFACE_CHANGED: ${{ steps.surface.outputs.changed }}
+          PRS: ${{ steps.release-plz.outputs.prs }}
+        run: |
+          set -euo pipefail
+          if [[ "${SURFACE_CHANGED}" != "true" ]]; then
+            exit 0
+          fi
+
+          count="$(echo "${PRS:-[]}" | jq 'length')"
+          if [[ "${count}" == "0" ]]; then
+            echo "::error::App changes outside src-tauri/ were marked releasable, but release-plz opened no release PR. The surface marker mechanism is not working — see the Prepare release surface marker step."
+            exit 1
+          fi
+
+          echo "Release PR(s) opened: ${count}"
 
       - name: Write PR workflow summary
         shell: bash

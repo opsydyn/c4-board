@@ -22,9 +22,21 @@ describe("audible alarms are opt-in", () => {
     expect(DEFAULT_APP_SETTINGS.sirenEnabledDefault).toBe(false);
   });
 
-  it("leaves the rest of the audio defaults alone", () => {
-    // Only the alarm changes. Save cues are quiet, brief and expected.
-    expect(DEFAULT_APP_SETTINGS.masterAudioEnabled).toBe(true);
+  it("makes no sound at all until someone asks for it", () => {
+    // This assertion previously read `masterAudioEnabled: true`, on the reasoning
+    // that the save cue is quiet, brief and expected. That reasoning does not
+    // survive its own argument: ADR-019 made the siren opt-in because anything
+    // that makes noise on someone's machine should be opted into, and "quieter"
+    // is not "asked for". A fresh profile played a tone at 80% on first save.
+    //
+    // `masterAudioEnabled` is the gate above every source, so one default makes
+    // the app silent until someone turns audio on.
+    expect(DEFAULT_APP_SETTINGS.masterAudioEnabled).toBe(false);
+  });
+
+  it("keeps the sub-switches on, so enabling audio gives you audio", () => {
+    // Turning the master on should not require finding two more toggles. These
+    // stay true and are gated by the master, which is the switch users reach for.
     expect(DEFAULT_APP_SETTINGS.saveVolEnabled).toBe(true);
   });
 

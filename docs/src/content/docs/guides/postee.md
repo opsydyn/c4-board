@@ -145,7 +145,9 @@ The charts cover requests per second, p95 latency over time, throughput against 
 
 ### Sirens
 
-The siren is **off by default** and has to be armed deliberately, with **SIREN::ON/OFF** in the panel or by changing the default in Settings. It is a real oscillator that sounds for as long as a run lasts, and it also respects the global audio settings — it will not sound if master audio is off.
+The siren is **off by default** and has to be armed deliberately, with **SIREN::ON/OFF** in the panel or by changing the default in Settings. It is a real oscillator that sounds for as long as a run lasts.
+
+**Audio is off globally by default too**, so arming the siren on a fresh profile still produces silence until Master Audio is enabled under Settings → Audio. Two switches, deliberately: the app makes no sound until you ask, and the loudest thing in it needs asking for separately.
 
 The toggle stays usable while a run is in flight, so silencing the noise never requires aborting the measurement.
 

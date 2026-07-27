@@ -289,10 +289,18 @@ export type AppSettingsPatch = Partial<AppSettings>;
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   animationsEnabled: true,
   transitionIntensity: "normal",
-  masterAudioEnabled: true,
+  // Silent until asked. This gates every sound the app makes, so one default
+  // covers the save cue and the load-test siren alike. ADR-019 made the alarm
+  // opt-in on the grounds that anything making noise on someone's machine should
+  // be opted into; the save cue was left on because it is quieter, which is not
+  // the same as being asked for — a fresh profile played a tone at 80% the first
+  // time anything was saved.
+  masterAudioEnabled: false,
+  // Sub-switches stay on: turning the master on should give you audio, not send
+  // you hunting for two more toggles.
   saveVolEnabled: true,
-  // ADR-019: opt-in. An audible alarm should never be something you have to
-  // discover how to switch off.
+  // The alarm is opt-in even once audio is on. It is the loudest thing here and
+  // it runs for the length of a load test.
   sirenEnabledDefault: false,
   azurePanelVisible: false,
   ownershipLensVisible: false,

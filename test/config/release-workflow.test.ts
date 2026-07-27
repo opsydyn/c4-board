@@ -265,3 +265,75 @@ describe("release publication", () => {
     expect(withdraw?.run, "resolves the release by tag").not.toMatch(/release view "\$\{RELEASE_TAG\}"/);
   });
 });
+
+/**
+ * The release surface marker.
+ *
+ * The frontend lives outside `src-tauri/`, so release-plz — which decides by
+ * packaging the crate and diffing it against the last released package — sees a
+ * frontend-only change as no change at all. The marker file exists to make one:
+ * it is inside `src-tauri/` and listed in Cargo.toml's `include`, so changing it
+ * changes the package.
+ *
+ * The step wrote that file and stopped. release-plz packages from a git worktree
+ * built from HEAD, where an uncommitted file does not exist, so it reported
+ * `c4-board: already up to date` and opened nothing — while the step logged
+ * "Prepared src-tauri/release-plz-surface.json for app changes outside
+ * src-tauri/" and the job went green.
+ *
+ * That combination ate two releases: v0.0.13 and the continuous-tone fix. Both
+ * times the failure looked exactly like success. The guard below matters more
+ * than the commit — a release job that decides to do nothing has to say so.
+ */
+describe("the release surface marker", () => {
+  const markerStep = () => {
+    const step = ((jobsRaw["release-plz-pr"]?.["steps"] ?? []) as ReadonlyArray<WorkflowStep>)
+      .find((candidate) => candidate.name?.includes("release surface marker"));
+    expect(step, "the marker step has moved or been renamed").toBeDefined();
+    return step?.run ?? "";
+  };
+
+  it("commits the marker, because release-plz packages from git", () => {
+    // Writing it to the working tree is invisible to a worktree checkout.
+    expect(markerStep()).toMatch(/git commit/);
+  });
+
+  it("pushes it, because the commit has to be in the ref release-plz reads", () => {
+    expect(markerStep()).toMatch(/git push/);
+  });
+
+  it("does not re-trigger itself", () => {
+    // A push to main from a workflow that runs on pushes to main loops forever
+    // without this.
+    expect(markerStep()).toMatch(/\[skip ci\]/);
+  });
+});
+
+describe("a releasable change cannot silently produce no release", () => {
+  const steps = (jobsRaw["release-plz-pr"]?.["steps"] ?? []) as ReadonlyArray<WorkflowStep>;
+
+  const guard = () => {
+    const step = steps.find((candidate) => candidate.name?.includes("releasable"));
+    expect(step, "no guard step").toBeDefined();
+    return step;
+  };
+
+  it("fails the job when the surface changed but nothing was opened", () => {
+    // The specific silence that cost two releases.
+    expect(guard()?.run).toMatch(/exit 1/);
+  });
+
+  it("decides using both signals", () => {
+    const run = guard()?.run ?? "";
+
+    expect(run, "does not consider whether the surface changed").toMatch(/SURFACE_CHANGED/);
+    expect(run, "does not consider whether a PR resulted").toMatch(/PRS/);
+  });
+
+  it("runs after release-plz rather than before it", () => {
+    const releasePlz = steps.findIndex((step) => step.uses?.includes("release-plz/action") === true);
+    const guardIndex = steps.findIndex((step) => step.name?.includes("releasable"));
+
+    expect(guardIndex).toBeGreaterThan(releasePlz);
+  });
+});
