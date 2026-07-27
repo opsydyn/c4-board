@@ -257,6 +257,9 @@ export const AppSettingsSchema = Schema.Struct({
   masterAudioEnabled: Schema.Boolean,
   saveVolEnabled: Schema.Boolean,
   sirenEnabledDefault: Schema.Boolean,
+  // Which mode the board opens in. Persisted so leaving for Postee and coming
+  // back returns you to the storm, DDD or C4 board you left.
+  boardDomain: Schema.Literal("c4", "ddd", "eventStorming"),
   azurePanelVisible: Schema.Boolean,
   ownershipLensVisible: Schema.Boolean,
   couplingExplainabilityVisible: Schema.Boolean,
@@ -302,6 +305,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // The alarm is opt-in even once audio is on. It is the loudest thing here and
   // it runs for the length of a load test.
   sirenEnabledDefault: false,
+  boardDomain: "c4",
   azurePanelVisible: false,
   ownershipLensVisible: false,
   couplingExplainabilityVisible: false,

@@ -11,6 +11,7 @@
  * - Load diagram on mount or create new
  */
 
+import { resolveBoardDomain } from "@/core/effects/board-domain";
 import { SAVE_CUE_ENVELOPE, SAVE_CUE_LEAD_SECONDS, SAVE_CUE_NOTES } from "@/core/effects/save-cue";
 import {
   CaretLeftIcon,
@@ -117,7 +118,7 @@ import {
   type C4SaveSuccess,
   createC4SaveMachine,
 } from "../machines/c4-save.machine";
-import { type CanvasEvent, canvasMachine } from "../machines/canvas.machine";
+import { type CanvasEvent, canvasMachine, type DiagramDomain } from "../machines/canvas.machine";
 import type { ContextMenuAction } from "../utils/contextMenu";
 import { AzureSyncPanel } from "./AzureSyncPanel";
 import { BalancedMudChart } from "./BalancedMudChart";
@@ -471,6 +472,44 @@ export function C4CanvasContainer() {
     },
     [runEffect, settingsV1Enabled],
   );
+
+  /**
+   * The board's mode is board state, not a per-diagram property — `domain` is a
+   * column on nodes, not on diagrams. It lives in settings beside the panel
+   * toggles so leaving for Postee and returning lands you back in the storm,
+   * DDD or C4 board you left rather than always in C4.
+   *
+   * Fire-and-forget: failing to remember a mode must never block switching to it.
+   */
+  const persistBoardDomain = useCallback(
+    (domain: DiagramDomain): void => {
+      if (!settingsV1Enabled) {
+        return;
+      }
+      void runEffect(patchSettings({ boardDomain: domain })).catch((error) => {
+        console.warn("⚠️ Failed to persist board domain", error);
+      });
+    },
+    [runEffect, settingsV1Enabled],
+  );
+
+  /**
+   * Hydrate once, after settings load. Syncing on every settings change would
+   * fight the user: the patch is asynchronous, so a stale value would arrive
+   * moments after a switch and put the board back where it was.
+   */
+  const hydratedBoardDomainRef = useRef(false);
+  useEffect(() => {
+    if (isSettingsLoading || hydratedBoardDomainRef.current) {
+      return;
+    }
+    hydratedBoardDomainRef.current = true;
+
+    const persisted = resolveBoardDomain(appSettings.boardDomain);
+    if (persisted !== state.context.currentDomain) {
+      send({ type: "SET_DOMAIN", domain: persisted });
+    }
+  }, [appSettings.boardDomain, isSettingsLoading, send, state.context.currentDomain]);
 
   const handlePanelPreferencePersistFailure = useCallback(
     (event: {
@@ -2985,7 +3024,10 @@ export function C4CanvasContainer() {
             </ToggleButton>
             <DomainToggle
               currentDomain={state.context.currentDomain}
-              onDomainChange={(domain) => send({ type: "SET_DOMAIN", domain })}
+              onDomainChange={(domain) => {
+                send({ type: "SET_DOMAIN", domain });
+                persistBoardDomain(domain);
+              }}
             />
           </div>
           {isOwnershipLensOpen && (
