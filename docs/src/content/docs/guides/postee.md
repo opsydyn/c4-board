@@ -51,6 +51,31 @@ This sends real traffic at whatever you point it at, as fast as you configure. P
 
 **Abort Run** stops a run in flight. Workers finish the request already in the air and the run reports the statistics it gathered, so aborting costs you the remaining duration, not the measurement.
 
+### Somewhere to point it
+
+Best is a local target. Nothing leaves your machine, there is no third party to be polite to, and the numbers describe your service rather than the internet between you and it. This one also exposes a slow path and a failing path, so you can see what the panel does when things go wrong:
+
+```bash
+bun --eval 'Bun.serve({port:8787,async fetch(r){const p=new URL(r.url).pathname;if(p==="/slow"){await Bun.sleep(250);return new Response("ok")}if(p==="/flaky")return new Response("",{status:Math.random()<0.3?503:200});return new Response("ok")}})'
+```
+
+| URL | Behaviour | What it shows |
+| --- | --------- | ------------- |
+| `http://localhost:8787/` | 200, immediate | Real throughput — the server responds in single-digit milliseconds, so your machine is the limit, not it |
+| `http://localhost:8787/slow` | 200 after 250ms | Latency percentiles landing where you expect |
+| `http://localhost:8787/flaky` | 200, with roughly 30% 503 | Status distribution, per-class latency, and a failing error budget |
+| `http://localhost:9/` | Nothing listening | Transport failures — the connect counter fills while `responses_received` stays at zero |
+
+Stop it with `Ctrl-C` when you are done.
+
+For a public endpoint, `https://postman-echo.com/get` is built for this and is the safest of the well-known ones. It is shared free infrastructure, so keep it modest — duration `20`, concurrency `5`, and an RPS limit around `20`. At a couple of hundred milliseconds round trip you are mostly measuring the distance to it.
+
+`httpbin.org` is the name that usually comes up first. It is frequently overloaded — at the time of writing it returns 503 to everything, including its own `/get` — so it is a poor choice for a latency measurement, however useful an accidental error generator it makes.
+
+### Suggested first run
+
+Point at `http://localhost:8787/flaky`, duration `15`, concurrency `10`, and set **Error Budget** to `1`. Roughly 30% of responses will be 503, so the run comes back **FAILED** with the measured rate — which is the whole feature working end to end: a 503 counted as a response rather than an error, latency recorded for it, the status class broken out, and a verdict you could gate a pipeline on.
+
 ### Settings
 
 | Field | Default | Notes |
