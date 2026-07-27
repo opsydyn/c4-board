@@ -11,6 +11,7 @@
  * - Load diagram on mount or create new
  */
 
+import { SAVE_CUE_ENVELOPE, SAVE_CUE_LEAD_SECONDS, SAVE_CUE_NOTES } from "@/core/effects/save-cue";
 import {
   CaretLeftIcon,
   CaretRightIcon,
@@ -652,12 +653,9 @@ export function C4CanvasContainer() {
       saveSynthRef.current = new Tone.PolySynth(Tone.Synth, {
         volume: toSaveSynthVolumeDb(appSettings.masterVolume),
         oscillator: { type: "triangle8" },
-        envelope: {
-          attack: 0.006,
-          decay: 0.2,
-          sustain: 0.12,
-          release: 0.3,
-        },
+        // `sustain: 0` is load-bearing: a cue that can hold a note will
+        // eventually hold one. See src/core/effects/save-cue.ts.
+        envelope: { ...SAVE_CUE_ENVELOPE },
       }).toDestination();
     }
 
@@ -714,10 +712,23 @@ export function C4CanvasContainer() {
         }
 
         const synth = getSaveSynth(Tone);
-        const now = Tone.now();
-        synth.triggerAttackRelease("C4", "16n", now);
-        synth.triggerAttackRelease("E4", "16n", now + 0.08);
-        synth.triggerAttackRelease("G4", "8n", now + 0.16);
+
+        // Clears any voice left ringing by an earlier cue whose release landed in
+        // the past. With `sustain: 0` that should no longer be reachable; this
+        // costs nothing and means a single bad schedule cannot outlive one cue.
+        synth.releaseAll();
+
+        // Never schedule at exactly `Tone.now()` — under the main-thread load of
+        // adding a node, an event timed for "now" can be past by the time the
+        // audio thread reaches it.
+        const start = Tone.now() + SAVE_CUE_LEAD_SECONDS;
+        for (const cue of SAVE_CUE_NOTES) {
+          synth.triggerAttackRelease(
+            cue.note,
+            cue.durationSeconds,
+            start + cue.offsetSeconds,
+          );
+        }
         lastSaveSoundAtRef.current = nowMs;
         lastSaveVolSkipReasonRef.current = null;
       } catch (error) {
