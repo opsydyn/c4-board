@@ -505,7 +505,10 @@ mod interval_tests {
 
         assert_eq!(first.interval_requests_sent, 2, "first window saw two");
         assert_eq!(second.interval_requests_sent, 1, "second window saw one");
-        assert_eq!(second.requests_sent, 3, "cumulative still counts everything");
+        assert_eq!(
+            second.requests_sent, 3,
+            "cumulative still counts everything"
+        );
     }
 
     #[test]
@@ -761,7 +764,11 @@ mod distribution_tests {
 
         assert_eq!(ok.count, 50);
         assert_eq!(server.count, 50);
-        assert!(ok.p95_latency_ms < 100.0, "2xx p95 was {}", ok.p95_latency_ms);
+        assert!(
+            ok.p95_latency_ms < 100.0,
+            "2xx p95 was {}",
+            ok.p95_latency_ms
+        );
         assert!(
             server.p95_latency_ms > 1000.0,
             "5xx p95 was {}",
@@ -776,7 +783,10 @@ mod distribution_tests {
 
         let snapshot = stats.snapshot();
 
-        assert!(snapshot.status_classes.iter().all(|entry| entry.class != "4xx"));
+        assert!(snapshot
+            .status_classes
+            .iter()
+            .all(|entry| entry.class != "4xx"));
     }
 
     #[test]
@@ -794,12 +804,18 @@ mod distribution_tests {
         let snapshot = stats.snapshot();
 
         assert!(
-            snapshot.recent_errors.iter().any(|error| error.contains("failure-499")),
+            snapshot
+                .recent_errors
+                .iter()
+                .any(|error| error.contains("failure-499")),
             "the newest failure is missing: {:?}",
             snapshot.recent_errors
         );
         assert!(
-            !snapshot.recent_errors.iter().any(|error| error.contains("failure-0")),
+            !snapshot
+                .recent_errors
+                .iter()
+                .any(|error| error.contains("failure-0")),
             "the oldest failure is still being reported: {:?}",
             snapshot.recent_errors
         );

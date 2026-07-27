@@ -255,7 +255,10 @@ mod policy_tests {
         let config = config_with(Some(vec![429]), None);
 
         assert!(config.is_success(429));
-        assert!(!config.is_success(200), "the list is exhaustive, not additive");
+        assert!(
+            !config.is_success(200),
+            "the list is exhaustive, not additive"
+        );
     }
 
     #[test]

@@ -275,7 +275,11 @@ struct ActiveLoadTest(std::sync::Mutex<Option<load_test::CancellationHandle>>);
 fn stop_load_test(active: tauri::State<'_, ActiveLoadTest>) -> Result<(), String> {
     // Idempotent by design: stopping nothing is a no-op, not an error. The button
     // is allowed to be pressed twice, or after a run has already finished.
-    let handle = active.0.lock().map_err(|_| "load test state poisoned")?.clone();
+    let handle = active
+        .0
+        .lock()
+        .map_err(|_| "load test state poisoned")?
+        .clone();
     if let Some(handle) = handle {
         handle.cancel();
     }

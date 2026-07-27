@@ -559,7 +559,10 @@ mod cancellation_tests {
 
         let progress = run.await.expect("run task").expect("cancelled run is ok");
 
-        assert!(ticks.load(Ordering::Relaxed) > 0, "no progress was reported");
+        assert!(
+            ticks.load(Ordering::Relaxed) > 0,
+            "no progress was reported"
+        );
         assert!(
             progress.requests_sent > 0,
             "a cancelled run reported no attempts at all"
