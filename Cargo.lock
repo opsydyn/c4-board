@@ -348,7 +348,7 @@ dependencies = [
 
 [[package]]
 name = "c4-board"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "bytes",
  "futures",
