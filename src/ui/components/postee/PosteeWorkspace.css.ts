@@ -904,16 +904,34 @@ export const loadTestControls = style({
 
 export const loadTestButtonRow = style({
   display: "flex",
+  // The row started at three buttons and grew to six. Without wrapping, the
+  // extras pushed out of the panel instead of moving to a second line — the
+  // siren toggle hung past the right edge and the container gained a horizontal
+  // scrollbar. `gap` already covers both axes once wrapping is on.
+  flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "flex-start",
   gap: theme.spacing["3"],
+  // A flex item will not shrink below its min-content width without this, which
+  // is what turns an over-wide row into a scrollbar on an ancestor.
+  minWidth: 0,
 
-  "@media": {
-    "(max-width: 900px)": {
+  "@container": {
+    // Was a viewport media query, which never fires for a narrow pane inside a
+    // wide window — precisely this case, since the panel lives in a resizable
+    // column. `loadTestControls` above already sizes against this container.
+    "responsePane (max-width: 480px)": {
       flexDirection: "column",
       alignItems: "stretch",
     },
   },
+});
+
+// The buttons are a fixed 36px tall, so a label that wraps is clipped rather
+// than growing the button — which is how "Initiate Load Test" lost its last
+// line. Keeping labels on one line makes the row wider, and the row wraps.
+globalStyle(`${loadTestButtonRow} button`, {
+  whiteSpace: "nowrap",
 });
 
 const blastDoorAlertBlink = keyframes({
