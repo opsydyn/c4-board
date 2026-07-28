@@ -10,6 +10,8 @@ import {
 import {
   type AzureAuthStatus,
   type AzureSyncScope,
+  fingerprintAzureBoardEdge,
+  fingerprintAzureBoardNode,
   isAzureEdgeId,
   isAzureNodeId,
 } from "../../core/effects/azure-sync.types";
@@ -75,40 +77,14 @@ const parseTagFilters = (value: string): Record<string, string> => {
   return output;
 };
 
-const stableStringify = (value: unknown): string =>
-  JSON.stringify(value, (_key, nestedValue) => {
-    if (
-      nestedValue !== null
-      && typeof nestedValue === "object"
-      && !Array.isArray(nestedValue)
-    ) {
-      return Object.fromEntries(
-        Object.entries(nestedValue as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
-      );
-    }
-    return nestedValue;
-  });
-
 const toAzureNodeSnapshot = (node: Node): AzureSyncEntitySnapshot => ({
   id: node.id,
-  fingerprint: stableStringify({
-    type: node.type ?? null,
-    width: node.width ?? null,
-    height: node.height ?? null,
-    position: node.position,
-    data: node.data ?? null,
-  }),
+  fingerprint: fingerprintAzureBoardNode(node),
 });
 
 const toAzureEdgeSnapshot = (edge: Edge): AzureSyncEntitySnapshot => ({
   id: edge.id,
-  fingerprint: stableStringify({
-    type: edge.type ?? null,
-    source: edge.source,
-    target: edge.target,
-    label: edge.label ?? null,
-    data: edge.data ?? null,
-  }),
+  fingerprint: fingerprintAzureBoardEdge(edge),
 });
 
 const isAzureNode = (node: Node): boolean => isAzureNodeId(node.id);
