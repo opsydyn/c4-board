@@ -4,8 +4,11 @@ title: "ADR-007: Azure Resource Graph Sync for Dynamic C4 Infrastructure Diagram
 
 # ADR-007: Azure Resource Graph Sync for Dynamic C4 Infrastructure Diagrams
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-02-12
+
+> **Accepted 2026-07-27.** Status corrected during an audit of the ADR index, which had carried this as Proposed long after it shipped. Seven `azure-sync.*` modules ship and the pipeline was exercised end to end against a live subscription, which is what surfaced the defects behind ADR-017.
+
 **Deciders**: Alan
 **Technical Story**: Enable deterministic, repeatable generation of C4 board diagrams from Azure infrastructure inventory while preserving ownership, coupling, and save/runtime guarantees.
 

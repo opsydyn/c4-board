@@ -4,8 +4,11 @@ title: "ADR-008: Rig Agent Platform Orchestration for OPY Net"
 
 # ADR-008: Rig Agent Platform Orchestration for OPY Net
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-02-15
+
+> **Accepted 2026-07-27.** Status corrected during an audit of the ADR index, which had carried this as Proposed long after it shipped. Twelve `rig_agent_*` commands are registered in the Tauri handler and OPY Net is in the product.
+
 **Deciders**: Alan
 **Technical Story**: Expand OPY Net from prompt/response assistant to a safe, deterministic, multi-stage agent platform that can generate and evolve boards from user intent.
 

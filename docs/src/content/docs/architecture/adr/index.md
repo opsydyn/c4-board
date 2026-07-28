@@ -24,14 +24,14 @@ Each ADR follows this structure:
 
 | ADR                                              | Title                                                             | Status   | Date       |
 | ------------------------------------------------ | ----------------------------------------------------------------- | -------- | ---------- |
-| [ADR-001](./001-postee-workspace-refactor.md)    | PosteeWorkspace Component Refactor to Functional Core Pattern    | Proposed | 2025-12-30 |
+| [ADR-001](./001-postee-workspace-refactor.md)    | PosteeWorkspace Component Refactor to Functional Core Pattern    | Accepted | 2025-12-30 |
 | [ADR-002](./002-postee-actor-model-refactor.md)  | Postee Actor Model Refactor (XState 5 Best Practices)            | Proposed | 2025-12-30 |
 | [ADR-003](./003-mcp-integration-architecture.md) | MCP Integration Architecture (Model Context Protocol Support)    | Proposed | 2025-12-31 |
 | [ADR-004](./004-sqlite-pool-architecture.md)     | SQLite Pool Architecture — Bypassing Plugin for Runtime Queries  | Accepted | 2026-02-07 |
-| [ADR-005](./005-global-settings-wiring-plan.md)  | Global Settings Architecture and Wiring Plan                     | Proposed | 2026-02-09 |
-| [ADR-006](./006-balanced-coupling-v2-and-mud-threshold-controls.md) | Balanced Coupling V2 Model and Big Ball of Mud Threshold Controls | Proposed | 2026-02-10 |
-| [ADR-007](./007-azure-graph-sync.md)             | Azure Resource Graph Sync for Dynamic C4 Infrastructure Diagrams | Proposed | 2026-02-12 |
-| [ADR-008](./008-rig-agent-platform-orchestration.md) | Rig Agent Platform Orchestration for OPY Net                 | Proposed | 2026-02-15 |
+| [ADR-005](./005-global-settings-wiring-plan.md)  | Global Settings Architecture and Wiring Plan                     | Accepted | 2026-02-09 |
+| [ADR-006](./006-balanced-coupling-v2-and-mud-threshold-controls.md) | Balanced Coupling V2 Model and Big Ball of Mud Threshold Controls | Accepted | 2026-02-10 |
+| [ADR-007](./007-azure-graph-sync.md)             | Azure Resource Graph Sync for Dynamic C4 Infrastructure Diagrams | Accepted | 2026-02-12 |
+| [ADR-008](./008-rig-agent-platform-orchestration.md) | Rig Agent Platform Orchestration for OPY Net                 | Accepted | 2026-02-15 |
 | [ADR-009](./009-varlock-environment-governance.md) | Adopt Varlock for Environment Governance                    | Accepted | 2026-07-23 |
 | [ADR-010](./010-http-response-integrity.md)      | HTTP Response Integrity — Never Discard a Response on Body Decode Failure | Accepted | 2026-07-24 |
 | [ADR-011](./011-postee-single-pane-workspace.md) | Postee Single-Pane Workspace Layout                              | Accepted | 2026-07-25 |

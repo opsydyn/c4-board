@@ -4,8 +4,11 @@ title: "ADR-006: Balanced Coupling V2 Model and Big Ball of Mud Threshold Contro
 
 # ADR-006: Balanced Coupling V2 Model and Big Ball of Mud Threshold Controls
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-02-10
+
+> **Accepted 2026-07-27.** Status corrected during an audit of the ADR index, which had carried this as Proposed long after it shipped. Both halves shipped: the V2 model, and `bigBallOfMudAlertThreshold` as a validated setting (5.0–9.5, default 8.0) with the mud chart rendering against it.
+
 **Deciders**: Alan
 **Technical Story**: Improve coupling/risk accuracy for real-world architectures, align scoring to Khononov's balancing formula, and give teams explicit control over mud-alert thresholds and node-level scoring.
 

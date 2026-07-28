@@ -4,8 +4,11 @@ title: "ADR-001: PosteeWorkspace Component Refactor to Functional Core Pattern"
 
 # ADR-001: PosteeWorkspace Component Refactor to Functional Core Pattern
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2025-12-30
+
+> **Accepted 2026-07-27.** Status corrected during an audit of the ADR index, which had carried this as Proposed long after it shipped. Every module this ADR proposed exists — `form-validation.ts`, `status-derivation.ts` and `ui-state.ts` — and Postee's logic now lives across 37 modules under `src/core/effects/postee/`, with the component down to 760 lines.
+
 **Deciders**: Development Team
 **Technical Story**: PosteeWorkspace architectural assessment revealed violations of Functional Core, Imperative Shell pattern
 
