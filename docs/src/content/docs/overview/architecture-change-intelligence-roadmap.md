@@ -42,7 +42,7 @@ The current OPY/Rig C4 loop is strong enough to treat as a foundation:
 Known gaps:
 
 - Runtime execution is still effectively OpenAI-first even though settings expose additional providers.
-- Provider token usage is reported and decoded but not yet persisted for the board surface, which blocks budget UI and release gates. Postee runs already persist it in `postee_agent_runs`.
+- Provider token usage is now persisted on both surfaces — `opy_agent_runs` for the board, `postee_agent_runs` for Postee — but nothing aggregates or displays it, so there is still no budget UI and no cost estimate.
 - Rig tool contracts exist, but OPY does not yet expose a broad Rig-native tool registry for architecture operations.
 - The OPY handbook and older roadmap contain stale status language in a few sections and should be reconciled as this roadmap becomes canonical.
 

@@ -372,6 +372,7 @@ describe("opy agent persistence restart recovery", () => {
       startedAt: 100,
       completedAt: null,
       errorSummary: null,
+      usage: null,
     };
     const task: OpyAgentTask = {
       id: "task-1",

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { RigAgentCitation, RigAgentContextBundle } from "./agent-context";
-import type { RigC4DiagramProposal } from "./ai-agent.runtime";
+import type { RigC4DiagramProposal, RigUsageMetadata } from "./ai-agent.runtime";
 import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService, NotFoundError } from "./database.base";
 import type { NodeDomain } from "./node-operations";
@@ -57,6 +57,13 @@ export interface OpyAgentRun {
   readonly startedAt: number;
   readonly completedAt: number | null;
   readonly errorSummary: string | null;
+  /**
+   * Provider token usage, or `null` when this run never captured any — it
+   * predates Rig 0.40, or it failed before the provider answered. An all-zero
+   * envelope is a different statement: the provider answered and reported
+   * nothing. A budget view must not read the first as the second.
+   */
+  readonly usage: RigUsageMetadata | null;
 }
 
 export interface OpyAgentTask {
@@ -312,7 +319,14 @@ const LIST_RUNS_SQL = `
     status,
     started_at AS startedAt,
     completed_at AS completedAt,
-    error_summary AS errorSummary
+    error_summary AS errorSummary,
+    input_tokens AS inputTokens,
+    output_tokens AS outputTokens,
+    total_tokens AS totalTokens,
+    cached_input_tokens AS cachedInputTokens,
+    cache_creation_input_tokens AS cacheCreationInputTokens,
+    tool_use_prompt_tokens AS toolUsePromptTokens,
+    reasoning_tokens AS reasoningTokens
   FROM opy_agent_runs
   WHERE session_id = ?
   ORDER BY started_at DESC
@@ -484,7 +498,14 @@ const LIST_ACTIVE_RUNS_SQL = `
     status,
     started_at AS startedAt,
     completed_at AS completedAt,
-    error_summary AS errorSummary
+    error_summary AS errorSummary,
+    input_tokens AS inputTokens,
+    output_tokens AS outputTokens,
+    total_tokens AS totalTokens,
+    cached_input_tokens AS cachedInputTokens,
+    cache_creation_input_tokens AS cacheCreationInputTokens,
+    tool_use_prompt_tokens AS toolUsePromptTokens,
+    reasoning_tokens AS reasoningTokens
   FROM opy_agent_runs
   WHERE session_id = ?
     AND status = 'running'
@@ -541,9 +562,16 @@ const INSERT_RUN_SQL = `
     status,
     started_at,
     completed_at,
-    error_summary
+    error_summary,
+    input_tokens,
+    output_tokens,
+    total_tokens,
+    cached_input_tokens,
+    cache_creation_input_tokens,
+    tool_use_prompt_tokens,
+    reasoning_tokens
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 const UPSERT_TASK_SQL = `
@@ -620,7 +648,14 @@ const UPDATE_RUN_SQL = `
     stage = ?,
     status = ?,
     completed_at = ?,
-    error_summary = ?
+    error_summary = ?,
+    input_tokens = ?,
+    output_tokens = ?,
+    total_tokens = ?,
+    cached_input_tokens = ?,
+    cache_creation_input_tokens = ?,
+    tool_use_prompt_tokens = ?,
+    reasoning_tokens = ?
   WHERE id = ?
     AND session_id = ?
 `;
@@ -940,6 +975,13 @@ type AgentRunRow = {
   startedAt: number;
   completedAt: number | null;
   errorSummary: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedInputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  toolUsePromptTokens: number | null;
+  reasoningTokens: number | null;
 };
 
 type AgentTaskRow = {
@@ -1206,6 +1248,53 @@ const decodeMessageRow = (row: MessageRow): OpyChatMessage | null => {
   };
 };
 
+/** Binds the usage envelope to its seven columns, or seven nulls when unknown. */
+const toRunUsageValues = (
+  usage: RigUsageMetadata | null | undefined,
+): ReadonlyArray<number | null> =>
+  usage == null ? [null, null, null, null, null, null, null] : [
+    usage.inputTokens,
+    usage.outputTokens,
+    usage.totalTokens,
+    usage.cachedInputTokens,
+    usage.cacheCreationInputTokens,
+    usage.toolUsePromptTokens,
+    usage.reasoningTokens,
+  ];
+
+/**
+ * Reads the seven usage columns as one envelope, or `null` when the run has no
+ * usage on record.
+ *
+ * A single missing counter makes the whole envelope unknown rather than a
+ * partial total, because a half-populated row cannot be summed honestly.
+ */
+const decodeRunUsage = (row: AgentRunRow): RigUsageMetadata | null => {
+  const isCounter = (value: number | null): value is number => typeof value === "number" && Number.isFinite(value);
+
+  if (
+    !isCounter(row.inputTokens)
+    || !isCounter(row.outputTokens)
+    || !isCounter(row.totalTokens)
+    || !isCounter(row.cachedInputTokens)
+    || !isCounter(row.cacheCreationInputTokens)
+    || !isCounter(row.toolUsePromptTokens)
+    || !isCounter(row.reasoningTokens)
+  ) {
+    return null;
+  }
+
+  return {
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    totalTokens: row.totalTokens,
+    cachedInputTokens: row.cachedInputTokens,
+    cacheCreationInputTokens: row.cacheCreationInputTokens,
+    toolUsePromptTokens: row.toolUsePromptTokens,
+    reasoningTokens: row.reasoningTokens,
+  };
+};
+
 const decodeAgentRunRow = (row: AgentRunRow): OpyAgentRun | null => {
   if (
     !isOpyAgentRunAgent(row.agent)
@@ -1226,6 +1315,7 @@ const decodeAgentRunRow = (row: AgentRunRow): OpyAgentRun | null => {
     startedAt: toTimestamp(row.startedAt),
     completedAt: toNullableTimestamp(row.completedAt),
     errorSummary: toNullableText(row.errorSummary),
+    usage: decodeRunUsage(row),
   };
 };
 
@@ -1550,6 +1640,7 @@ export const createOpyAgentRun = (run: OpyAgentRun) =>
       run.startedAt,
       run.completedAt,
       run.errorSummary,
+      ...toRunUsageValues(run.usage),
     ]);
 
     return run;
@@ -1659,6 +1750,7 @@ export const updateOpyAgentRun = (run: OpyAgentRun) =>
       run.status,
       run.completedAt,
       run.errorSummary,
+      ...toRunUsageValues(run.usage),
       run.id,
       run.sessionId,
     ]);

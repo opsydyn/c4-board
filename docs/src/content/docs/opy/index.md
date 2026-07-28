@@ -402,7 +402,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - Settings agent audit now reports replay readiness counts: replayable, partial, and blocked
 - replay readiness is deterministic and based on the stored request replay kind, required artifacts, snapshot linkage, and terminal task status
 - offline Rig fixture evals now cover read-only QA grounding, safe mutation approval metadata, read-only mutation blocking, policy-budget rejection, low-confidence proposal coverage, failed-provider replay blocking, and Azure-heavy rollback preview/approval
-- provider token usage is now reported by the runtime and validated at the Effect boundary, but the eval dashboard does not yet include it because the board surface does not persist it against tasks and runs
+- provider token usage is now reported, validated, and persisted on the run envelope, but the eval dashboard does not yet aggregate it into a per-session or per-cohort figure
 - cost estimates are not available at all; the runtime reports tokens, not money
 
 ## Run Envelope and Telemetry
@@ -418,6 +418,13 @@ Each OPY run is wrapped in a durable run envelope.
 - `startedAt`
 - `completedAt`
 - `errorSummary`
+- `usage` — provider token counts, or `null` when the run captured none
+
+Usage is attached the moment the provider answers, not at completion, so a run
+that fails afterwards still records what it spent. `null` and an all-zero
+envelope are different claims: `null` means no measurement was captured (the run
+predates Rig 0.40, or it failed before the provider answered), while zeros mean
+the provider answered and reported nothing.
 
 ### Current Run Intents
 
@@ -615,10 +622,10 @@ Model runtime:
 - `src-tauri/src/ai_agent.rs` — Tauri command adapters, secret resolution,
   prompts, sanitization, and validation. It consumes the runtime rather than Rig.
 
-Provider token usage crosses into TypeScript on every command response and is
-validated by `ai-agent.runtime.ts`. It is available to the core task trail but is
-not persisted against board runs and has no budget UI; a provider that reports
-nothing sends zeros rather than omitting the envelope.
+Provider token usage crosses into TypeScript on every command response, is
+validated by `ai-agent.runtime.ts`, and is persisted on the run envelope in
+`opy_agent_runs`. There is no budget UI over it yet, and no cost estimate — the
+runtime reports tokens, not money.
 
 Runtime and persistence:
 

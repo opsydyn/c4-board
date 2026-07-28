@@ -4,6 +4,7 @@ import {
   buildOpyAgentTaskLifecycleMetadata,
   createOpyAgentArtifact,
   createOpyAgentCheckpoint,
+  createOpyAgentRun,
   deriveOpyAgentTaskSnapshotRef,
   getOpyAgentCheckpoint,
   interruptOpyAgentTasks,
@@ -15,12 +16,15 @@ import {
   listAllOpyDiagramProposals,
   listOpyAgentArtifacts,
   listOpyAgentCheckpoints,
+  listOpyAgentRuns,
   listOpyAgentTasks,
   listOpyAgentToolCalls,
   listOpyDiagramProposals,
   type OpyAgentCheckpoint,
+  type OpyAgentRun,
   type OpyAgentTask,
   type OpyPersistedDiagramProposal,
+  updateOpyAgentRun,
   upsertOpyAgentTask,
   upsertOpyAgentToolCall,
   upsertOpyDiagramProposal,
@@ -211,6 +215,151 @@ const runExitWithDatabaseService = async <A, E>(
 
   return Effect.runPromiseExit(effect.pipe(Effect.provide(layer)));
 };
+
+const createRun = (overrides?: Partial<OpyAgentRun>): OpyAgentRun => ({
+  id: "run-1",
+  sessionId: "session-1",
+  agent: "opy-net",
+  intent: "review-c4-board",
+  stage: "invoke",
+  status: "running",
+  startedAt: 2_000,
+  completedAt: null,
+  errorSummary: null,
+  usage: null,
+  ...overrides,
+});
+
+describe("opy agent run usage", () => {
+  const usage = {
+    inputTokens: 900,
+    outputTokens: 120,
+    totalTokens: 1_020,
+    cachedInputTokens: 64,
+    cacheCreationInputTokens: 0,
+    toolUsePromptTokens: 12,
+    reasoningTokens: 30,
+  };
+
+  it("persists the full provider usage envelope when a run reports one", async () => {
+    const execute = vi.fn();
+
+    await runWithDatabaseService(
+      createOpyAgentRun(createRun({ usage })),
+      { execute },
+    );
+
+    const [sql, values] = execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("INSERT INTO opy_agent_runs");
+    expect(values.slice(9)).toEqual([900, 120, 1_020, 64, 0, 12, 30]);
+  });
+
+  it("records a run that captured no usage as null rather than as zero", async () => {
+    const execute = vi.fn();
+
+    await runWithDatabaseService(
+      createOpyAgentRun(createRun({ usage: null })),
+      { execute },
+    );
+
+    const [, values] = execute.mock.calls[0] as [string, unknown[]];
+    expect(values.slice(9)).toEqual([null, null, null, null, null, null, null]);
+  });
+
+  it("carries usage through the terminal run transition", async () => {
+    const execute = vi.fn();
+
+    await runWithDatabaseService(
+      updateOpyAgentRun(createRun({ status: "completed", stage: "complete", completedAt: 2_400, usage })),
+      { execute },
+    );
+
+    const [sql, values] = execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("UPDATE opy_agent_runs");
+    expect(values.slice(4, 11)).toEqual([900, 120, 1_020, 64, 0, 12, 30]);
+  });
+
+  it("decodes persisted usage when listing session runs", async () => {
+    const runs = await runWithDatabaseService(listOpyAgentRuns("session-1"), {
+      query: () => [
+        {
+          id: "run-1",
+          sessionId: "session-1",
+          agent: "opy-net",
+          intent: "review-c4-board",
+          stage: "complete",
+          status: "completed",
+          startedAt: 2_000,
+          completedAt: 2_400,
+          errorSummary: null,
+          inputTokens: 900,
+          outputTokens: 120,
+          totalTokens: 1_020,
+          cachedInputTokens: 64,
+          cacheCreationInputTokens: 0,
+          toolUsePromptTokens: 12,
+          reasoningTokens: 30,
+        },
+      ],
+    });
+
+    expect(runs[0]?.usage).toEqual(usage);
+  });
+
+  it("reads a run predating usage capture as unknown, not as a free run", async () => {
+    const runs = await runWithDatabaseService(listOpyAgentRuns("session-1"), {
+      query: () => [
+        {
+          id: "run-legacy",
+          sessionId: "session-1",
+          agent: "opy-net",
+          intent: "chat",
+          stage: "complete",
+          status: "completed",
+          startedAt: 1_000,
+          completedAt: 1_400,
+          errorSummary: null,
+          inputTokens: null,
+          outputTokens: null,
+          totalTokens: null,
+          cachedInputTokens: null,
+          cacheCreationInputTokens: null,
+          toolUsePromptTokens: null,
+          reasoningTokens: null,
+        },
+      ],
+    });
+
+    expect(runs[0]?.usage).toBeNull();
+  });
+
+  it("treats a provider that reported all zeros as a real zero-token measurement", async () => {
+    const runs = await runWithDatabaseService(listOpyAgentRuns("session-1"), {
+      query: () => [
+        {
+          id: "run-zero",
+          sessionId: "session-1",
+          agent: "opy-net",
+          intent: "chat",
+          stage: "complete",
+          status: "completed",
+          startedAt: 1_000,
+          completedAt: 1_400,
+          errorSummary: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          cachedInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          toolUsePromptTokens: 0,
+          reasoningTokens: 0,
+        },
+      ],
+    });
+
+    expect(runs[0]?.usage).toEqual(ZERO_RIG_USAGE);
+  });
+});
 
 describe("opy-chat.persistence", () => {
   it("lists all OPY chat sessions across domains for audit views", async () => {

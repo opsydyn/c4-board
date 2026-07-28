@@ -8,7 +8,7 @@
  */
 
 import type { AgentError } from "@/core/effects/ai-agent.runtime";
-import { Effect, Either } from "effect";
+import { Effect, Either, Option } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
@@ -17,7 +17,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
 }));
 
-const { planRigC4Diagram, reviewRigC4Board, runRigHello } = await import(
+const { planRigC4Diagram, readRigUsage, reviewRigC4Board, runRigHello } = await import(
   "@/core/effects/ai-agent.runtime"
 );
 
@@ -148,5 +148,24 @@ describe("Rig provider usage metadata", () => {
 
     expect(error._tag).toBe("AgentRuntimeError");
     expect(error.stage).toBe("complete");
+  });
+});
+
+describe("readRigUsage", () => {
+  it("finds the usage envelope on any command result that carries one", () => {
+    expect(readRigUsage(helloResponse)).toEqual(Option.some(usage));
+    expect(readRigUsage(proposalResponse)).toEqual(Option.some(usage));
+    expect(readRigUsage(reviewResponse)).toEqual(Option.some(usage));
+  });
+
+  it("reports no usage for a result that never carried one", () => {
+    expect(readRigUsage({ tool: "board_summary", result: {} })).toEqual(Option.none());
+    expect(readRigUsage(null)).toEqual(Option.none());
+    expect(readRigUsage("ready")).toEqual(Option.none());
+  });
+
+  it("reports no usage rather than a partial total when the envelope is incomplete", () => {
+    expect(readRigUsage({ ...helloResponse, usage: { inputTokens: 12, outputTokens: 4 } }))
+      .toEqual(Option.none());
   });
 });

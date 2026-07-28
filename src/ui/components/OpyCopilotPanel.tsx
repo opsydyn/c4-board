@@ -1,5 +1,5 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   assembleRigAgentContext,
@@ -41,6 +41,7 @@ import {
   makeAgentPolicyError,
   makeAgentRuntimeError,
   planRigC4Diagram,
+  readRigUsage,
   reviewRigC4Board,
   type RigC4BoardEdge,
   type RigC4BoardNode,
@@ -3094,6 +3095,7 @@ export function OpyCopilotPanel({
           startedAt: Date.now(),
           completedAt: null,
           errorSummary: null,
+          usage: null,
         }),
       );
 
@@ -3110,7 +3112,7 @@ export function OpyCopilotPanel({
   const transitionAgentRun = useCallback(
     async (
       currentRun: OpyAgentRun,
-      patch: Partial<Pick<OpyAgentRun, "stage" | "status" | "completedAt" | "errorSummary">>,
+      patch: Partial<Pick<OpyAgentRun, "stage" | "status" | "completedAt" | "errorSummary" | "usage">>,
     ): Promise<OpyAgentRun> => {
       const nextRun: OpyAgentRun = {
         ...currentRun,
@@ -4091,8 +4093,12 @@ export function OpyCopilotPanel({
         });
         throwIfLifecycleRequestInactive(taskId);
         agentLifecycle.markResultReady();
+        // Attached as soon as the provider answers, not at completion: a run
+        // that fails afterwards still spent those tokens, and later transitions
+        // carry the measurement forward.
         currentRun = await transitionAgentRun(currentRun, {
           stage: "persist",
+          usage: Option.getOrNull(readRigUsage(result)),
         });
 
         if (

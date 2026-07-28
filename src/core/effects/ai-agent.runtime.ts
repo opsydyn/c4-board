@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Option, pipe, Schema } from "effect";
 import {
   type RigC4BoardEdge,
   type RigC4BoardNode,
@@ -51,6 +51,25 @@ const RigUsageMetadataSchema = Schema.Struct({
 });
 
 export type RigUsageMetadata = Schema.Schema.Type<typeof RigUsageMetadataSchema>;
+
+const RigUsageCarrierSchema = Schema.Struct({
+  usage: RigUsageMetadataSchema,
+});
+
+/**
+ * Reads the usage envelope off a command result that may or may not carry one.
+ *
+ * The OPY lifecycle runner is generic over its result: a chat, proposal, or
+ * review answer carries usage, while a read-tool or rollback result does not.
+ * `None` means this result never reported usage — not that the run was free.
+ * A partially-shaped envelope is `None` as well; half a measurement cannot be
+ * summed into a budget.
+ */
+export const readRigUsage = (value: unknown): Option.Option<RigUsageMetadata> =>
+  pipe(
+    Schema.decodeUnknownOption(RigUsageCarrierSchema)(value),
+    Option.map((carrier) => carrier.usage),
+  );
 
 const RigHelloResponseSchema = Schema.Struct({
   message: Schema.String,
