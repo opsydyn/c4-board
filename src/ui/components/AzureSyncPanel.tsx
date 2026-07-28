@@ -2,6 +2,7 @@ import { CloudIcon } from "@phosphor-icons/react";
 import type { Edge, Node } from "@xyflow/react";
 import { useEffect, useMemo } from "react";
 import type { RigAgentAzureSyncRetrievalSnapshot } from "../../core/effects/agent-retrieval";
+import type { AzureApplyPlan, AzureApplyPolicy } from "../../core/effects/azure-sync.apply-policy";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import type { AzureRelationshipConfidence, AzureRelationshipSource } from "../../core/effects/azure-sync.types";
 import { useAzureSync } from "../hooks/useAzureSync";
@@ -11,7 +12,8 @@ interface AzureSyncPanelProps {
   readonly nodes: readonly Node[];
   readonly edges: readonly Edge[];
   readonly diagramId?: string | null;
-  readonly onApply?: (dryRun: AzureSyncDryRunOutput) => Promise<void>;
+  readonly policy: AzureApplyPolicy;
+  readonly onApply?: (dryRun: AzureSyncDryRunOutput, plan: AzureApplyPlan) => Promise<void>;
   readonly onSummaryChange?: (summary: RigAgentAzureSyncRetrievalSnapshot | null) => void;
 }
 
@@ -95,6 +97,7 @@ export function AzureSyncPanel({
   nodes,
   edges,
   diagramId,
+  policy,
   onApply,
   onSummaryChange,
 }: AzureSyncPanelProps) {
@@ -114,6 +117,9 @@ export function AzureSyncPanel({
     lastAppliedAt,
     existingAzureNodeCount,
     existingAzureEdgeCount,
+    applyDecision,
+    acknowledgedUntrustedSnapshot,
+    acknowledgeUntrustedSnapshot,
     checkAuth,
     runDryRun,
     runApply,
@@ -121,6 +127,7 @@ export function AzureSyncPanel({
   } = useAzureSync({
     nodes,
     edges,
+    policy,
     ...(diagramId ? { diagramId } : {}),
     ...(onApply ? { onApply } : {}),
   });
@@ -351,6 +358,32 @@ export function AzureSyncPanel({
         </label>
       </div>
 
+      {applyDecision && applyDecision.ok === false && (
+        <div className={styles.syncList}>
+          {applyDecision.blocked.map((block) => (
+            <p key={block.reason} className={styles.syncWarning}>
+              {`BLOCKED :: ${block.message} ${block.recommendedAction}`}
+            </p>
+          ))}
+          {applyDecision.blocked.some((block) => block.reason === "untrusted-snapshot") && (
+            <label className={styles.syncWarning}>
+              <input
+                type="checkbox"
+                checked={acknowledgedUntrustedSnapshot}
+                onChange={(event) =>
+                  acknowledgeUntrustedSnapshot(event.target.checked)}
+              />
+              {" I have checked the scope and accept this snapshot may be incomplete"}
+            </label>
+          )}
+        </div>
+      )}
+      {applyDecision?.ok === true
+        && (applyDecision.plan.nodesRetained > 0 || applyDecision.plan.edgesRetained > 0) && (
+        <p className={styles.syncWarning}>
+          {`RETAINING ${applyDecision.plan.nodesRetained} node(s) and ${applyDecision.plan.edgesRetained} edge(s) Azure no longer reports. Enable archiving in Settings to remove them.`}
+        </p>
+      )}
       <div className={styles.syncActions}>
         <button
           type="button"
@@ -378,9 +411,14 @@ export function AzureSyncPanel({
           onClick={() => {
             void runApply();
           }}
-          disabled={isDryRunLoading || isCheckingAuth || isApplyLoading || !dryRun}
+          disabled={isDryRunLoading || isCheckingAuth || isApplyLoading || !dryRun
+            || applyDecision?.ok === false}
         >
-          {isApplyLoading ? "APPLYING..." : "APPLY TO BOARD"}
+          {isApplyLoading
+            ? "APPLYING..."
+            : applyDecision?.plan.destructive
+            ? `APPLY · REMOVES ${applyDecision.plan.nodesToArchive + applyDecision.plan.edgesToArchive}`
+            : "APPLY TO BOARD"}
         </button>
         <button
           type="button"

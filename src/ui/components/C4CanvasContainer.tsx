@@ -57,6 +57,7 @@ import type {
 import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../../core/effects/ai-agent.runtime";
 import type { ArchitectureSemanticRole } from "../../core/effects/architecture-role-classification";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
+import type { AzureApplyPlan } from "../../core/effects/azure-sync.apply-policy";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import { canvasToneFor } from "../../core/effects/canvas-ambient-tone";
 import {
@@ -1360,7 +1361,7 @@ export function C4CanvasContainer() {
   }, [runEffect, seedPersistedFingerprintFromDiagram, send]);
 
   const handleApplyAzureSync = useCallback(
-    async (dryRun: AzureSyncDryRunOutput) => {
+    async (dryRun: AzureSyncDryRunOutput, _plan: AzureApplyPlan) => {
       const currentDiagramId = state.context.currentDiagramId;
       if (!currentDiagramId) {
         throw new Error("No active diagram loaded for Azure sync apply.");
@@ -1373,6 +1374,9 @@ export function C4CanvasContainer() {
         edges: canvasEdges,
         mapped: dryRun.mapped,
         syncedAt: dryRun.snapshot.collectedAt,
+        // ADR-020: removal is what the operator turned on, not what the diff
+        // happened to compute.
+        archiveMissing: appSettings.azureSyncPolicy.archiveMissing,
       });
 
       const saveInput: SaveDiagramPayload = {
@@ -1423,6 +1427,7 @@ export function C4CanvasContainer() {
       );
     },
     [
+      appSettings.azureSyncPolicy.archiveMissing,
       flushPendingInlineEdits,
       requestSave,
       saveSnapshot.context.lastSavedAt,
@@ -3084,6 +3089,7 @@ export function C4CanvasContainer() {
           )}
           {isAzurePanelOpen && (
             <AzureSyncPanel
+              policy={appSettings.azureSyncPolicy}
               nodes={state.context.nodes}
               edges={state.context.edges}
               diagramId={state.context.currentDiagramId}
