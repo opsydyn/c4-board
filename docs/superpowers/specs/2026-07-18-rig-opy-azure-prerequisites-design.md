@@ -121,6 +121,14 @@ specific product need; SQLite remains OPY's durable authority.
 
 ## Gate 2: OPY Core Stabilization
 
+**Status**: In progress. Two of the five required items are delivered as of
+2026-07-28 — provider usage is joined to the existing run trail
+(`opy_agent_runs`, migration 036), and release readiness is computed from
+persisted replay, latency, confidence, anomaly, approval, and failure signals
+without touching action modes (`opy-release-readiness.ts`). Still open: the
+end-to-end lifecycle verification pass, the task/session isolation proof, and
+the remaining documentation reconciliation.
+
 ### Supported Core
 
 OPY remains C4-first and controlled:

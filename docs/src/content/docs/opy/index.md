@@ -405,6 +405,36 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - provider token usage is now reported, validated, and persisted on the run envelope, but the eval dashboard does not yet aggregate it into a per-session or per-cohort figure
 - cost estimates are not available at all; the runtime reports tokens, not money
 
+### Release Readiness
+
+Settings agent audit reports a release-readiness verdict computed from persisted
+evidence alone, in `src/core/effects/opy-release-readiness.ts`. It answers one
+question: does the track record support widening OPY's mutation defaults?
+
+Six signals are graded and always reported, including when they pass:
+
+- `replay` — share of tasks replayable from their persisted trail
+- `failure` — share of tasks that ended failed or cancelled
+- `latency` — p95 terminal task duration
+- `confidence` — share of groundings that came back low confidence
+- `anomaly` — critical anomalies that reached execution without being blocked
+- `approval` — share of decided proposals the operator rejected
+
+Three properties are deliberate and load-bearing:
+
+- **It changes nothing.** The verdict is advisory and exposes no path to an
+  action mode. Wiring it to a policy switch would let a quiet metric shift grant
+  the agent more power than an operator chose to.
+- **Absent evidence is not a pass.** Below the sample floor, or with no decided
+  proposals, the verdict is `insufficient-evidence` — which outranks `warn`,
+  because for a gate that grants power, not knowing must never read as milder
+  than knowing something is wrong.
+- **A blocked critical anomaly counts in the boundary's favour.** Only one that
+  reached execution is evidence of a hole.
+
+Thresholds are exported constants, not buried literals; they are judgement calls
+and are meant to be argued with.
+
 ## Run Envelope and Telemetry
 
 Each OPY run is wrapped in a durable run envelope.

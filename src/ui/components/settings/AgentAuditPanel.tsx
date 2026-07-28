@@ -13,6 +13,7 @@ import {
   type OpyChatSession,
   type OpyPersistedDiagramProposal,
 } from "../../../core/effects/opy-chat.persistence";
+import { assessOpyReleaseReadiness } from "../../../core/effects/opy-release-readiness";
 import { useDatabase } from "../../../core/effects/useDatabase";
 import * as styles from "../../../styles/pages/settings.css";
 
@@ -337,6 +338,16 @@ export function AgentAuditPanel() {
       }),
     [snapshot.artifacts, snapshot.tasks, snapshot.toolCalls],
   );
+  const releaseReadiness = useMemo(
+    () =>
+      assessOpyReleaseReadiness({
+        tasks: snapshot.tasks,
+        artifacts: snapshot.artifacts,
+        toolCalls: snapshot.toolCalls,
+        proposals: snapshot.proposals,
+      }),
+    [snapshot.artifacts, snapshot.proposals, snapshot.tasks, snapshot.toolCalls],
+  );
 
   return (
     <article id="agent-audit" className={`${styles.settingsCard} ${styles.settingsCardWide}`}>
@@ -438,6 +449,32 @@ export function AgentAuditPanel() {
           <span className={styles.settingsMetricLabel}>Replay Blocked</span>
           <span className={styles.settingsMetricValue}>{replayEvalDashboard.blockedTaskCount}</span>
         </div>
+      </div>
+      <div className={styles.settingsRow}>
+        <div className={styles.settingsRowLabel}>
+          <span>Release Readiness</span>
+          <span className={styles.settingsRowHint}>
+            Whether the persisted evidence supports widening mutation defaults. Advisory only — it changes nothing on
+            its own.
+          </span>
+        </div>
+        <span className={styles.settingsRowValue}>
+          {releaseReadiness.verdict.toUpperCase()}
+        </span>
+      </div>
+      <div className={styles.settingsAuditList}>
+        {releaseReadiness.signals.map((signal) => (
+          <section key={signal.id} className={styles.settingsAuditEntry}>
+            <div className={styles.settingsAuditEntryHeader}>
+              <h3 className={styles.settingsAuditEntryTitle}>{signal.id.toUpperCase()}</h3>
+              <div className={styles.settingsAuditEntryMeta}>
+                <span className={styles.settingsRowValue}>{signal.verdict.toUpperCase()}</span>
+                <span className={styles.settingsRowValue}>{`n=${signal.sampleSize}`}</span>
+              </div>
+            </div>
+            <p className={styles.settingsAuditEntryBody}>{signal.summary}</p>
+          </section>
+        ))}
       </div>
       {error && <p className={styles.settingsErrorText}>{error}</p>}
       {!error && !isLoading && auditEntries.length === 0 && (
