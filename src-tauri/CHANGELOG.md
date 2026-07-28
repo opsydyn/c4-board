@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.19](https://github.com/opsydyn/c4-board/compare/v0.0.18...v0.0.19) - 2026-07-28
+
+### Other
+
+- mark app changes outside src-tauri as releasable [skip ci]
+- Merge pull request #30 from opsydyn/feat/rig-usage-envelope
+- mark app changes outside src-tauri as releasable [skip ci]
+
 ## [0.0.18](https://github.com/opsydyn/c4-board/compare/v0.0.17...v0.0.18) - 2026-07-28
 
 ### Other
