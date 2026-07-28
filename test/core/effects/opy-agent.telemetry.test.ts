@@ -26,6 +26,8 @@ describe("opy-agent.telemetry", () => {
       completedAt: 250,
       errorSummary: null,
       usage: null,
+      provider: "openai",
+      model: "gpt-4o-mini",
     }, {
       provider: "openai",
       model: "gpt-4o-mini",

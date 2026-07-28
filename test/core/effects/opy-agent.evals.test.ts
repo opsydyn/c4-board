@@ -2,9 +2,10 @@ import {
   buildOpyReplayEvalDashboard,
   buildOpyReplayEvalPlans,
   calculateOpyLatencyDistribution,
+  summarizeOpyModelAttribution,
 } from "@/core/effects/opy-agent.evals";
 import type { OpyAgentArtifact, OpyAgentToolCall } from "@/core/effects/opy-agent.trace";
-import type { OpyAgentTask } from "@/core/effects/opy-chat.persistence";
+import type { OpyAgentRun, OpyAgentTask } from "@/core/effects/opy-chat.persistence";
 import { describe, expect, it } from "vitest";
 
 const createTask = (overrides?: Partial<OpyAgentTask>): OpyAgentTask => ({
@@ -158,5 +159,75 @@ describe("opy-agent.evals", () => {
       p95Ms: 700,
     });
     expect(dashboard.toolSuccessRate).toBe(0.5);
+  });
+});
+
+describe("summarizeOpyModelAttribution", () => {
+  const run = (overrides: Partial<OpyAgentRun>): OpyAgentRun => ({
+    id: "run-1",
+    sessionId: "session-1",
+    agent: "opy-net",
+    intent: "chat",
+    stage: "complete",
+    status: "completed",
+    startedAt: 1_000,
+    completedAt: 1_500,
+    errorSummary: null,
+    usage: null,
+    provider: null,
+    model: null,
+    ...overrides,
+  });
+
+  const usage = (totalTokens: number) => ({
+    inputTokens: totalTokens - 10,
+    outputTokens: 10,
+    totalTokens,
+    cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    toolUsePromptTokens: 0,
+    reasoningTokens: 0,
+  });
+
+  it("totals observed tokens per model", () => {
+    const summary = summarizeOpyModelAttribution([
+      run({ id: "a", provider: "openai", model: "gpt-4o-mini", usage: usage(100) }),
+      run({ id: "b", provider: "openai", model: "gpt-4o-mini", usage: usage(50) }),
+      run({ id: "c", provider: "openai", model: "gpt-5", usage: usage(400) }),
+    ]);
+
+    expect(summary.models).toEqual([
+      { provider: "openai", model: "gpt-5", runCount: 1, totalTokens: 400, measuredRunCount: 1 },
+      { provider: "openai", model: "gpt-4o-mini", runCount: 2, totalTokens: 150, measuredRunCount: 2 },
+    ]);
+  });
+
+  it("counts unattributed runs separately instead of inventing a model for them", () => {
+    const summary = summarizeOpyModelAttribution([
+      run({ id: "a", provider: "openai", model: "gpt-5", usage: usage(100) }),
+      run({ id: "legacy" }),
+    ]);
+
+    expect(summary.unattributedRunCount).toBe(1);
+    expect(summary.models).toHaveLength(1);
+  });
+
+  it("separates runs with no usage measurement from runs that measured zero", () => {
+    const summary = summarizeOpyModelAttribution([
+      run({ id: "a", provider: "openai", model: "gpt-5", usage: usage(100) }),
+      run({ id: "b", provider: "openai", model: "gpt-5", usage: null }),
+    ]);
+
+    const [entry] = summary.models;
+    expect(entry?.runCount).toBe(2);
+    expect(entry?.measuredRunCount).toBe(1);
+    expect(entry?.totalTokens).toBe(100);
+  });
+
+  it("reports nothing rather than a zero total when there are no runs", () => {
+    const summary = summarizeOpyModelAttribution([]);
+
+    expect(summary.models).toEqual([]);
+    expect(summary.totalTokens).toBeNull();
   });
 });

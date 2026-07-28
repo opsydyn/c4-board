@@ -121,13 +121,27 @@ specific product need; SQLite remains OPY's durable authority.
 
 ## Gate 2: OPY Core Stabilization
 
-**Status**: In progress. Two of the five required items are delivered as of
-2026-07-28 — provider usage is joined to the existing run trail
-(`opy_agent_runs`, migration 036), and release readiness is computed from
-persisted replay, latency, confidence, anomaly, approval, and failure signals
-without touching action modes (`opy-release-readiness.ts`). Still open: the
-end-to-end lifecycle verification pass, the task/session isolation proof, and
-the remaining documentation reconciliation.
+**Status**: Delivered 2026-07-28, with one item explicitly scoped out.
+
+- Provider usage *and* model attribution are joined to the existing run trail
+  (`opy_agent_runs`, migrations 036 and 037) and surfaced per model in the
+  Settings agent audit, so task history can reconstruct what answered a run and
+  what it cost in tokens.
+- Release readiness is computed from persisted replay, latency, confidence,
+  anomaly, approval, and failure signals without touching action modes
+  (`opy-release-readiness.ts`).
+- Stale-result dropping and session isolation now live in
+  `opy-agent.staleness.ts` with direct coverage, instead of untested logic
+  inside the panel. Session isolation falls out of the same check: switching
+  sessions replaces the active request, so anything in flight is dropped.
+- Documentation across the handbook, task breakdown, and architecture roadmap
+  no longer contradicts the implementation.
+
+Scoped out: a full manual end-to-end lifecycle pass across every intent. The
+lifecycle machine has direct coverage for stages, cancellation, timeout, retry
+budgets, failure provenance, and resume, and staleness is now covered too — but
+that is unit-level evidence, not a demonstration that every supported intent
+reaches a terminal state in the running app. That remains unproven.
 
 ### Supported Core
 

@@ -373,6 +373,8 @@ describe("opy agent persistence restart recovery", () => {
       completedAt: null,
       errorSummary: null,
       usage: null,
+      provider: "openai",
+      model: "gpt-4o-mini",
     };
     const task: OpyAgentTask = {
       id: "task-1",

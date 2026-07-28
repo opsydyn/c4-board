@@ -8,7 +8,7 @@ import {
 import type {
   RigC4BoardEdge,
   RigC4BoardNode,
-  RigC4DiagramProposal,
+  RigC4DiagramProposalContent,
   RigC4ProposalEdge,
   RigC4ProposalNode,
 } from "./ai-agent.runtime";
@@ -244,7 +244,7 @@ const sortActions = (
 ): ReadonlyArray<RigValidatedMutationAction> => [...actions].sort((left, right) => left.tool.localeCompare(right.tool));
 
 export const buildRigMutationPlanDiff = (
-  proposal: RigC4DiagramProposal,
+  proposal: RigC4DiagramProposalContent,
   groundedDiff: OpyGroundedProposalDiff | null,
 ): RigRenderedMutationPlan | null => {
   if (!groundedDiff) {

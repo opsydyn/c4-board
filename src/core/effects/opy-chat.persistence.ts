@@ -64,6 +64,13 @@ export interface OpyAgentRun {
    * nothing. A budget view must not read the first as the second.
    */
   readonly usage: RigUsageMetadata | null;
+  /**
+   * Which provider and model answered, or `null` for runs recorded before
+   * attribution existed. Never backfilled from current settings — that would be
+   * a guess wearing the clothes of a record.
+   */
+  readonly provider: string | null;
+  readonly model: string | null;
 }
 
 export interface OpyAgentTask {
@@ -136,10 +143,22 @@ export interface OpyAgentTaskBoardSnapshotLinkInput {
 
 export type OpyPlanDecisionStatus = "pending" | "approved" | "rejected";
 
+/**
+ * A proposal as it was persisted.
+ *
+ * Identical to the wire proposal except that `usage` may be `null`: rows
+ * written before Rig 0.40 have no usage envelope, and the wire type requires
+ * one. Keeping them the same type would let a rehydrated old proposal claim a
+ * measurement it never had.
+ */
+export type OpyPersistedRigC4DiagramProposal =
+  & Omit<RigC4DiagramProposal, "usage">
+  & { readonly usage: RigUsageMetadata | null };
+
 export interface OpyPersistedDiagramProposal {
   readonly sessionId: string;
   readonly commandDescription: string;
-  readonly proposal: RigC4DiagramProposal;
+  readonly proposal: OpyPersistedRigC4DiagramProposal;
   readonly context: RigAgentContextBundle;
   readonly decisionStatus: OpyPlanDecisionStatus;
   readonly decidedAt: number;
@@ -326,7 +345,9 @@ const LIST_RUNS_SQL = `
     cached_input_tokens AS cachedInputTokens,
     cache_creation_input_tokens AS cacheCreationInputTokens,
     tool_use_prompt_tokens AS toolUsePromptTokens,
-    reasoning_tokens AS reasoningTokens
+    reasoning_tokens AS reasoningTokens,
+    provider,
+    model
   FROM opy_agent_runs
   WHERE session_id = ?
   ORDER BY started_at DESC
@@ -350,6 +371,31 @@ const LIST_AGENT_TASKS_SQL = `
   FROM opy_agent_tasks
   WHERE session_id = ?
   ORDER BY updated_at DESC, created_at DESC
+`;
+
+/** Cross-session run trail for the audit view (ADR-008 replayability). */
+const LIST_ALL_RUNS_SQL = `
+  SELECT
+    id,
+    session_id AS sessionId,
+    agent,
+    intent,
+    stage,
+    status,
+    started_at AS startedAt,
+    completed_at AS completedAt,
+    error_summary AS errorSummary,
+    input_tokens AS inputTokens,
+    output_tokens AS outputTokens,
+    total_tokens AS totalTokens,
+    cached_input_tokens AS cachedInputTokens,
+    cache_creation_input_tokens AS cacheCreationInputTokens,
+    tool_use_prompt_tokens AS toolUsePromptTokens,
+    reasoning_tokens AS reasoningTokens,
+    provider,
+    model
+  FROM opy_agent_runs
+  ORDER BY started_at DESC
 `;
 
 const LIST_ALL_AGENT_TASKS_SQL = `
@@ -505,7 +551,9 @@ const LIST_ACTIVE_RUNS_SQL = `
     cached_input_tokens AS cachedInputTokens,
     cache_creation_input_tokens AS cacheCreationInputTokens,
     tool_use_prompt_tokens AS toolUsePromptTokens,
-    reasoning_tokens AS reasoningTokens
+    reasoning_tokens AS reasoningTokens,
+    provider,
+    model
   FROM opy_agent_runs
   WHERE session_id = ?
     AND status = 'running'
@@ -569,9 +617,11 @@ const INSERT_RUN_SQL = `
     cached_input_tokens,
     cache_creation_input_tokens,
     tool_use_prompt_tokens,
-    reasoning_tokens
+    reasoning_tokens,
+    provider,
+    model
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 const UPSERT_TASK_SQL = `
@@ -655,7 +705,9 @@ const UPDATE_RUN_SQL = `
     cached_input_tokens = ?,
     cache_creation_input_tokens = ?,
     tool_use_prompt_tokens = ?,
-    reasoning_tokens = ?
+    reasoning_tokens = ?,
+    provider = ?,
+    model = ?
   WHERE id = ?
     AND session_id = ?
 `;
@@ -982,6 +1034,8 @@ type AgentRunRow = {
   cacheCreationInputTokens: number | null;
   toolUsePromptTokens: number | null;
   reasoningTokens: number | null;
+  provider: string | null;
+  model: string | null;
 };
 
 type AgentTaskRow = {
@@ -1164,15 +1218,45 @@ const isRigAgentContextBundle = (value: unknown): value is RigAgentContextBundle
 };
 
 /**
- * Deliberately does not require `usage`, which the wire schema does.
+ * Accepts a proposal with or without a usage envelope.
  *
- * Proposals persisted before the Rig 0.40 upgrade have no usage envelope, and
- * rejecting them here would erase them from history and replay rather than
- * report them as unpriced. Nothing reads usage off a rehydrated proposal today;
- * joining usage to the persisted task trail is Gate 2 work, and it owns closing
- * the gap between this guard and the wire type.
+ * Rows written before Rig 0.40 have none. Rejecting them would erase them from
+ * history and replay rather than report them as unmeasured, so the persisted
+ * type admits `usage: null` and `decodeDiagramProposalRow` normalizes a missing
+ * envelope into exactly that.
  */
-const isRigC4DiagramProposal = (value: unknown): value is RigC4DiagramProposal => {
+/** Reads a persisted proposal's usage envelope, or `null` when it has none. */
+const readPersistedProposalUsage = (proposal: unknown): RigUsageMetadata | null => {
+  const usage = (proposal as { usage?: unknown }).usage;
+  if (typeof usage !== "object" || usage === null) {
+    return null;
+  }
+
+  const candidate = usage as Record<string, unknown>;
+  const counters = [
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "cachedInputTokens",
+    "cacheCreationInputTokens",
+    "toolUsePromptTokens",
+    "reasoningTokens",
+  ] as const;
+
+  return counters.every((key) => typeof candidate[key] === "number" && Number.isFinite(candidate[key]))
+    ? {
+      inputTokens: candidate.inputTokens as number,
+      outputTokens: candidate.outputTokens as number,
+      totalTokens: candidate.totalTokens as number,
+      cachedInputTokens: candidate.cachedInputTokens as number,
+      cacheCreationInputTokens: candidate.cacheCreationInputTokens as number,
+      toolUsePromptTokens: candidate.toolUsePromptTokens as number,
+      reasoningTokens: candidate.reasoningTokens as number,
+    }
+    : null;
+};
+
+const isRigC4DiagramProposal = (value: unknown): value is Omit<RigC4DiagramProposal, "usage"> => {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -1316,6 +1400,8 @@ const decodeAgentRunRow = (row: AgentRunRow): OpyAgentRun | null => {
     completedAt: toNullableTimestamp(row.completedAt),
     errorSummary: toNullableText(row.errorSummary),
     usage: decodeRunUsage(row),
+    provider: toNullableText(row.provider),
+    model: toNullableText(row.model),
   };
 };
 
@@ -1404,7 +1490,10 @@ const decodeDiagramProposalRow = (row: DiagramProposalRow): OpyPersistedDiagramP
   return {
     sessionId: row.sessionId,
     commandDescription: row.commandDescription,
-    proposal,
+    proposal: {
+      ...proposal,
+      usage: readPersistedProposalUsage(proposal),
+    },
     context,
     decisionStatus: row.decisionStatus,
     decidedAt: toTimestamp(row.decidedAt, proposal.respondedAtMs),
@@ -1532,6 +1621,15 @@ export const listOpyAgentTasks = (sessionId: string) =>
     );
   });
 
+export const listAllOpyAgentRuns = () =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentRunRow>(LIST_ALL_RUNS_SQL);
+    return sortRunsByRecency(
+      rows.map(decodeAgentRunRow).filter((row): row is OpyAgentRun => row !== null),
+    );
+  });
+
 export const listAllOpyAgentTasks = () =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -1641,6 +1739,8 @@ export const createOpyAgentRun = (run: OpyAgentRun) =>
       run.completedAt,
       run.errorSummary,
       ...toRunUsageValues(run.usage),
+      run.provider,
+      run.model,
     ]);
 
     return run;
@@ -1751,6 +1851,8 @@ export const updateOpyAgentRun = (run: OpyAgentRun) =>
       run.completedAt,
       run.errorSummary,
       ...toRunUsageValues(run.usage),
+      run.provider,
+      run.model,
       run.id,
       run.sessionId,
     ]);

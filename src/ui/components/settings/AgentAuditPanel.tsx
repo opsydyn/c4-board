@@ -1,14 +1,16 @@
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { buildOpyReplayEvalDashboard } from "../../../core/effects/opy-agent.evals";
+import { buildOpyReplayEvalDashboard, summarizeOpyModelAttribution } from "../../../core/effects/opy-agent.evals";
 import type { OpyAgentArtifact, OpyAgentToolCall } from "../../../core/effects/opy-agent.trace";
 import type { OpyAnomalyAssessment } from "../../../core/effects/opy-anomaly";
 import {
   listAllOpyAgentArtifacts,
+  listAllOpyAgentRuns,
   listAllOpyAgentTasks,
   listAllOpyAgentToolCalls,
   listAllOpyChatSessions,
   listAllOpyDiagramProposals,
+  type OpyAgentRun,
   type OpyAgentTask,
   type OpyChatSession,
   type OpyPersistedDiagramProposal,
@@ -23,6 +25,7 @@ interface AgentAuditSnapshot {
   readonly tasks: ReadonlyArray<OpyAgentTask>;
   readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
   readonly proposals: ReadonlyArray<OpyPersistedDiagramProposal>;
+  readonly runs: ReadonlyArray<OpyAgentRun>;
 }
 
 interface AgentAuditEntry {
@@ -244,6 +247,7 @@ export function AgentAuditPanel() {
     tasks: [],
     toolCalls: [],
     proposals: [],
+    runs: [],
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,6 +265,7 @@ export function AgentAuditPanel() {
         tasks: listAllOpyAgentTasks(),
         toolCalls: listAllOpyAgentToolCalls(),
         proposals: listAllOpyDiagramProposals(),
+        runs: listAllOpyAgentRuns(),
       }),
     )
       .then((nextSnapshot) => {
@@ -337,6 +342,10 @@ export function AgentAuditPanel() {
         toolCalls: snapshot.toolCalls,
       }),
     [snapshot.artifacts, snapshot.tasks, snapshot.toolCalls],
+  );
+  const modelAttribution = useMemo(
+    () => summarizeOpyModelAttribution(snapshot.runs),
+    [snapshot.runs],
   );
   const releaseReadiness = useMemo(
     () =>
@@ -450,6 +459,44 @@ export function AgentAuditPanel() {
           <span className={styles.settingsMetricValue}>{replayEvalDashboard.blockedTaskCount}</span>
         </div>
       </div>
+      <div className={styles.settingsRow}>
+        <div className={styles.settingsRowLabel}>
+          <span>Model Attribution</span>
+          <span className={styles.settingsRowHint}>
+            Which provider and model answered, and the tokens observed. Reported, not enforced — there is no cost
+            figure, because the runtime reports tokens rather than money.
+          </span>
+        </div>
+        <span className={styles.settingsRowValue}>
+          {modelAttribution.totalTokens === null
+            ? "NO USAGE MEASURED"
+            : `${modelAttribution.totalTokens.toLocaleString()} TOKENS`}
+        </span>
+      </div>
+      {modelAttribution.models.length > 0 && (
+        <div className={styles.settingsMetricsGrid}>
+          {modelAttribution.models.map((entry) => (
+            <div key={`${entry.provider}:${entry.model}`} className={styles.settingsMetricTile}>
+              <span className={styles.settingsMetricLabel}>{entry.model}</span>
+              <span className={styles.settingsMetricValue}>
+                {entry.totalTokens.toLocaleString()}
+              </span>
+              <span className={styles.settingsMetricLabel}>
+                {`${entry.measuredRunCount}/${entry.runCount} RUNS MEASURED`}
+              </span>
+            </div>
+          ))}
+          {modelAttribution.unattributedRunCount > 0 && (
+            <div className={styles.settingsMetricTile}>
+              <span className={styles.settingsMetricLabel}>Unattributed</span>
+              <span className={styles.settingsMetricValue}>
+                {modelAttribution.unattributedRunCount}
+              </span>
+              <span className={styles.settingsMetricLabel}>RECORDED BEFORE ATTRIBUTION</span>
+            </div>
+          )}
+        </div>
+      )}
       <div className={styles.settingsRow}>
         <div className={styles.settingsRowLabel}>
           <span>Release Readiness</span>

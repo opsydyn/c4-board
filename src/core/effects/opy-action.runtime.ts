@@ -6,7 +6,7 @@ import {
   type RigMutationPolicySettings,
 } from "./agent-policy";
 import { formatOpyRollbackSummary } from "./agent-rollback.runtime";
-import type { RigC4BoardSummary, RigC4DiagramProposal } from "./ai-agent.runtime";
+import type { RigC4BoardSummary, RigC4DiagramProposalContent } from "./ai-agent.runtime";
 import {
   buildGroundedProposalDiff,
   type OpyGroundedProposalDiff,
@@ -28,7 +28,7 @@ export interface OpyBoardApplyC4ProposalAction {
   readonly kind: "apply-c4-proposal";
   readonly sessionId: string;
   readonly proposalRespondedAtMs: number;
-  readonly proposal: RigC4DiagramProposal;
+  readonly proposal: RigC4DiagramProposalContent;
 }
 
 export interface OpyBoardRollbackCheckpointAction {
@@ -70,7 +70,7 @@ export type OpyActionFlowIssue =
   };
 
 export interface OpyActionProposalRecord {
-  readonly proposal: RigC4DiagramProposal;
+  readonly proposal: RigC4DiagramProposalContent;
   readonly decisionStatus: OpyPlanDecisionStatus;
 }
 

@@ -115,6 +115,16 @@ const RigC4DiagramProposalSchema = Schema.Struct({
 export type RigC4ProposalNode = Schema.Schema.Type<typeof RigC4ProposalNodeSchema>;
 export type RigC4ProposalEdge = Schema.Schema.Type<typeof RigC4ProposalEdgeSchema>;
 export type RigC4DiagramProposal = Schema.Schema.Type<typeof RigC4DiagramProposalSchema>;
+
+/**
+ * A proposal's content, without the provider usage envelope.
+ *
+ * Consumers that reason about nodes, edges, and rationale take this rather than
+ * the full response, so a live proposal and one rehydrated from a row written
+ * before usage capture both fit. Requiring the envelope in a diff signature
+ * would be asking for a measurement the function does not read.
+ */
+export type RigC4DiagramProposalContent = Omit<RigC4DiagramProposal, "usage">;
 export type { RigC4BoardEdge, RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary };
 export type { RigReadToolInputByName, RigReadToolName, RigReadToolResultByName };
 

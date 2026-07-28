@@ -10,7 +10,7 @@ This handbook describes the current OPY surface in `c4-board`: what it can do to
 
 The current OPY/Rig agentic phase is concluded for the C4 board loop. OPY now has grounded read/review/proposal flows, typed planner artifacts, policy-backed confirmation, controlled apply, checkpoint rollback, resumable task state, audit/eval surfaces, anomaly boundaries, confidence scoring, and deterministic fixture coverage.
 
-Remaining work is tracked as platform expansion or release governance rather than core OPY loop completion: broader tool coverage, transcript/session management polish, provider usage budgets once provider token/cost data is persisted, and release gates that consume the existing audit/eval signals.
+Remaining work is tracked as platform expansion rather than core OPY loop completion: broader tool coverage, transcript/session management polish, and usage budgeting, which needs a cost model the app does not have. Release gates over the audit/eval signals now exist and are advisory.
 
 ## What OPY Is
 
@@ -402,7 +402,7 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - Settings agent audit now reports replay readiness counts: replayable, partial, and blocked
 - replay readiness is deterministic and based on the stored request replay kind, required artifacts, snapshot linkage, and terminal task status
 - offline Rig fixture evals now cover read-only QA grounding, safe mutation approval metadata, read-only mutation blocking, policy-budget rejection, low-confidence proposal coverage, failed-provider replay blocking, and Azure-heavy rollback preview/approval
-- provider token usage is now reported, validated, and persisted on the run envelope, but the eval dashboard does not yet aggregate it into a per-session or per-cohort figure
+- provider token usage is reported, validated, persisted on the run envelope, and totalled per model in the Settings agent audit, alongside which provider and model answered each run
 - cost estimates are not available at all; the runtime reports tokens, not money
 
 ### Release Readiness
@@ -654,8 +654,9 @@ Model runtime:
 
 Provider token usage crosses into TypeScript on every command response, is
 validated by `ai-agent.runtime.ts`, and is persisted on the run envelope in
-`opy_agent_runs`. There is no budget UI over it yet, and no cost estimate — the
-runtime reports tokens, not money.
+`opy_agent_runs` alongside the provider and model that answered. The Settings
+agent audit totals it per model. It is reported, not enforced: no budget, no
+limit, and no cost figure, because the runtime reports tokens rather than money.
 
 Runtime and persistence:
 

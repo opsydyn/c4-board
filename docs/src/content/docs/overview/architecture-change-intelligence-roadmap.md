@@ -42,7 +42,7 @@ The current OPY/Rig C4 loop is strong enough to treat as a foundation:
 Known gaps:
 
 - Runtime execution is still effectively OpenAI-first even though settings expose additional providers.
-- Provider token usage is now persisted on both surfaces — `opy_agent_runs` for the board, `postee_agent_runs` for Postee — but nothing aggregates or displays it, so there is still no budget UI and no cost estimate.
+- Provider token usage is persisted on both surfaces — `opy_agent_runs` for the board, `postee_agent_runs` for Postee — and the board's is aggregated per model in the Settings agent audit. It is reported, not enforced: there is no budget, no limit, and no cost estimate, because the runtime reports tokens rather than money.
 - Rig tool contracts exist, but OPY does not yet expose a broad Rig-native tool registry for architecture operations.
 - The OPY handbook and older roadmap contain stale status language in a few sections and should be reconciled as this roadmap becomes canonical.
 
@@ -106,14 +106,14 @@ Delivered:
 - A normalized, required usage envelope on every command response, decoded and validated at the Effect boundary in [`ai-agent.runtime.ts`](/src/core/effects/ai-agent.runtime.ts).
 
 Deferred, and not implied by the upgrade: streaming, `AgentRun`, hooks, Rig
-conversation memory, Rig vector stores, provider parity beyond OpenAI, and usage
-budget persistence.
+conversation memory, Rig vector stores, provider parity beyond OpenAI, and any
+form of usage budgeting or cost estimation.
 
 Remaining capabilities:
 
 - Normalize provider execution for OpenAI, Anthropic, and OpenRouter.
 - Extend the runtime boundary to streaming and tool use.
-- Persist provider response metadata, token usage, and cost estimates where available.
+- Add cost estimation. Provider/model attribution and token usage are persisted per run; turning tokens into money needs a pricing table the app does not have.
 - Evaluate Rig conversation memory, `rig-memory`, and Rig vector-store/RAG primitives without weakening OPY's app-owned task/session/artifact ledger.
 - Preserve Effect Schema validation and OPY policy gates at the app boundary.
 

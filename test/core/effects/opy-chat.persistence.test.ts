@@ -10,6 +10,7 @@ import {
   interruptOpyAgentTasks,
   interruptOpyAgentToolCalls,
   listAllOpyAgentArtifacts,
+  listAllOpyAgentRuns,
   listAllOpyAgentTasks,
   listAllOpyAgentToolCalls,
   listAllOpyChatSessions,
@@ -227,6 +228,8 @@ const createRun = (overrides?: Partial<OpyAgentRun>): OpyAgentRun => ({
   completedAt: null,
   errorSummary: null,
   usage: null,
+  provider: null,
+  model: null,
   ...overrides,
 });
 
@@ -251,7 +254,7 @@ describe("opy agent run usage", () => {
 
     const [sql, values] = execute.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain("INSERT INTO opy_agent_runs");
-    expect(values.slice(9)).toEqual([900, 120, 1_020, 64, 0, 12, 30]);
+    expect(values.slice(9, 16)).toEqual([900, 120, 1_020, 64, 0, 12, 30]);
   });
 
   it("records a run that captured no usage as null rather than as zero", async () => {
@@ -263,7 +266,7 @@ describe("opy agent run usage", () => {
     );
 
     const [, values] = execute.mock.calls[0] as [string, unknown[]];
-    expect(values.slice(9)).toEqual([null, null, null, null, null, null, null]);
+    expect(values.slice(9, 16)).toEqual([null, null, null, null, null, null, null]);
   });
 
   it("carries usage through the terminal run transition", async () => {
@@ -277,6 +280,82 @@ describe("opy agent run usage", () => {
     const [sql, values] = execute.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain("UPDATE opy_agent_runs");
     expect(values.slice(4, 11)).toEqual([900, 120, 1_020, 64, 0, 12, 30]);
+  });
+
+  it("persists which provider and model answered, so a run can be attributed later", async () => {
+    const execute = vi.fn();
+
+    await runWithDatabaseService(
+      createOpyAgentRun(createRun({ provider: "openai", model: "gpt-4o-mini" })),
+      { execute },
+    );
+
+    const [, values] = execute.mock.calls[0] as [string, unknown[]];
+    expect(values.slice(16)).toEqual(["openai", "gpt-4o-mini"]);
+  });
+
+  it("reads a run recorded before model attribution as unattributed", async () => {
+    const runs = await runWithDatabaseService(listOpyAgentRuns("session-1"), {
+      query: () => [
+        {
+          id: "run-legacy",
+          sessionId: "session-1",
+          agent: "opy-net",
+          intent: "chat",
+          stage: "complete",
+          status: "completed",
+          startedAt: 1_000,
+          completedAt: 1_400,
+          errorSummary: null,
+          inputTokens: null,
+          outputTokens: null,
+          totalTokens: null,
+          cachedInputTokens: null,
+          cacheCreationInputTokens: null,
+          toolUsePromptTokens: null,
+          reasoningTokens: null,
+          provider: null,
+          model: null,
+        },
+      ],
+    });
+
+    expect(runs[0]?.provider).toBeNull();
+    expect(runs[0]?.model).toBeNull();
+  });
+
+  it("lists runs across every session for audit, newest first", async () => {
+    const row = (id: string, sessionId: string, startedAt: number) => ({
+      id,
+      sessionId,
+      agent: "opy-net",
+      intent: "chat",
+      stage: "complete",
+      status: "completed",
+      startedAt,
+      completedAt: startedAt + 100,
+      errorSummary: null,
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      toolUsePromptTokens: 0,
+      reasoningTokens: 0,
+      provider: "openai",
+      model: "gpt-4o-mini",
+    });
+
+    const runs = await runWithDatabaseService(listAllOpyAgentRuns(), {
+      query: (sql) => {
+        expect(sql).not.toContain("WHERE session_id");
+        return [row("run-b", "session-2", 2_000), row("run-a", "session-1", 1_000)];
+      },
+    });
+
+    expect(runs.map((run) => run.id)).toEqual(["run-b", "run-a"]);
+    expect(runs[0]?.model).toBe("gpt-4o-mini");
+    expect(runs[0]?.usage?.totalTokens).toBe(15);
   });
 
   it("decodes persisted usage when listing session runs", async () => {
@@ -299,6 +378,8 @@ describe("opy agent run usage", () => {
           cacheCreationInputTokens: 0,
           toolUsePromptTokens: 12,
           reasoningTokens: 30,
+          provider: "openai",
+          model: "gpt-4o-mini",
         },
       ],
     });
@@ -1186,5 +1267,44 @@ describe("opy-chat.persistence", () => {
     expect(updateValues[0]).toBe(3_100);
     expect(updateValues[1]).toBe("INTERRUPTED DURING PREVIOUS SESSION.");
     expect(updateValues[2]).toBe("session-1");
+  });
+});
+
+describe("persisted proposals that predate usage capture", () => {
+  it("rehydrates an older proposal with usage recorded as unknown, not as a fabricated zero", async () => {
+    const { usage: _dropped, ...proposalWithoutUsage } = createPersistedProposal().proposal;
+
+    const proposals = await runWithDatabaseService(listOpyDiagramProposals("session-1"), {
+      query: () => [
+        {
+          sessionId: "session-1",
+          commandDescription: "Add a ledger service",
+          proposalJson: JSON.stringify(proposalWithoutUsage),
+          contextJson: JSON.stringify(createPersistedProposal().context),
+          decisionStatus: "approved",
+          decidedAt: 2_500,
+        },
+      ],
+    });
+
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]?.proposal.usage).toBeNull();
+  });
+
+  it("keeps usage on a proposal that recorded one", async () => {
+    const proposals = await runWithDatabaseService(listOpyDiagramProposals("session-1"), {
+      query: () => [
+        {
+          sessionId: "session-1",
+          commandDescription: "Add a ledger service",
+          proposalJson: JSON.stringify(createPersistedProposal().proposal),
+          contextJson: JSON.stringify(createPersistedProposal().context),
+          decisionStatus: "approved",
+          decidedAt: 2_500,
+        },
+      ],
+    });
+
+    expect(proposals[0]?.proposal.usage).toEqual(ZERO_RIG_USAGE);
   });
 });
