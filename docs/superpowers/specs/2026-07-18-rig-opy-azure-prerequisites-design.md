@@ -61,6 +61,13 @@ Azure evidence is being made trustworthy.
 
 ## Gate 1: Rig 0.40 Upgrade
 
+**Status**: Delivered 2026-07-28. All five exit criteria below are met:
+`rig-core 0.40` compiles with Rust characterization tests passing,
+`rig_runtime.rs` is the only module importing Rig, hello/review/proposal
+behaviour is unchanged, provider errors carry no secrets, and the normalized
+usage envelope is decoded and validated at the Effect boundary. Usage is
+*available* to the task trail; persisting it against board runs is Gate 2.
+
 ### Characterization Contract
 
 Before changing the dependency, add deterministic Rust-side coverage for:
@@ -113,6 +120,28 @@ specific product need; SQLite remains OPY's durable authority.
 - No OPY call site outside the new runtime boundary imports Rig directly.
 
 ## Gate 2: OPY Core Stabilization
+
+**Status**: Delivered 2026-07-28, with one item explicitly scoped out.
+
+- Provider usage *and* model attribution are joined to the existing run trail
+  (`opy_agent_runs`, migrations 036 and 037) and surfaced per model in the
+  Settings agent audit, so task history can reconstruct what answered a run and
+  what it cost in tokens.
+- Release readiness is computed from persisted replay, latency, confidence,
+  anomaly, approval, and failure signals without touching action modes
+  (`opy-release-readiness.ts`).
+- Stale-result dropping and session isolation now live in
+  `opy-agent.staleness.ts` with direct coverage, instead of untested logic
+  inside the panel. Session isolation falls out of the same check: switching
+  sessions replaces the active request, so anything in flight is dropped.
+- Documentation across the handbook, task breakdown, and architecture roadmap
+  no longer contradicts the implementation.
+
+Scoped out: a full manual end-to-end lifecycle pass across every intent. The
+lifecycle machine has direct coverage for stages, cancellation, timeout, retry
+budgets, failure provenance, and resume, and staleness is now covered too — but
+that is unit-level evidence, not a demonstration that every supported intent
+reaches a terminal state in the running app. That remains unproven.
 
 ### Supported Core
 

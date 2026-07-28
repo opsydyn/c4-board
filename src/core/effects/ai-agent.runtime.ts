@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Option, pipe, Schema } from "effect";
 import {
   type RigC4BoardEdge,
   type RigC4BoardNode,
@@ -32,6 +32,45 @@ export class AgentPolicyError extends Data.TaggedError("AgentPolicyError")<Agent
 
 export type AgentError = AgentConfigError | AgentRuntimeError | AgentPolicyError;
 
+/**
+ * Provider token usage, normalized by `rig_runtime.rs` (Rig 0.40).
+ *
+ * Required rather than optional: a provider that reports nothing emits zeros, so
+ * an absent envelope means the response contract drifted, not that the run was
+ * free. Extractor usage covers the final successful attempt only — Rig discards
+ * usage from failed parse attempts, so a retried extraction under-reports spend.
+ */
+const RigUsageMetadataSchema = Schema.Struct({
+  inputTokens: Schema.Number,
+  outputTokens: Schema.Number,
+  totalTokens: Schema.Number,
+  cachedInputTokens: Schema.Number,
+  cacheCreationInputTokens: Schema.Number,
+  toolUsePromptTokens: Schema.Number,
+  reasoningTokens: Schema.Number,
+});
+
+export type RigUsageMetadata = Schema.Schema.Type<typeof RigUsageMetadataSchema>;
+
+const RigUsageCarrierSchema = Schema.Struct({
+  usage: RigUsageMetadataSchema,
+});
+
+/**
+ * Reads the usage envelope off a command result that may or may not carry one.
+ *
+ * The OPY lifecycle runner is generic over its result: a chat, proposal, or
+ * review answer carries usage, while a read-tool or rollback result does not.
+ * `None` means this result never reported usage — not that the run was free.
+ * A partially-shaped envelope is `None` as well; half a measurement cannot be
+ * summed into a budget.
+ */
+export const readRigUsage = (value: unknown): Option.Option<RigUsageMetadata> =>
+  pipe(
+    Schema.decodeUnknownOption(RigUsageCarrierSchema)(value),
+    Option.map((carrier) => carrier.usage),
+  );
+
 const RigHelloResponseSchema = Schema.Struct({
   message: Schema.String,
   provider: Schema.String,
@@ -40,6 +79,7 @@ const RigHelloResponseSchema = Schema.Struct({
   temperature: Schema.Number,
   maxTokens: Schema.Number,
   respondedAtMs: Schema.Number,
+  usage: RigUsageMetadataSchema,
 });
 
 export type RigHelloResponse = Schema.Schema.Type<typeof RigHelloResponseSchema>;
@@ -69,11 +109,22 @@ const RigC4DiagramProposalSchema = Schema.Struct({
   provider: Schema.String,
   model: Schema.String,
   respondedAtMs: Schema.Number,
+  usage: RigUsageMetadataSchema,
 });
 
 export type RigC4ProposalNode = Schema.Schema.Type<typeof RigC4ProposalNodeSchema>;
 export type RigC4ProposalEdge = Schema.Schema.Type<typeof RigC4ProposalEdgeSchema>;
 export type RigC4DiagramProposal = Schema.Schema.Type<typeof RigC4DiagramProposalSchema>;
+
+/**
+ * A proposal's content, without the provider usage envelope.
+ *
+ * Consumers that reason about nodes, edges, and rationale take this rather than
+ * the full response, so a live proposal and one rehydrated from a row written
+ * before usage capture both fit. Requiring the envelope in a diff signature
+ * would be asking for a measurement the function does not read.
+ */
+export type RigC4DiagramProposalContent = Omit<RigC4DiagramProposal, "usage">;
 export type { RigC4BoardEdge, RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary };
 export type { RigReadToolInputByName, RigReadToolName, RigReadToolResultByName };
 
@@ -108,6 +159,7 @@ const RigC4BoardReviewSchema = Schema.Struct({
   provider: Schema.String,
   model: Schema.String,
   respondedAtMs: Schema.Number,
+  usage: RigUsageMetadataSchema,
 });
 
 export type RigC4ReviewNote = Schema.Schema.Type<typeof RigC4ReviewNoteSchema>;

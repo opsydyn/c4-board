@@ -10,7 +10,7 @@ This handbook describes the current OPY surface in `c4-board`: what it can do to
 
 The current OPY/Rig agentic phase is concluded for the C4 board loop. OPY now has grounded read/review/proposal flows, typed planner artifacts, policy-backed confirmation, controlled apply, checkpoint rollback, resumable task state, audit/eval surfaces, anomaly boundaries, confidence scoring, and deterministic fixture coverage.
 
-Remaining work is tracked as platform expansion or release governance rather than core OPY loop completion: broader tool coverage, transcript/session management polish, provider usage budgets once provider token/cost data is persisted, and release gates that consume the existing audit/eval signals.
+Remaining work is tracked as platform expansion rather than core OPY loop completion: broader tool coverage, transcript/session management polish, and usage budgeting, which needs a cost model the app does not have. Release gates over the audit/eval signals now exist and are advisory.
 
 ## What OPY Is
 
@@ -402,7 +402,38 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - Settings agent audit now reports replay readiness counts: replayable, partial, and blocked
 - replay readiness is deterministic and based on the stored request replay kind, required artifacts, snapshot linkage, and terminal task status
 - offline Rig fixture evals now cover read-only QA grounding, safe mutation approval metadata, read-only mutation blocking, policy-budget rejection, low-confidence proposal coverage, failed-provider replay blocking, and Azure-heavy rollback preview/approval
-- provider token usage and cost are not yet included because the runtime does not persist provider-reported usage data
+- provider token usage is reported, validated, persisted on the run envelope, and totalled per model in the Settings agent audit, alongside which provider and model answered each run
+- cost estimates are not available at all; the runtime reports tokens, not money
+
+### Release Readiness
+
+Settings agent audit reports a release-readiness verdict computed from persisted
+evidence alone, in `src/core/effects/opy-release-readiness.ts`. It answers one
+question: does the track record support widening OPY's mutation defaults?
+
+Six signals are graded and always reported, including when they pass:
+
+- `replay` — share of tasks replayable from their persisted trail
+- `failure` — share of tasks that ended failed or cancelled
+- `latency` — p95 terminal task duration
+- `confidence` — share of groundings that came back low confidence
+- `anomaly` — critical anomalies that reached execution without being blocked
+- `approval` — share of decided proposals the operator rejected
+
+Three properties are deliberate and load-bearing:
+
+- **It changes nothing.** The verdict is advisory and exposes no path to an
+  action mode. Wiring it to a policy switch would let a quiet metric shift grant
+  the agent more power than an operator chose to.
+- **Absent evidence is not a pass.** Below the sample floor, or with no decided
+  proposals, the verdict is `insufficient-evidence` — which outranks `warn`,
+  because for a gate that grants power, not knowing must never read as milder
+  than knowing something is wrong.
+- **A blocked critical anomaly counts in the boundary's favour.** Only one that
+  reached execution is evidence of a hole.
+
+Thresholds are exported constants, not buried literals; they are judgement calls
+and are meant to be argued with.
 
 ## Run Envelope and Telemetry
 
@@ -417,6 +448,13 @@ Each OPY run is wrapped in a durable run envelope.
 - `startedAt`
 - `completedAt`
 - `errorSummary`
+- `usage` — provider token counts, or `null` when the run captured none
+
+Usage is attached the moment the provider answers, not at completion, so a run
+that fails afterwards still records what it spent. `null` and an all-zero
+envelope are different claims: `null` means no measurement was captured (the run
+predates Rig 0.40, or it failed before the provider answered), while zeros mean
+the provider answered and reported nothing.
 
 ### Current Run Intents
 
@@ -605,6 +643,20 @@ Primary OPY surface files:
 - `src/ui/components/OpyFloatingWidget.tsx`
 - `src/ui/components/OpyCopilotPanel.tsx`
 - `src/ui/components/styles.css.ts`
+
+Model runtime:
+
+- `src-tauri/src/rig_runtime.rs` — the only module that imports `rig`. It owns
+  OpenAI client construction, prompts, structured extraction, and the normalized
+  provider usage envelope. `rig-core` is at `0.40`.
+- `src-tauri/src/ai_agent.rs` — Tauri command adapters, secret resolution,
+  prompts, sanitization, and validation. It consumes the runtime rather than Rig.
+
+Provider token usage crosses into TypeScript on every command response, is
+validated by `ai-agent.runtime.ts`, and is persisted on the run envelope in
+`opy_agent_runs` alongside the provider and model that answered. The Settings
+agent audit totals it per model. It is reported, not enforced: no budget, no
+limit, and no cost figure, because the runtime reports tokens rather than money.
 
 Runtime and persistence:
 

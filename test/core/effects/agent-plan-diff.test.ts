@@ -2,6 +2,7 @@ import { buildRigMutationPlanDiff } from "@/core/effects/agent-plan-diff";
 import type { RigC4BoardSummary, RigC4DiagramProposal } from "@/core/effects/ai-agent.runtime";
 import { buildGroundedProposalDiff } from "@/core/effects/opy-c4-proposals";
 import { describe, expect, it } from "vitest";
+import { ZERO_RIG_USAGE } from "./rig-usage.fixture";
 
 const createBoardSummary = (overrides?: Partial<RigC4BoardSummary>): RigC4BoardSummary => ({
   diagramId: "diagram-1",
@@ -78,6 +79,7 @@ const createProposal = (overrides?: Partial<RigC4DiagramProposal>): RigC4Diagram
   provider: "openai",
   model: "gpt-5",
   respondedAtMs: 1,
+  usage: ZERO_RIG_USAGE,
   ...overrides,
 });
 

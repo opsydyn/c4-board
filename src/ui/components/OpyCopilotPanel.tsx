@@ -1,5 +1,5 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   assembleRigAgentContext,
@@ -41,6 +41,7 @@ import {
   makeAgentPolicyError,
   makeAgentRuntimeError,
   planRigC4Diagram,
+  readRigUsage,
   reviewRigC4Board,
   type RigC4BoardEdge,
   type RigC4BoardNode,
@@ -84,6 +85,7 @@ import {
   formatOpyStageTransitionSummary,
   type OpyStageTransitionPayload,
 } from "../../core/effects/opy-agent.stage-transitions";
+import { resolveOpyLifecycleStaleness } from "../../core/effects/opy-agent.staleness";
 import {
   buildOpyAgentTaskLineage,
   deriveOpyAgentTaskContinuityKey,
@@ -137,6 +139,7 @@ import {
   type OpyChatRole,
   type OpyChatSession,
   type OpyPersistedDiagramProposal,
+  type OpyPersistedRigC4DiagramProposal,
   type OpyPlanDecisionStatus,
   renameOpyChatSession,
   restoreInterruptedOpyAgentSessionState,
@@ -190,7 +193,12 @@ import { TacticalSelect, type TacticalSelectOption } from "./TacticalSelect";
 
 interface OpySessionDiagramProposal {
   readonly command: OpyDiagramProposalCommand;
-  readonly proposal: RigC4DiagramProposal;
+  /**
+   * The persisted shape, not the wire shape: a proposal here may be a live Rig
+   * response or one rehydrated from a row written before usage was captured.
+   * A live response is assignable to it; the reverse is not true.
+   */
+  readonly proposal: OpyPersistedRigC4DiagramProposal;
   readonly context: RigAgentContextBundle;
   readonly decisionStatus: OpyPlanDecisionStatus;
   readonly decidedAtMs: number;
@@ -3094,6 +3102,12 @@ export function OpyCopilotPanel({
           startedAt: Date.now(),
           completedAt: null,
           errorSummary: null,
+          usage: null,
+          // Captured at start, from the settings this run will actually use.
+          // Reading them back at render time would attribute every historical
+          // run to whatever is configured now.
+          provider: aiSettings.provider,
+          model: aiSettings.model,
         }),
       );
 
@@ -3104,13 +3118,13 @@ export function OpyCopilotPanel({
 
       return run;
     },
-    [runEffect],
+    [aiSettings.model, aiSettings.provider, runEffect],
   );
 
   const transitionAgentRun = useCallback(
     async (
       currentRun: OpyAgentRun,
-      patch: Partial<Pick<OpyAgentRun, "stage" | "status" | "completedAt" | "errorSummary">>,
+      patch: Partial<Pick<OpyAgentRun, "stage" | "status" | "completedAt" | "errorSummary" | "usage">>,
     ): Promise<OpyAgentRun> => {
       const nextRun: OpyAgentRun = {
         ...currentRun,
@@ -3353,23 +3367,12 @@ export function OpyCopilotPanel({
   );
 
   const resolveLifecycleRequestStaleError = useCallback((requestId: string): OpyLifecycleRequestStaleError | null => {
-    const lifecycleState = lifecycleTaskSyncRef.current;
-    if (lifecycleState.activeRequestId === requestId) {
-      return null;
-    }
-
-    if (lifecycleState.lastRequestId === requestId && lifecycleState.terminalStatus === "failed") {
-      return new OpyLifecycleRequestStaleError({
-        message: lifecycleState.errorSummary
-          ?? "FLOW FAILED BEFORE THE CURRENT STAGE COULD COMPLETE.",
-        terminalStatus: "failed",
-      });
-    }
-
-    return new OpyLifecycleRequestStaleError({
-      message: "FLOW CANCELLED OR SUPERSEDED BEFORE THE CURRENT STAGE COULD COMPLETE.",
-      terminalStatus: "cancelled",
+    const outcome = resolveOpyLifecycleStaleness({
+      lifecycle: lifecycleTaskSyncRef.current,
+      requestId,
     });
+
+    return outcome === null ? null : new OpyLifecycleRequestStaleError(outcome);
   }, []);
 
   const throwIfLifecycleRequestInactive = useCallback((requestId: string): void => {
@@ -4091,8 +4094,12 @@ export function OpyCopilotPanel({
         });
         throwIfLifecycleRequestInactive(taskId);
         agentLifecycle.markResultReady();
+        // Attached as soon as the provider answers, not at completion: a run
+        // that fails afterwards still spent those tokens, and later transitions
+        // carry the measurement forward.
         currentRun = await transitionAgentRun(currentRun, {
           stage: "persist",
+          usage: Option.getOrNull(readRigUsage(result)),
         });
 
         if (

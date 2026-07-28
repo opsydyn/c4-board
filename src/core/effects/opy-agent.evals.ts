@@ -1,5 +1,5 @@
 import type { OpyAgentArtifact, OpyAgentArtifactKind, OpyAgentToolCall } from "./opy-agent.trace";
-import type { OpyAgentTask } from "./opy-chat.persistence";
+import type { OpyAgentRun, OpyAgentTask } from "./opy-chat.persistence";
 
 export type OpyReplayReadiness = "replayable" | "partial" | "blocked";
 
@@ -211,5 +211,73 @@ export const buildOpyReplayEvalDashboard = (input: {
     failedToolCallCount,
     toolSuccessRate,
     plans,
+  };
+};
+
+export interface OpyModelAttributionEntry {
+  readonly provider: string;
+  readonly model: string;
+  /** Runs attributed to this model, whether or not they measured usage. */
+  readonly runCount: number;
+  /** Of those, how many actually reported a usage envelope. */
+  readonly measuredRunCount: number;
+  readonly totalTokens: number;
+}
+
+export interface OpyModelAttributionSummary {
+  readonly models: ReadonlyArray<OpyModelAttributionEntry>;
+  /** Runs recorded before attribution existed. Never folded into a model. */
+  readonly unattributedRunCount: number;
+  /** Observed tokens across every attributed run, or `null` when none measured. */
+  readonly totalTokens: number | null;
+}
+
+/**
+ * Groups runs by what answered them and totals what was observed.
+ *
+ * This is an audit fact, not budget tracking: it reports what was measured,
+ * enforces nothing, and cannot report cost — the runtime reports tokens, not
+ * money. `runCount` and `measuredRunCount` are kept apart so a total is never
+ * mistaken for complete coverage; runs that predate usage capture would
+ * otherwise silently deflate the figure.
+ */
+export const summarizeOpyModelAttribution = (
+  runs: ReadonlyArray<OpyAgentRun>,
+): OpyModelAttributionSummary => {
+  const byModel = new Map<string, OpyModelAttributionEntry>();
+  let unattributedRunCount = 0;
+  let measuredAny = false;
+  let totalTokens = 0;
+
+  for (const run of runs) {
+    if (run.provider === null || run.model === null) {
+      unattributedRunCount += 1;
+      continue;
+    }
+
+    const key = `${run.provider} ${run.model}`;
+    const existing = byModel.get(key);
+    const runTokens = run.usage?.totalTokens ?? 0;
+    if (run.usage !== null) {
+      measuredAny = true;
+      totalTokens += runTokens;
+    }
+
+    byModel.set(key, {
+      provider: run.provider,
+      model: run.model,
+      runCount: (existing?.runCount ?? 0) + 1,
+      measuredRunCount: (existing?.measuredRunCount ?? 0) + (run.usage === null ? 0 : 1),
+      totalTokens: (existing?.totalTokens ?? 0) + runTokens,
+    });
+  }
+
+  return {
+    models: [...byModel.values()].sort((left, right) =>
+      right.totalTokens - left.totalTokens
+      || left.model.localeCompare(right.model)
+    ),
+    unattributedRunCount,
+    totalTokens: measuredAny ? totalTokens : null,
   };
 };

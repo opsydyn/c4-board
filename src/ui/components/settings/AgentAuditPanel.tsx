@@ -1,18 +1,21 @@
 import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { buildOpyReplayEvalDashboard } from "../../../core/effects/opy-agent.evals";
+import { buildOpyReplayEvalDashboard, summarizeOpyModelAttribution } from "../../../core/effects/opy-agent.evals";
 import type { OpyAgentArtifact, OpyAgentToolCall } from "../../../core/effects/opy-agent.trace";
 import type { OpyAnomalyAssessment } from "../../../core/effects/opy-anomaly";
 import {
   listAllOpyAgentArtifacts,
+  listAllOpyAgentRuns,
   listAllOpyAgentTasks,
   listAllOpyAgentToolCalls,
   listAllOpyChatSessions,
   listAllOpyDiagramProposals,
+  type OpyAgentRun,
   type OpyAgentTask,
   type OpyChatSession,
   type OpyPersistedDiagramProposal,
 } from "../../../core/effects/opy-chat.persistence";
+import { assessOpyReleaseReadiness } from "../../../core/effects/opy-release-readiness";
 import { useDatabase } from "../../../core/effects/useDatabase";
 import * as styles from "../../../styles/pages/settings.css";
 
@@ -22,6 +25,7 @@ interface AgentAuditSnapshot {
   readonly tasks: ReadonlyArray<OpyAgentTask>;
   readonly toolCalls: ReadonlyArray<OpyAgentToolCall>;
   readonly proposals: ReadonlyArray<OpyPersistedDiagramProposal>;
+  readonly runs: ReadonlyArray<OpyAgentRun>;
 }
 
 interface AgentAuditEntry {
@@ -243,6 +247,7 @@ export function AgentAuditPanel() {
     tasks: [],
     toolCalls: [],
     proposals: [],
+    runs: [],
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -260,6 +265,7 @@ export function AgentAuditPanel() {
         tasks: listAllOpyAgentTasks(),
         toolCalls: listAllOpyAgentToolCalls(),
         proposals: listAllOpyDiagramProposals(),
+        runs: listAllOpyAgentRuns(),
       }),
     )
       .then((nextSnapshot) => {
@@ -336,6 +342,20 @@ export function AgentAuditPanel() {
         toolCalls: snapshot.toolCalls,
       }),
     [snapshot.artifacts, snapshot.tasks, snapshot.toolCalls],
+  );
+  const modelAttribution = useMemo(
+    () => summarizeOpyModelAttribution(snapshot.runs),
+    [snapshot.runs],
+  );
+  const releaseReadiness = useMemo(
+    () =>
+      assessOpyReleaseReadiness({
+        tasks: snapshot.tasks,
+        artifacts: snapshot.artifacts,
+        toolCalls: snapshot.toolCalls,
+        proposals: snapshot.proposals,
+      }),
+    [snapshot.artifacts, snapshot.proposals, snapshot.tasks, snapshot.toolCalls],
   );
 
   return (
@@ -438,6 +458,70 @@ export function AgentAuditPanel() {
           <span className={styles.settingsMetricLabel}>Replay Blocked</span>
           <span className={styles.settingsMetricValue}>{replayEvalDashboard.blockedTaskCount}</span>
         </div>
+      </div>
+      <div className={styles.settingsRow}>
+        <div className={styles.settingsRowLabel}>
+          <span>Model Attribution</span>
+          <span className={styles.settingsRowHint}>
+            Which provider and model answered, and the tokens observed. Reported, not enforced — there is no cost
+            figure, because the runtime reports tokens rather than money.
+          </span>
+        </div>
+        <span className={styles.settingsRowValue}>
+          {modelAttribution.totalTokens === null
+            ? "NO USAGE MEASURED"
+            : `${modelAttribution.totalTokens.toLocaleString()} TOKENS`}
+        </span>
+      </div>
+      {modelAttribution.models.length > 0 && (
+        <div className={styles.settingsMetricsGrid}>
+          {modelAttribution.models.map((entry) => (
+            <div key={`${entry.provider}:${entry.model}`} className={styles.settingsMetricTile}>
+              <span className={styles.settingsMetricLabel}>{entry.model}</span>
+              <span className={styles.settingsMetricValue}>
+                {entry.totalTokens.toLocaleString()}
+              </span>
+              <span className={styles.settingsMetricLabel}>
+                {`${entry.measuredRunCount}/${entry.runCount} RUNS MEASURED`}
+              </span>
+            </div>
+          ))}
+          {modelAttribution.unattributedRunCount > 0 && (
+            <div className={styles.settingsMetricTile}>
+              <span className={styles.settingsMetricLabel}>Unattributed</span>
+              <span className={styles.settingsMetricValue}>
+                {modelAttribution.unattributedRunCount}
+              </span>
+              <span className={styles.settingsMetricLabel}>RECORDED BEFORE ATTRIBUTION</span>
+            </div>
+          )}
+        </div>
+      )}
+      <div className={styles.settingsRow}>
+        <div className={styles.settingsRowLabel}>
+          <span>Release Readiness</span>
+          <span className={styles.settingsRowHint}>
+            Whether the persisted evidence supports widening mutation defaults. Advisory only — it changes nothing on
+            its own.
+          </span>
+        </div>
+        <span className={styles.settingsRowValue}>
+          {releaseReadiness.verdict.toUpperCase()}
+        </span>
+      </div>
+      <div className={styles.settingsAuditList}>
+        {releaseReadiness.signals.map((signal) => (
+          <section key={signal.id} className={styles.settingsAuditEntry}>
+            <div className={styles.settingsAuditEntryHeader}>
+              <h3 className={styles.settingsAuditEntryTitle}>{signal.id.toUpperCase()}</h3>
+              <div className={styles.settingsAuditEntryMeta}>
+                <span className={styles.settingsRowValue}>{signal.verdict.toUpperCase()}</span>
+                <span className={styles.settingsRowValue}>{`n=${signal.sampleSize}`}</span>
+              </div>
+            </div>
+            <p className={styles.settingsAuditEntryBody}>{signal.summary}</p>
+          </section>
+        ))}
       </div>
       {error && <p className={styles.settingsErrorText}>{error}</p>}
       {!error && !isLoading && auditEntries.length === 0 && (

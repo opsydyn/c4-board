@@ -500,9 +500,9 @@ Remaining roadmap items are intentionally tracked as follow-on governance or pla
 
 ## 8) Next Recommended Execution Order
 
-1. Add release gates that consume replay readiness, latency, confidence, anomaly, and approval-policy signals before enabling broader mutation defaults.
-2. Persist provider-reported token usage and cost estimates when runtime support is available.
-3. Add provider-usage budget tracking UI once usage and cost estimates are persisted.
+1. ~~Add release gates that consume replay readiness, latency, confidence, anomaly, and approval-policy signals before enabling broader mutation defaults.~~ Done 2026-07-28: `src/core/effects/opy-release-readiness.ts` grades all five signals plus task failure rate, and the verdict is surfaced in the Settings agent audit. It is advisory — it does not change action modes, by design.
+2. ~~Persist provider-reported token usage.~~ Done 2026-07-28: `opy_agent_runs` carries the Rig 0.40 usage envelope. Cost estimates remain unavailable; the runtime reports tokens, not money, and no pricing table exists in the app.
+3. Add provider-usage budget tracking UI. Usage is persisted but nothing aggregates or displays it.
 
 ## 9) Definition of Ready / Done
 

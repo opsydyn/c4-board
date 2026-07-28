@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { RigAgentCitation, RigAgentContextBundle } from "./agent-context";
-import type { RigC4DiagramProposal } from "./ai-agent.runtime";
+import type { RigC4DiagramProposal, RigUsageMetadata } from "./ai-agent.runtime";
 import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService, NotFoundError } from "./database.base";
 import type { NodeDomain } from "./node-operations";
@@ -57,6 +57,20 @@ export interface OpyAgentRun {
   readonly startedAt: number;
   readonly completedAt: number | null;
   readonly errorSummary: string | null;
+  /**
+   * Provider token usage, or `null` when this run never captured any — it
+   * predates Rig 0.40, or it failed before the provider answered. An all-zero
+   * envelope is a different statement: the provider answered and reported
+   * nothing. A budget view must not read the first as the second.
+   */
+  readonly usage: RigUsageMetadata | null;
+  /**
+   * Which provider and model answered, or `null` for runs recorded before
+   * attribution existed. Never backfilled from current settings — that would be
+   * a guess wearing the clothes of a record.
+   */
+  readonly provider: string | null;
+  readonly model: string | null;
 }
 
 export interface OpyAgentTask {
@@ -129,10 +143,22 @@ export interface OpyAgentTaskBoardSnapshotLinkInput {
 
 export type OpyPlanDecisionStatus = "pending" | "approved" | "rejected";
 
+/**
+ * A proposal as it was persisted.
+ *
+ * Identical to the wire proposal except that `usage` may be `null`: rows
+ * written before Rig 0.40 have no usage envelope, and the wire type requires
+ * one. Keeping them the same type would let a rehydrated old proposal claim a
+ * measurement it never had.
+ */
+export type OpyPersistedRigC4DiagramProposal =
+  & Omit<RigC4DiagramProposal, "usage">
+  & { readonly usage: RigUsageMetadata | null };
+
 export interface OpyPersistedDiagramProposal {
   readonly sessionId: string;
   readonly commandDescription: string;
-  readonly proposal: RigC4DiagramProposal;
+  readonly proposal: OpyPersistedRigC4DiagramProposal;
   readonly context: RigAgentContextBundle;
   readonly decisionStatus: OpyPlanDecisionStatus;
   readonly decidedAt: number;
@@ -312,7 +338,16 @@ const LIST_RUNS_SQL = `
     status,
     started_at AS startedAt,
     completed_at AS completedAt,
-    error_summary AS errorSummary
+    error_summary AS errorSummary,
+    input_tokens AS inputTokens,
+    output_tokens AS outputTokens,
+    total_tokens AS totalTokens,
+    cached_input_tokens AS cachedInputTokens,
+    cache_creation_input_tokens AS cacheCreationInputTokens,
+    tool_use_prompt_tokens AS toolUsePromptTokens,
+    reasoning_tokens AS reasoningTokens,
+    provider,
+    model
   FROM opy_agent_runs
   WHERE session_id = ?
   ORDER BY started_at DESC
@@ -336,6 +371,31 @@ const LIST_AGENT_TASKS_SQL = `
   FROM opy_agent_tasks
   WHERE session_id = ?
   ORDER BY updated_at DESC, created_at DESC
+`;
+
+/** Cross-session run trail for the audit view (ADR-008 replayability). */
+const LIST_ALL_RUNS_SQL = `
+  SELECT
+    id,
+    session_id AS sessionId,
+    agent,
+    intent,
+    stage,
+    status,
+    started_at AS startedAt,
+    completed_at AS completedAt,
+    error_summary AS errorSummary,
+    input_tokens AS inputTokens,
+    output_tokens AS outputTokens,
+    total_tokens AS totalTokens,
+    cached_input_tokens AS cachedInputTokens,
+    cache_creation_input_tokens AS cacheCreationInputTokens,
+    tool_use_prompt_tokens AS toolUsePromptTokens,
+    reasoning_tokens AS reasoningTokens,
+    provider,
+    model
+  FROM opy_agent_runs
+  ORDER BY started_at DESC
 `;
 
 const LIST_ALL_AGENT_TASKS_SQL = `
@@ -484,7 +544,16 @@ const LIST_ACTIVE_RUNS_SQL = `
     status,
     started_at AS startedAt,
     completed_at AS completedAt,
-    error_summary AS errorSummary
+    error_summary AS errorSummary,
+    input_tokens AS inputTokens,
+    output_tokens AS outputTokens,
+    total_tokens AS totalTokens,
+    cached_input_tokens AS cachedInputTokens,
+    cache_creation_input_tokens AS cacheCreationInputTokens,
+    tool_use_prompt_tokens AS toolUsePromptTokens,
+    reasoning_tokens AS reasoningTokens,
+    provider,
+    model
   FROM opy_agent_runs
   WHERE session_id = ?
     AND status = 'running'
@@ -541,9 +610,18 @@ const INSERT_RUN_SQL = `
     status,
     started_at,
     completed_at,
-    error_summary
+    error_summary,
+    input_tokens,
+    output_tokens,
+    total_tokens,
+    cached_input_tokens,
+    cache_creation_input_tokens,
+    tool_use_prompt_tokens,
+    reasoning_tokens,
+    provider,
+    model
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 const UPSERT_TASK_SQL = `
@@ -620,7 +698,16 @@ const UPDATE_RUN_SQL = `
     stage = ?,
     status = ?,
     completed_at = ?,
-    error_summary = ?
+    error_summary = ?,
+    input_tokens = ?,
+    output_tokens = ?,
+    total_tokens = ?,
+    cached_input_tokens = ?,
+    cache_creation_input_tokens = ?,
+    tool_use_prompt_tokens = ?,
+    reasoning_tokens = ?,
+    provider = ?,
+    model = ?
   WHERE id = ?
     AND session_id = ?
 `;
@@ -940,6 +1027,15 @@ type AgentRunRow = {
   startedAt: number;
   completedAt: number | null;
   errorSummary: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedInputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  toolUsePromptTokens: number | null;
+  reasoningTokens: number | null;
+  provider: string | null;
+  model: string | null;
 };
 
 type AgentTaskRow = {
@@ -1121,7 +1217,46 @@ const isRigAgentContextBundle = (value: unknown): value is RigAgentContextBundle
     && typeof candidate.confidenceReason === "string";
 };
 
-const isRigC4DiagramProposal = (value: unknown): value is RigC4DiagramProposal => {
+/**
+ * Accepts a proposal with or without a usage envelope.
+ *
+ * Rows written before Rig 0.40 have none. Rejecting them would erase them from
+ * history and replay rather than report them as unmeasured, so the persisted
+ * type admits `usage: null` and `decodeDiagramProposalRow` normalizes a missing
+ * envelope into exactly that.
+ */
+/** Reads a persisted proposal's usage envelope, or `null` when it has none. */
+const readPersistedProposalUsage = (proposal: unknown): RigUsageMetadata | null => {
+  const usage = (proposal as { usage?: unknown }).usage;
+  if (typeof usage !== "object" || usage === null) {
+    return null;
+  }
+
+  const candidate = usage as Record<string, unknown>;
+  const counters = [
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "cachedInputTokens",
+    "cacheCreationInputTokens",
+    "toolUsePromptTokens",
+    "reasoningTokens",
+  ] as const;
+
+  return counters.every((key) => typeof candidate[key] === "number" && Number.isFinite(candidate[key]))
+    ? {
+      inputTokens: candidate.inputTokens as number,
+      outputTokens: candidate.outputTokens as number,
+      totalTokens: candidate.totalTokens as number,
+      cachedInputTokens: candidate.cachedInputTokens as number,
+      cacheCreationInputTokens: candidate.cacheCreationInputTokens as number,
+      toolUsePromptTokens: candidate.toolUsePromptTokens as number,
+      reasoningTokens: candidate.reasoningTokens as number,
+    }
+    : null;
+};
+
+const isRigC4DiagramProposal = (value: unknown): value is Omit<RigC4DiagramProposal, "usage"> => {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -1197,6 +1332,53 @@ const decodeMessageRow = (row: MessageRow): OpyChatMessage | null => {
   };
 };
 
+/** Binds the usage envelope to its seven columns, or seven nulls when unknown. */
+const toRunUsageValues = (
+  usage: RigUsageMetadata | null | undefined,
+): ReadonlyArray<number | null> =>
+  usage == null ? [null, null, null, null, null, null, null] : [
+    usage.inputTokens,
+    usage.outputTokens,
+    usage.totalTokens,
+    usage.cachedInputTokens,
+    usage.cacheCreationInputTokens,
+    usage.toolUsePromptTokens,
+    usage.reasoningTokens,
+  ];
+
+/**
+ * Reads the seven usage columns as one envelope, or `null` when the run has no
+ * usage on record.
+ *
+ * A single missing counter makes the whole envelope unknown rather than a
+ * partial total, because a half-populated row cannot be summed honestly.
+ */
+const decodeRunUsage = (row: AgentRunRow): RigUsageMetadata | null => {
+  const isCounter = (value: number | null): value is number => typeof value === "number" && Number.isFinite(value);
+
+  if (
+    !isCounter(row.inputTokens)
+    || !isCounter(row.outputTokens)
+    || !isCounter(row.totalTokens)
+    || !isCounter(row.cachedInputTokens)
+    || !isCounter(row.cacheCreationInputTokens)
+    || !isCounter(row.toolUsePromptTokens)
+    || !isCounter(row.reasoningTokens)
+  ) {
+    return null;
+  }
+
+  return {
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    totalTokens: row.totalTokens,
+    cachedInputTokens: row.cachedInputTokens,
+    cacheCreationInputTokens: row.cacheCreationInputTokens,
+    toolUsePromptTokens: row.toolUsePromptTokens,
+    reasoningTokens: row.reasoningTokens,
+  };
+};
+
 const decodeAgentRunRow = (row: AgentRunRow): OpyAgentRun | null => {
   if (
     !isOpyAgentRunAgent(row.agent)
@@ -1217,6 +1399,9 @@ const decodeAgentRunRow = (row: AgentRunRow): OpyAgentRun | null => {
     startedAt: toTimestamp(row.startedAt),
     completedAt: toNullableTimestamp(row.completedAt),
     errorSummary: toNullableText(row.errorSummary),
+    usage: decodeRunUsage(row),
+    provider: toNullableText(row.provider),
+    model: toNullableText(row.model),
   };
 };
 
@@ -1305,7 +1490,10 @@ const decodeDiagramProposalRow = (row: DiagramProposalRow): OpyPersistedDiagramP
   return {
     sessionId: row.sessionId,
     commandDescription: row.commandDescription,
-    proposal,
+    proposal: {
+      ...proposal,
+      usage: readPersistedProposalUsage(proposal),
+    },
     context,
     decisionStatus: row.decisionStatus,
     decidedAt: toTimestamp(row.decidedAt, proposal.respondedAtMs),
@@ -1433,6 +1621,15 @@ export const listOpyAgentTasks = (sessionId: string) =>
     );
   });
 
+export const listAllOpyAgentRuns = () =>
+  Effect.gen(function*() {
+    const service = yield* DatabaseService;
+    const rows = yield* service.query<AgentRunRow>(LIST_ALL_RUNS_SQL);
+    return sortRunsByRecency(
+      rows.map(decodeAgentRunRow).filter((row): row is OpyAgentRun => row !== null),
+    );
+  });
+
 export const listAllOpyAgentTasks = () =>
   Effect.gen(function*() {
     const service = yield* DatabaseService;
@@ -1541,6 +1738,9 @@ export const createOpyAgentRun = (run: OpyAgentRun) =>
       run.startedAt,
       run.completedAt,
       run.errorSummary,
+      ...toRunUsageValues(run.usage),
+      run.provider,
+      run.model,
     ]);
 
     return run;
@@ -1650,6 +1850,9 @@ export const updateOpyAgentRun = (run: OpyAgentRun) =>
       run.status,
       run.completedAt,
       run.errorSummary,
+      ...toRunUsageValues(run.usage),
+      run.provider,
+      run.model,
       run.id,
       run.sessionId,
     ]);

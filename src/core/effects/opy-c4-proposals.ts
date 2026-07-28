@@ -2,7 +2,7 @@ import type {
   RigC4BoardEdge,
   RigC4BoardNode,
   RigC4BoardSummary,
-  RigC4DiagramProposal,
+  RigC4DiagramProposalContent,
   RigC4ProposalEdge,
   RigC4ProposalNode,
 } from "./ai-agent.runtime";
@@ -73,7 +73,7 @@ export const findBoardNodeMatches = (
 };
 
 export const buildGroundedProposalDiff = (
-  proposal: RigC4DiagramProposal,
+  proposal: RigC4DiagramProposalContent,
   boardSummary: RigC4BoardSummary | null,
 ): OpyGroundedProposalDiff | null => {
   if (!boardSummary) {
