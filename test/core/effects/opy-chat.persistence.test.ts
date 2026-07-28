@@ -27,6 +27,7 @@ import {
 } from "@/core/effects/opy-chat.persistence";
 import { Cause, Effect, Layer, Option } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import { ZERO_RIG_USAGE } from "./rig-usage.fixture";
 
 const createPersistedProposal = (
   overrides?: Partial<OpyPersistedDiagramProposal>,
@@ -55,6 +56,7 @@ const createPersistedProposal = (
     provider: "openai",
     model: "gpt-5",
     respondedAtMs: 2_000,
+    usage: ZERO_RIG_USAGE,
   },
   context: {
     promptContext: "FOCUS=Ledger\nCONFIDENCE=HIGH",

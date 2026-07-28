@@ -61,6 +61,13 @@ Azure evidence is being made trustworthy.
 
 ## Gate 1: Rig 0.40 Upgrade
 
+**Status**: Delivered 2026-07-28. All five exit criteria below are met:
+`rig-core 0.40` compiles with Rust characterization tests passing,
+`rig_runtime.rs` is the only module importing Rig, hello/review/proposal
+behaviour is unchanged, provider errors carry no secrets, and the normalized
+usage envelope is decoded and validated at the Effect boundary. Usage is
+*available* to the task trail; persisting it against board runs is Gate 2.
+
 ### Characterization Contract
 
 Before changing the dependency, add deterministic Rust-side coverage for:

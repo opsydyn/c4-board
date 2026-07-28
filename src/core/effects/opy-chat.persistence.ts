@@ -1121,6 +1121,15 @@ const isRigAgentContextBundle = (value: unknown): value is RigAgentContextBundle
     && typeof candidate.confidenceReason === "string";
 };
 
+/**
+ * Deliberately does not require `usage`, which the wire schema does.
+ *
+ * Proposals persisted before the Rig 0.40 upgrade have no usage envelope, and
+ * rejecting them here would erase them from history and replay rather than
+ * report them as unpriced. Nothing reads usage off a rehydrated proposal today;
+ * joining usage to the persisted task trail is Gate 2 work, and it owns closing
+ * the gap between this guard and the wire type.
+ */
 const isRigC4DiagramProposal = (value: unknown): value is RigC4DiagramProposal => {
   if (typeof value !== "object" || value === null) {
     return false;

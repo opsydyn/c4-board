@@ -32,6 +32,26 @@ export class AgentPolicyError extends Data.TaggedError("AgentPolicyError")<Agent
 
 export type AgentError = AgentConfigError | AgentRuntimeError | AgentPolicyError;
 
+/**
+ * Provider token usage, normalized by `rig_runtime.rs` (Rig 0.40).
+ *
+ * Required rather than optional: a provider that reports nothing emits zeros, so
+ * an absent envelope means the response contract drifted, not that the run was
+ * free. Extractor usage covers the final successful attempt only — Rig discards
+ * usage from failed parse attempts, so a retried extraction under-reports spend.
+ */
+const RigUsageMetadataSchema = Schema.Struct({
+  inputTokens: Schema.Number,
+  outputTokens: Schema.Number,
+  totalTokens: Schema.Number,
+  cachedInputTokens: Schema.Number,
+  cacheCreationInputTokens: Schema.Number,
+  toolUsePromptTokens: Schema.Number,
+  reasoningTokens: Schema.Number,
+});
+
+export type RigUsageMetadata = Schema.Schema.Type<typeof RigUsageMetadataSchema>;
+
 const RigHelloResponseSchema = Schema.Struct({
   message: Schema.String,
   provider: Schema.String,
@@ -40,6 +60,7 @@ const RigHelloResponseSchema = Schema.Struct({
   temperature: Schema.Number,
   maxTokens: Schema.Number,
   respondedAtMs: Schema.Number,
+  usage: RigUsageMetadataSchema,
 });
 
 export type RigHelloResponse = Schema.Schema.Type<typeof RigHelloResponseSchema>;
@@ -69,6 +90,7 @@ const RigC4DiagramProposalSchema = Schema.Struct({
   provider: Schema.String,
   model: Schema.String,
   respondedAtMs: Schema.Number,
+  usage: RigUsageMetadataSchema,
 });
 
 export type RigC4ProposalNode = Schema.Schema.Type<typeof RigC4ProposalNodeSchema>;
@@ -108,6 +130,7 @@ const RigC4BoardReviewSchema = Schema.Struct({
   provider: Schema.String,
   model: Schema.String,
   respondedAtMs: Schema.Number,
+  usage: RigUsageMetadataSchema,
 });
 
 export type RigC4ReviewNote = Schema.Schema.Type<typeof RigC4ReviewNoteSchema>;

@@ -402,7 +402,8 @@ OPY now has an explicit UI-side orchestration machine for active flows.
 - Settings agent audit now reports replay readiness counts: replayable, partial, and blocked
 - replay readiness is deterministic and based on the stored request replay kind, required artifacts, snapshot linkage, and terminal task status
 - offline Rig fixture evals now cover read-only QA grounding, safe mutation approval metadata, read-only mutation blocking, policy-budget rejection, low-confidence proposal coverage, failed-provider replay blocking, and Azure-heavy rollback preview/approval
-- provider token usage and cost are not yet included because the runtime does not persist provider-reported usage data
+- provider token usage is now reported by the runtime and validated at the Effect boundary, but the eval dashboard does not yet include it because the board surface does not persist it against tasks and runs
+- cost estimates are not available at all; the runtime reports tokens, not money
 
 ## Run Envelope and Telemetry
 
@@ -605,6 +606,19 @@ Primary OPY surface files:
 - `src/ui/components/OpyFloatingWidget.tsx`
 - `src/ui/components/OpyCopilotPanel.tsx`
 - `src/ui/components/styles.css.ts`
+
+Model runtime:
+
+- `src-tauri/src/rig_runtime.rs` — the only module that imports `rig`. It owns
+  OpenAI client construction, prompts, structured extraction, and the normalized
+  provider usage envelope. `rig-core` is at `0.40`.
+- `src-tauri/src/ai_agent.rs` — Tauri command adapters, secret resolution,
+  prompts, sanitization, and validation. It consumes the runtime rather than Rig.
+
+Provider token usage crosses into TypeScript on every command response and is
+validated by `ai-agent.runtime.ts`. It is available to the core task trail but is
+not persisted against board runs and has no budget UI; a provider that reports
+nothing sends zeros rather than omitting the envelope.
 
 Runtime and persistence:
 

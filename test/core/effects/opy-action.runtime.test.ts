@@ -7,6 +7,7 @@ import {
 import type { OpyAgentCheckpoint, OpyPlanDecisionStatus } from "@/core/effects/opy-chat.persistence";
 import { DEFAULT_APP_SETTINGS } from "@/core/effects/settings.types";
 import { describe, expect, it } from "vitest";
+import { ZERO_RIG_USAGE } from "./rig-usage.fixture";
 
 const defaultAgentPolicy = DEFAULT_APP_SETTINGS.agentPolicy;
 
@@ -74,6 +75,7 @@ const createProposal = (overrides?: Partial<RigC4DiagramProposal>): RigC4Diagram
   provider: "openai",
   model: "gpt-5",
   respondedAtMs: 1_700_000_000_000,
+  usage: ZERO_RIG_USAGE,
   ...overrides,
 });
 

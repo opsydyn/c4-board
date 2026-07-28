@@ -6,6 +6,7 @@ import type {
   RigC4ProposalEdge,
   RigC4ProposalNode,
 } from "@/core/effects/ai-agent.runtime";
+import { ZERO_RIG_USAGE } from "../rig-usage.fixture";
 
 export interface RigAgentEvalScenario {
   readonly id: "mono-team" | "cross-team" | "unknown-ownership" | "azure-heavy";
@@ -98,6 +99,7 @@ const makeProposal = (
   provider: "openai",
   model: "gpt-4.1-mini",
   respondedAtMs,
+  usage: ZERO_RIG_USAGE,
 });
 
 const monoApi = makeNode("mono-api", "API Gateway", "system", "team-platform", "TypeScript");

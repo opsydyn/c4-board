@@ -42,8 +42,7 @@ The current OPY/Rig C4 loop is strong enough to treat as a foundation:
 Known gaps:
 
 - Runtime execution is still effectively OpenAI-first even though settings expose additional providers.
-- `rig-core` is pinned to `0.30`; the newest public Rig line is newer and should be evaluated before product expansion.
-- Provider token usage and cost are not persisted, which blocks budget UI and release gates.
+- Provider token usage is reported and decoded but not yet persisted for the board surface, which blocks budget UI and release gates. Postee runs already persist it in `postee_agent_runs`.
 - Rig tool contracts exist, but OPY does not yet expose a broad Rig-native tool registry for architecture operations.
 - The OPY handbook and older roadmap contain stale status language in a few sections and should be reconciled as this roadmap becomes canonical.
 
@@ -99,11 +98,21 @@ Acceptance criteria:
 
 Move from "Rig call sites inside OPY" toward a typed Rig runtime boundary.
 
-Capabilities:
+Delivered:
 
-- Spike upgrade from `rig-core = "0.30"` to the newest stable Rig line.
+- `rig-core 0.40` compatibility, replacing the previous `0.30` pin.
+- One Rust-side runtime boundary: [`rig_runtime.rs`](/src-tauri/src/rig_runtime.rs) is the only module that imports `rig`.
+- Retained OpenAI prompt and structured-extraction behaviour, with no change to command names, payloads, or user-visible error prefixes.
+- A normalized, required usage envelope on every command response, decoded and validated at the Effect boundary in [`ai-agent.runtime.ts`](/src/core/effects/ai-agent.runtime.ts).
+
+Deferred, and not implied by the upgrade: streaming, `AgentRun`, hooks, Rig
+conversation memory, Rig vector stores, provider parity beyond OpenAI, and usage
+budget persistence.
+
+Remaining capabilities:
+
 - Normalize provider execution for OpenAI, Anthropic, and OpenRouter.
-- Wrap model calls in one Rust-side runtime interface for prompt, extraction, streaming, tool use, and usage metadata.
+- Extend the runtime boundary to streaming and tool use.
 - Persist provider response metadata, token usage, and cost estimates where available.
 - Evaluate Rig conversation memory, `rig-memory`, and Rig vector-store/RAG primitives without weakening OPY's app-owned task/session/artifact ledger.
 - Preserve Effect Schema validation and OPY policy gates at the app boundary.
@@ -270,11 +279,10 @@ Exit criteria:
 
 Goal: validate newest Rig capabilities without product-scope churn.
 
-- [ ] Create a branch for the Rig upgrade spike.
-- [ ] Upgrade `rig-core` in isolation.
-- [ ] Verify existing hello, plan, review, extractor, and secret-resolution commands.
-- [ ] Identify breaking API changes and required Schemars/reqwest adjustments.
-- [ ] Document provider, streaming, tool, memory, and usage-metadata APIs that are viable for OPY.
+- [x] Upgrade `rig-core` in isolation.
+- [x] Verify existing hello, plan, review, extractor, and secret-resolution commands.
+- [x] Identify breaking API changes and required Schemars/reqwest adjustments.
+- [x] Document provider, streaming, tool, memory, and usage-metadata APIs that are viable for OPY.
 - [ ] Complete the Rig Memory Adoption Spike and record the OPY/Rig memory boundary.
 
 Exit criteria:
