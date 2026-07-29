@@ -27,6 +27,12 @@ interface UseAzureSyncInput {
   readonly edges: readonly Edge[];
   readonly diagramId?: string | null;
   readonly policy: AzureApplyPolicy;
+  /**
+   * Asked only when the plan removes something. Returning false abandons the
+   * apply. Injected rather than called directly so the decision stays testable
+   * and the hook stays free of `window`.
+   */
+  readonly confirmDestructiveApply: (plan: AzureApplyPlan) => boolean;
   readonly onApply?: (
     dryRun: AzureSyncDryRunOutput,
     plan: AzureApplyPlan,
@@ -105,7 +111,7 @@ const isAzureNode = (node: Node): boolean => isAzureNodeId(node.id);
 const isAzureEdge = (edge: Edge): boolean => isAzureEdgeId(edge.id);
 
 export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
-  const { nodes, edges, diagramId, onApply, policy } = input;
+  const { nodes, edges, diagramId, onApply, policy, confirmDestructiveApply } = input;
 
   const [subscriptionIdsInput, setSubscriptionIdsInput] = useState("");
   const [resourceGroupsInput, setResourceGroupsInput] = useState("");
@@ -232,6 +238,10 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
 
     // The gate, not a warning (ADR-020). A truncated or empty snapshot cannot
     // be told apart from a deleted estate, so it does not reach the board.
+    //
+    // Recomputed here rather than read from `applyDecision` so the click acts
+    // on the state at the moment it happened, not on a render that may have
+    // been captured before the operator changed something.
     const decision = resolveAzureApplyDecision({
       policy,
       nodeDiff: dryRun.nodeDiff,
@@ -250,6 +260,12 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
       return;
     }
 
+    // Only ever asked when something is destroyed, so it does not become the
+    // dialog people dismiss without reading.
+    if (decision.plan.requiresConfirmation && !confirmDestructiveApply(decision.plan)) {
+      return;
+    }
+
     setIsApplyLoading(true);
     try {
       await onApply(dryRun, decision.plan);
@@ -262,7 +278,7 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
     } finally {
       setIsApplyLoading(false);
     }
-  }, [acknowledgedUntrustedSnapshot, dryRun, onApply, policy]);
+  }, [acknowledgedUntrustedSnapshot, confirmDestructiveApply, dryRun, onApply, policy]);
 
   return {
     form: {

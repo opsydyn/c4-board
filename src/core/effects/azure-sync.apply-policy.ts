@@ -149,3 +149,36 @@ export const resolveAzureApplyDecision = (
     ? { ok: true, blocked: [], plan }
     : { ok: false, blocked, plan };
 };
+
+/**
+ * The line an operator reads before agreeing to a destructive apply.
+ *
+ * Removal comes first. Everything else on the line is recoverable by running
+ * the sync again; the removals are not, and burying them behind create and
+ * update counts is how a confirmation becomes something people click past.
+ *
+ * The `APPROVAL:: · RISK::` shape is the one OPY confirmations already use
+ * (`agent-policy.ts`), so an operator reads one vocabulary across both surfaces
+ * rather than learning a second dialect for Azure.
+ */
+export const describeAzureApplyPlan = (plan: AzureApplyPlan): string => {
+  const removals = plan.nodesToArchive + plan.edgesToArchive;
+
+  return [
+    "APPROVAL::AZURE SYNC",
+    `RISK::${plan.destructive ? "HIGH" : "LOW"}`,
+    removals > 0
+      ? `REMOVE ${plan.nodesToArchive} node(s) and ${plan.edgesToArchive} edge(s)`
+      : null,
+    plan.nodesToCreate + plan.edgesToCreate > 0
+      ? `CREATE ${plan.nodesToCreate} node(s) and ${plan.edgesToCreate} edge(s)`
+      : null,
+    plan.nodesToUpdate + plan.edgesToUpdate > 0
+      ? `UPDATE ${plan.nodesToUpdate} node(s) and ${plan.edgesToUpdate} edge(s)`
+      : null,
+    plan.nodesRetained + plan.edgesRetained > 0
+      ? `RETAIN ${plan.nodesRetained} node(s) and ${plan.edgesRetained} edge(s) Azure no longer reports`
+      : null,
+    `ACTIONS::${plan.totalOperations}`,
+  ].filter((part): part is string => part !== null).join(" · ");
+};

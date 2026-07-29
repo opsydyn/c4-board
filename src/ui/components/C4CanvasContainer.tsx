@@ -58,6 +58,7 @@ import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../.
 import type { ArchitectureSemanticRole } from "../../core/effects/architecture-role-classification";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureApplyPlan } from "../../core/effects/azure-sync.apply-policy";
+import { createAzureSyncCheckpoint } from "../../core/effects/azure-sync.checkpoints";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import { canvasToneFor } from "../../core/effects/canvas-ambient-tone";
 import {
@@ -1390,6 +1391,29 @@ export function C4CanvasContainer() {
         saveInput.description = state.context.diagramDescription;
       }
 
+      // Checkpoint the board as it stands, before anything is written. With the
+      // save ordered ahead of the canvas update this is not what recovers a
+      // failed apply — it is how an operator undoes a successful one.
+      await runEffect(
+        createAzureSyncCheckpoint({
+          id: `azure-checkpoint-${dryRun.result.runId}`,
+          diagramId: currentDiagramId,
+          runId: dryRun.result.runId,
+          checkpointType: "pre-apply",
+          snapshot: {
+            id: currentDiagramId,
+            name: state.context.diagramName,
+            nodes: state.context.nodes,
+            edges: state.context.edges,
+            savedAt: state.context.lastSaved ?? null,
+            ...(state.context.diagramDescription
+              ? { description: state.context.diagramDescription }
+              : {}),
+          },
+          createdAt: Date.now(),
+        }),
+      );
+
       const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
         type: "LOAD_DIAGRAM_SUCCESS",
         diagram: {
@@ -1407,8 +1431,11 @@ export function C4CanvasContainer() {
             : {}),
         },
       };
-      send(loadEvent);
 
+      // Persist before touching the canvas. `saveDiagram` is transactional, so
+      // a failure leaves the database untouched — and now the board too. The
+      // old order sent this event first and threw on failure, leaving a mutated
+      // canvas with nothing saved behind it and no way back.
       const didSave = await requestSave("manual", {
         overrideInput: saveInput,
       });
@@ -1416,8 +1443,10 @@ export function C4CanvasContainer() {
       if (!didSave) {
         const saveError = saveActorRef.getSnapshot().context.errorMessage;
         const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
-        throw new Error(`Azure sync apply save failed: ${detail}`);
+        throw new Error(`Azure sync apply save failed, board left unchanged: ${detail}`);
       }
+
+      send(loadEvent);
 
       console.log(
         "☁️ Azure sync applied:",
@@ -1430,6 +1459,7 @@ export function C4CanvasContainer() {
       appSettings.azureSyncPolicy.archiveMissing,
       flushPendingInlineEdits,
       requestSave,
+      runEffect,
       saveSnapshot.context.lastSavedAt,
       send,
       state.context.currentDiagramId,

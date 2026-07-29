@@ -7,7 +7,11 @@
  * apply right up until the board is gone.
  */
 
-import { type AzureApplyPolicy, resolveAzureApplyDecision } from "@/core/effects/azure-sync.apply-policy";
+import {
+  type AzureApplyPolicy,
+  describeAzureApplyPlan,
+  resolveAzureApplyDecision,
+} from "@/core/effects/azure-sync.apply-policy";
 import type { AzureSyncDiffResult } from "@/core/effects/azure-sync.diff";
 import { describe, expect, it } from "vitest";
 
@@ -162,5 +166,52 @@ describe("resolveAzureApplyDecision", () => {
       expect(entry.message.length).toBeGreaterThan(0);
       expect(entry.recommendedAction.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("describeAzureApplyPlan", () => {
+  const plan = (overrides: Partial<Parameters<typeof describeAzureApplyPlan>[0]>) =>
+    describeAzureApplyPlan({
+      nodesToCreate: 0,
+      nodesToUpdate: 0,
+      nodesToArchive: 0,
+      edgesToCreate: 0,
+      edgesToUpdate: 0,
+      edgesToArchive: 0,
+      nodesRetained: 0,
+      edgesRetained: 0,
+      totalOperations: 0,
+      destructive: false,
+      requiresConfirmation: false,
+      ...overrides,
+    });
+
+  it("leads with what is removed, because that is the irreversible part", () => {
+    const summary = plan({
+      nodesToCreate: 2,
+      nodesToArchive: 5,
+      edgesToArchive: 3,
+      destructive: true,
+      requiresConfirmation: true,
+      totalOperations: 10,
+    });
+
+    expect(summary.indexOf("REMOVE")).toBeLessThan(summary.indexOf("CREATE"));
+    expect(summary).toContain("5 node");
+    expect(summary).toContain("3 edge");
+  });
+
+  it("reads in the same vocabulary as an OPY approval", () => {
+    const summary = plan({ nodesToArchive: 1, destructive: true, requiresConfirmation: true, totalOperations: 1 });
+
+    expect(summary).toContain("APPROVAL::AZURE SYNC");
+    expect(summary).toContain("RISK::HIGH");
+  });
+
+  it("does not claim high risk for an additive plan", () => {
+    const summary = plan({ nodesToCreate: 4, totalOperations: 4 });
+
+    expect(summary).toContain("RISK::LOW");
+    expect(summary).not.toContain("REMOVE");
   });
 });

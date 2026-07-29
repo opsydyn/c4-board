@@ -1,8 +1,12 @@
 import { CloudIcon } from "@phosphor-icons/react";
 import type { Edge, Node } from "@xyflow/react";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { RigAgentAzureSyncRetrievalSnapshot } from "../../core/effects/agent-retrieval";
-import type { AzureApplyPlan, AzureApplyPolicy } from "../../core/effects/azure-sync.apply-policy";
+import {
+  type AzureApplyPlan,
+  type AzureApplyPolicy,
+  describeAzureApplyPlan,
+} from "../../core/effects/azure-sync.apply-policy";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import type { AzureRelationshipConfidence, AzureRelationshipSource } from "../../core/effects/azure-sync.types";
 import { useAzureSync } from "../hooks/useAzureSync";
@@ -101,6 +105,13 @@ export function AzureSyncPanel({
   onApply,
   onSummaryChange,
 }: AzureSyncPanelProps) {
+  // The only `window` call in the Azure path, kept at the edge so the decision
+  // to ask, and the words used, both stay in the functional core.
+  const confirmDestructiveApply = useCallback(
+    (plan: AzureApplyPlan) => window.confirm(describeAzureApplyPlan(plan)),
+    [],
+  );
+
   const {
     form,
     setSubscriptionIdsInput,
@@ -128,6 +139,7 @@ export function AzureSyncPanel({
     nodes,
     edges,
     policy,
+    confirmDestructiveApply,
     ...(diagramId ? { diagramId } : {}),
     ...(onApply ? { onApply } : {}),
   });

@@ -55,13 +55,17 @@ Truncation and zero-result are not degraded accuracy — they are indistinguisha
 
 ### Every apply is checkpointed, in its own table
 
-A pre-apply snapshot is mandatory, and restore is the recovery path when a save fails.
+A pre-apply snapshot is mandatory.
+
+It is **not** what recovers a failed apply — reordering the save handles that, see below — and the distinction matters for what the checkpoint is for. Its job is undoing an apply that *succeeded* and should not have: an archiving run against a scope that turned out to be wrong, where everything worked exactly as asked.
 
 The checkpoint does **not** go in `opy_agent_checkpoints`. That table's `session_id` is `NOT NULL` with a foreign key to `opy_chat_sessions`, and an Azure sync has no chat session. Satisfying the FK would mean inventing one — the precise trap that [migration 033](/src-tauri/migrations/033_create_postee_agent_runs.sql) documents avoiding for Postee, on the grounds that a fabricated parent row is a worse lie than a second table. Azure gets its own.
 
 ### The board is not replaced before the save succeeds
 
-`handleApplyAzureSync` sends `LOAD_DIAGRAM_SUCCESS` and then requests the save, throwing if it fails — leaving the canvas mutated with nothing persisted and no restore branch. The order inverts, and a failed save restores from the checkpoint.
+`handleApplyAzureSync` sends `LOAD_DIAGRAM_SUCCESS` and then requests the save, throwing if it fails — leaving the canvas mutated with nothing persisted and no restore branch.
+
+The order inverts: persist, then update the canvas. Because `saveDiagram` is transactional, a failed save leaves the database untouched, and with the canvas not yet updated there is nothing to roll back. That is better than restoring from a checkpoint, which is a recovery that can itself fail.
 
 ### Safety before transport
 
