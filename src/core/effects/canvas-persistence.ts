@@ -403,6 +403,12 @@ export function dbNodeToReactFlow(dbNode: DbNode): ReactFlowNode {
       ...(isArchitectureSemanticRole(dbNode.semantic_role)
         ? { layoutRole: dbNode.semantic_role }
         : {}),
+      // Spread only when present, so an unprovenanced node stays that way rather
+      // than gaining explicit nulls that read as "synced, found nothing".
+      ...(dbNode.source_provider ? { sourceProvider: dbNode.source_provider } : {}),
+      ...(dbNode.source_resource_id ? { sourceResourceId: dbNode.source_resource_id } : {}),
+      ...(dbNode.source_resource_type ? { sourceResourceType: dbNode.source_resource_type } : {}),
+      ...(typeof dbNode.last_synced_at === "number" ? { lastSyncedAt: dbNode.last_synced_at } : {}),
       ...couplingState,
     },
     // Initialize measured dimensions for ReactFlow v12+
@@ -478,6 +484,15 @@ export function reactFlowNodeToDb(
   const semanticRole = isArchitectureSemanticRole(dataRecord.layoutRole)
     ? dataRecord.layoutRole
     : undefined;
+  // Azure provenance (migration 039). Only carried when the node actually has
+  // it — a hand-drawn node must not come back claiming a provider made it.
+  const text = (value: unknown): string | undefined =>
+    typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  const sourceProvider = text(dataRecord.sourceProvider);
+  const lastSyncedAt = typeof dataRecord.lastSyncedAt === "number"
+      && Number.isFinite(dataRecord.lastSyncedAt)
+    ? dataRecord.lastSyncedAt
+    : undefined;
 
   return {
     id: node.id,
@@ -497,6 +512,10 @@ export function reactFlowNodeToDb(
     ...optional("expand_parent", node.expandParent),
     ...optional("icon_id", resolvedIconId),
     ...optional("semantic_role", semanticRole),
+    ...optional("source_provider", sourceProvider),
+    ...optional("source_resource_id", text(dataRecord.sourceResourceId)),
+    ...optional("source_resource_type", text(dataRecord.sourceResourceType)),
+    ...optional("last_synced_at", lastSyncedAt),
     ...optional(
       "team_ownership",
       teamOwnership.length > 0 ? teamOwnership : undefined,
@@ -518,7 +537,49 @@ interface PersistedEdgePayloadV1 {
     sourceHandle?: string | null;
     targetHandle?: string | null;
   };
+  /**
+   * Azure provenance (ADR-020 Phase 2).
+   *
+   * Added to this payload rather than as columns, because edges already store
+   * their extras here — the opposite call to nodes, which are flat-column
+   * throughout. Optional, so rows written before this existed still decode as
+   * version 1 with no provenance rather than failing.
+   */
+  provenance?: {
+    sourceProvider?: string;
+    relationshipType?: string;
+    confidence?: string;
+    provenanceSource?: string;
+    provenanceDetail?: string;
+    lastSyncedAt?: number;
+  };
 }
+
+/** Reads the provenance an Azure sync wrote onto an edge, if any. */
+const readEdgeProvenance = (
+  edgeData: EdgeData | undefined,
+): PersistedEdgePayloadV1["provenance"] => {
+  const record = edgeData as Record<string, unknown> | undefined;
+  if (!record) {
+    return undefined;
+  }
+
+  const text = (value: unknown): string | undefined =>
+    typeof value === "string" && value.trim().length > 0 ? value : undefined;
+
+  const provenance = {
+    ...(text(record.sourceProvider) ? { sourceProvider: text(record.sourceProvider)! } : {}),
+    ...(text(record.relationshipType) ? { relationshipType: text(record.relationshipType)! } : {}),
+    ...(text(record.confidence) ? { confidence: text(record.confidence)! } : {}),
+    ...(text(record.provenanceSource) ? { provenanceSource: text(record.provenanceSource)! } : {}),
+    ...(text(record.provenanceDetail) ? { provenanceDetail: text(record.provenanceDetail)! } : {}),
+    ...(typeof record.lastSyncedAt === "number" && Number.isFinite(record.lastSyncedAt)
+      ? { lastSyncedAt: record.lastSyncedAt }
+      : {}),
+  };
+
+  return Object.keys(provenance).length > 0 ? provenance : undefined;
+};
 
 const isPersistedEdgePayloadV1 = (value: unknown): value is PersistedEdgePayloadV1 =>
   typeof value === "object"
@@ -530,12 +591,14 @@ export function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
   // Parse metadata JSON if present
   let metadata: EdgeMetadata | undefined;
   let layout: PersistedEdgePayloadV1["layout"];
+  let provenance: PersistedEdgePayloadV1["provenance"];
   if (dbEdge.metadata) {
     try {
       const persisted = JSON.parse(dbEdge.metadata) as unknown;
       if (isPersistedEdgePayloadV1(persisted)) {
         metadata = persisted.metadata;
         layout = persisted.layout;
+        provenance = persisted.provenance;
       } else {
         metadata = persisted as EdgeMetadata;
       }
@@ -549,6 +612,7 @@ export function dbEdgeToReactFlow(dbEdge: DbEdge): ReactFlowEdge {
     ...(metadata && { metadata }),
     ...(layout?.audit && { layoutAudit: layout.audit }),
     ...(layout?.route && { layoutRoute: layout.route }),
+    ...(provenance ?? {}),
   };
 
   return {
@@ -578,7 +642,8 @@ export function reactFlowEdgeToDb(
   const hasLayout = Boolean(
     edgeData?.layoutAudit || edgeData?.layoutRoute || edge.sourceHandle || edge.targetHandle,
   );
-  const metadataJson = metadata || hasLayout
+  const provenance = readEdgeProvenance(edgeData);
+  const metadataJson = metadata || hasLayout || provenance
     ? JSON.stringify(
       {
         version: 1,
@@ -591,6 +656,7 @@ export function reactFlowEdgeToDb(
             ...(edge.targetHandle && { targetHandle: edge.targetHandle }),
           },
         }),
+        ...(provenance && { provenance }),
       } satisfies PersistedEdgePayloadV1,
     )
     : undefined;

@@ -180,6 +180,7 @@ interface AzureFingerprintableEdge {
   readonly source: string;
   readonly target: string;
   readonly label?: unknown;
+  readonly data?: unknown;
 }
 
 interface AzureFingerprintableMappedNode {
@@ -195,6 +196,9 @@ interface AzureFingerprintableMappedEdge {
   readonly source: string;
   readonly target: string;
   readonly label: string;
+  readonly relationshipType: string;
+  readonly confidence: string;
+  readonly provenanceSource: string;
 }
 
 /** Fingerprints a node as the mapper produced it. */
@@ -224,16 +228,33 @@ export const fingerprintAzureBoardNode = (node: AzureFingerprintableNode): strin
   ]);
 };
 
+/**
+ * Fingerprints an edge as the mapper produced it.
+ *
+ * Includes relationship type, confidence, and provenance source now that
+ * migration 039 persists them. Before that they were dropped at save, so a link
+ * demoted from `high` to `inferred` fingerprinted identically and the dry-run
+ * reported no change — an operator never learned the evidence had weakened.
+ */
 export const fingerprintAzureMappedEdge = (edge: AzureFingerprintableMappedEdge): string =>
   stableFingerprint([
     ["source", text(edge.source)],
     ["target", text(edge.target)],
     ["label", text(edge.label)],
+    ["relationshipType", text(edge.relationshipType)],
+    ["confidence", text(edge.confidence)],
+    ["provenanceSource", text(edge.provenanceSource)],
   ]);
 
-export const fingerprintAzureBoardEdge = (edge: AzureFingerprintableEdge): string =>
-  stableFingerprint([
+export const fingerprintAzureBoardEdge = (edge: AzureFingerprintableEdge): string => {
+  const data = (typeof edge.data === "object" && edge.data !== null ? edge.data : {}) as Record<string, unknown>;
+
+  return stableFingerprint([
     ["source", text(edge.source)],
     ["target", text(edge.target)],
     ["label", text(edge.label)],
+    ["relationshipType", text(data.relationshipType)],
+    ["confidence", text(data.confidence)],
+    ["provenanceSource", text(data.provenanceSource)],
   ]);
+};

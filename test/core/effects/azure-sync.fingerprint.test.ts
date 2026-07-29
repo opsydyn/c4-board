@@ -135,6 +135,17 @@ describe("azure sync fingerprints", () => {
     expect(fingerprintAzureBoardNode(moved)).toBe(fingerprintAzureBoardNode(boardNode));
   });
 
+  it("notices a confidence downgrade on an edge, now that provenance persists", () => {
+    // Before provenance was persisted this was invisible: a link demoted from
+    // high confidence to inferred fingerprinted identically, so the dry-run
+    // reported no change and an operator never learned the evidence weakened.
+    const before = fingerprintAzureMappedEdge(mappedEdge());
+
+    expect(fingerprintAzureMappedEdge(mappedEdge({ confidence: "low" }))).not.toBe(before);
+    expect(fingerprintAzureMappedEdge(mappedEdge({ relationshipType: "inferred" }))).not.toBe(before);
+    expect(fingerprintAzureMappedEdge(mappedEdge({ provenanceSource: "arm_parent" }))).not.toBe(before);
+  });
+
   it("matches a mapped edge against the board edge it produced", () => {
     const edge = mappedEdge();
     // The merge keeps an edge only when both endpoints are themselves mapped,
