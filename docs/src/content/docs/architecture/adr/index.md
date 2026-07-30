@@ -41,7 +41,7 @@ Each ADR follows this structure:
 | [ADR-015](./015-board-metadata-envelope.md)      | Board Metadata Envelope for Diagram Exports                      | Accepted | 2026-07-26 |
 | [ADR-016](./016-event-storming-big-picture-mode.md) | Event Storming Mode (Big Picture)                             | Accepted | 2026-07-26 |
 | [ADR-017](./017-azure-resource-type-mapping.md) | Azure Resource Type Mapping and Relationship Projection        | Accepted | 2026-07-26 |
-| [ADR-018](./018-azure-sync-enterprise-readiness.md) | Azure Sync Enterprise Readiness                            | Proposed | 2026-07-26 |
+| [ADR-018](./018-azure-sync-enterprise-readiness.md) | Azure Sync Enterprise Readiness                            | Accepted | 2026-07-26 |
 | [ADR-019](./019-load-test-control-and-accuracy.md) | Load Test Control and Measurement Accuracy              | Accepted | 2026-07-26 |
 | [ADR-020](./020-azure-sync-apply-safety.md) | Azure Sync Apply Safety                                       | Accepted | 2026-07-28 |
 

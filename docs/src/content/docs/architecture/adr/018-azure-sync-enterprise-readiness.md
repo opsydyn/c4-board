@@ -4,8 +4,21 @@ title: "ADR-018: Azure sync enterprise readiness"
 
 # ADR-018: Azure sync enterprise readiness
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-26
+
+> **Accepted 2026-07-30, Phase 1 delivered.** Queries now go directly to the
+> Resource Graph REST API through `src-tauri/src/azure_rest.rs`; `az` is used
+> only to obtain a token, so authentication behaviour is unchanged as this ADR
+> intended. Two things the phase promised are real: the `resource-graph` CLI
+> extension is no longer required, and truncation is now a fact read from
+> `totalRecords` rather than inferred from a leftover skip token.
+>
+> Phases 2 to 6 — retry and backoff, pluggable credentials, server-side
+> filtering, management-group scope, wider relationship coverage — remain
+> unbuilt. The "Unverified" section below still stands: management group scope,
+> throttling behaviour, and the managed-identity and workload-identity paths
+> have not been exercised.
 
 ## Context
 

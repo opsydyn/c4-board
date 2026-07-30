@@ -58,9 +58,16 @@ describe("the Azure capability is documented as something you can run", () => {
     expect(guide()).toMatch(/az login/);
   });
 
-  it("states the resource-graph extension requirement", () => {
-    // Without it `az graph` does not exist and the query fails after auth passes.
-    expect(guide()).toMatch(/az extension add[^\n]*resource-graph/);
+  it("tells a reader the resource-graph extension is no longer needed", () => {
+    // It was required while queries ran through `az graph query`. Since ADR-018
+    // Phase 1 they go straight to the REST API, and someone arriving from the
+    // old instructions needs to be told that rather than left to wonder.
+    const text = guide();
+
+    expect(text).toMatch(/no longer|not required|unused/i);
+    expect(text).toMatch(/REST API/i);
+    // The install command must not read as a live instruction any more.
+    expect(text).not.toMatch(/^\s*az extension add[^\n]*resource-graph\s*$/m);
   });
 
   it("says how to find your own subscription id, since the panel needs one", () => {

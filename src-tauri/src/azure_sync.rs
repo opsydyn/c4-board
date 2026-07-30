@@ -62,14 +62,6 @@ pub struct AzureAuthStatusDto {
     pub details: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct AzureGraphQueryResponse {
-    #[serde(default)]
-    data: Vec<JsonValue>,
-    #[serde(default, alias = "skipToken", alias = "skip_token")]
-    skip_token: Option<String>,
-}
-
 struct AzureGraphQueryRows {
     rows: Vec<JsonValue>,
     warnings: Vec<String>,
@@ -745,47 +737,47 @@ async fn query_resource_rows(
     let mut warnings: Vec<String> = Vec::new();
     let mut skip_token: Option<String> = None;
 
+    let mut total_records: u64 = 0;
+
     for _ in 0..limits.max_pages {
-        let mut args = vec![
-            "graph".to_string(),
-            "query".to_string(),
-            "--output".to_string(),
-            "json".to_string(),
-            "--first".to_string(),
-            limits.page_size.to_string(),
-            "-q".to_string(),
-            query.to_string(),
-            "--subscriptions".to_string(),
-        ];
-        args.extend(scope.subscription_ids.iter().cloned());
+        let page = crate::azure_rest::query_page(
+            &scope.subscription_ids,
+            query,
+            limits.page_size,
+            skip_token.as_deref(),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
 
-        if let Some(token) = skip_token
-            .as_deref()
-            .filter(|token| !token.trim().is_empty())
-        {
-            args.push("--skip-token".to_string());
-            args.push(token.to_string());
+        total_records = page.total_records;
+        rows.extend(page.rows);
+
+        // The service truncated the result set itself, independently of our
+        // paging. Reported separately because narrowing the scope is the fix,
+        // and raising our page limits is not.
+        if page.result_truncated {
+            warnings.push(
+                "Azure Resource Graph truncated the result set. Narrow the scope and retry."
+                    .to_string(),
+            );
         }
 
-        let payload = run_az_json(&args, "az graph query").await?;
-        let page: AzureGraphQueryResponse = serde_json::from_value(payload)
-            .map_err(|error| format!("Failed to decode az graph query response: {error}"))?;
-
-        rows.extend(page.data);
-
-        let next_token = page.skip_token.filter(|token| !token.trim().is_empty());
-        if next_token.is_none() {
-            return Ok(AzureGraphQueryRows { rows, warnings });
+        if page.skip_token.is_none() {
+            break;
         }
-        skip_token = next_token;
+        skip_token = page.skip_token;
     }
 
-    if skip_token.is_some() {
+    // Now a fact rather than an inference. Over the CLI the only evidence of a
+    // short read was a leftover skip token; the REST response states how many
+    // rows matched, so a partial result can say how much is missing.
+    if (rows.len() as u64) < total_records {
         warnings.push(format!(
-            "Azure Resource Graph pagination guardrail reached; returning partial results (maxPages={}, pageSize={}, collectedRows={}). Set {} and {} to tune limits.",
+            "Azure Resource Graph pagination guardrail reached; returning partial results ({} of {} rows, maxPages={}, pageSize={}). Set {} and {} to tune limits.",
+            rows.len(),
+            total_records,
             limits.max_pages,
             limits.page_size,
-            rows.len(),
             AZURE_GRAPH_MAX_PAGES_ENV,
             AZURE_GRAPH_PAGE_SIZE_ENV,
         ));
