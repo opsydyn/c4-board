@@ -190,6 +190,7 @@ export function SettingsPanel() {
   const [aiTemperatureDraft, setAiTemperatureDraft] = useState<string>("0.2");
   const [aiMaxTokensDraft, setAiMaxTokensDraft] = useState<string>("1024");
   const [maxActionsPerBatchDraft, setMaxActionsPerBatchDraft] = useState<string>("48");
+  const [maxApplyOperationsDraft, setMaxApplyOperationsDraft] = useState<string>("250");
   const [maxNodesCreatedPerRunDraft, setMaxNodesCreatedPerRunDraft] = useState<string>("12");
   const [maxEdgesCreatedPerRunDraft, setMaxEdgesCreatedPerRunDraft] = useState<string>("24");
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState<string>("");
@@ -959,6 +960,39 @@ export function SettingsPanel() {
     });
   }, [aiMaxTokensDraft, applyPatch, settings.aiSettings]);
 
+  /**
+   * Azure archiving (ADR-020).
+   *
+   * Off means a resource Azure stops reporting stays on the board. Turning it
+   * on is the only route to the destructive path, which is why it needs to be
+   * reachable here rather than only in the database.
+   */
+  const commitArchiveMissing = useCallback((archiveMissing: boolean) => {
+    applyPatch({
+      azureSyncPolicy: { ...settings.azureSyncPolicy, archiveMissing },
+    });
+  }, [applyPatch, settings.azureSyncPolicy]);
+
+  const commitMaxApplyOperations = useCallback(() => {
+    const parsed = Number(maxApplyOperationsDraft);
+    if (!Number.isFinite(parsed)) {
+      setMaxApplyOperationsDraft(String(settings.azureSyncPolicy.maxApplyOperations));
+      return;
+    }
+
+    // Floor of 1: zero would block every apply, which reads as a broken sync
+    // rather than a deliberate policy.
+    const normalized = clamp(Math.round(parsed), 1, 5_000);
+    setMaxApplyOperationsDraft(String(normalized));
+    if (normalized === settings.azureSyncPolicy.maxApplyOperations) {
+      return;
+    }
+
+    applyPatch({
+      azureSyncPolicy: { ...settings.azureSyncPolicy, maxApplyOperations: normalized },
+    });
+  }, [applyPatch, maxApplyOperationsDraft, settings.azureSyncPolicy]);
+
   const commitMaxActionsPerBatch = useCallback(() => {
     const parsed = Number(maxActionsPerBatchDraft);
     if (!Number.isFinite(parsed)) {
@@ -1036,6 +1070,9 @@ export function SettingsPanel() {
   useEffect(() => {
     setMaxActionsPerBatchDraft(String(settings.agentPolicy.maxActionsPerBatch));
   }, [settings.agentPolicy.maxActionsPerBatch]);
+  useEffect(() => {
+    setMaxApplyOperationsDraft(String(settings.azureSyncPolicy.maxApplyOperations));
+  }, [settings.azureSyncPolicy.maxApplyOperations]);
   useEffect(() => {
     setMaxNodesCreatedPerRunDraft(String(settings.agentPolicy.maxNodesCreatedPerRun));
   }, [settings.agentPolicy.maxNodesCreatedPerRun]);
@@ -1846,6 +1883,46 @@ export function SettingsPanel() {
                   <span className={styles.settingsRowHint}>Live runtime mutation budget</span>
                 </div>
                 <span className={styles.settingsRowValue}>{agentPolicySummary}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Azure Archive Missing</span>
+                  <span className={styles.settingsRowHint}>
+                    Off keeps resources Azure stops reporting. On removes them from the board.
+                  </span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="checkbox"
+                    checked={settings.azureSyncPolicy.archiveMissing}
+                    onChange={(event) => commitArchiveMissing(event.currentTarget.checked)}
+                    aria-label="Azure sync archive missing resources"
+                  />
+                </div>
+              </div>
+              <div className={styles.settingsRow}>
+                <div className={styles.settingsRowLabel}>
+                  <span>Azure Max Apply Operations</span>
+                  <span className={styles.settingsRowHint}>Blocks larger applies, 1 to 5000</span>
+                </div>
+                <div className={styles.settingsControlGroup}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5_000}
+                    step={1}
+                    className={styles.settingsNumberControl}
+                    value={maxApplyOperationsDraft}
+                    onChange={(event) => setMaxApplyOperationsDraft(event.currentTarget.value)}
+                    onBlur={commitMaxApplyOperations}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        commitMaxApplyOperations();
+                      }
+                    }}
+                    aria-label="Azure sync max apply operations"
+                  />
+                </div>
               </div>
               <div className={styles.settingsRow}>
                 <div className={styles.settingsRowLabel}>

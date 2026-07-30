@@ -59,6 +59,7 @@ import type { ArchitectureSemanticRole } from "../../core/effects/architecture-r
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureApplyPlan } from "../../core/effects/azure-sync.apply-policy";
 import { createAzureSyncCheckpoint } from "../../core/effects/azure-sync.checkpoints";
+import { recordAzureSyncRun } from "../../core/effects/azure-sync.runs";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import { canvasToneFor } from "../../core/effects/canvas-ambient-tone";
 import {
@@ -1362,7 +1363,7 @@ export function C4CanvasContainer() {
   }, [runEffect, seedPersistedFingerprintFromDiagram, send]);
 
   const handleApplyAzureSync = useCallback(
-    async (dryRun: AzureSyncDryRunOutput, _plan: AzureApplyPlan) => {
+    async (dryRun: AzureSyncDryRunOutput, plan: AzureApplyPlan) => {
       const currentDiagramId = state.context.currentDiagramId;
       if (!currentDiagramId) {
         throw new Error("No active diagram loaded for Azure sync apply.");
@@ -1447,6 +1448,39 @@ export function C4CanvasContainer() {
       }
 
       send(loadEvent);
+
+      // Recorded after the save, so the history only ever claims applies that
+      // actually reached the board.
+      await runEffect(
+        recordAzureSyncRun({
+          id: dryRun.result.runId,
+          diagramId: currentDiagramId,
+          subscriptionIds: dryRun.snapshot.scope.subscriptionIds,
+          resourceGroups: dryRun.snapshot.scope.resourceGroups ?? [],
+          tagFilters: dryRun.snapshot.scope.tagFilters ?? {},
+          usedCustomQuery: Boolean(dryRun.snapshot.scope.query),
+          status: "applied",
+          resourceCount: dryRun.snapshot.resources.length,
+          relationshipCount: dryRun.snapshot.relationships.length,
+          nodesCreated: plan.nodesToCreate,
+          nodesUpdated: plan.nodesToUpdate,
+          nodesArchived: plan.nodesToArchive,
+          nodesRetained: plan.nodesRetained,
+          edgesCreated: plan.edgesToCreate,
+          edgesUpdated: plan.edgesToUpdate,
+          edgesArchived: plan.edgesToArchive,
+          edgesRetained: plan.edgesRetained,
+          truncated: dryRun.result.warnings.some((warning) =>
+            warning.toLowerCase().includes("guardrail") || warning.toLowerCase().includes("partial")
+          ),
+          warnings: dryRun.result.warnings,
+          blockedReasons: [],
+          checkpointId: `azure-checkpoint-${dryRun.result.runId}`,
+          errorSummary: null,
+          collectedAt: dryRun.snapshot.collectedAt,
+          createdAt: Date.now(),
+        }),
+      );
 
       console.log(
         "☁️ Azure sync applied:",
