@@ -1,14 +1,17 @@
 import { CloudIcon } from "@phosphor-icons/react";
 import type { Edge, Node } from "@xyflow/react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RigAgentAzureSyncRetrievalSnapshot } from "../../core/effects/agent-retrieval";
 import {
   type AzureApplyPlan,
   type AzureApplyPolicy,
   describeAzureApplyPlan,
 } from "../../core/effects/azure-sync.apply-policy";
+import { type AzureSyncCheckpoint, latestAzureSyncCheckpoint } from "../../core/effects/azure-sync.checkpoints";
+import { describeAzureRestorePlan, resolveAzureRestorePlan } from "../../core/effects/azure-sync.restore";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import type { AzureRelationshipConfidence, AzureRelationshipSource } from "../../core/effects/azure-sync.types";
+import { useDatabase } from "../../core/effects/useDatabase";
 import { useAzureSync } from "../hooks/useAzureSync";
 import * as styles from "./AzureSyncPanel.css";
 
@@ -18,6 +21,7 @@ interface AzureSyncPanelProps {
   readonly diagramId?: string | null;
   readonly policy: AzureApplyPolicy;
   readonly onApply?: (dryRun: AzureSyncDryRunOutput, plan: AzureApplyPlan) => Promise<void>;
+  readonly onRestoreCheckpoint?: (checkpoint: AzureSyncCheckpoint) => Promise<void>;
   readonly onSummaryChange?: (summary: RigAgentAzureSyncRetrievalSnapshot | null) => void;
 }
 
@@ -103,6 +107,7 @@ export function AzureSyncPanel({
   diagramId,
   policy,
   onApply,
+  onRestoreCheckpoint,
   onSummaryChange,
 }: AzureSyncPanelProps) {
   // The only `window` call in the Azure path, kept at the edge so the decision
@@ -143,6 +148,60 @@ export function AzureSyncPanel({
     ...(diagramId ? { diagramId } : {}),
     ...(onApply ? { onApply } : {}),
   });
+
+  const { runEffect } = useDatabase();
+  const [latestCheckpoint, setLatestCheckpoint] = useState<AzureSyncCheckpoint | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  // Refreshed after every apply, so the undo offered is the one that reverses
+  // what just happened rather than a stale earlier checkpoint.
+  useEffect(() => {
+    if (!diagramId) {
+      setLatestCheckpoint(null);
+      return;
+    }
+
+    let cancelled = false;
+    void runEffect(latestAzureSyncCheckpoint(diagramId))
+      .then((checkpoint) => {
+        if (!cancelled) {
+          setLatestCheckpoint(checkpoint);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLatestCheckpoint(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [diagramId, lastAppliedAt, runEffect]);
+
+  const restore = useCallback(async () => {
+    if (!latestCheckpoint || !onRestoreCheckpoint) {
+      return;
+    }
+
+    const plan = resolveAzureRestorePlan({
+      checkpoint: latestCheckpoint,
+      currentNodes: nodes,
+      currentEdges: edges,
+    });
+
+    if (!window.confirm(describeAzureRestorePlan(plan))) {
+      return;
+    }
+
+    setIsRestoring(true);
+    try {
+      await onRestoreCheckpoint(latestCheckpoint);
+      setLatestCheckpoint(null);
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [edges, latestCheckpoint, nodes, onRestoreCheckpoint]);
 
   const authBadgeClassName = useMemo(() => {
     if (!authStatus) {
@@ -432,6 +491,21 @@ export function AzureSyncPanel({
             ? `APPLY · REMOVES ${applyDecision.plan.nodesToArchive + applyDecision.plan.edgesToArchive}`
             : "APPLY TO BOARD"}
         </button>
+        {latestCheckpoint && onRestoreCheckpoint && (
+          <button
+            type="button"
+            className={styles.syncButton}
+            onClick={() => {
+              void restore();
+            }}
+            disabled={isApplyLoading || isRestoring}
+            title={`Restore the board as it was before the sync at ${
+              new Date(latestCheckpoint.createdAt).toLocaleString()
+            }`}
+          >
+            {isRestoring ? "RESTORING..." : "UNDO LAST SYNC"}
+          </button>
+        )}
         <button
           type="button"
           className={styles.syncButton}

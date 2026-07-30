@@ -58,7 +58,7 @@ import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../.
 import type { ArchitectureSemanticRole } from "../../core/effects/architecture-role-classification";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
 import type { AzureApplyPlan } from "../../core/effects/azure-sync.apply-policy";
-import { createAzureSyncCheckpoint } from "../../core/effects/azure-sync.checkpoints";
+import { type AzureSyncCheckpoint, createAzureSyncCheckpoint } from "../../core/effects/azure-sync.checkpoints";
 import { recordAzureSyncRun } from "../../core/effects/azure-sync.runs";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import { canvasToneFor } from "../../core/effects/canvas-ambient-tone";
@@ -1501,6 +1501,92 @@ export function C4CanvasContainer() {
       state.context.diagramName,
       state.context.edges,
       state.context.lastSaved,
+      state.context.nodes,
+    ],
+  );
+
+  /**
+   * Undo an Azure apply by putting a checkpoint's board back (ADR-020).
+   *
+   * Follows the same order as apply — checkpoint, persist, then update the
+   * canvas — so a failed restore leaves both the database and the board as they
+   * were. The pre-restore checkpoint means a mistaken undo is itself undoable,
+   * which matters because restoring discards anything added since.
+   */
+  const handleRestoreAzureCheckpoint = useCallback(
+    async (checkpoint: AzureSyncCheckpoint) => {
+      const currentDiagramId = state.context.currentDiagramId;
+      if (!currentDiagramId) {
+        throw new Error("No active diagram loaded for Azure checkpoint restore.");
+      }
+
+      await flushPendingInlineEdits();
+
+      await runEffect(
+        createAzureSyncCheckpoint({
+          id: `azure-checkpoint-restore-${Date.now()}`,
+          diagramId: currentDiagramId,
+          runId: checkpoint.runId,
+          checkpointType: "pre-restore",
+          snapshot: {
+            id: currentDiagramId,
+            name: state.context.diagramName,
+            nodes: state.context.nodes,
+            edges: state.context.edges,
+            savedAt: state.context.lastSaved ?? null,
+            ...(state.context.diagramDescription
+              ? { description: state.context.diagramDescription }
+              : {}),
+          },
+          createdAt: Date.now(),
+        }),
+      );
+
+      const saveInput: SaveDiagramPayload = {
+        id: currentDiagramId,
+        name: state.context.diagramName,
+        nodes: [...checkpoint.snapshot.nodes],
+        edges: [...checkpoint.snapshot.edges],
+      };
+
+      if (state.context.diagramDescription) {
+        saveInput.description = state.context.diagramDescription;
+      }
+
+      const didSave = await requestSave("manual", { overrideInput: saveInput });
+
+      if (!didSave) {
+        const saveError = saveActorRef.getSnapshot().context.errorMessage;
+        const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+        throw new Error(`Azure checkpoint restore save failed, board left unchanged: ${detail}`);
+      }
+
+      send({
+        type: "LOAD_DIAGRAM_SUCCESS",
+        diagram: {
+          id: currentDiagramId,
+          name: state.context.diagramName,
+          nodes: [...checkpoint.snapshot.nodes],
+          edges: [...checkpoint.snapshot.edges],
+          updatedAt: Date.now(),
+          layoutAudits: state.context.layoutAudits,
+          ...(state.context.diagramDescription
+            ? { description: state.context.diagramDescription }
+            : {}),
+        },
+      });
+    },
+    [
+      flushPendingInlineEdits,
+      requestSave,
+      runEffect,
+      send,
+      state.context.currentDiagramId,
+      state.context.diagramDescription,
+      state.context.diagramName,
+      state.context.edges,
+      state.context.lastSaved,
+      state.context.layoutAudits,
       state.context.nodes,
     ],
   );
@@ -3158,6 +3244,7 @@ export function C4CanvasContainer() {
               edges={state.context.edges}
               diagramId={state.context.currentDiagramId}
               onApply={handleApplyAzureSync}
+              onRestoreCheckpoint={handleRestoreAzureCheckpoint}
               onSummaryChange={handleAzureSyncSummaryChange}
             />
           )}

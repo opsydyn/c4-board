@@ -14,7 +14,12 @@ import { Effect } from "effect";
 import type { SaveDiagramInput } from "./canvas-persistence";
 import { DatabaseService } from "./database.base";
 
-export type AzureSyncCheckpointType = "pre-apply";
+/**
+ * `pre-restore` exists because undoing an apply is itself destructive — it
+ * discards everything added since the checkpoint — so a mistaken undo needs to
+ * be recoverable too (migration 041).
+ */
+export type AzureSyncCheckpointType = "pre-apply" | "pre-restore";
 
 export interface AzureSyncCheckpointSnapshot extends SaveDiagramInput {
   readonly savedAt: number | null;
@@ -72,7 +77,7 @@ const LIST_CHECKPOINTS_SQL = `
  * checkpoint at all.
  */
 const decodeCheckpointRow = (row: AzureSyncCheckpointRow): AzureSyncCheckpoint | null => {
-  if (row.checkpointType !== "pre-apply") {
+  if (row.checkpointType !== "pre-apply" && row.checkpointType !== "pre-restore") {
     return null;
   }
 
@@ -96,7 +101,7 @@ const decodeCheckpointRow = (row: AzureSyncCheckpointRow): AzureSyncCheckpoint |
     id: row.id,
     diagramId: row.diagramId,
     runId: row.runId,
-    checkpointType: "pre-apply",
+    checkpointType: row.checkpointType,
     snapshot: candidate as AzureSyncCheckpointSnapshot,
     createdAt: row.createdAt,
   };
