@@ -14,11 +14,23 @@ title: "ADR-018: Azure sync enterprise readiness"
 > extension is no longer required, and truncation is now a fact read from
 > `totalRecords` rather than inferred from a leftover skip token.
 >
-> Phases 2 to 6 — retry and backoff, pluggable credentials, server-side
-> filtering, management-group scope, wider relationship coverage — remain
-> unbuilt. The "Unverified" section below still stands: management group scope,
-> throttling behaviour, and the managed-identity and workload-identity paths
-> have not been exercised.
+> **Phase 2 delivered 2026-08-01.** Throttled (429), unavailable (503) and
+> network-level failures are retried with capped exponential backoff and jitter,
+> bounded to four attempts. A `Retry-After` from the service overrides our
+> backoff, since it knows when it will be ready; an unreasonable one is refused
+> rather than slept through. Permission and query errors are never retried —
+> trying again only delays a message the operator needs immediately. Exhaustion
+> surfaces as a distinct error naming the attempt count.
+>
+> The retry policy is a pure function taking its jitter as an argument, because
+> the available tenant is far too small to provoke a real 429. It is decided by
+> test rather than by observation, and that remains the honest limit: **no
+> throttling path here has been exercised against live Azure.**
+>
+> Phases 3 to 6 — pluggable credentials, server-side filtering, management-group
+> scope, wider relationship coverage — remain unbuilt. The "Unverified" section
+> below still stands for management group scope and the managed-identity and
+> workload-identity paths.
 
 ## Context
 

@@ -103,7 +103,8 @@ Leave them unset for the defaults. Raise `OPSYDYN_AZURE_GRAPH_MAX_PAGES` if a la
 | `Azure CLI (az) was not found or failed to launch` | The CLI is not installed, or not on the `PATH` the desktop app inherits. A GUI app does not read your shell profile, so a CLI installed only for an interactive shell may be invisible to it. |
 | Panel says not authenticated, `Run az login and retry` | No active `az` session. |
 | `Azure denied this request (403)` | The signed-in principal lacks Reader on the requested scope. |
-| `Azure rate limited this request (429)` | Azure throttled the query. Retry shortly; automatic backoff is ADR-018 Phase 2. |
+| `Azure rate limited this request (429)` | Azure throttled the query. Throttled and unavailable responses are retried automatically with backoff; this appears only when the retries are also refused. |
+| `still failing after N attempts` | The transient failure did not clear. The underlying cause is quoted after the count. |
 | `Azure Resource Graph rejected the query (400)` | The advanced KQL is invalid. The message carries Azure's own explanation. |
 | `azure_graph_query requires at least one subscriptionId` | No subscription was set on the panel scope. |
 | `received invalid subscription GUID(s)` | A subscription *name* was entered where the id is required. |

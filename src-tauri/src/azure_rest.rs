@@ -18,6 +18,7 @@
 
 use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 
 const RESOURCE_GRAPH_URL: &str =
@@ -40,6 +41,8 @@ pub enum AzureRestError {
     Http { status: u16, detail: String },
     #[error("Azure Resource Graph returned a response that could not be read: {0}")]
     Malformed(String),
+    #[error("Azure Resource Graph still failing after {attempts} attempts: {detail}")]
+    RetriesExhausted { attempts: u32, detail: String },
 }
 
 /// One page of results, plus what the service says about the whole result set.
@@ -127,14 +130,133 @@ fn classify_status(status: u16, body: &str) -> AzureRestError {
     }
 }
 
-/// Runs one Resource Graph query page.
+/// What to do after a failed attempt (ADR-018 Phase 2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RetryDecision {
+    /// Wait this long, then try again.
+    RetryAfter(Duration),
+    /// Either the failure is not transient, or the attempts are spent.
+    GiveUp,
+}
+
+/// Attempts in total, including the first. Bounded so a throttled tenant fails
+/// with a clear message rather than hanging the panel indefinitely.
+const MAX_ATTEMPTS: u32 = 4;
+/// Longest wait we will honour from a `Retry-After`. A service asking for ten
+/// minutes should surface as a clear failure, not a frozen UI.
+const MAX_HONOURED_DELAY: Duration = Duration::from_secs(30);
+const BASE_BACKOFF: Duration = Duration::from_millis(500);
+
+/// Parses `Retry-After`, which Azure sends as whole seconds.
+///
+/// The HTTP-date form is not handled: Azure Resource Graph does not use it, and
+/// guessing at a date format would risk a wildly wrong delay. Unparseable
+/// values fall back to our own backoff, which is the safe direction.
+fn parse_retry_after(header: Option<&str>) -> Option<Duration> {
+    header?.trim().parse::<u64>().ok().map(Duration::from_secs)
+}
+
+/// Capped exponential backoff. `jitter_ratio` is supplied by the caller so the
+/// policy stays deterministic under test; it spreads retries so several callers
+/// do not return in lockstep.
+fn backoff_delay(attempt: u32, jitter_ratio: f64) -> Duration {
+    let exponent = attempt.saturating_sub(1).min(5);
+    let base = BASE_BACKOFF.saturating_mul(1u32 << exponent);
+    let capped = base.min(MAX_HONOURED_DELAY);
+    let jitter = capped.mul_f64(jitter_ratio.clamp(0.0, 1.0) * 0.25);
+    capped + jitter
+}
+
+/// Decides whether a failure is worth another attempt.
+///
+/// Only conditions that retrying can actually fix: throttling, service
+/// unavailability, and network-level failures. A 400, 401 or 403 is retried
+/// never — the query is malformed, or the principal lacks access, and trying
+/// again only delays a message the operator needs now.
+pub fn retry_decision(
+    attempt: u32,
+    error: &AzureRestError,
+    retry_after: Option<&str>,
+    jitter_ratio: f64,
+) -> RetryDecision {
+    if attempt >= MAX_ATTEMPTS {
+        return RetryDecision::GiveUp;
+    }
+
+    let transient = match error {
+        AzureRestError::Throttled => true,
+        AzureRestError::Http { status, .. } => *status == 503 || *status == 0,
+        _ => false,
+    };
+
+    if !transient {
+        return RetryDecision::GiveUp;
+    }
+
+    // The service's own instruction beats our formula — it knows when it will
+    // be ready and we are guessing.
+    match parse_retry_after(retry_after) {
+        Some(delay) if delay > MAX_HONOURED_DELAY => RetryDecision::GiveUp,
+        Some(delay) => RetryDecision::RetryAfter(delay),
+        None => RetryDecision::RetryAfter(backoff_delay(attempt, jitter_ratio)),
+    }
+}
+
+/// Cheap jitter source. Not random enough for anything security-shaped, which
+/// is fine — it exists only to stop retries returning in lockstep.
+fn jitter_ratio() -> f64 {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.subsec_nanos())
+        .unwrap_or(0);
+    f64::from(nanos % 1_000) / 1_000.0
+}
+
+/// Runs one Resource Graph query page, retrying transient failures.
 pub async fn query_page(
     subscription_ids: &[String],
     query: &str,
     page_size: usize,
     skip_token: Option<&str>,
 ) -> Result<ResourceGraphPage, AzureRestError> {
-    let token = acquire_token().await?;
+    let mut attempt = 1;
+
+    loop {
+        let outcome = attempt_page(subscription_ids, query, page_size, skip_token).await;
+
+        let (error, retry_after) = match outcome {
+            Ok(page) => return Ok(page),
+            Err((error, retry_after)) => (error, retry_after),
+        };
+
+        match retry_decision(attempt, &error, retry_after.as_deref(), jitter_ratio()) {
+            RetryDecision::GiveUp => {
+                return Err(if attempt > 1 {
+                    AzureRestError::RetriesExhausted {
+                        attempts: attempt,
+                        detail: error.to_string(),
+                    }
+                } else {
+                    error
+                });
+            }
+            RetryDecision::RetryAfter(delay) => {
+                tokio::time::sleep(delay).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
+/// One HTTP attempt. Returns the `Retry-After` alongside the error so the
+/// retry policy can honour it without this function knowing the policy.
+async fn attempt_page(
+    subscription_ids: &[String],
+    query: &str,
+    page_size: usize,
+    skip_token: Option<&str>,
+) -> Result<ResourceGraphPage, (AzureRestError, Option<String>)> {
+    let token = acquire_token().await.map_err(|error| (error, None))?;
 
     let mut options = json!({
         "resultFormat": "objectArray",
@@ -156,23 +278,36 @@ pub async fn query_page(
         .json(&body)
         .send()
         .await
-        .map_err(|error| AzureRestError::Http {
-            status: 0,
-            detail: error.to_string(),
+        .map_err(|error| {
+            // Status 0 marks a network-level failure: no response arrived, so
+            // there is nothing to classify and a retry is worth making.
+            (
+                AzureRestError::Http {
+                    status: 0,
+                    detail: error.to_string(),
+                },
+                None,
+            )
         })?;
 
     let status = response.status().as_u16();
+    let retry_after = response
+        .headers()
+        .get("retry-after")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+
     let text = response
         .text()
         .await
-        .map_err(|error| AzureRestError::Malformed(error.to_string()))?;
+        .map_err(|error| (AzureRestError::Malformed(error.to_string()), None))?;
 
     if !(200..300).contains(&status) {
-        return Err(classify_status(status, &text));
+        return Err((classify_status(status, &text), retry_after));
     }
 
     let raw: RawPage = serde_json::from_str(&text)
-        .map_err(|error| AzureRestError::Malformed(error.to_string()))?;
+        .map_err(|error| (AzureRestError::Malformed(error.to_string()), None))?;
 
     Ok(ResourceGraphPage {
         rows: raw.data,
@@ -245,6 +380,122 @@ mod tests {
             classify_status(400, "bad kql"),
             AzureRestError::BadQuery(_)
         ));
+    }
+
+    // Retry policy (ADR-018 Phase 2). Throttling cannot be triggered against
+    // the available tenant — it is far too small — so the policy is written to
+    // be decidable without a live 429 and tested that way.
+
+    #[test]
+    fn throttling_is_retried() {
+        assert!(matches!(
+            retry_decision(1, &AzureRestError::Throttled, None, 0.0),
+            RetryDecision::RetryAfter(_)
+        ));
+    }
+
+    #[test]
+    fn a_permission_or_query_error_is_never_retried() {
+        // Retrying these only delays a message the operator needs immediately.
+        for error in [
+            AzureRestError::Forbidden,
+            AzureRestError::NotAuthenticated,
+            AzureRestError::BadQuery("bad kql".into()),
+        ] {
+            assert_eq!(
+                retry_decision(1, &error, Some("1"), 0.0),
+                RetryDecision::GiveUp,
+                "{error} should not be retried"
+            );
+        }
+    }
+
+    #[test]
+    fn a_network_failure_is_retried_but_a_500_is_not() {
+        let network = AzureRestError::Http {
+            status: 0,
+            detail: "connection reset".into(),
+        };
+        let server = AzureRestError::Http {
+            status: 500,
+            detail: String::new(),
+        };
+
+        assert!(matches!(
+            retry_decision(1, &network, None, 0.0),
+            RetryDecision::RetryAfter(_)
+        ));
+        assert_eq!(retry_decision(1, &server, None, 0.0), RetryDecision::GiveUp);
+    }
+
+    #[test]
+    fn service_unavailable_is_retried_since_it_says_come_back() {
+        let unavailable = AzureRestError::Http {
+            status: 503,
+            detail: String::new(),
+        };
+
+        assert!(matches!(
+            retry_decision(1, &unavailable, None, 0.0),
+            RetryDecision::RetryAfter(_)
+        ));
+    }
+
+    #[test]
+    fn the_services_own_retry_after_beats_our_backoff() {
+        // It knows when it will be ready; we are guessing.
+        assert_eq!(
+            retry_decision(1, &AzureRestError::Throttled, Some("7"), 0.0),
+            RetryDecision::RetryAfter(Duration::from_secs(7)),
+        );
+    }
+
+    #[test]
+    fn an_unreasonable_retry_after_is_refused_rather_than_slept_through() {
+        assert_eq!(
+            retry_decision(1, &AzureRestError::Throttled, Some("600"), 0.0),
+            RetryDecision::GiveUp,
+        );
+    }
+
+    #[test]
+    fn an_unparseable_retry_after_falls_back_to_backoff() {
+        // Including the HTTP-date form, which is deliberately not parsed.
+        assert!(matches!(
+            retry_decision(
+                1,
+                &AzureRestError::Throttled,
+                Some("Wed, 21 Oct 2026 07:28:00 GMT"),
+                0.0
+            ),
+            RetryDecision::RetryAfter(_)
+        ));
+    }
+
+    #[test]
+    fn attempts_are_bounded() {
+        assert_eq!(
+            retry_decision(MAX_ATTEMPTS, &AzureRestError::Throttled, None, 0.0),
+            RetryDecision::GiveUp,
+        );
+    }
+
+    #[test]
+    fn backoff_grows_and_then_stops_growing() {
+        let first = backoff_delay(1, 0.0);
+        let second = backoff_delay(2, 0.0);
+
+        assert!(second > first);
+        assert!(backoff_delay(20, 0.0) <= MAX_HONOURED_DELAY.mul_f64(1.25));
+    }
+
+    #[test]
+    fn jitter_only_ever_adds_a_little() {
+        let plain = backoff_delay(2, 0.0);
+        let jittered = backoff_delay(2, 1.0);
+
+        assert!(jittered > plain);
+        assert!(jittered <= plain.mul_f64(1.25));
     }
 
     #[test]
