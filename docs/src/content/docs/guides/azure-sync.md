@@ -96,6 +96,19 @@ Resource Graph pages its results. Two optional variables control how the app wal
 
 Leave them unset for the defaults. Raise `OPSYDYN_AZURE_GRAPH_MAX_PAGES` if a large subscription is being truncated; lower it to keep queries cheap while experimenting.
 
+## Scope filters
+
+Resource group and tag filters are applied inside the query rather than after
+it. That matters beyond speed: filters used to run once every page had been
+fetched, so a tag filter over a large estate could spend its entire page budget
+on resources that did not match and return none of the ones that did.
+
+Tag matching is deliberately looser in the query than in the final result. The
+query keeps any resource whose tags mention the value; the app then narrows that
+to an exact key and value match, comparing both case-insensitively. Azure's own
+`tags['key']` lookup is case-sensitive on the key, so a stricter query would
+silently drop resources a filter is expected to match.
+
 ## Troubleshooting
 
 | Symptom | Cause |

@@ -27,8 +27,21 @@ title: "ADR-018: Azure sync enterprise readiness"
 > test rather than by observation, and that remains the honest limit: **no
 > throttling path here has been exercised against live Azure.**
 >
-> Phases 3 to 6 — pluggable credentials, server-side filtering, management-group
-> scope, wider relationship coverage — remain unbuilt. The "Unverified" section
+> **Phase 4 delivered 2026-08-01**, taken before Phase 3 because it fixes a
+> correctness problem rather than only a performance one: filters ran *after*
+> paging, so a tag filter over a large estate could exhaust its page budget on
+> non-matching resources and return none of the matching ones — which, with
+> archiving enabled, is indistinguishable from a deleted estate.
+>
+> Tag predicates now go into the query. They are deliberately a *superset* of
+> the client-side filter rather than a replacement for it: KQL matches tag keys
+> case-sensitively while the app matches them case-insensitively, verified
+> against the live tenant, so an exact-key predicate would silently drop
+> resources a filter is expected to match. `matches_scope_filters` remains the
+> authority; the query only reduces what has to be fetched.
+>
+> Phases 3, 5 and 6 — pluggable credentials, management-group scope, wider
+> relationship coverage — remain unbuilt. The "Unverified" section
 > below still stands for management group scope and the managed-identity and
 > workload-identity paths.
 

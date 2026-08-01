@@ -480,6 +480,44 @@ fn build_default_query(scope: &AzureSyncScopeDto) -> String {
         }
     }
 
+    // Tag filtering, pushed server-side (ADR-018 Phase 4).
+    //
+    // This is a *reduction*, not the semantics. `matches_scope_filters` remains
+    // the authority on what a tag filter means, and this predicate is written to
+    // be a guaranteed superset of it, because the two cannot express the same
+    // thing:
+    //
+    //   KQL `tags['project']` matches the key case-sensitively, while the
+    //   client-side filter matches keys with `eq_ignore_ascii_case`. Verified
+    //   against the live endpoint — `tags['Project']` returns nothing where
+    //   `tags['project']` returns six. Pushing an exact-key predicate would
+    //   silently drop resources a filter used to match, and with archiving on
+    //   that reads as a deleted estate.
+    //
+    // `contains` is case-insensitive and matches the serialized bag, so anything
+    // the client-side filter would keep survives this. It may also admit
+    // resources whose value sits under a different key; those are dropped
+    // afterwards, which costs a row rather than a resource.
+    //
+    // The point is not speed. Filters used to run *after* paging, so a tag
+    // filter over a large estate could spend every page on non-matching
+    // resources and return none of the matching ones.
+    if let Some(tag_filters) = &scope.tag_filters {
+        let mut values: Vec<&str> = tag_filters
+            .values()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .collect();
+        values.sort_unstable();
+        values.dedup();
+
+        for value in values {
+            query.push_str(" | where tags contains '");
+            query.push_str(&escape_kql_string(value));
+            query.push('\'');
+        }
+    }
+
     query
 }
 
@@ -902,6 +940,65 @@ mod projection_tests {
             tag_filters: None,
             query: None,
         }
+    }
+
+    fn scope_with_tags(pairs: &[(&str, &str)]) -> AzureSyncScopeDto {
+        AzureSyncScopeDto {
+            subscription_ids: vec![],
+            resource_groups: None,
+            tag_filters: Some(
+                pairs
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect(),
+            ),
+            query: None,
+        }
+    }
+
+    /// ADR-018 Phase 4. Filters used to run after paging, so a tag filter over a
+    /// large estate could spend every page on non-matching resources and return
+    /// none of the matching ones.
+    #[test]
+    fn tag_filters_reach_the_query_instead_of_only_the_client() {
+        let query = build_default_query(&scope_with_tags(&[("project", "planetnik")]));
+
+        assert!(query.contains("| where tags contains 'planetnik'"));
+    }
+
+    /// The predicate must be a superset of `matches_scope_filters`, which
+    /// compares keys case-insensitively. KQL's `tags['Project']` does not, so an
+    /// exact-key predicate would silently drop resources a filter used to match.
+    #[test]
+    fn the_pushed_predicate_does_not_pin_the_tag_key() {
+        let query = build_default_query(&scope_with_tags(&[("Project", "planetnik")]));
+
+        assert!(!query.contains("tags['Project']"));
+        assert!(!query.contains("tags[\"Project\"]"));
+        assert!(query.contains("contains 'planetnik'"));
+    }
+
+    #[test]
+    fn tag_values_are_escaped_like_every_other_operator_string() {
+        let query = build_default_query(&scope_with_tags(&[("owner", "o'brien")]));
+
+        assert!(query.contains("contains 'o''brien'"));
+    }
+
+    #[test]
+    fn an_empty_tag_value_adds_no_predicate() {
+        // An empty value would push `contains ''`, which matches everything and
+        // reads as a filter that silently does nothing.
+        let query = build_default_query(&scope_with_tags(&[("project", "   ")]));
+
+        assert!(!query.contains("| where tags contains"));
+    }
+
+    #[test]
+    fn the_tag_predicate_follows_the_projection_that_selects_tags() {
+        let query = build_default_query(&scope_with_tags(&[("project", "planetnik")]));
+
+        assert!(query.find("project id").unwrap() < query.find("where tags contains").unwrap());
     }
 
     #[test]
