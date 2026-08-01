@@ -74,7 +74,7 @@ describe("azureResourceLookup", () => {
   it("finds only the board nodes Azure actually put there", () => {
     const result = azureResourceLookup(
       { query: null },
-      { nodes: [azureNode("azure:/subs/s/app"), manualNode("system-manual")], runs: [] },
+      { nodes: [azureNode("azure:/subs/s/app"), manualNode("system-manual")], edges: [], runs: [] },
     );
 
     expect(result.totalAzureNodes).toBe(1);
@@ -92,6 +92,7 @@ describe("azureResourceLookup", () => {
             sourceResourceType: "microsoft.containerregistry/registries",
           }),
         ],
+        edges: [],
         runs: [],
       },
     );
@@ -103,7 +104,7 @@ describe("azureResourceLookup", () => {
   it("matches on the resource id, so a full ARM id pasted from the portal resolves", () => {
     const result = azureResourceLookup(
       { query: "/SUBS/S/APP" },
-      { nodes: [azureNode("azure:/subs/s/app")], runs: [] },
+      { nodes: [azureNode("azure:/subs/s/app")], edges: [], runs: [] },
     );
 
     expect(result.matches).toHaveLength(1);
@@ -112,7 +113,7 @@ describe("azureResourceLookup", () => {
   it("says it found nothing rather than returning the whole board", () => {
     const result = azureResourceLookup(
       { query: "nothing-like-this" },
-      { nodes: [azureNode("azure:/subs/s/app")], runs: [] },
+      { nodes: [azureNode("azure:/subs/s/app")], edges: [], runs: [] },
     );
 
     expect(result.matches).toEqual([]);
@@ -122,7 +123,7 @@ describe("azureResourceLookup", () => {
   it("reports a board with no Azure nodes as empty rather than as an error", () => {
     const result = azureResourceLookup(
       { query: null },
-      { nodes: [manualNode("system-manual")], runs: [] },
+      { nodes: [manualNode("system-manual")], edges: [], runs: [] },
     );
 
     expect(result.totalAzureNodes).toBe(0);
@@ -134,7 +135,7 @@ describe("azureSyncSummary", () => {
   it("reports the most recent run", () => {
     const result = azureSyncSummary(
       {},
-      { nodes: [], runs: [run({ id: "newer", createdAt: 3_000 }), run({ id: "older", createdAt: 1_000 })] },
+      { nodes: [], edges: [], runs: [run({ id: "newer", createdAt: 3_000 }), run({ id: "older", createdAt: 1_000 })] },
     );
 
     expect(result.lastRun?.runId).toBe("newer");
@@ -143,7 +144,7 @@ describe("azureSyncSummary", () => {
   it("distinguishes never-synced from synced-and-empty", () => {
     // A board with no sync history is not a board whose estate is empty, and
     // OPY answering "there is nothing in Azure" to the first would be wrong.
-    const result = azureSyncSummary({}, { nodes: [], runs: [] });
+    const result = azureSyncSummary({}, { nodes: [], edges: [], runs: [] });
 
     expect(result.hasSynced).toBe(false);
     expect(result.lastRun).toBeNull();
@@ -152,14 +153,14 @@ describe("azureSyncSummary", () => {
   it("surfaces that a run was truncated, because it changes what the answer is worth", () => {
     const result = azureSyncSummary(
       {},
-      { nodes: [], runs: [run({ truncated: true, warnings: ["partial"] })] },
+      { nodes: [], edges: [], runs: [run({ truncated: true, warnings: ["partial"] })] },
     );
 
     expect(result.lastRun?.truncated).toBe(true);
   });
 
   it("carries retained counts, so retention is visible as a deliberate choice", () => {
-    const result = azureSyncSummary({}, { nodes: [], runs: [run({ nodesRetained: 7 })] });
+    const result = azureSyncSummary({}, { nodes: [], edges: [], runs: [run({ nodesRetained: 7 })] });
 
     expect(result.lastRun?.nodesRetained).toBe(7);
   });
@@ -169,7 +170,7 @@ describe("azure citations", () => {
   it("cites a resource by its Azure identity, not its board id", () => {
     const result = azureResourceLookup(
       { query: null },
-      { nodes: [azureNode("azure:/subs/s/app")], runs: [] },
+      { nodes: [azureNode("azure:/subs/s/app")], edges: [], runs: [] },
     );
 
     const citation = buildAzureResourceCitation(result, "off");
@@ -183,7 +184,7 @@ describe("azure citations", () => {
     // survive redaction even when the identifier cannot.
     const result = azureResourceLookup(
       { query: null },
-      { nodes: [azureNode("azure:/subs/s/app")], runs: [] },
+      { nodes: [azureNode("azure:/subs/s/app")], edges: [], runs: [] },
     );
 
     const citation = buildAzureResourceCitation(result, "strict");
@@ -193,19 +194,19 @@ describe("azure citations", () => {
   });
 
   it("does not cite an Azure resource when none was found", () => {
-    const result = azureResourceLookup({ query: "nope" }, { nodes: [], runs: [] });
+    const result = azureResourceLookup({ query: "nope" }, { nodes: [], edges: [], runs: [] });
 
     expect(buildAzureResourceCitation(result, "off")).toBeNull();
   });
 
   it("does not cite a sync that never happened", () => {
-    const result = azureSyncSummary({}, { nodes: [], runs: [] });
+    const result = azureSyncSummary({}, { nodes: [], edges: [], runs: [] });
 
     expect(buildAzureSyncCitation(result, "off")).toBeNull();
   });
 
   it("cites a real sync with what it did", () => {
-    const result = azureSyncSummary({}, { nodes: [], runs: [run()] });
+    const result = azureSyncSummary({}, { nodes: [], edges: [], runs: [run()] });
     const citation = buildAzureSyncCitation(result, "off");
 
     expect(citation?.tool).toBe("azure_sync_summary");

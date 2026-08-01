@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { buildAzureGroundingFacts, formatGroundingFactsForPrompt } from "./agent-grounding-facts";
 import type { RigAgentRetrievalBundle, RigAgentRetrievalHit } from "./agent-retrieval";
 import {
   azureResourceLookup,
@@ -419,6 +420,13 @@ export const assembleRigAgentContextWithTools = (
       surface: "chat",
     });
 
+    // Stated rather than left to be worked out. OPY answered "41 nodes" for a
+    // board with 19 Azure nodes, and inverted a dependency, from data it had
+    // exactly. Counts and directions it must not compute go in as facts.
+    const azureFacts = input.azure
+      ? buildAzureGroundingFacts({ nodes: input.azure.nodes, edges: input.azure.edges })
+      : null;
+
     return {
       promptContext: [
         `FOCUS=${focusLabel(focus)}`,
@@ -426,6 +434,9 @@ export const assembleRigAgentContextWithTools = (
         `CONFIDENCE_REASON=${confidence.reason}`,
         `GROUNDING_SCORE=${confidence.score}`,
         ...citations.map((citation) => `SOURCE=${formatCitationLine(citation)}`),
+        ...(azureFacts && azureFacts.azureNodeCount > 0
+          ? [formatGroundingFactsForPrompt(azureFacts)]
+          : []),
       ].join("\n"),
       citations,
       confidence: confidence.confidence,

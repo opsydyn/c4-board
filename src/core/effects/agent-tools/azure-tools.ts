@@ -17,7 +17,7 @@
  * entirely.
  */
 
-import type { Node } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 import type { AzureSyncRunRecord } from "../azure-sync.runs";
 import { isAzureNodeId } from "../azure-sync.types";
 import type { RedactionMode } from "../settings.types";
@@ -26,6 +26,8 @@ export type RigAzureToolName = "azure_resource_lookup" | "azure_sync_summary";
 
 export interface RigAzureToolContext {
   readonly nodes: ReadonlyArray<Node>;
+  /** Needed for directional grounding facts, not by the lookup tools. */
+  readonly edges: ReadonlyArray<Edge>;
   readonly runs: ReadonlyArray<AzureSyncRunRecord>;
 }
 

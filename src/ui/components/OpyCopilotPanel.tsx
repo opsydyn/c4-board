@@ -1,5 +1,5 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
-import type { Node } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 import { Effect, Option } from "effect";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -551,6 +551,7 @@ interface OpyCopilotPanelProps {
   readonly boardSummary: RigC4BoardSummary | null;
   /** Raw board nodes, needed for the Azure provenance the summary does not carry. */
   readonly boardNodes: ReadonlyArray<Node>;
+  readonly boardEdges: ReadonlyArray<Edge>;
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly aiSettings: AiSettings;
   readonly actionMode: AiActionMode;
@@ -1537,6 +1538,7 @@ export function OpyCopilotPanel({
   edgeCount,
   boardSummary,
   boardNodes,
+  boardEdges,
   boardContext,
   aiSettings,
   actionMode,
@@ -2446,7 +2448,7 @@ export function OpyCopilotPanel({
                 boardContext,
                 focus: input.focus,
                 redactionMode,
-                azure: { nodes: boardNodes, runs: azureRuns },
+                azure: { nodes: boardNodes, edges: boardEdges, runs: azureRuns },
               }),
           ),
           retrieval: loadRigAgentRetrievalBundle({
