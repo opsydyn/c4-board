@@ -22,7 +22,7 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useReactFlow } from "@xyflow/react";
+import { useNodesInitialized, useReactFlow } from "@xyflow/react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { NodeDomain } from "../../core/effects/node-operations";
 import { nodeTypesForDomain } from "./nodes/nodeTypesByDomain";
@@ -142,6 +142,19 @@ function C4CanvasInner(
 ) {
   const { setCenter, getNode, fitView, getViewport, setViewport } = useReactFlow();
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  /**
+   * True once ReactFlow has measured every node.
+   *
+   * A board opened from cold rendered blank: the nodes were present and the
+   * minimap drew them, but the viewport was elsewhere. The fit ran on the
+   * render where the nodes arrived, which is before ReactFlow has measured
+   * them — measurement happens after paint, via its own ResizeObserver — so
+   * there were no bounds to fit to and the call did nothing. Adding a node
+   * afterwards fitted correctly, because by then everything had dimensions.
+   *
+   * This is the signal to wait on instead of guessing with an animation frame.
+   */
+  const nodesInitialized = useNodesInitialized();
   const fitNodeIds = useMemo(
     () => resolveCanvasFitNodeIds(nodes, viewportFitNodeIds),
     [nodes, viewportFitNodeIds],
@@ -161,6 +174,27 @@ function C4CanvasInner(
   // Edge label editor state
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isEdgeLabelEditorOpen, setIsEdgeLabelEditorOpen] = useState(false);
+
+  /**
+   * Fit once per board, as soon as its nodes have been measured.
+   *
+   * Keyed on the node-id signature rather than a count so that swapping
+   * diagrams of the same size still refits, and so that moving a node does not.
+   */
+  const fitSignature = useMemo(() => fitNodeIds.join("|"), [fitNodeIds]);
+  const fittedSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!nodesInitialized || fitNodeIds.length === 0) {
+      return;
+    }
+    if (fittedSignatureRef.current === fitSignature) {
+      return;
+    }
+
+    fittedSignatureRef.current = fitSignature;
+    fitGraph(0);
+  }, [fitGraph, fitNodeIds.length, fitSignature, nodesInitialized]);
 
   // Apply viewport after import if available
   useEffect(() => {
