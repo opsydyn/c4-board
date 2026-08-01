@@ -3035,6 +3035,7 @@ export function C4CanvasContainer() {
         nodeCount={state.context.nodes.length}
         edgeCount={state.context.edges.length}
         boardSummary={opyBoardSummary}
+        boardNodes={state.context.nodes}
         boardContext={opyBoardContext}
         aiSettings={appSettings.aiSettings}
         actionMode={opyActionMode}

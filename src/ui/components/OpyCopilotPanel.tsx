@@ -1,4 +1,5 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
+import type { Node } from "@xyflow/react";
 import { Effect, Option } from "effect";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -53,6 +54,7 @@ import {
   summarizeAgentError,
   withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
+import { listAzureSyncRuns } from "../../core/effects/azure-sync.runs";
 import type { EffectiveRigAgentV1RolloutState } from "../../core/effects/feature-flags";
 import { describeActionMode, isBlockingBoundary, type OpyActionModeSurface } from "../../core/effects/opy-action-mode";
 import {
@@ -547,6 +549,8 @@ interface OpyCopilotPanelProps {
   readonly nodeCount: number;
   readonly edgeCount: number;
   readonly boardSummary: RigC4BoardSummary | null;
+  /** Raw board nodes, needed for the Azure provenance the summary does not carry. */
+  readonly boardNodes: ReadonlyArray<Node>;
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly aiSettings: AiSettings;
   readonly actionMode: AiActionMode;
@@ -1532,6 +1536,7 @@ export function OpyCopilotPanel({
   nodeCount,
   edgeCount,
   boardSummary,
+  boardNodes,
   boardContext,
   aiSettings,
   actionMode,
@@ -2431,12 +2436,19 @@ export function OpyCopilotPanel({
     }): Promise<RigAgentContextBundle> =>
       runEffect(
         Effect.all({
-          base: assembleRigAgentContext({
-            boardSummary,
-            boardContext,
-            focus: input.focus,
-            redactionMode,
-          }),
+          base: Effect.flatMap(
+            // Loaded per request rather than held in state: the trail changes
+            // when a sync runs, not when this panel re-renders.
+            listAzureSyncRuns(),
+            (azureRuns) =>
+              assembleRigAgentContext({
+                boardSummary,
+                boardContext,
+                focus: input.focus,
+                redactionMode,
+                azure: { nodes: boardNodes, runs: azureRuns },
+              }),
+          ),
           retrieval: loadRigAgentRetrievalBundle({
             domain,
             sessionId: input.sessionId,

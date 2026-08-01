@@ -172,7 +172,7 @@ Capabilities:
 Acceptance criteria:
 
 1. OPY can explain what an Azure dry-run means without applying changes.
-2. OPY can cite board nodes, Azure resources, and sync telemetry in its answer.
+2. ~~OPY can cite board nodes, Azure resources, and sync telemetry in its answer.~~ **Met 2026-08-01.** `agent-tools/azure-tools.ts` adds `azure_resource_lookup` and `azure_sync_summary`, and `RigAgentCitation` was widened so their results cite like board evidence. Both read persisted data — provenanced nodes and the sync run trail — so a citation survives a reload.
 3. OPY mutation proposals remain typed, checkpointed, and explicitly approved.
 4. Rejected reconciliation proposals remain available as decision memory.
 
