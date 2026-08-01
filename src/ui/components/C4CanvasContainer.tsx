@@ -2819,13 +2819,19 @@ export function C4CanvasContainer() {
     const hasChanged = lastDiagramIdRef.current !== currentId;
     const hasNodes = state.context.nodes.length > 0;
 
-    if (hasChanged) {
+    // Both conditions, and the ref is only marked once the fit actually runs.
+    //
+    // Marking it as soon as the id changed spent the signal on the render where
+    // the diagram id had arrived but its nodes had not — which is the ordinary
+    // cold start. By the time the nodes landed, `hasChanged` was already false
+    // and nothing ever fitted the viewport, so the board rendered off-screen
+    // and looked empty. Remounting reset the ref, which is why navigating away
+    // and back, or reloading, appeared to fix it.
+    if (hasChanged && hasNodes) {
       lastDiagramIdRef.current = currentId;
-      if (hasNodes) {
-        requestAnimationFrame(() => {
-          canvasRef.current?.fitViewToGraph();
-        });
-      }
+      requestAnimationFrame(() => {
+        canvasRef.current?.fitViewToGraph();
+      });
     }
   }, [state.context.currentDiagramId, state.context.nodes.length]);
 
