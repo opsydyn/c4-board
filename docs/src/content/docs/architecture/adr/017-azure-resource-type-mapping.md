@@ -72,7 +72,7 @@ resources that now yield an edge: 2
    planetnik-runtime -> planetnik-env
 ```
 
-`_ref_environmentId` does what it was added for. `_ref_registryId` is **retained but unverified**: it fired on nothing in this estate, because a Container App holds its registries under `properties.configuration.registries[]` — an array of login-server hostnames, not a resource id, so it cannot yield a resource-to-resource edge in this form. It is kept because it is the documented property for other types (AKS in particular) and costs one projected column. Resolving Container App to registry needs a hostname-to-registry match, which is out of scope here.
+`_ref_environmentId` does what it was added for. `_ref_registryId` is **retained but unverified**: it fired on nothing in this estate, because a Container App holds its registries under `properties.configuration.registries[]` — an array of login-server hostnames, not a resource id, so it cannot yield a resource-to-resource edge in this form. It is kept because it is the documented property for other types (AKS in particular) and costs one projected column. Resolving Container App to registry needs a hostname-to-registry match, which is out of scope here. **Resolved 2026-08-01 by [ADR-018](018-azure-sync-enterprise-readiness.md) Phase 6**, which adds an alias mechanism for exactly this: the app's login-server hostname is matched against the registry's own `loginServer`, so the edge now exists.
 
 ### 3. Keep the fallback honest
 

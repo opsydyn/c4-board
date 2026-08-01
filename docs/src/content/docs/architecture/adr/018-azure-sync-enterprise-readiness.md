@@ -40,8 +40,30 @@ title: "ADR-018: Azure sync enterprise readiness"
 > resources a filter is expected to match. `matches_scope_filters` remains the
 > authority; the query only reduces what has to be fetched.
 >
-> Phases 3, 5 and 6 — pluggable credentials, management-group scope, wider
-> relationship coverage — remain unbuilt. The "Unverified" section
+> **Phase 6 delivered 2026-08-01**, scoped to the two relationships that a
+> `_ref_` column provably cannot express. Both were found by reading a live
+> estate rather than by picking from the phase's list: a Container App names
+> its registry by login-server hostname, and a Container Apps environment names
+> its workspace by that workspace's `customerId` GUID. Neither is a resource
+> id, so neither could ever match a `_ref_` column — the exact gap ADR-017
+> recorded and deferred.
+>
+> An `_alias_`/`_key_` pair resolves these within the snapshot. Labels must
+> match on both sides, so an alias can never resolve against an unrelated
+> key that happens to share a value, and an alias resolving to nothing produces
+> no edge — a resource outside the synced scope is ordinary, and an edge to a
+> node that is not on the board would be worse than a missing one.
+>
+> Known limit: only the first entry of `properties.configuration.registries` is
+> projected, so an app pulling from two registries yields one edge. Reading the
+> whole array needs `mv-expand`, which conflicts with the single-row projection.
+>
+> The rest of the phase's list — private endpoints, diagnostic settings, RBAC
+> assignments, VNet integration — is untouched. The estate here has none of
+> them, so adding columns for them would be untested guesswork.
+>
+> Phases 3 and 5 — pluggable credentials and management-group scope — remain
+> unbuilt. The "Unverified" section
 > below still stands for management group scope and the managed-identity and
 > workload-identity paths.
 
