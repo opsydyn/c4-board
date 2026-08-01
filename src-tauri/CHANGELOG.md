@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.20](https://github.com/opsydyn/c4-board/compare/v0.0.19...v0.0.20) - 2026-08-01
+
+### Added
+
+- connect Azure resources that name each other without resource ids
+- filter Azure resources in the query, not after it
+- retry Azure throttling instead of failing on it
+- query Azure Resource Graph directly instead of through the CLI
+- let an operator undo an Azure apply
+- record Azure sync runs and let OPY read them across sessions
+- make Azure provenance survive a save
+- checkpoint Azure applies and save before touching the board
+
+### Other
+
+- mark app changes outside src-tauri as releasable [skip ci]
+- Merge pull request #32 from opsydyn/fix/azure-dry-run-fingerprint
+
 ## [0.0.19](https://github.com/opsydyn/c4-board/compare/v0.0.18...v0.0.19) - 2026-07-28
 
 ### Other
