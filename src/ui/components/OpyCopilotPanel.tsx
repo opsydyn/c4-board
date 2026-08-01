@@ -1560,6 +1560,23 @@ export function OpyCopilotPanel({
   chromeSectionRequest,
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
+  /**
+   * Latest board arrays, held in refs rather than read from the closure.
+   *
+   * `resolveRigAgentContext` needs current nodes and edges to build Azure
+   * grounding facts, but it sits in the dependency chain of several other
+   * callbacks. Listing the arrays as dependencies would change its identity on
+   * every board edit and ripple through those chains — the failure the
+   * 2026-06-05 OPY board interaction postmortem records, which is why the
+   * operational memory says to depend on stable refs rather than mutable
+   * collections. Reading `.current` keeps the values fresh and the identity
+   * still.
+   */
+  const boardNodesRef = useRef(boardNodes);
+  const boardEdgesRef = useRef(boardEdges);
+  boardNodesRef.current = boardNodes;
+  boardEdgesRef.current = boardEdges;
+
   const pendingViewportBaselineRef = useRef(true);
   const agentTaskIndexRef = useRef<Record<string, OpyAgentTask>>({});
   const resumableTaskActivationRef = useRef<string | null>(null);
@@ -2448,7 +2465,7 @@ export function OpyCopilotPanel({
                 boardContext,
                 focus: input.focus,
                 redactionMode,
-                azure: { nodes: boardNodes, edges: boardEdges, runs: azureRuns },
+                azure: { nodes: boardNodesRef.current, edges: boardEdgesRef.current, runs: azureRuns },
               }),
           ),
           retrieval: loadRigAgentRetrievalBundle({
