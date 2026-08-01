@@ -1,9 +1,17 @@
 import { CloudIcon } from "@phosphor-icons/react";
 import type { Edge, Node } from "@xyflow/react";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RigAgentAzureSyncRetrievalSnapshot } from "../../core/effects/agent-retrieval";
+import {
+  type AzureApplyPlan,
+  type AzureApplyPolicy,
+  describeAzureApplyPlan,
+} from "../../core/effects/azure-sync.apply-policy";
+import { type AzureSyncCheckpoint, latestAzureSyncCheckpoint } from "../../core/effects/azure-sync.checkpoints";
+import { describeAzureRestorePlan, resolveAzureRestorePlan } from "../../core/effects/azure-sync.restore";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import type { AzureRelationshipConfidence, AzureRelationshipSource } from "../../core/effects/azure-sync.types";
+import { useDatabase } from "../../core/effects/useDatabase";
 import { useAzureSync } from "../hooks/useAzureSync";
 import * as styles from "./AzureSyncPanel.css";
 
@@ -11,7 +19,9 @@ interface AzureSyncPanelProps {
   readonly nodes: readonly Node[];
   readonly edges: readonly Edge[];
   readonly diagramId?: string | null;
-  readonly onApply?: (dryRun: AzureSyncDryRunOutput) => Promise<void>;
+  readonly policy: AzureApplyPolicy;
+  readonly onApply?: (dryRun: AzureSyncDryRunOutput, plan: AzureApplyPlan) => Promise<void>;
+  readonly onRestoreCheckpoint?: (checkpoint: AzureSyncCheckpoint) => Promise<void>;
   readonly onSummaryChange?: (summary: RigAgentAzureSyncRetrievalSnapshot | null) => void;
 }
 
@@ -95,9 +105,18 @@ export function AzureSyncPanel({
   nodes,
   edges,
   diagramId,
+  policy,
   onApply,
+  onRestoreCheckpoint,
   onSummaryChange,
 }: AzureSyncPanelProps) {
+  // The only `window` call in the Azure path, kept at the edge so the decision
+  // to ask, and the words used, both stay in the functional core.
+  const confirmDestructiveApply = useCallback(
+    (plan: AzureApplyPlan) => window.confirm(describeAzureApplyPlan(plan)),
+    [],
+  );
+
   const {
     form,
     setSubscriptionIdsInput,
@@ -114,6 +133,9 @@ export function AzureSyncPanel({
     lastAppliedAt,
     existingAzureNodeCount,
     existingAzureEdgeCount,
+    applyDecision,
+    acknowledgedUntrustedSnapshot,
+    acknowledgeUntrustedSnapshot,
     checkAuth,
     runDryRun,
     runApply,
@@ -121,9 +143,65 @@ export function AzureSyncPanel({
   } = useAzureSync({
     nodes,
     edges,
+    policy,
+    confirmDestructiveApply,
     ...(diagramId ? { diagramId } : {}),
     ...(onApply ? { onApply } : {}),
   });
+
+  const { runEffect } = useDatabase();
+  const [latestCheckpoint, setLatestCheckpoint] = useState<AzureSyncCheckpoint | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  // Refreshed after every apply, so the undo offered is the one that reverses
+  // what just happened rather than a stale earlier checkpoint.
+  useEffect(() => {
+    if (!diagramId) {
+      setLatestCheckpoint(null);
+      return;
+    }
+
+    let cancelled = false;
+    void runEffect(latestAzureSyncCheckpoint(diagramId))
+      .then((checkpoint) => {
+        if (!cancelled) {
+          setLatestCheckpoint(checkpoint);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLatestCheckpoint(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [diagramId, lastAppliedAt, runEffect]);
+
+  const restore = useCallback(async () => {
+    if (!latestCheckpoint || !onRestoreCheckpoint) {
+      return;
+    }
+
+    const plan = resolveAzureRestorePlan({
+      checkpoint: latestCheckpoint,
+      currentNodes: nodes,
+      currentEdges: edges,
+    });
+
+    if (!window.confirm(describeAzureRestorePlan(plan))) {
+      return;
+    }
+
+    setIsRestoring(true);
+    try {
+      await onRestoreCheckpoint(latestCheckpoint);
+      setLatestCheckpoint(null);
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [edges, latestCheckpoint, nodes, onRestoreCheckpoint]);
 
   const authBadgeClassName = useMemo(() => {
     if (!authStatus) {
@@ -351,6 +429,32 @@ export function AzureSyncPanel({
         </label>
       </div>
 
+      {applyDecision && applyDecision.ok === false && (
+        <div className={styles.syncList}>
+          {applyDecision.blocked.map((block) => (
+            <p key={block.reason} className={styles.syncWarning}>
+              {`BLOCKED :: ${block.message} ${block.recommendedAction}`}
+            </p>
+          ))}
+          {applyDecision.blocked.some((block) => block.reason === "untrusted-snapshot") && (
+            <label className={styles.syncWarning}>
+              <input
+                type="checkbox"
+                checked={acknowledgedUntrustedSnapshot}
+                onChange={(event) =>
+                  acknowledgeUntrustedSnapshot(event.target.checked)}
+              />
+              {" I have checked the scope and accept this snapshot may be incomplete"}
+            </label>
+          )}
+        </div>
+      )}
+      {applyDecision?.ok === true
+        && (applyDecision.plan.nodesRetained > 0 || applyDecision.plan.edgesRetained > 0) && (
+        <p className={styles.syncWarning}>
+          {`RETAINING ${applyDecision.plan.nodesRetained} node(s) and ${applyDecision.plan.edgesRetained} edge(s) Azure no longer reports. Enable archiving in Settings to remove them.`}
+        </p>
+      )}
       <div className={styles.syncActions}>
         <button
           type="button"
@@ -378,10 +482,30 @@ export function AzureSyncPanel({
           onClick={() => {
             void runApply();
           }}
-          disabled={isDryRunLoading || isCheckingAuth || isApplyLoading || !dryRun}
+          disabled={isDryRunLoading || isCheckingAuth || isApplyLoading || !dryRun
+            || applyDecision?.ok === false}
         >
-          {isApplyLoading ? "APPLYING..." : "APPLY TO BOARD"}
+          {isApplyLoading
+            ? "APPLYING..."
+            : applyDecision?.plan.destructive
+            ? `APPLY · REMOVES ${applyDecision.plan.nodesToArchive + applyDecision.plan.edgesToArchive}`
+            : "APPLY TO BOARD"}
         </button>
+        {latestCheckpoint && onRestoreCheckpoint && (
+          <button
+            type="button"
+            className={styles.syncButton}
+            onClick={() => {
+              void restore();
+            }}
+            disabled={isApplyLoading || isRestoring}
+            title={`Restore the board as it was before the sync at ${
+              new Date(latestCheckpoint.createdAt).toLocaleString()
+            }`}
+          >
+            {isRestoring ? "RESTORING..." : "UNDO LAST SYNC"}
+          </button>
+        )}
         <button
           type="button"
           className={styles.syncButton}

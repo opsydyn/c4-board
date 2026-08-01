@@ -26,27 +26,16 @@ az login
 
 The panel reports authentication state by running `az account show`, so if that command works, the app is satisfied.
 
-### 3. Add the Resource Graph extension
+### 3. No extension required
 
-`az graph` is not part of the base CLI. Without the extension the panel will report a **healthy** connection and then fail on the query, because auth is validated with `az account show` before the graph query runs:
+Earlier versions ran `az graph query` as a subprocess, which needed the
+`resource-graph` CLI extension and failed with `'graph' is misspelled` when it
+was missing.
 
-```
-ERROR: 'graph' is misspelled or not recognized by the system.
-```
-
-Install it once:
-
-```sh
-az extension add --name resource-graph
-```
-
-Verify:
-
-```sh
-az extension list --query "[].name" -o tsv
-```
-
-The app invokes `az` as a subprocess with no terminal attached, so the CLI's usual "install this extension now?" prompt has nothing to answer it. Install the extension yourself rather than relying on that prompt.
+Queries now go straight to the Resource Graph REST API (ADR-018 Phase 1). The
+CLI is still used, but only to obtain an access token, so nothing beyond
+`az login` is needed. If you installed the extension previously you can leave
+it; it is simply unused.
 
 ## Finding your subscription id
 
@@ -107,13 +96,29 @@ Resource Graph pages its results. Two optional variables control how the app wal
 
 Leave them unset for the defaults. Raise `OPSYDYN_AZURE_GRAPH_MAX_PAGES` if a large subscription is being truncated; lower it to keep queries cheap while experimenting.
 
+## Scope filters
+
+Resource group and tag filters are applied inside the query rather than after
+it. That matters beyond speed: filters used to run once every page had been
+fetched, so a tag filter over a large estate could spend its entire page budget
+on resources that did not match and return none of the ones that did.
+
+Tag matching is deliberately looser in the query than in the final result. The
+query keeps any resource whose tags mention the value; the app then narrows that
+to an exact key and value match, comparing both case-insensitively. Azure's own
+`tags['key']` lookup is case-sensitive on the key, so a stricter query would
+silently drop resources a filter is expected to match.
+
 ## Troubleshooting
 
 | Symptom | Cause |
 | ------- | ----- |
 | `Azure CLI (az) was not found or failed to launch` | The CLI is not installed, or not on the `PATH` the desktop app inherits. A GUI app does not read your shell profile, so a CLI installed only for an interactive shell may be invisible to it. |
 | Panel says not authenticated, `Run az login and retry` | No active `az` session. |
-| Auth looks fine but the query fails with `'graph' is misspelled` | The `resource-graph` extension is missing. |
+| `Azure denied this request (403)` | The signed-in principal lacks Reader on the requested scope. |
+| `Azure rate limited this request (429)` | Azure throttled the query. Throttled and unavailable responses are retried automatically with backoff; this appears only when the retries are also refused. |
+| `still failing after N attempts` | The transient failure did not clear. The underlying cause is quoted after the count. |
+| `Azure Resource Graph rejected the query (400)` | The advanced KQL is invalid. The message carries Azure's own explanation. |
 | `azure_graph_query requires at least one subscriptionId` | No subscription was set on the panel scope. |
 | `received invalid subscription GUID(s)` | A subscription *name* was entered where the id is required. |
 | Results look truncated | Raise `OPSYDYN_AZURE_GRAPH_MAX_PAGES`. |

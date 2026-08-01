@@ -18,6 +18,7 @@ import type {
   AzureSyncResult,
   AzureSyncScope,
 } from "./azure-sync.types";
+import { fingerprintAzureMappedEdge, fingerprintAzureMappedNode } from "./azure-sync.types";
 
 export class AzureSyncRuntimeError extends Data.TaggedError("AzureSyncRuntimeError")<{
   readonly message: string;
@@ -369,32 +370,14 @@ const toNodeEntitySnapshot = (
   node: AzureMappedNode,
 ): AzureSyncEntitySnapshot => ({
   id: node.id,
-  fingerprint: JSON.stringify({
-    type: node.type,
-    label: node.label,
-    technology: node.technology,
-    description: node.description,
-    sourceResourceId: node.sourceResourceId,
-    sourceResourceType: node.sourceResourceType,
-    parentGroupId: node.parentGroupId ?? null,
-    isSyntheticContainer: node.isSyntheticContainer ?? false,
-    teamOwnership: node.teamOwnership ?? null,
-  }),
+  fingerprint: fingerprintAzureMappedNode(node),
 });
 
 const toEdgeEntitySnapshot = (
   edge: AzureMappedEdge,
 ): AzureSyncEntitySnapshot => ({
   id: edge.id,
-  fingerprint: JSON.stringify({
-    source: edge.source,
-    target: edge.target,
-    label: edge.label,
-    relationshipType: edge.relationshipType,
-    confidence: edge.confidence,
-    provenanceSource: edge.provenanceSource,
-    provenanceDetail: edge.provenanceDetail ?? null,
-  }),
+  fingerprint: fingerprintAzureMappedEdge(edge),
 });
 
 const toSyncResult = (

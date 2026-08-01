@@ -1,5 +1,14 @@
 import { Effect } from "effect";
+import { buildAzureGroundingFacts, formatGroundingFactsForPrompt } from "./agent-grounding-facts";
 import type { RigAgentRetrievalBundle, RigAgentRetrievalHit } from "./agent-retrieval";
+import {
+  azureResourceLookup,
+  azureSyncSummary,
+  buildAzureResourceCitation,
+  buildAzureSyncCitation,
+  type RigAzureToolContext,
+  type RigAzureToolName,
+} from "./agent-tools/azure-tools";
 import type {
   AgentError,
   RigC4BoardSummary,
@@ -16,7 +25,13 @@ export type RigAgentContextConfidence = "high" | "medium" | "low";
 
 export interface RigAgentCitation {
   readonly id: string;
-  readonly tool: RigReadToolName;
+  /**
+   * Azure tools widen this beyond the Rust-executed read tools (Gate 5). Azure
+   * evidence lives in SQLite rather than in a board summary, so its tools run
+   * in the functional core — but a citation is a citation, and an operator
+   * checking a claim should not care which side produced it.
+   */
+  readonly tool: RigReadToolName | RigAzureToolName;
   readonly label: string;
   readonly detail: string;
   readonly sourceId: string | null;
@@ -67,6 +82,8 @@ interface AssembleRigAgentContextInput {
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly focus: string | null;
   readonly redactionMode?: RedactionMode;
+  /** Azure evidence, when the board has any (Gate 5). */
+  readonly azure?: RigAzureToolContext;
 }
 
 interface AssembleRigAgentContextWithToolsInput extends AssembleRigAgentContextInput {
@@ -335,6 +352,23 @@ export const assembleRigAgentContextWithTools = (
     const boardSummaryResult = yield* runReadTool("board_summary", {}, boardSummary);
     const citations: RigAgentCitation[] = [createBoardSummaryCitation(boardSummaryResult, redactionMode)];
 
+    // Azure evidence, cited the same way board evidence is. Runs only when the
+    // board actually has Azure on it, so a purely hand-drawn board is not told
+    // about a sync that never happened.
+    if (input.azure && (input.azure.nodes.length > 0 || input.azure.runs.length > 0)) {
+      pushCitation(
+        citations,
+        buildAzureSyncCitation(azureSyncSummary({}, input.azure), redactionMode),
+      );
+      pushCitation(
+        citations,
+        buildAzureResourceCitation(
+          azureResourceLookup({ query: focus }, input.azure),
+          redactionMode,
+        ),
+      );
+    }
+
     let selectedNodeResult: RigReadToolResultByName["node_lookup"] | null = null;
     if (boardContext?.selectedNode?.id) {
       selectedNodeResult = yield* runReadTool(
@@ -386,6 +420,13 @@ export const assembleRigAgentContextWithTools = (
       surface: "chat",
     });
 
+    // Stated rather than left to be worked out. OPY answered "41 nodes" for a
+    // board with 19 Azure nodes, and inverted a dependency, from data it had
+    // exactly. Counts and directions it must not compute go in as facts.
+    const azureFacts = input.azure
+      ? buildAzureGroundingFacts({ nodes: input.azure.nodes, edges: input.azure.edges })
+      : null;
+
     return {
       promptContext: [
         `FOCUS=${focusLabel(focus)}`,
@@ -393,6 +434,9 @@ export const assembleRigAgentContextWithTools = (
         `CONFIDENCE_REASON=${confidence.reason}`,
         `GROUNDING_SCORE=${confidence.score}`,
         ...citations.map((citation) => `SOURCE=${formatCitationLine(citation)}`),
+        ...(azureFacts && azureFacts.azureNodeCount > 0
+          ? [formatGroundingFactsForPrompt(azureFacts)]
+          : []),
       ].join("\n"),
       citations,
       confidence: confidence.confidence,

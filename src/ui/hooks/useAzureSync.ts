@@ -1,6 +1,12 @@
 import type { Edge, Node } from "@xyflow/react";
 import { Effect } from "effect";
 import { useCallback, useMemo, useState } from "react";
+import {
+  type AzureApplyDecision,
+  type AzureApplyPlan,
+  type AzureApplyPolicy,
+  resolveAzureApplyDecision,
+} from "../../core/effects/azure-sync.apply-policy";
 import type { AzureSyncEntitySnapshot } from "../../core/effects/azure-sync.diff";
 import {
   type AzureSyncDryRunOutput,
@@ -10,6 +16,8 @@ import {
 import {
   type AzureAuthStatus,
   type AzureSyncScope,
+  fingerprintAzureBoardEdge,
+  fingerprintAzureBoardNode,
   isAzureEdgeId,
   isAzureNodeId,
 } from "../../core/effects/azure-sync.types";
@@ -18,7 +26,17 @@ interface UseAzureSyncInput {
   readonly nodes: readonly Node[];
   readonly edges: readonly Edge[];
   readonly diagramId?: string | null;
-  readonly onApply?: (dryRun: AzureSyncDryRunOutput) => Promise<void>;
+  readonly policy: AzureApplyPolicy;
+  /**
+   * Asked only when the plan removes something. Returning false abandons the
+   * apply. Injected rather than called directly so the decision stays testable
+   * and the hook stays free of `window`.
+   */
+  readonly confirmDestructiveApply: (plan: AzureApplyPlan) => boolean;
+  readonly onApply?: (
+    dryRun: AzureSyncDryRunOutput,
+    plan: AzureApplyPlan,
+  ) => Promise<void>;
 }
 
 interface AzureScopeFormState {
@@ -42,6 +60,10 @@ interface UseAzureSyncResult {
   readonly error: string | null;
   readonly lastUpdatedAt: number | null;
   readonly lastAppliedAt: number | null;
+  /** The live gate for the current dry-run, or `null` before one exists. */
+  readonly applyDecision: AzureApplyDecision | null;
+  readonly acknowledgedUntrustedSnapshot: boolean;
+  readonly acknowledgeUntrustedSnapshot: (acknowledged: boolean) => void;
   readonly existingAzureNodeCount: number;
   readonly existingAzureEdgeCount: number;
   readonly checkAuth: () => Promise<void>;
@@ -75,47 +97,21 @@ const parseTagFilters = (value: string): Record<string, string> => {
   return output;
 };
 
-const stableStringify = (value: unknown): string =>
-  JSON.stringify(value, (_key, nestedValue) => {
-    if (
-      nestedValue !== null
-      && typeof nestedValue === "object"
-      && !Array.isArray(nestedValue)
-    ) {
-      return Object.fromEntries(
-        Object.entries(nestedValue as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
-      );
-    }
-    return nestedValue;
-  });
-
 const toAzureNodeSnapshot = (node: Node): AzureSyncEntitySnapshot => ({
   id: node.id,
-  fingerprint: stableStringify({
-    type: node.type ?? null,
-    width: node.width ?? null,
-    height: node.height ?? null,
-    position: node.position,
-    data: node.data ?? null,
-  }),
+  fingerprint: fingerprintAzureBoardNode(node),
 });
 
 const toAzureEdgeSnapshot = (edge: Edge): AzureSyncEntitySnapshot => ({
   id: edge.id,
-  fingerprint: stableStringify({
-    type: edge.type ?? null,
-    source: edge.source,
-    target: edge.target,
-    label: edge.label ?? null,
-    data: edge.data ?? null,
-  }),
+  fingerprint: fingerprintAzureBoardEdge(edge),
 });
 
 const isAzureNode = (node: Node): boolean => isAzureNodeId(node.id);
 const isAzureEdge = (edge: Edge): boolean => isAzureEdgeId(edge.id);
 
 export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
-  const { nodes, edges, diagramId, onApply } = input;
+  const { nodes, edges, diagramId, onApply, policy, confirmDestructiveApply } = input;
 
   const [subscriptionIdsInput, setSubscriptionIdsInput] = useState("");
   const [resourceGroupsInput, setResourceGroupsInput] = useState("");
@@ -130,6 +126,7 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [lastAppliedAt, setLastAppliedAt] = useState<number | null>(null);
+  const [acknowledgedUntrustedSnapshot, setAcknowledgedUntrustedSnapshot] = useState(false);
 
   const existingNodes = useMemo(
     () => nodes.filter(isAzureNode).map(toAzureNodeSnapshot),
@@ -203,9 +200,27 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
     }
   }, [diagramId, existingEdges, existingNodes, parsedScope]);
 
+  /**
+   * Computed for display as well as for the gate, so the panel can disable and
+   * explain APPLY before it is pressed rather than failing after.
+   */
+  const applyDecision = useMemo<AzureApplyDecision | null>(
+    () =>
+      dryRun === null ? null : resolveAzureApplyDecision({
+        policy,
+        nodeDiff: dryRun.nodeDiff,
+        edgeDiff: dryRun.edgeDiff,
+        resourceCount: dryRun.snapshot.resources.length,
+        warnings: dryRun.result.warnings,
+        acknowledgedUntrustedSnapshot,
+      }),
+    [acknowledgedUntrustedSnapshot, dryRun, policy],
+  );
+
   const clearDryRun = useCallback(() => {
     setDryRun(null);
     setError(null);
+    setAcknowledgedUntrustedSnapshot(false);
   }, []);
 
   const runApply = useCallback(async () => {
@@ -221,9 +236,39 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
       return;
     }
 
+    // The gate, not a warning (ADR-020). A truncated or empty snapshot cannot
+    // be told apart from a deleted estate, so it does not reach the board.
+    //
+    // Recomputed here rather than read from `applyDecision` so the click acts
+    // on the state at the moment it happened, not on a render that may have
+    // been captured before the operator changed something.
+    const decision = resolveAzureApplyDecision({
+      policy,
+      nodeDiff: dryRun.nodeDiff,
+      edgeDiff: dryRun.edgeDiff,
+      resourceCount: dryRun.snapshot.resources.length,
+      warnings: dryRun.result.warnings,
+      acknowledgedUntrustedSnapshot,
+    });
+
+    if (!decision.ok) {
+      setError(
+        decision.blocked
+          .map((block) => `${block.message} ${block.recommendedAction}`)
+          .join(" "),
+      );
+      return;
+    }
+
+    // Only ever asked when something is destroyed, so it does not become the
+    // dialog people dismiss without reading.
+    if (decision.plan.requiresConfirmation && !confirmDestructiveApply(decision.plan)) {
+      return;
+    }
+
     setIsApplyLoading(true);
     try {
-      await onApply(dryRun);
+      await onApply(dryRun, decision.plan);
       const appliedAt = Date.now();
       setLastAppliedAt(appliedAt);
       setLastUpdatedAt(appliedAt);
@@ -233,7 +278,7 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
     } finally {
       setIsApplyLoading(false);
     }
-  }, [dryRun, onApply]);
+  }, [acknowledgedUntrustedSnapshot, confirmDestructiveApply, dryRun, onApply, policy]);
 
   return {
     form: {
@@ -254,6 +299,9 @@ export const useAzureSync = (input: UseAzureSyncInput): UseAzureSyncResult => {
     error,
     lastUpdatedAt,
     lastAppliedAt,
+    applyDecision,
+    acknowledgedUntrustedSnapshot,
+    acknowledgeUntrustedSnapshot: setAcknowledgedUntrustedSnapshot,
     existingAzureNodeCount: existingNodes.length,
     existingAzureEdgeCount: existingEdges.length,
     checkAuth,

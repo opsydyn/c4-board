@@ -4,8 +4,68 @@ title: "ADR-018: Azure sync enterprise readiness"
 
 # ADR-018: Azure sync enterprise readiness
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-26
+
+> **Accepted 2026-07-30, Phase 1 delivered.** Queries now go directly to the
+> Resource Graph REST API through `src-tauri/src/azure_rest.rs`; `az` is used
+> only to obtain a token, so authentication behaviour is unchanged as this ADR
+> intended. Two things the phase promised are real: the `resource-graph` CLI
+> extension is no longer required, and truncation is now a fact read from
+> `totalRecords` rather than inferred from a leftover skip token.
+>
+> **Phase 2 delivered 2026-08-01.** Throttled (429), unavailable (503) and
+> network-level failures are retried with capped exponential backoff and jitter,
+> bounded to four attempts. A `Retry-After` from the service overrides our
+> backoff, since it knows when it will be ready; an unreasonable one is refused
+> rather than slept through. Permission and query errors are never retried —
+> trying again only delays a message the operator needs immediately. Exhaustion
+> surfaces as a distinct error naming the attempt count.
+>
+> The retry policy is a pure function taking its jitter as an argument, because
+> the available tenant is far too small to provoke a real 429. It is decided by
+> test rather than by observation, and that remains the honest limit: **no
+> throttling path here has been exercised against live Azure.**
+>
+> **Phase 4 delivered 2026-08-01**, taken before Phase 3 because it fixes a
+> correctness problem rather than only a performance one: filters ran *after*
+> paging, so a tag filter over a large estate could exhaust its page budget on
+> non-matching resources and return none of the matching ones — which, with
+> archiving enabled, is indistinguishable from a deleted estate.
+>
+> Tag predicates now go into the query. They are deliberately a *superset* of
+> the client-side filter rather than a replacement for it: KQL matches tag keys
+> case-sensitively while the app matches them case-insensitively, verified
+> against the live tenant, so an exact-key predicate would silently drop
+> resources a filter is expected to match. `matches_scope_filters` remains the
+> authority; the query only reduces what has to be fetched.
+>
+> **Phase 6 delivered 2026-08-01**, scoped to the two relationships that a
+> `_ref_` column provably cannot express. Both were found by reading a live
+> estate rather than by picking from the phase's list: a Container App names
+> its registry by login-server hostname, and a Container Apps environment names
+> its workspace by that workspace's `customerId` GUID. Neither is a resource
+> id, so neither could ever match a `_ref_` column — the exact gap ADR-017
+> recorded and deferred.
+>
+> An `_alias_`/`_key_` pair resolves these within the snapshot. Labels must
+> match on both sides, so an alias can never resolve against an unrelated
+> key that happens to share a value, and an alias resolving to nothing produces
+> no edge — a resource outside the synced scope is ordinary, and an edge to a
+> node that is not on the board would be worse than a missing one.
+>
+> Known limit: only the first entry of `properties.configuration.registries` is
+> projected, so an app pulling from two registries yields one edge. Reading the
+> whole array needs `mv-expand`, which conflicts with the single-row projection.
+>
+> The rest of the phase's list — private endpoints, diagnostic settings, RBAC
+> assignments, VNet integration — is untouched. The estate here has none of
+> them, so adding columns for them would be untested guesswork.
+>
+> Phases 3 and 5 — pluggable credentials and management-group scope — remain
+> unbuilt. The "Unverified" section
+> below still stands for management group scope and the managed-identity and
+> workload-identity paths.
 
 ## Context
 

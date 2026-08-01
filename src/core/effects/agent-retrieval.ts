@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import Fuse, { type IFuseOptions } from "fuse.js";
 import type { RigExecutionPolicySettings, RigMutationPolicySettings } from "./agent-policy";
 import type { RigC4BoardNode, RigC4BoardSummary } from "./ai-agent.runtime";
+import { type AzureSyncRunRecord, listAzureSyncRuns } from "./azure-sync.runs";
 import { type Diagram, listDiagrams } from "./database";
 import type { EffectiveRigAgentV1RolloutState } from "./feature-flags";
 import type { OpyAgentArtifact } from "./opy-agent.trace";
@@ -701,6 +702,47 @@ const buildAzureSyncDocument = (input: {
   };
 };
 
+/**
+ * Azure evidence from the persisted run trail (ADR-020 Phase 2).
+ *
+ * The document above is built from live panel state, so it exists only if the
+ * operator opened the panel and ran a dry-run in this session. These come from
+ * `azure_sync_runs`, which means OPY can answer "what did the last sync do"
+ * across restarts, the way it already can for diagrams and tasks.
+ *
+ * Applied runs outrank planned ones: what reached the board is stronger
+ * evidence about reality than what someone previewed and abandoned.
+ */
+const buildAzureSyncHistoryDocuments = (input: {
+  readonly domain: RigAgentRetrievalDomain;
+  readonly runs: ReadonlyArray<AzureSyncRunRecord>;
+  readonly limit?: number;
+}): ReadonlyArray<RigAgentRetrievalDocument> =>
+  input.runs
+    .slice(0, input.limit ?? 5)
+    .map((run) => ({
+      id: `azure-sync-run:${run.id}`,
+      domain: input.domain,
+      scope: "governance" as const,
+      source: "azure_sync" as const,
+      title: `AZURE SYNC ${run.status.toUpperCase()}`,
+      detail: `${run.resourceCount} resources · ${run.relationshipCount} links · ${run.subscriptionIds.length} sub(s)`,
+      content: [
+        `status ${run.status}`,
+        `nodes +${run.nodesCreated} ~${run.nodesUpdated} -${run.nodesArchived}`,
+        run.nodesRetained > 0 ? `nodes retained ${run.nodesRetained}` : "",
+        `edges +${run.edgesCreated} ~${run.edgesUpdated} -${run.edgesArchived}`,
+        run.edgesRetained > 0 ? `edges retained ${run.edgesRetained}` : "",
+        run.truncated ? "snapshot truncated" : "",
+        run.usedCustomQuery ? "custom query replaced the default projection" : "",
+        run.warnings.length > 0 ? `warnings ${run.warnings.length}` : "",
+        run.errorSummary ?? "",
+      ].filter((value) => value.length > 0).join(" · "),
+      createdAt: run.createdAt,
+      priority: run.status === "applied" ? 92 : 80,
+      tags: ["azure", "sync", "run", run.status, input.domain],
+    }));
+
 const buildExplainabilityDocument = (input: {
   readonly snapshot: RigAgentExplainabilityRetrievalSnapshot | null | undefined;
 }): RigAgentRetrievalDocument | null => {
@@ -836,6 +878,9 @@ export const loadRigAgentRetrievalBundle = (
       proposals: listOpyDiagramProposals(input.sessionId),
       checkpoints: listOpyAgentCheckpoints(input.sessionId),
       diagrams: diagramScope === "all-diagrams" ? listDiagrams() : Effect.succeed([] as Diagram[]),
+      // Cross-session by design: the last applied sync is evidence about the
+      // estate regardless of which OPY session is asking.
+      azureSyncRuns: listAzureSyncRuns(),
     });
 
     const artifactLists = yield* Effect.forEach(
@@ -896,6 +941,10 @@ export const loadRigAgentRetrievalBundle = (
           domain: input.domain,
           snapshot: input.azureSyncSnapshot,
           redactionMode: input.redactionMode,
+        }),
+        ...buildAzureSyncHistoryDocuments({
+          domain: input.domain,
+          runs: snapshot.azureSyncRuns,
         }),
         buildExplainabilityDocument({
           snapshot: input.explainabilitySnapshot,

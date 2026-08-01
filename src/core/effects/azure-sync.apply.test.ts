@@ -109,6 +109,9 @@ describe("mergeAzureMappedGraphIntoCanvas", () => {
       edges,
       mapped,
       syncedAt: 1_700_000_000_000,
+      // Archival is opt-in since ADR-020. This test is about what an archiving
+      // run does; retention is covered in azure-sync.retention.test.ts.
+      archiveMissing: true,
     });
 
     expect(result.nodes.map((node) => node.id).sort()).toEqual([
@@ -161,6 +164,7 @@ describe("mergeAzureMappedGraphIntoCanvas", () => {
         edges: [],
       },
       syncedAt: 1_700_000_000_000,
+      archiveMissing: true,
     });
 
     expect(result.nodes.map((node) => node.id)).toEqual([manual.id]);

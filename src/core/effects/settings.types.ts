@@ -9,6 +9,20 @@ import {
 export const TransitionIntensitySchema = Schema.Literal("low", "normal", "high");
 export type TransitionIntensity = Schema.Schema.Type<typeof TransitionIntensitySchema>;
 
+/**
+ * Azure sync apply guardrails (ADR-020).
+ *
+ * `archiveMissing` defaults to off: a sync that stops seeing a resource leaves
+ * it on the board. A truncated page and a deleted estate are indistinguishable
+ * from the diff's point of view, and only one of those is recoverable.
+ */
+export const AzureSyncPolicySettingsSchema = Schema.Struct({
+  archiveMissing: Schema.Boolean,
+  maxApplyOperations: Schema.Number.pipe(Schema.int(), Schema.greaterThan(0)),
+});
+
+export type AzureSyncPolicySettings = Schema.Schema.Type<typeof AzureSyncPolicySettingsSchema>;
+
 export const RedactionModeSchema = Schema.Literal("off", "standard", "strict");
 export type RedactionMode = Schema.Schema.Type<typeof RedactionModeSchema>;
 
@@ -283,6 +297,7 @@ export const AppSettingsSchema = Schema.Struct({
   rigAgentRolloutPreference: RigAgentV1RolloutPreferenceSchema,
   rigExecutionPolicy: RigExecutionPolicySettingsSchema,
   agentPolicy: RigMutationPolicySettingsSchema,
+  azureSyncPolicy: AzureSyncPolicySettingsSchema,
 });
 
 export type AppSettings = Schema.Schema.Type<typeof AppSettingsSchema>;
@@ -377,6 +392,14 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     maxEdgesCreatedPerRun: 24,
     allowSettingsMutation: false,
   } satisfies RigMutationPolicySettings,
+  azureSyncPolicy: {
+    // Off, so the destructive path is something an operator chooses rather than
+    // something a scope typo does to them.
+    archiveMissing: false,
+    // Sized to admit an ordinary estate sync while stopping a runaway one. An
+    // operator with a larger estate raises it deliberately.
+    maxApplyOperations: 250,
+  } satisfies AzureSyncPolicySettings,
 };
 
 export const APP_SETTING_KEYS = Object.freeze(

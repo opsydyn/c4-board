@@ -57,6 +57,9 @@ import type {
 import type { RigC4BoardNode, RigC4BoardNodeType, RigC4BoardSummary } from "../../core/effects/ai-agent.runtime";
 import type { ArchitectureSemanticRole } from "../../core/effects/architecture-role-classification";
 import { mergeAzureMappedGraphIntoCanvas } from "../../core/effects/azure-sync.apply";
+import type { AzureApplyPlan } from "../../core/effects/azure-sync.apply-policy";
+import { type AzureSyncCheckpoint, createAzureSyncCheckpoint } from "../../core/effects/azure-sync.checkpoints";
+import { recordAzureSyncRun } from "../../core/effects/azure-sync.runs";
 import type { AzureSyncDryRunOutput } from "../../core/effects/azure-sync.runtime";
 import { canvasToneFor } from "../../core/effects/canvas-ambient-tone";
 import {
@@ -1360,7 +1363,7 @@ export function C4CanvasContainer() {
   }, [runEffect, seedPersistedFingerprintFromDiagram, send]);
 
   const handleApplyAzureSync = useCallback(
-    async (dryRun: AzureSyncDryRunOutput) => {
+    async (dryRun: AzureSyncDryRunOutput, plan: AzureApplyPlan) => {
       const currentDiagramId = state.context.currentDiagramId;
       if (!currentDiagramId) {
         throw new Error("No active diagram loaded for Azure sync apply.");
@@ -1373,6 +1376,9 @@ export function C4CanvasContainer() {
         edges: canvasEdges,
         mapped: dryRun.mapped,
         syncedAt: dryRun.snapshot.collectedAt,
+        // ADR-020: removal is what the operator turned on, not what the diff
+        // happened to compute.
+        archiveMissing: appSettings.azureSyncPolicy.archiveMissing,
       });
 
       const saveInput: SaveDiagramPayload = {
@@ -1385,6 +1391,29 @@ export function C4CanvasContainer() {
       if (state.context.diagramDescription) {
         saveInput.description = state.context.diagramDescription;
       }
+
+      // Checkpoint the board as it stands, before anything is written. With the
+      // save ordered ahead of the canvas update this is not what recovers a
+      // failed apply — it is how an operator undoes a successful one.
+      await runEffect(
+        createAzureSyncCheckpoint({
+          id: `azure-checkpoint-${dryRun.result.runId}`,
+          diagramId: currentDiagramId,
+          runId: dryRun.result.runId,
+          checkpointType: "pre-apply",
+          snapshot: {
+            id: currentDiagramId,
+            name: state.context.diagramName,
+            nodes: state.context.nodes,
+            edges: state.context.edges,
+            savedAt: state.context.lastSaved ?? null,
+            ...(state.context.diagramDescription
+              ? { description: state.context.diagramDescription }
+              : {}),
+          },
+          createdAt: Date.now(),
+        }),
+      );
 
       const loadEvent: Extract<CanvasEvent, { type: "LOAD_DIAGRAM_SUCCESS" }> = {
         type: "LOAD_DIAGRAM_SUCCESS",
@@ -1403,8 +1432,11 @@ export function C4CanvasContainer() {
             : {}),
         },
       };
-      send(loadEvent);
 
+      // Persist before touching the canvas. `saveDiagram` is transactional, so
+      // a failure leaves the database untouched — and now the board too. The
+      // old order sent this event first and threw on failure, leaving a mutated
+      // canvas with nothing saved behind it and no way back.
       const didSave = await requestSave("manual", {
         overrideInput: saveInput,
       });
@@ -1412,8 +1444,43 @@ export function C4CanvasContainer() {
       if (!didSave) {
         const saveError = saveActorRef.getSnapshot().context.errorMessage;
         const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
-        throw new Error(`Azure sync apply save failed: ${detail}`);
+        throw new Error(`Azure sync apply save failed, board left unchanged: ${detail}`);
       }
+
+      send(loadEvent);
+
+      // Recorded after the save, so the history only ever claims applies that
+      // actually reached the board.
+      await runEffect(
+        recordAzureSyncRun({
+          id: dryRun.result.runId,
+          diagramId: currentDiagramId,
+          subscriptionIds: dryRun.snapshot.scope.subscriptionIds,
+          resourceGroups: dryRun.snapshot.scope.resourceGroups ?? [],
+          tagFilters: dryRun.snapshot.scope.tagFilters ?? {},
+          usedCustomQuery: Boolean(dryRun.snapshot.scope.query),
+          status: "applied",
+          resourceCount: dryRun.snapshot.resources.length,
+          relationshipCount: dryRun.snapshot.relationships.length,
+          nodesCreated: plan.nodesToCreate,
+          nodesUpdated: plan.nodesToUpdate,
+          nodesArchived: plan.nodesToArchive,
+          nodesRetained: plan.nodesRetained,
+          edgesCreated: plan.edgesToCreate,
+          edgesUpdated: plan.edgesToUpdate,
+          edgesArchived: plan.edgesToArchive,
+          edgesRetained: plan.edgesRetained,
+          truncated: dryRun.result.warnings.some((warning) =>
+            warning.toLowerCase().includes("guardrail") || warning.toLowerCase().includes("partial")
+          ),
+          warnings: dryRun.result.warnings,
+          blockedReasons: [],
+          checkpointId: `azure-checkpoint-${dryRun.result.runId}`,
+          errorSummary: null,
+          collectedAt: dryRun.snapshot.collectedAt,
+          createdAt: Date.now(),
+        }),
+      );
 
       console.log(
         "☁️ Azure sync applied:",
@@ -1423,8 +1490,10 @@ export function C4CanvasContainer() {
       );
     },
     [
+      appSettings.azureSyncPolicy.archiveMissing,
       flushPendingInlineEdits,
       requestSave,
+      runEffect,
       saveSnapshot.context.lastSavedAt,
       send,
       state.context.currentDiagramId,
@@ -1432,6 +1501,92 @@ export function C4CanvasContainer() {
       state.context.diagramName,
       state.context.edges,
       state.context.lastSaved,
+      state.context.nodes,
+    ],
+  );
+
+  /**
+   * Undo an Azure apply by putting a checkpoint's board back (ADR-020).
+   *
+   * Follows the same order as apply — checkpoint, persist, then update the
+   * canvas — so a failed restore leaves both the database and the board as they
+   * were. The pre-restore checkpoint means a mistaken undo is itself undoable,
+   * which matters because restoring discards anything added since.
+   */
+  const handleRestoreAzureCheckpoint = useCallback(
+    async (checkpoint: AzureSyncCheckpoint) => {
+      const currentDiagramId = state.context.currentDiagramId;
+      if (!currentDiagramId) {
+        throw new Error("No active diagram loaded for Azure checkpoint restore.");
+      }
+
+      await flushPendingInlineEdits();
+
+      await runEffect(
+        createAzureSyncCheckpoint({
+          id: `azure-checkpoint-restore-${Date.now()}`,
+          diagramId: currentDiagramId,
+          runId: checkpoint.runId,
+          checkpointType: "pre-restore",
+          snapshot: {
+            id: currentDiagramId,
+            name: state.context.diagramName,
+            nodes: state.context.nodes,
+            edges: state.context.edges,
+            savedAt: state.context.lastSaved ?? null,
+            ...(state.context.diagramDescription
+              ? { description: state.context.diagramDescription }
+              : {}),
+          },
+          createdAt: Date.now(),
+        }),
+      );
+
+      const saveInput: SaveDiagramPayload = {
+        id: currentDiagramId,
+        name: state.context.diagramName,
+        nodes: [...checkpoint.snapshot.nodes],
+        edges: [...checkpoint.snapshot.edges],
+      };
+
+      if (state.context.diagramDescription) {
+        saveInput.description = state.context.diagramDescription;
+      }
+
+      const didSave = await requestSave("manual", { overrideInput: saveInput });
+
+      if (!didSave) {
+        const saveError = saveActorRef.getSnapshot().context.errorMessage;
+        const detail = saveError ?? "unknown cause (check browser console for ❌ Save failed log)";
+        throw new Error(`Azure checkpoint restore save failed, board left unchanged: ${detail}`);
+      }
+
+      send({
+        type: "LOAD_DIAGRAM_SUCCESS",
+        diagram: {
+          id: currentDiagramId,
+          name: state.context.diagramName,
+          nodes: [...checkpoint.snapshot.nodes],
+          edges: [...checkpoint.snapshot.edges],
+          updatedAt: Date.now(),
+          layoutAudits: state.context.layoutAudits,
+          ...(state.context.diagramDescription
+            ? { description: state.context.diagramDescription }
+            : {}),
+        },
+      });
+    },
+    [
+      flushPendingInlineEdits,
+      requestSave,
+      runEffect,
+      send,
+      state.context.currentDiagramId,
+      state.context.diagramDescription,
+      state.context.diagramName,
+      state.context.edges,
+      state.context.lastSaved,
+      state.context.layoutAudits,
       state.context.nodes,
     ],
   );
@@ -2664,13 +2819,19 @@ export function C4CanvasContainer() {
     const hasChanged = lastDiagramIdRef.current !== currentId;
     const hasNodes = state.context.nodes.length > 0;
 
-    if (hasChanged) {
+    // Both conditions, and the ref is only marked once the fit actually runs.
+    //
+    // Marking it as soon as the id changed spent the signal on the render where
+    // the diagram id had arrived but its nodes had not — which is the ordinary
+    // cold start. By the time the nodes landed, `hasChanged` was already false
+    // and nothing ever fitted the viewport, so the board rendered off-screen
+    // and looked empty. Remounting reset the ref, which is why navigating away
+    // and back, or reloading, appeared to fix it.
+    if (hasChanged && hasNodes) {
       lastDiagramIdRef.current = currentId;
-      if (hasNodes) {
-        requestAnimationFrame(() => {
-          canvasRef.current?.fitViewToGraph();
-        });
-      }
+      requestAnimationFrame(() => {
+        canvasRef.current?.fitViewToGraph();
+      });
     }
   }, [state.context.currentDiagramId, state.context.nodes.length]);
 
@@ -2880,6 +3041,8 @@ export function C4CanvasContainer() {
         nodeCount={state.context.nodes.length}
         edgeCount={state.context.edges.length}
         boardSummary={opyBoardSummary}
+        boardNodes={state.context.nodes}
+        boardEdges={state.context.edges}
         boardContext={opyBoardContext}
         aiSettings={appSettings.aiSettings}
         actionMode={opyActionMode}
@@ -3084,10 +3247,12 @@ export function C4CanvasContainer() {
           )}
           {isAzurePanelOpen && (
             <AzureSyncPanel
+              policy={appSettings.azureSyncPolicy}
               nodes={state.context.nodes}
               edges={state.context.edges}
               diagramId={state.context.currentDiagramId}
               onApply={handleApplyAzureSync}
+              onRestoreCheckpoint={handleRestoreAzureCheckpoint}
               onSummaryChange={handleAzureSyncSummaryChange}
             />
           )}

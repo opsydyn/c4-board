@@ -1,4 +1,5 @@
 import { CopilotChatConfigurationProvider, CopilotChatInput } from "@copilotkit/react-core/v2";
+import type { Edge, Node } from "@xyflow/react";
 import { Effect, Option } from "effect";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -53,6 +54,7 @@ import {
   summarizeAgentError,
   withAgentErrorContext,
 } from "../../core/effects/ai-agent.runtime";
+import { listAzureSyncRuns } from "../../core/effects/azure-sync.runs";
 import type { EffectiveRigAgentV1RolloutState } from "../../core/effects/feature-flags";
 import { describeActionMode, isBlockingBoundary, type OpyActionModeSurface } from "../../core/effects/opy-action-mode";
 import {
@@ -547,6 +549,9 @@ interface OpyCopilotPanelProps {
   readonly nodeCount: number;
   readonly edgeCount: number;
   readonly boardSummary: RigC4BoardSummary | null;
+  /** Raw board nodes, needed for the Azure provenance the summary does not carry. */
+  readonly boardNodes: ReadonlyArray<Node>;
+  readonly boardEdges: ReadonlyArray<Edge>;
   readonly boardContext: OpyBoardContextRegistry | null;
   readonly aiSettings: AiSettings;
   readonly actionMode: AiActionMode;
@@ -1532,6 +1537,8 @@ export function OpyCopilotPanel({
   nodeCount,
   edgeCount,
   boardSummary,
+  boardNodes,
+  boardEdges,
   boardContext,
   aiSettings,
   actionMode,
@@ -1553,6 +1560,23 @@ export function OpyCopilotPanel({
   chromeSectionRequest,
 }: OpyCopilotPanelProps) {
   const { runEffect } = useDatabase();
+  /**
+   * Latest board arrays, held in refs rather than read from the closure.
+   *
+   * `resolveRigAgentContext` needs current nodes and edges to build Azure
+   * grounding facts, but it sits in the dependency chain of several other
+   * callbacks. Listing the arrays as dependencies would change its identity on
+   * every board edit and ripple through those chains — the failure the
+   * 2026-06-05 OPY board interaction postmortem records, which is why the
+   * operational memory says to depend on stable refs rather than mutable
+   * collections. Reading `.current` keeps the values fresh and the identity
+   * still.
+   */
+  const boardNodesRef = useRef(boardNodes);
+  const boardEdgesRef = useRef(boardEdges);
+  boardNodesRef.current = boardNodes;
+  boardEdgesRef.current = boardEdges;
+
   const pendingViewportBaselineRef = useRef(true);
   const agentTaskIndexRef = useRef<Record<string, OpyAgentTask>>({});
   const resumableTaskActivationRef = useRef<string | null>(null);
@@ -2431,12 +2455,19 @@ export function OpyCopilotPanel({
     }): Promise<RigAgentContextBundle> =>
       runEffect(
         Effect.all({
-          base: assembleRigAgentContext({
-            boardSummary,
-            boardContext,
-            focus: input.focus,
-            redactionMode,
-          }),
+          base: Effect.flatMap(
+            // Loaded per request rather than held in state: the trail changes
+            // when a sync runs, not when this panel re-renders.
+            listAzureSyncRuns(),
+            (azureRuns) =>
+              assembleRigAgentContext({
+                boardSummary,
+                boardContext,
+                focus: input.focus,
+                redactionMode,
+                azure: { nodes: boardNodesRef.current, edges: boardEdgesRef.current, runs: azureRuns },
+              }),
+          ),
           retrieval: loadRigAgentRetrievalBundle({
             domain,
             sessionId: input.sessionId,

@@ -102,12 +102,14 @@ How to use it: [Postee guide](docs/src/content/docs/guides/postee.md)
 - Balanced coupling and mud-risk scoring model.
 - Explainability surfaces for topology review.
 
-Azure sync reads your account through the Azure CLI, so it needs `az login` and the `resource-graph` extension before the panel will return anything:
+Azure sync signs in through the Azure CLI, so it needs an active `az login` before the panel will return anything:
 
 ```sh
 az login
-az extension add --name resource-graph
 ```
+
+The `resource-graph` CLI extension is no longer required. Queries go directly to
+the Resource Graph REST API (ADR-018); the CLI is used only to obtain a token.
 
 How to use it: [Azure sync guide](docs/src/content/docs/guides/azure-sync.md)
 
@@ -135,7 +137,7 @@ Install the standard Tauri prerequisites for your operating system:
 
 Tauri prerequisites: <https://v2.tauri.app/start/prerequisites/>
 
-The Azure sync panel additionally needs the **Azure CLI** with the `resource-graph` extension, since the app runs `az graph query` as a subprocess. It is not needed for anything else — see [Azure sync](docs/src/content/docs/guides/azure-sync.md).
+The Azure sync panel additionally needs the **Azure CLI**, which it uses to obtain an access token. Queries themselves go straight to the Resource Graph REST API, so no CLI extension is needed. It is not needed for anything else — see [Azure sync](docs/src/content/docs/guides/azure-sync.md).
 
 ## Setup
 

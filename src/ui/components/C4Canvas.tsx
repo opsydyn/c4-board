@@ -22,7 +22,7 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useReactFlow } from "@xyflow/react";
+import { useNodesInitialized, useReactFlow } from "@xyflow/react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { NodeDomain } from "../../core/effects/node-operations";
 import { nodeTypesForDomain } from "./nodes/nodeTypesByDomain";
@@ -104,13 +104,26 @@ export function resolveCanvasFitNodeIds(
   return selectedNodeIds.length > 0 ? selectedNodeIds : graphNodeIds;
 }
 
+/**
+ * `minZoom` applies to every board, not just harness captures.
+ *
+ * ReactFlow's default floor is 0.5, which is not enough to show a board that
+ * has grown large. One synced board spanned roughly 11,000 by 10,800 units —
+ * a handful of hand-drawn nodes had ended up far from everything else — and
+ * fitting it needs about 0.1. `fitView` clamped at 0.5 and settled over an
+ * empty region, so the board loaded, the minimap drew it, and the canvas showed
+ * nothing but grid.
+ *
+ * The lower floor already existed for harness captures. A board someone is
+ * actually looking at should not be held to a stricter limit than a screenshot.
+ */
 export function resolveCanvasViewportChrome(visualHarness: boolean): {
   minZoom?: number;
   showMiniMap: boolean;
 } {
   return visualHarness
     ? { minZoom: 0.1, showMiniMap: false }
-    : { showMiniMap: true };
+    : { minZoom: 0.1, showMiniMap: true };
 }
 
 function C4CanvasInner(
@@ -142,6 +155,19 @@ function C4CanvasInner(
 ) {
   const { setCenter, getNode, fitView, getViewport, setViewport } = useReactFlow();
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  /**
+   * True once ReactFlow has measured every node.
+   *
+   * A board opened from cold rendered blank: the nodes were present and the
+   * minimap drew them, but the viewport was elsewhere. The fit ran on the
+   * render where the nodes arrived, which is before ReactFlow has measured
+   * them — measurement happens after paint, via its own ResizeObserver — so
+   * there were no bounds to fit to and the call did nothing. Adding a node
+   * afterwards fitted correctly, because by then everything had dimensions.
+   *
+   * This is the signal to wait on instead of guessing with an animation frame.
+   */
+  const nodesInitialized = useNodesInitialized();
   const fitNodeIds = useMemo(
     () => resolveCanvasFitNodeIds(nodes, viewportFitNodeIds),
     [nodes, viewportFitNodeIds],
@@ -161,6 +187,27 @@ function C4CanvasInner(
   // Edge label editor state
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isEdgeLabelEditorOpen, setIsEdgeLabelEditorOpen] = useState(false);
+
+  /**
+   * Fit once per board, as soon as its nodes have been measured.
+   *
+   * Keyed on the node-id signature rather than a count so that swapping
+   * diagrams of the same size still refits, and so that moving a node does not.
+   */
+  const fitSignature = useMemo(() => fitNodeIds.join("|"), [fitNodeIds]);
+  const fittedSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!nodesInitialized || fitNodeIds.length === 0) {
+      return;
+    }
+    if (fittedSignatureRef.current === fitSignature) {
+      return;
+    }
+
+    fittedSignatureRef.current = fitSignature;
+    fitGraph(0);
+  }, [fitGraph, fitNodeIds.length, fitSignature, nodesInitialized]);
 
   // Apply viewport after import if available
   useEffect(() => {

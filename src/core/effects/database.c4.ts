@@ -74,6 +74,12 @@ export interface Node {
   expand_parent: number;
   icon_id: string | null;
   semantic_role: string | null;
+  // Azure provenance (migration 039). NULL means not provider-derived, which is
+  // a different statement from synced-and-empty.
+  source_provider: string | null;
+  source_resource_id: string | null;
+  source_resource_type: string | null;
+  last_synced_at: number | null;
   coupling_state_version: number;
   coupling_state_json: string | null;
 
@@ -160,6 +166,10 @@ export interface CreateNodeInput {
   expand_parent?: boolean;
   icon_id?: string;
   semantic_role?: string;
+  source_provider?: string | null;
+  source_resource_id?: string | null;
+  source_resource_type?: string | null;
+  last_synced_at?: number | null;
   coupling_state_version?: number;
   coupling_state_json?: string | null;
 
@@ -205,6 +215,10 @@ export interface UpdateNodeInput {
   expand_parent?: boolean;
   icon_id?: string | null;
   semantic_role?: string | null;
+  source_provider?: string | null;
+  source_resource_id?: string | null;
+  source_resource_type?: string | null;
+  last_synced_at?: number | null;
   coupling_state_version?: number;
   coupling_state_json?: string | null;
   team_ownership?: string | null;
@@ -337,8 +351,9 @@ export const createNode = (input: CreateNodeInput) =>
 				parameters, target_aggregate, return_type, use_cases, dependencies,
 				publishing_context, subscribing_contexts, from_context, to_context, translation_rules,
 				saga_steps, compensation_logic, semantic_role,
+				source_provider, source_resource_id, source_resource_type, last_synced_at,
 				created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.id,
         input.diagram_id,
@@ -385,6 +400,10 @@ export const createNode = (input: CreateNodeInput) =>
         toJson(input.saga_steps),
         toJson(input.compensation_logic),
         input.semantic_role ?? null,
+        input.source_provider ?? null,
+        input.source_resource_id ?? null,
+        input.source_resource_type ?? null,
+        input.last_synced_at ?? null,
         now,
         now,
       ],
@@ -407,6 +426,10 @@ export const createNode = (input: CreateNodeInput) =>
       expand_parent: input.expand_parent ? 1 : 0,
       icon_id: input.icon_id ?? null,
       semantic_role: input.semantic_role ?? null,
+      source_provider: input.source_provider ?? null,
+      source_resource_id: input.source_resource_id ?? null,
+      source_resource_type: input.source_resource_type ?? null,
+      last_synced_at: input.last_synced_at ?? null,
       coupling_state_version: input.coupling_state_version ?? 1,
       coupling_state_json: input.coupling_state_json ?? null,
       // DDD fields

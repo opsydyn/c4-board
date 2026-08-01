@@ -28,6 +28,12 @@ pub struct AzureResourceSnapshotDto {
     /// Keys are relationship labels (e.g. "serverFarmId"), values are target ARM resource IDs.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub property_refs: BTreeMap<String, String>,
+    /// Values naming another resource without being its ARM id (ADR-018 Phase 6).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub alias_refs: BTreeMap<String, String>,
+    /// Values other resources may refer to this one by.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub identity_keys: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -60,14 +66,6 @@ pub struct AzureAuthStatusDto {
     pub authenticated: bool,
     pub strategy: String,
     pub details: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AzureGraphQueryResponse {
-    #[serde(default)]
-    data: Vec<JsonValue>,
-    #[serde(default, alias = "skipToken", alias = "skip_token")]
-    skip_token: Option<String>,
 }
 
 struct AzureGraphQueryRows {
@@ -325,6 +323,49 @@ fn parse_depends_on(row: &JsonValue) -> Option<Vec<String>> {
 /// Prefix used in KQL projections to mark property-based resource references.
 const PROPERTY_REF_PREFIX: &str = "_ref_";
 
+/// Prefix for a value that *names* another resource without being its ARM id
+/// (ADR-018 Phase 6).
+///
+/// `_ref_` columns hold resource ids and can be matched directly. Some of the
+/// most useful relationships are not recorded that way: a Container App records
+/// its registry as a login-server hostname, and a Container Apps environment
+/// records its workspace by that workspace's `customerId` GUID. ADR-017 saw the
+/// registry case and left it, because resolving it needs a second pass rather
+/// than another `_ref_` column.
+///
+/// An alias is resolved against the `_key_` values of the resources in the same
+/// snapshot. Labels pair by name: `_alias_loginServer` looks up `_key_loginServer`.
+const ALIAS_REF_PREFIX: &str = "_alias_";
+
+/// Prefix for a value another resource may refer to this one by.
+const IDENTITY_KEY_PREFIX: &str = "_key_";
+
+/// Reads prefixed string columns out of a projected row.
+fn extract_prefixed_strings(row: &JsonValue, prefix: &str) -> BTreeMap<String, String> {
+    let mut found = BTreeMap::new();
+    let Some(obj) = row.as_object() else {
+        return found;
+    };
+
+    for (key, value) in obj {
+        let Some(label) = key.strip_prefix(prefix) else {
+            continue;
+        };
+        if label.is_empty() {
+            continue;
+        }
+
+        if let JsonValue::String(text) = value {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                found.insert(label.to_string(), trimmed.to_string());
+            }
+        }
+    }
+
+    found
+}
+
 fn extract_property_refs(row: &JsonValue) -> BTreeMap<String, String> {
     let mut refs = BTreeMap::new();
     let Some(obj) = row.as_object() else {
@@ -401,7 +442,44 @@ fn decode_resource_row(row: &JsonValue) -> Option<AzureResourceSnapshotDto> {
         tags: parse_tags(row.get("tags")),
         depends_on: parse_depends_on(row),
         property_refs: extract_property_refs(row),
+        alias_refs: extract_prefixed_strings(row, ALIAS_REF_PREFIX),
+        identity_keys: extract_prefixed_strings(row, IDENTITY_KEY_PREFIX),
     })
+}
+
+/// Relationship semantics for an alias label (ADR-018 Phase 6).
+///
+/// Confidence is `high` for both: these are exact identifier matches against
+/// another resource in the same snapshot, not name similarity or a guess.
+fn relationship_type_for_alias(label: &str) -> Option<(&'static str, &'static str)> {
+    match label {
+        // A Container App pulling images from a registry.
+        "loginServer" => Some(("depends_on", "high")),
+        // A Container Apps environment shipping logs to a workspace.
+        "customerId" => Some(("data_link", "high")),
+        _ => None,
+    }
+}
+
+/// Indexes every resource by the values other resources may name it with.
+///
+/// Keyed by `(label, lowercased value)` so a `loginServer` alias can never
+/// resolve against a `customerId` key that happens to share a string.
+fn build_identity_index(
+    resources: &[AzureResourceSnapshotDto],
+) -> BTreeMap<(String, String), String> {
+    let mut index: BTreeMap<(String, String), String> = BTreeMap::new();
+
+    for resource in resources {
+        for (label, value) in &resource.identity_keys {
+            index.insert(
+                (label.clone(), value.trim().to_lowercase()),
+                resource.resource_id.clone(),
+            );
+        }
+    }
+
+    index
 }
 
 fn matches_scope_filters(resource: &AzureResourceSnapshotDto, scope: &AzureSyncScopeDto) -> bool {
@@ -470,7 +548,11 @@ fn build_default_query(scope: &AzureSyncScopeDto) -> String {
          _ref_keyVaultId = properties.keyVault.id, \
          _ref_environmentId = coalesce(properties.environmentId, properties.managedEnvironmentId), \
          _ref_registryId = coalesce(properties.registryId, properties.containerRegistryId), \
-         _ref_managedBy = managedBy",
+         _ref_managedBy = managedBy, \
+         _alias_loginServer = tostring(properties.configuration.registries[0].server), \
+         _alias_customerId = tostring(properties.appLogsConfiguration.logAnalyticsConfiguration.customerId), \
+         _key_loginServer = tostring(properties.loginServer), \
+         _key_customerId = tostring(properties.customerId)",
     );
 
     if let Some(resource_groups) = &scope.resource_groups {
@@ -485,6 +567,44 @@ fn build_default_query(scope: &AzureSyncScopeDto) -> String {
             query.push_str(" | where resourceGroup in~ (");
             query.push_str(&quoted.join(", "));
             query.push(')');
+        }
+    }
+
+    // Tag filtering, pushed server-side (ADR-018 Phase 4).
+    //
+    // This is a *reduction*, not the semantics. `matches_scope_filters` remains
+    // the authority on what a tag filter means, and this predicate is written to
+    // be a guaranteed superset of it, because the two cannot express the same
+    // thing:
+    //
+    //   KQL `tags['project']` matches the key case-sensitively, while the
+    //   client-side filter matches keys with `eq_ignore_ascii_case`. Verified
+    //   against the live endpoint — `tags['Project']` returns nothing where
+    //   `tags['project']` returns six. Pushing an exact-key predicate would
+    //   silently drop resources a filter used to match, and with archiving on
+    //   that reads as a deleted estate.
+    //
+    // `contains` is case-insensitive and matches the serialized bag, so anything
+    // the client-side filter would keep survives this. It may also admit
+    // resources whose value sits under a different key; those are dropped
+    // afterwards, which costs a row rather than a resource.
+    //
+    // The point is not speed. Filters used to run *after* paging, so a tag
+    // filter over a large estate could spend every page on non-matching
+    // resources and return none of the matching ones.
+    if let Some(tag_filters) = &scope.tag_filters {
+        let mut values: Vec<&str> = tag_filters
+            .values()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .collect();
+        values.sort_unstable();
+        values.dedup();
+
+        for value in values {
+            query.push_str(" | where tags contains '");
+            query.push_str(&escape_kql_string(value));
+            query.push('\'');
         }
     }
 
@@ -570,6 +690,8 @@ fn build_relationships(
         })
         .collect();
 
+    let identity_index = build_identity_index(resources);
+
     let mut dedupe: BTreeMap<(String, String, String), AzureRelationshipSnapshotDto> =
         BTreeMap::new();
 
@@ -649,7 +771,40 @@ fn build_relationships(
             );
         }
 
-        // 3. ARM ID hierarchy: child -> parent (free, no extra query)
+        // 3. Alias edges: a value that names another resource without being its
+        //    ARM id, resolved against that resource's `_key_` values.
+        //
+        //    This is what lets a Container App reach its registry — it records
+        //    `planetnikacre1289.azurecr.io`, never the registry's resource id —
+        //    and an environment reach the workspace it logs to, which it records
+        //    by that workspace's `customerId` GUID.
+        //
+        //    Unresolved aliases produce nothing. Naming a resource outside the
+        //    synced scope is ordinary, and inventing an edge to a node that is
+        //    not on the board would be worse than the missing edge.
+        for (label, alias_value) in &resource.alias_refs {
+            let Some((rel_type, confidence)) = relationship_type_for_alias(label) else {
+                continue;
+            };
+
+            let Some(target_id) =
+                identity_index.get(&(label.clone(), alias_value.trim().to_lowercase()))
+            else {
+                continue;
+            };
+
+            try_add_edge(
+                &resource.resource_id,
+                target_id,
+                rel_type,
+                confidence,
+                "alias_ref",
+                Some(label),
+                &mut dedupe,
+            );
+        }
+
+        // 4. ARM ID hierarchy: child -> parent (free, no extra query)
         if let Some(parent_id) = infer_arm_parent_id(&resource.resource_id) {
             try_add_edge(
                 &resource.resource_id,
@@ -745,47 +900,47 @@ async fn query_resource_rows(
     let mut warnings: Vec<String> = Vec::new();
     let mut skip_token: Option<String> = None;
 
+    let mut total_records: u64 = 0;
+
     for _ in 0..limits.max_pages {
-        let mut args = vec![
-            "graph".to_string(),
-            "query".to_string(),
-            "--output".to_string(),
-            "json".to_string(),
-            "--first".to_string(),
-            limits.page_size.to_string(),
-            "-q".to_string(),
-            query.to_string(),
-            "--subscriptions".to_string(),
-        ];
-        args.extend(scope.subscription_ids.iter().cloned());
+        let page = crate::azure_rest::query_page(
+            &scope.subscription_ids,
+            query,
+            limits.page_size,
+            skip_token.as_deref(),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
 
-        if let Some(token) = skip_token
-            .as_deref()
-            .filter(|token| !token.trim().is_empty())
-        {
-            args.push("--skip-token".to_string());
-            args.push(token.to_string());
+        total_records = page.total_records;
+        rows.extend(page.rows);
+
+        // The service truncated the result set itself, independently of our
+        // paging. Reported separately because narrowing the scope is the fix,
+        // and raising our page limits is not.
+        if page.result_truncated {
+            warnings.push(
+                "Azure Resource Graph truncated the result set. Narrow the scope and retry."
+                    .to_string(),
+            );
         }
 
-        let payload = run_az_json(&args, "az graph query").await?;
-        let page: AzureGraphQueryResponse = serde_json::from_value(payload)
-            .map_err(|error| format!("Failed to decode az graph query response: {error}"))?;
-
-        rows.extend(page.data);
-
-        let next_token = page.skip_token.filter(|token| !token.trim().is_empty());
-        if next_token.is_none() {
-            return Ok(AzureGraphQueryRows { rows, warnings });
+        if page.skip_token.is_none() {
+            break;
         }
-        skip_token = next_token;
+        skip_token = page.skip_token;
     }
 
-    if skip_token.is_some() {
+    // Now a fact rather than an inference. Over the CLI the only evidence of a
+    // short read was a leftover skip token; the REST response states how many
+    // rows matched, so a partial result can say how much is missing.
+    if (rows.len() as u64) < total_records {
         warnings.push(format!(
-            "Azure Resource Graph pagination guardrail reached; returning partial results (maxPages={}, pageSize={}, collectedRows={}). Set {} and {} to tune limits.",
+            "Azure Resource Graph pagination guardrail reached; returning partial results ({} of {} rows, maxPages={}, pageSize={}). Set {} and {} to tune limits.",
+            rows.len(),
+            total_records,
             limits.max_pages,
             limits.page_size,
-            rows.len(),
             AZURE_GRAPH_MAX_PAGES_ENV,
             AZURE_GRAPH_PAGE_SIZE_ENV,
         ));
@@ -892,6 +1047,175 @@ Use the default query or ensure custom query projects those columns."
 }
 
 #[cfg(test)]
+mod alias_tests {
+    use super::{build_relationships, AzureResourceSnapshotDto};
+    use std::collections::BTreeMap;
+
+    /// ADR-018 Phase 6, from real values in a live subscription.
+    ///
+    /// ADR-017 projected `_ref_registryId` and recorded that it fired on
+    /// nothing: a Container App stores its registry as a login-server hostname,
+    /// never as a resource id, so there was nothing for a `_ref_` column to
+    /// match. The same is true of a Container Apps environment and its
+    /// workspace, which it names by that workspace's `customerId` GUID.
+    fn resource(
+        id: &str,
+        kind: &str,
+        aliases: &[(&str, &str)],
+        keys: &[(&str, &str)],
+    ) -> AzureResourceSnapshotDto {
+        AzureResourceSnapshotDto {
+            resource_id: id.to_string(),
+            r#type: kind.to_string(),
+            name: id.rsplit('/').next().unwrap_or(id).to_string(),
+            location: None,
+            subscription_id: "sub".to_string(),
+            resource_group: None,
+            tags: BTreeMap::new(),
+            depends_on: None,
+            property_refs: BTreeMap::new(),
+            alias_refs: aliases
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            identity_keys: keys
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn a_container_app_reaches_the_registry_it_pulls_from() {
+        let app = resource(
+            "/subscriptions/s/providers/Microsoft.App/containerApps/planetnik-app",
+            "microsoft.app/containerapps",
+            &[("loginServer", "planetnikacre1289.azurecr.io")],
+            &[],
+        );
+        let registry = resource(
+            "/subscriptions/s/providers/Microsoft.ContainerRegistry/registries/planetnikacre1289",
+            "microsoft.containerregistry/registries",
+            &[],
+            &[("loginServer", "planetnikacre1289.azurecr.io")],
+        );
+
+        let edges = build_relationships(&[app.clone(), registry.clone()]);
+        let edge = edges
+            .iter()
+            .find(|edge| edge.source == "alias_ref")
+            .expect("the registry edge ADR-017 could not build");
+
+        assert_eq!(edge.from_resource_id, app.resource_id);
+        assert_eq!(edge.to_resource_id, registry.resource_id);
+        assert_eq!(edge.confidence, "high");
+    }
+
+    #[test]
+    fn an_environment_reaches_the_workspace_it_logs_to() {
+        let environment = resource(
+            "/subscriptions/s/providers/Microsoft.App/managedEnvironments/planetnik-env",
+            "microsoft.app/managedenvironments",
+            &[("customerId", "c9737900-cd5b-4ce4-b101-6622718c539e")],
+            &[],
+        );
+        let workspace = resource(
+            "/subscriptions/s/providers/Microsoft.OperationalInsights/workspaces/planetnik-logs",
+            "microsoft.operationalinsights/workspaces",
+            &[],
+            &[("customerId", "c9737900-cd5b-4ce4-b101-6622718c539e")],
+        );
+
+        let edges = build_relationships(&[environment, workspace.clone()]);
+        let edge = edges
+            .iter()
+            .find(|edge| edge.source == "alias_ref")
+            .expect("the workspace edge");
+
+        assert_eq!(edge.to_resource_id, workspace.resource_id);
+        assert_eq!(edge.relationship_type, "data_link");
+    }
+
+    #[test]
+    fn an_alias_that_resolves_to_nothing_produces_no_edge() {
+        // Naming a resource outside the synced scope is ordinary. An edge to a
+        // node that is not on the board would be worse than the missing edge.
+        let app = resource(
+            "/subscriptions/s/providers/Microsoft.App/containerApps/app",
+            "microsoft.app/containerapps",
+            &[("loginServer", "somewhere-else.azurecr.io")],
+            &[],
+        );
+
+        let edges = build_relationships(&[app]);
+
+        assert!(edges.iter().all(|edge| edge.source != "alias_ref"));
+    }
+
+    #[test]
+    fn an_alias_never_resolves_against_a_different_labels_key() {
+        // Both are opaque identifiers; matching on value alone would let a
+        // login server resolve against a workspace that happened to share it.
+        let app = resource(
+            "/subscriptions/s/providers/Microsoft.App/containerApps/app",
+            "microsoft.app/containerapps",
+            &[("loginServer", "shared-value")],
+            &[],
+        );
+        let workspace = resource(
+            "/subscriptions/s/providers/Microsoft.OperationalInsights/workspaces/w",
+            "microsoft.operationalinsights/workspaces",
+            &[],
+            &[("customerId", "shared-value")],
+        );
+
+        let edges = build_relationships(&[app, workspace]);
+
+        assert!(edges.iter().all(|edge| edge.source != "alias_ref"));
+    }
+
+    #[test]
+    fn alias_matching_ignores_case_because_azure_is_inconsistent_about_it() {
+        let app = resource(
+            "/subscriptions/s/providers/Microsoft.App/containerApps/app",
+            "microsoft.app/containerapps",
+            &[("loginServer", "PlanetnikACRe1289.azurecr.io")],
+            &[],
+        );
+        let registry = resource(
+            "/subscriptions/s/providers/Microsoft.ContainerRegistry/registries/r",
+            "microsoft.containerregistry/registries",
+            &[],
+            &[("loginServer", "planetnikacre1289.azurecr.io")],
+        );
+
+        let edges = build_relationships(&[app, registry]);
+
+        assert!(edges.iter().any(|edge| edge.source == "alias_ref"));
+    }
+
+    #[test]
+    fn an_unknown_alias_label_is_ignored_rather_than_guessed_at() {
+        let app = resource(
+            "/subscriptions/s/providers/Microsoft.App/containerApps/app",
+            "microsoft.app/containerapps",
+            &[("somethingNew", "value")],
+            &[],
+        );
+        let other = resource(
+            "/subscriptions/s/providers/Microsoft.Other/things/t",
+            "microsoft.other/things",
+            &[],
+            &[("somethingNew", "value")],
+        );
+
+        let edges = build_relationships(&[app, other]);
+
+        assert!(edges.iter().all(|edge| edge.source != "alias_ref"));
+    }
+}
+
+#[cfg(test)]
 mod projection_tests {
     use super::{build_default_query, relationship_type_for_property_ref, AzureSyncScopeDto};
 
@@ -910,6 +1234,65 @@ mod projection_tests {
             tag_filters: None,
             query: None,
         }
+    }
+
+    fn scope_with_tags(pairs: &[(&str, &str)]) -> AzureSyncScopeDto {
+        AzureSyncScopeDto {
+            subscription_ids: vec![],
+            resource_groups: None,
+            tag_filters: Some(
+                pairs
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect(),
+            ),
+            query: None,
+        }
+    }
+
+    /// ADR-018 Phase 4. Filters used to run after paging, so a tag filter over a
+    /// large estate could spend every page on non-matching resources and return
+    /// none of the matching ones.
+    #[test]
+    fn tag_filters_reach_the_query_instead_of_only_the_client() {
+        let query = build_default_query(&scope_with_tags(&[("project", "planetnik")]));
+
+        assert!(query.contains("| where tags contains 'planetnik'"));
+    }
+
+    /// The predicate must be a superset of `matches_scope_filters`, which
+    /// compares keys case-insensitively. KQL's `tags['Project']` does not, so an
+    /// exact-key predicate would silently drop resources a filter used to match.
+    #[test]
+    fn the_pushed_predicate_does_not_pin_the_tag_key() {
+        let query = build_default_query(&scope_with_tags(&[("Project", "planetnik")]));
+
+        assert!(!query.contains("tags['Project']"));
+        assert!(!query.contains("tags[\"Project\"]"));
+        assert!(query.contains("contains 'planetnik'"));
+    }
+
+    #[test]
+    fn tag_values_are_escaped_like_every_other_operator_string() {
+        let query = build_default_query(&scope_with_tags(&[("owner", "o'brien")]));
+
+        assert!(query.contains("contains 'o''brien'"));
+    }
+
+    #[test]
+    fn an_empty_tag_value_adds_no_predicate() {
+        // An empty value would push `contains ''`, which matches everything and
+        // reads as a filter that silently does nothing.
+        let query = build_default_query(&scope_with_tags(&[("project", "   ")]));
+
+        assert!(!query.contains("| where tags contains"));
+    }
+
+    #[test]
+    fn the_tag_predicate_follows_the_projection_that_selects_tags() {
+        let query = build_default_query(&scope_with_tags(&[("project", "planetnik")]));
+
+        assert!(query.find("project id").unwrap() < query.find("where tags contains").unwrap());
     }
 
     #[test]

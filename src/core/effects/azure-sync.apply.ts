@@ -16,6 +16,14 @@ interface MergeAzureMappedGraphInput {
   readonly edges: readonly Edge[];
   readonly mapped: AzureMappedGraph;
   readonly syncedAt?: number;
+  /**
+   * Whether Azure entities the snapshot no longer reports are removed (ADR-020).
+   *
+   * Defaults to `false`, and the default is the safety property: a caller that
+   * forgets this flag retains rather than deletes. A missing resource and a
+   * truncated page look the same from here, and only one of them is recoverable.
+   */
+  readonly archiveMissing?: boolean;
 }
 
 interface MergeAzureMappedGraphOutput {
@@ -615,6 +623,7 @@ export const mergeAzureMappedGraphIntoCanvas = (
   input: MergeAzureMappedGraphInput,
 ): MergeAzureMappedGraphOutput => {
   const syncedAt = input.syncedAt ?? Date.now();
+  const archiveMissing = input.archiveMissing ?? false;
   const mappedNodes = sortById(input.mapped.nodes);
   const mappedEdges = sortById(input.mapped.edges);
 
@@ -630,6 +639,14 @@ export const mergeAzureMappedGraphIntoCanvas = (
 
     const mappedNode = mappedNodesById.get(node.id);
     if (!mappedNode) {
+      // Carried through with its data untouched: Azure has stopped describing
+      // this node, so the sync has nothing to say about its label, technology,
+      // or ownership. Layout still owns its position, as it does for every
+      // Azure node on the board.
+      if (!archiveMissing) {
+        mergedNodes.push(node);
+        consumedNodeIds.add(node.id);
+      }
       continue;
     }
 
@@ -660,6 +677,10 @@ export const mergeAzureMappedGraphIntoCanvas = (
 
     const mappedEdge = mappedEdgesById.get(edge.id);
     if (!mappedEdge) {
+      if (!archiveMissing) {
+        mergedEdges.push(edge);
+        consumedEdgeIds.add(edge.id);
+      }
       continue;
     }
 

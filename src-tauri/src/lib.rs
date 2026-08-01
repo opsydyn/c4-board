@@ -7,6 +7,7 @@ use tauri::{Emitter, Listener, Manager};
 use tokio::time::sleep;
 
 mod ai_agent;
+mod azure_rest;
 mod azure_sync;
 mod db;
 mod load_test;

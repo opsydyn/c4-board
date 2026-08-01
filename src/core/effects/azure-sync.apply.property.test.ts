@@ -106,4 +106,53 @@ describe("Azure sync reconciliation properties", () => {
       { numRuns: 100 },
     );
   });
+
+  /**
+   * The invariant ADR-020 exists for.
+   *
+   * Idempotence above says a repeated sync changes nothing. It says nothing
+   * about the first sync, which is the one that used to delete. With archiving
+   * off there is no input — no scope, no snapshot, no truncation — that makes
+   * an apply shrink the board.
+   */
+  it("never removes a node or edge while archiving is off", () => {
+    FastCheck.assert(
+      FastCheck.property(syncCaseArbitrary, ({ mapped, includeExisting, includeStale }) => {
+        const initial = existingCanvas(mapped, includeExisting, includeStale);
+
+        const applied = mergeAzureMappedGraphIntoCanvas({
+          ...initial,
+          mapped,
+          syncedAt: SYNCED_AT,
+          archiveMissing: false,
+        });
+
+        expect(applied.nodes.length).toBeGreaterThanOrEqual(initial.nodes.length);
+        for (const node of initial.nodes) {
+          expect(applied.nodes.some((candidate) => candidate.id === node.id)).toBe(true);
+        }
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  /** The same guarantee against the worst input: Azure reporting nothing at all. */
+  it("keeps the whole board when the snapshot comes back empty", () => {
+    FastCheck.assert(
+      FastCheck.property(syncCaseArbitrary, ({ mapped, includeExisting, includeStale }) => {
+        const initial = existingCanvas(mapped, includeExisting, includeStale);
+
+        const applied = mergeAzureMappedGraphIntoCanvas({
+          ...initial,
+          mapped: { nodes: [], edges: [] },
+          syncedAt: SYNCED_AT,
+          archiveMissing: false,
+        });
+
+        expect(applied.nodes.map((node) => node.id).sort())
+          .toEqual(initial.nodes.map((node) => node.id).sort());
+      }),
+      { numRuns: 100 },
+    );
+  });
 });
