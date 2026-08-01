@@ -5,8 +5,19 @@ import { getLayoutVisualFixture } from "@/core/effects/layout-visual-fixtures";
 import { resolveCanvasFitNodeIds, resolveCanvasViewportChrome } from "./C4Canvas";
 
 describe("C4Canvas viewport fitting", () => {
-  it("keeps the normal canvas chrome for editable and read-only board views", () => {
+  /**
+   * A board can be larger than ReactFlow's default 0.5 zoom floor can show.
+   *
+   * One synced board spanned roughly 11,000 by 10,800 units, mostly because a
+   * few hand-drawn nodes sat far from everything else. Fitting it needs about
+   * 0.1, so `fitView` clamped at 0.5 and settled over an empty region — the
+   * board loaded, the minimap drew it, and the canvas showed grid. The floor
+   * was already lowered for harness captures; there was no reason a board a
+   * person is looking at should be held to a stricter one.
+   */
+  it("lets an ordinary board zoom out far enough to fit a large graph", () => {
     expect(resolveCanvasViewportChrome(false)).toEqual({
+      minZoom: 0.1,
       showMiniMap: true,
     });
   });

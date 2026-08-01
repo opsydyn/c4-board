@@ -104,13 +104,26 @@ export function resolveCanvasFitNodeIds(
   return selectedNodeIds.length > 0 ? selectedNodeIds : graphNodeIds;
 }
 
+/**
+ * `minZoom` applies to every board, not just harness captures.
+ *
+ * ReactFlow's default floor is 0.5, which is not enough to show a board that
+ * has grown large. One synced board spanned roughly 11,000 by 10,800 units —
+ * a handful of hand-drawn nodes had ended up far from everything else — and
+ * fitting it needs about 0.1. `fitView` clamped at 0.5 and settled over an
+ * empty region, so the board loaded, the minimap drew it, and the canvas showed
+ * nothing but grid.
+ *
+ * The lower floor already existed for harness captures. A board someone is
+ * actually looking at should not be held to a stricter limit than a screenshot.
+ */
 export function resolveCanvasViewportChrome(visualHarness: boolean): {
   minZoom?: number;
   showMiniMap: boolean;
 } {
   return visualHarness
     ? { minZoom: 0.1, showMiniMap: false }
-    : { showMiniMap: true };
+    : { minZoom: 0.1, showMiniMap: true };
 }
 
 function C4CanvasInner(
