@@ -137,7 +137,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Measured from the last release tag, not from the last push.
+          # Measured from the last release commit, not from the last push and
+          # not from the last tag.
           #
           # It used to diff `github.event.before..GITHUB_SHA`, the range of one
           # push, which loses anything from a push that was skipped, cancelled or
@@ -146,9 +147,21 @@ jobs:
           # push was suppressed, so it was never marked, and the following push
           # correctly saw nothing releasable in its own diff.
           #
-          # A tag-based range is idempotent. It always describes everything
-          # unreleased, so a missed push is picked up by the next one.
-          base_ref="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          # Anchoring on a release is idempotent: the range always describes
+          # everything unreleased, so a missed push is picked up by the next one.
+          #
+          # The anchor is the commit rather than the tag because the two do not
+          # arrive together. Merging a release PR puts `chore: release vX` on
+          # main immediately and triggers this workflow; the tag is created
+          # afterwards by the separate release job. A tag-based range therefore
+          # read one release behind on exactly that push, re-marked everything
+          # that was being released at that moment, and then failed the guard
+          # below when release-plz — correctly — had nothing left to release.
+          base_ref="$(git log -1 --format=%H --grep='^chore: release' 2>/dev/null || true)"
+          if [[ -z "${base_ref}" ]]; then
+            # Older history, or a repo whose releases predate that convention.
+            base_ref="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          fi
           if [[ -z "${base_ref}" ]]; then
             # No releases yet, so everything is unreleased.
             base_ref="$(git hash-object -t tree /dev/null)"
